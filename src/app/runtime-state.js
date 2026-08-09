@@ -7,6 +7,7 @@ export const runtimeState = {
     stateModelRunning: false,
     stateController: null,
     currentChatId: null,
+    pendingUnseenChatReset: null,
     historyViewIndex: -1,
     renderedViewActive: false,
     loreRedoStack: [],

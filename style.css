@@ -126,7 +126,7 @@
     --rt-card-header: rgba(240, 122, 170, 0.06);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ AI Wizard Custom Theme Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ AI Wizard Custom Theme ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 /* Variables are injected dynamically by the Theme Wizard into #rt-custom-theme-style */
 .rpg-tracker-panel.rt-theme-custom {
     --rt-bg: var(--rt-custom-bg, rgba(20, 20, 30, 0.96));
@@ -239,7 +239,7 @@
     overflow: visible !important;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ State Tracker / Lorebook Agent card-flip mode (integrated docked layout) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ State Tracker / Lorebook Agent card-flip mode (integrated docked layout) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-header-face {
     display: flex;
     align-items: center;
@@ -474,12 +474,12 @@
     opacity: 1;
 }
 
-/* Disabled via the settings checkbox Ã¢â‚¬â€ full transparency */
+/* Disabled via the settings checkbox ĂÂ˘Ă˘âÂŹĂ˘âŹÂ full transparency */
 .rpg-tracker-panel.is-disabled {
     opacity: 0.68;
     filter: grayscale(0.6) brightness(0.8);
 }
-/* Block interaction on the content area only Ã¢â‚¬â€ the header (and overflow menu)
+/* Block interaction on the content area only ĂÂ˘Ă˘âÂŹĂ˘âŹÂ the header (and overflow menu)
    stay clickable so the user can re-enable. The panel shell itself keeps
    pointer-events so scroll events don't bleed through to the chat behind it. */
 .rpg-tracker-panel.is-disabled .rpg-tracker-content,
@@ -500,7 +500,7 @@
     pointer-events: auto;
 }
 
-/* Agent panel disabled Ã¢â‚¬â€ dim content but keep header interactive */
+/* Agent panel disabled ĂÂ˘Ă˘âÂŹĂ˘âŹÂ dim content but keep header interactive */
 .rpg-tracker-agent-panel.is-agent-disabled .rpg-tracker-content {
     opacity: 0.45;
     filter: grayscale(0.5) brightness(0.75);
@@ -512,7 +512,7 @@
     pointer-events: auto;
 }
 
-/* Paused via the pause button Ã¢â‚¬â€ visible but indicating pause */
+/* Paused via the pause button ĂÂ˘Ă˘âÂŹĂ˘âŹÂ visible but indicating pause */
 .rpg-tracker-panel.is-paused .rpg-tracker-memo-area,
 .rpg-tracker-panel.is-paused .rpg-tracker-render-view {
     opacity: 0.93;
@@ -614,7 +614,7 @@
     z-index: 1;
 }
 
-/* Night header starfield Ã¢â‚¬â€ scattered across the full bar width */
+/* Night header starfield ĂÂ˘Ă˘âÂŹĂ˘âŹÂ scattered across the full bar width */
 .rt-header-starfield {
     display: none;
     position: absolute;
@@ -764,7 +764,7 @@
     transition: color 0.2s, background 0.2s; transition-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* Hover chrome only for fine pointers — touch devices keep :hover stuck after tap */
+/* Hover chrome only for fine pointers â touch devices keep :hover stuck after tap */
 @media (hover: hover) and (pointer: fine) {
     .rpg-tracker-icon-btn:hover {
         color: var(--rt-accent);
@@ -787,7 +787,7 @@
     outline-offset: 1px;
 }
 
-/* HELP header button — slightly wider text label */
+/* HELP header button â slightly wider text label */
 .rpg-tracker-icon-btn.rt-tutorial-help-btn {
     font-size: 0.65em;
     font-weight: 700;
@@ -796,7 +796,7 @@
     min-width: auto;
 }
 
-/* ── Adventure Companion (panel morph) ─────────────────────────────────── */
+/* ââ Adventure Companion (panel morph) âââââââââââââââââââââââââââââââââââ */
 .rt-panel-mode-pane.rt-tutorial-mode {
     display: flex;
     flex-direction: column;
@@ -1268,7 +1268,7 @@
     background: rgba(0, 0, 0, 0.2);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Direct Prompt Bar Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Direct Prompt Bar ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rpg-tracker-prompt-bar {
     display: flex;
     gap: 6px;
@@ -1327,7 +1327,7 @@
     border-color: var(--rt-accent);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Update Menu Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Update Menu ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-update-menu {
     position: absolute;
     background: var(--rt-card-bg);
@@ -1366,7 +1366,7 @@
     color: var(--rt-text-muted);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Rendered Card View Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Rendered Card View ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rpg-tracker-render-view {
     flex: 1;
     overflow-y: auto;
@@ -1599,7 +1599,7 @@
     cursor: default;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Tab Mode (compact layout) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Tab Mode (compact layout) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 
 .rt-tabmode-wrap {
     display: flex;
@@ -1608,7 +1608,7 @@
     /* Guarantee at least one viewport's worth of height, and always leave a generous
        block of blank, scrollable room below the content on top of that (see
        padding-bottom below). Tab switches never programmatically move the scroll
-       position (see bindRenderedCardEvents in index.js) Ã¢â‚¬â€ instead, wherever the user
+       position (see bindRenderedCardEvents in index.js) ĂÂ˘Ă˘âÂŹĂ˘âŹÂ instead, wherever the user
        has parked the viewport should simply remain a valid scroll position no matter
        which tab is short or tall, so the browser never needs to clamp scrollTop and
        nothing visibly bounces when switching tabs. */
@@ -1750,7 +1750,7 @@
     text-align: center;
 }
 
-/* Secondary badge on PARTY's tab button reflecting its folded-in benched count Ã¢â‚¬â€
+/* Secondary badge on PARTY's tab button reflecting its folded-in benched count ĂÂ˘Ă˘âÂŹĂ˘âŹÂ
    offset to the bottom-right so it never collides with the primary (active-count) badge. */
 .rt-tab-badge-secondary {
     top: auto;
@@ -1760,7 +1760,7 @@
     color: #2a1400;
 }
 
-/* Benched Party sub-panel Ã¢â‚¬â€ folded into PARTY's own card as a compact "camp roster"
+/* Benched Party sub-panel ĂÂ˘Ă˘âÂŹĂ˘âŹÂ folded into PARTY's own card as a compact "camp roster"
    rather than a standalone module, evoking a party-base/camp screen: desaturated
    portraits, a warm campfire palette, click-to-expand accordion per member. */
 .rt-benched-panel {
@@ -1900,7 +1900,7 @@
     display: flex;
     flex-direction: column;
     /* Absorb the leftover space (see .rt-tabmode-wrap above) so short tab content
-       doesn't shrink the scrollable area Ã¢â‚¬â€ it just leaves blank room below it. */
+       doesn't shrink the scrollable area ĂÂ˘Ă˘âÂŹĂ˘âŹÂ it just leaves blank room below it. */
     flex: 1 0 auto;
 }
 
@@ -1974,7 +1974,7 @@
     font-size: 0.92em;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Onboarding layout Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Onboarding layout ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-onboarding-config-row {
     display: flex;
     align-items: flex-end;
@@ -2394,7 +2394,7 @@
     flex-shrink: 0;
 }
 
-/* Segmented toggle (choose-one, left/right) Ã¢â‚¬â€ used for Time & Date format controls */
+/* Segmented toggle (choose-one, left/right) ĂÂ˘Ă˘âÂŹĂ˘âŹÂ used for Time & Date format controls */
 .rt-seg-toggle {
     display: inline-flex;
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -2432,7 +2432,7 @@
     color: var(--rt-accent, #00c88c);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Spells Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Spells ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-spell-row {
     display: grid;
     grid-template-columns: 70px 1fr;
@@ -2788,7 +2788,7 @@
     align-self: center;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Status Pill Color Variants Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Status Pill Color Variants ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-pill-buff {
     background: rgba(0, 200, 100, 0.1);
     border-color: rgba(0, 200, 100, 0.3);
@@ -2863,7 +2863,7 @@
     padding-left: 0;
 }
 
-/* Each cell wrapper Ã¢â‚¬â€ fixed types (pills, badges, text) take natural width */
+/* Each cell wrapper ĂÂ˘Ă˘âÂŹĂ˘âŹÂ fixed types (pills, badges, text) take natural width */
 .rt-mmc-cell {
     flex: 0 0 auto;
     min-width: 0;
@@ -3020,9 +3020,9 @@
     margin-top: 0;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Universal Rendering Tags Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Universal Rendering Tags ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 
-/* Rendering Tags Library — a small portal into the framework's visual toolkit. */
+/* Rendering Tags Library â a small portal into the framework's visual toolkit. */
 .rt-tag-library-button {
     flex: 1;
     width: 100%;
@@ -3358,7 +3358,7 @@
     padding: 1px 0;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Delta Resize Handle Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Delta Resize Handle ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 
 .rpg-tracker-delta-resize-handle {
     height: 5px;
@@ -3447,7 +3447,7 @@
     z-index: 1;
 }
 
-/* Night footer starfield Ã¢â‚¬â€ related to header stars but offset pattern & timing */
+/* Night footer starfield ĂÂ˘Ă˘âÂŹĂ˘âŹÂ related to header stars but offset pattern & timing */
 .rt-footer-starfield {
     display: none;
     position: absolute;
@@ -3576,7 +3576,7 @@
     border-color: var(--rt-accent-dim);
 }
 
-/* Footer location Ã¢â‚¬â€ accent glow tracks day/night cycle via --rt-accent */
+/* Footer location ĂÂ˘Ă˘âÂŹĂ˘âŹÂ accent glow tracks day/night cycle via --rt-accent */
 .rt-footer-location-text {
     flex: 1;
     min-width: 0;
@@ -3611,7 +3611,7 @@
     margin-left: 4px;
 }
 
-/* Lorebook Agent footer Ã¢â‚¬â€ mirror State Tracker: nav left, status + prompt right */
+/* Lorebook Agent footer ĂÂ˘Ă˘âÂŹĂ˘âŹÂ mirror State Tracker: nav left, status + prompt right */
 #rt-agent-footer {
     justify-content: space-between;
 }
@@ -3856,7 +3856,7 @@
         max-height: 40vh;
     }
 
-    /* Resize is desktop-only Ã¢â‚¬â€ hide handles on mobile/touch */
+    /* Resize is desktop-only ĂÂ˘Ă˘âÂŹĂ˘âŹÂ hide handles on mobile/touch */
     .rpg-tracker-panel .rt-resizer-tr,
     .rpg-tracker-panel .rt-resizer-br,
     .rpg-tracker-panel .rt-resizer-bl {
@@ -3952,7 +3952,7 @@
         display: none !important;
     }
 
-    /* Dedicated header buttons on mobile — Raw View gets a larger tap target */
+    /* Dedicated header buttons on mobile â Raw View gets a larger tap target */
     #rpg-tracker-view-btn {
         display: flex !important;
         flex-shrink: 0 !important;
@@ -4009,12 +4009,12 @@
 }
 
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Overflow button (hidden on desktop, shown by mobile media query above) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Overflow button (hidden on desktop, shown by mobile media query above) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 #rt-overflow-btn {
     display: none;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Lorebook Agent cleanup dropdown (reparented to panel when open) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent cleanup dropdown (reparented to panel when open) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-cleanup-dropdown {
     position: absolute;
     z-index: 3100;
@@ -4043,7 +4043,7 @@
     overflow: visible !important;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Overflow dropdown menu Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Overflow dropdown menu ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-overflow-menu {
     position: absolute;
     background: var(--rt-card-bg);
@@ -4105,7 +4105,7 @@
     margin-top: -4px;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Settings Module List Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Settings Module List ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-order-item {
     transition: background 0.2s, opacity 0.2s;
     user-select: none;
@@ -4187,7 +4187,7 @@
     animation: none;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Character Roll Trigger Button Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Character Roll Trigger Button ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-char-roll-trigger {
     background: rgba(120, 80, 220, 0.15) !important;
     border-color: rgba(120, 80, 220, 0.5) !important;
@@ -4200,7 +4200,7 @@
     color: #ddd6fe !important;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Character Roll Inline Panel Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Character Roll Inline Panel ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 #rt-char-roll-panel {
     border: 1px solid rgba(120, 80, 220, 0.25);
     border-radius: 6px;
@@ -4301,7 +4301,7 @@
     flex-wrap: wrap;
 }
 
-/* System Prompt Control Room Ã¢â‚¬â€ one scroll region (section list only) */
+/* System Prompt Control Room ĂÂ˘Ă˘âÂŹĂ˘âŹÂ one scroll region (section list only) */
 .popup-content:has(.rt-cr-popup-container) {
     display: flex;
     flex-direction: column;
@@ -4457,7 +4457,7 @@ textarea.rt-cr-input {
     min-height: 48px;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Persona / CR Help Icon (tap/click on mobile; hover title on desktop) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Persona / CR Help Icon (tap/click on mobile; hover title on desktop) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-cr-help-icon {
     display: inline-flex;
     align-items: center;
@@ -4484,7 +4484,7 @@ textarea.rt-cr-input {
     outline: none;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Generate Button Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Generate Button ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 #rt-cr-generate-btn:hover:not(:disabled) {
     background: rgba(120, 80, 220, 0.35) !important;
     border-color: rgba(160, 120, 255, 0.9) !important;
@@ -4584,7 +4584,7 @@ textarea.rt-cr-input {
     color: var(--rt-accent);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Mobile Layout Fixes Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Mobile Layout Fixes ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-footer-toggle-btn {
     display: none; /* Hide on desktop */
 }
@@ -4719,7 +4719,7 @@ textarea.rt-cr-input {
         overflow-y: auto;
     }
 
-    /* Campaign records flow with the panel body Ã¢â‚¬â€ one shared scrollbar */
+    /* Campaign records flow with the panel body ĂÂ˘Ă˘âÂŹĂ˘âŹÂ one shared scrollbar */
     #rt-agent-campaign-section {
         flex: 0 0 auto !important;
         min-height: 0 !important;
@@ -4737,7 +4737,7 @@ textarea.rt-cr-input {
 }
 
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Lorebook Agent panel: single scroll region on .rpg-tracker-content.
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent panel: single scroll region on .rpg-tracker-content.
    Upper drawers and Campaign Records all use natural height so one scrollbar
    reaches the true bottom (no nested flex trap at the campaign header). */
 #rpg-tracker-agent {
@@ -4772,7 +4772,7 @@ textarea.rt-cr-input {
     overflow: visible;
 }
 
-/* Location Images & Visualization Ã¢â‚¬â€ settings sections */
+/* Location Images & Visualization ĂÂ˘Ă˘âÂŹĂ˘âŹÂ settings sections */
 .rt-loc-settings-block {
     margin-bottom: 4px;
 }
@@ -4961,7 +4961,7 @@ textarea.rt-cr-input {
     color: #a8e0f0;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Lorebook Agent view mode switch (Campaign Records / Visualization Mode) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent view mode switch (Campaign Records / Visualization Mode) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-agent-view-mode-switch {
     display: inline-flex;
     align-items: stretch;
@@ -5062,7 +5062,7 @@ textarea.rt-cr-input {
     50% { transform: scale(1.15); opacity: 0.75; }
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Connection Settings Panels Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Connection Settings Panels ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 /* Central Connections & Models settings */
 .rt-connections-models-intro {
     margin-bottom: 8px;
@@ -5210,7 +5210,7 @@ textarea.rt-cr-input {
     background: rgba(0, 255, 170, 0.15);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Bar Recoloring Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Bar Recoloring ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-hp-bar-wrap[data-recolor-id], 
 .rt-xp-bar-wrap[data-recolor-id] {
     position: relative;
@@ -5228,7 +5228,7 @@ textarea.rt-cr-input {
     transform: scale(0.98);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Quest Log Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Quest Log ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-quest-card {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
@@ -5427,7 +5427,7 @@ textarea.rt-cr-input {
 .rt-quest-mood-tick-neutral   { left: 33.3%; }
 .rt-quest-mood-tick-deadline  { left: 66.6%; }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Context Debug Viewer Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Context Debug Viewer ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rpg-debug-viewer {
     position: fixed;
     top: 50px;
@@ -5675,7 +5675,7 @@ textarea.rt-cr-input {
     }
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Panel Collapsed State (Immersion Mode) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Panel Collapsed State (Immersion Mode) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rpg-tracker-panel.rt-panel-collapsed {
     height: auto !important;
     min-height: 0 !important;
@@ -5757,7 +5757,7 @@ textarea.rt-cr-input {
 }
 
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Remove Up/Down Spinners Globally for extension number inputs Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Remove Up/Down Spinners Globally for extension number inputs ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rpg-tracker-panel input[type="number"]::-webkit-outer-spin-button,
 .rpg-tracker-panel input[type="number"]::-webkit-inner-spin-button,
 .rpg-tracker-settings input[type="number"]::-webkit-outer-spin-button,
@@ -5772,7 +5772,7 @@ textarea.rt-cr-input {
 
 
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Character Portrait System Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Character Portrait System ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 
 /* Outer wrapper: portrait on left, entity content on right */
 .rt-entity-container {
@@ -5903,11 +5903,11 @@ textarea.rt-cr-input {
     opacity: 0.92;
 }
 
-/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-   NPC CAMPAIGN RECORDS Ã¢â‚¬â€ Visual Overhaul
-   Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */
+/* ĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂ
+   NPC CAMPAIGN RECORDS ĂÂ˘Ă˘âÂŹĂ˘âŹÂ Visual Overhaul
+   ĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂ */
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Folder Header Accent Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Folder Header Accent ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-folder-hdr {
     transition: background 0.2s ease;
 }
@@ -5920,7 +5920,7 @@ textarea.rt-cr-input {
     flex-shrink: 0;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Card Grid Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Card Grid ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-card-grid {
     display: flex;
     flex-direction: column;
@@ -5928,7 +5928,7 @@ textarea.rt-cr-input {
     padding: 4px 0;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Card Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Card ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-card {
     display: flex;
     flex-wrap: wrap;
@@ -5958,7 +5958,7 @@ textarea.rt-cr-input {
     background: linear-gradient(135deg, rgba(212, 169, 64, 0.08), rgba(255, 255, 255, 0.03));
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Portrait Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Portrait ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-portrait-wrap {
     width: 64px;
     height: 64px;
@@ -6004,7 +6004,7 @@ textarea.rt-cr-input {
     opacity: 1;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Info Area Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Info Area ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-info {
     flex: 1 1 calc(100% - 72px);
     min-width: 0;
@@ -6055,7 +6055,7 @@ textarea.rt-cr-input {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Relationship Bars Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Relationship Bars ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-bars {
     display: flex;
     flex-direction: column;
@@ -6252,7 +6252,7 @@ textarea.rt-cr-input {
     100% { opacity: 0; transform: translate(-50%, -13px) scale(0.94); }
 }
 
-/* ── Relationship float feedback (Friendship / Affection awards) ── */
+/* ââ Relationship float feedback (Friendship / Affection awards) ââ */
 .rt-rel-float-layer {
     position: fixed;
     pointer-events: none;
@@ -6306,16 +6306,16 @@ textarea.rt-cr-input {
     text-overflow: clip;
 }
 .rt-rel-float-npc::before {
-    content: '·';
+    content: 'Âˇ';
     margin-right: 5px;
     opacity: 0.5;
 }
 
-/* Friendship — green / red */
+/* Friendship â green / red */
 .rt-rel-float--friendship.rt-rel-float--positive { color: #4ade80; }
 .rt-rel-float--friendship.rt-rel-float--negative { color: #f87171; }
 
-/* Affection — pink / purple */
+/* Affection â pink / purple */
 .rt-rel-float--affection.rt-rel-float--positive { color: #f472b6; }
 .rt-rel-float--affection.rt-rel-float--negative { color: #c084fc; }
 
@@ -6348,7 +6348,7 @@ textarea.rt-cr-input {
     }
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Relationship Tier Badges Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Relationship Tier Badges ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-tier-row {
     display: flex;
     gap: 5px;
@@ -6378,7 +6378,7 @@ textarea.rt-cr-input {
 .rt-npc-tier-detailed-label { font-weight: bold; margin-right: 4px; transition: color 0.25s ease; }
 .rt-npc-tier-detailed-hint { opacity: 0.7; color: var(--SmartThemeBodyColor, inherit); }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Card Actions Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Card Actions ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-actions {
     display: flex;
     gap: 4px;
@@ -6433,7 +6433,7 @@ textarea.rt-cr-input {
     color: #ecc050;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Add Button Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Add Button ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-add-btn {
     background: rgba(212, 169, 64, 0.08);
     border: 1px dashed rgba(212, 169, 64, 0.3);
@@ -6456,9 +6456,9 @@ textarea.rt-cr-input {
     color: #ecc050;
 }
 
-/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-   LOCATION IMAGES Ã¢â‚¬â€ Lorebook Agent tree + detail popup
-   Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */
+/* ĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂ
+   LOCATION IMAGES ĂÂ˘Ă˘âÂŹĂ˘âŹÂ Lorebook Agent tree + detail popup
+   ĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂ */
 
 .rt-loc-folder-hdr .rt-loc-folder-icon {
     color: #5eb8d4;
@@ -6584,7 +6584,7 @@ textarea.rt-cr-input {
     margin-top: 12px;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Lorebook Agent immersion scene view Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent immersion scene view ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-immersion-root {
     display: flex;
     flex-direction: column;
@@ -6757,7 +6757,7 @@ textarea.rt-cr-input {
     font-style: italic;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Character Card Picker Popup Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Character Card Picker Popup ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-charpicker-overlay {
     position: fixed;
     inset: 0;
@@ -6962,7 +6962,7 @@ textarea.rt-cr-input {
     background: rgba(255, 255, 255, 0.04);
     color: var(--rt-text, #eee);
 }
-/* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Creator Dialog Tabs Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Creator Dialog Tabs ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 .rt-npc-creator-tabs {
     display: flex;
     border-bottom: 1px solid rgba(212, 169, 64, 0.15);
@@ -7003,7 +7003,7 @@ textarea.rt-cr-input {
 }
 
 @media screen and (max-width: 800px) {
-    /* Full-viewport modal Ã¢â‚¬â€ absolute fill avoids flex stretch / margin:auto scroll bugs */
+    /* Full-viewport modal ĂÂ˘Ă˘âÂŹĂ˘âŹÂ absolute fill avoids flex stretch / margin:auto scroll bugs */
     .rt-charpicker-overlay {
         display: block;
         padding: 0;
@@ -7271,9 +7271,9 @@ textarea.rt-cr-input {
     animation: rt-battery-flash 1s infinite;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Day/Night Cycle Sky Badge Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Day/Night Cycle Sky Badge ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ
    Pure-CSS sun/moon + starfield badge reflecting in-world time of day, shown
-   in the panel header when the feature is enabled. No image assets Ã¢â‚¬â€ the
+   in the panel header when the feature is enabled. No image assets ĂÂ˘Ă˘âÂŹĂ˘âŹÂ the
    celestial body is a radial-gradient disc with a box-shadow glow, and the
    starfield is a handful of fixed dots layered behind it via box-shadow. */
 .rt-daynight-badge {
@@ -7323,7 +7323,7 @@ textarea.rt-cr-input {
     50% { opacity: 0.45; }
 }
 
-/* Sun phases Ã¢â‚¬â€ warm gradient disc, glow intensity/hue shifts across the day. */
+/* Sun phases ĂÂ˘Ă˘âÂŹĂ˘âŹÂ warm gradient disc, glow intensity/hue shifts across the day. */
 .rt-sky-dawn .rt-sky-disc {
     background: radial-gradient(circle at 35% 35%, #fff2cc, #ffaa55);
     box-shadow: 0 0 6px 2px rgba(255, 170, 85, 0.55);
@@ -7345,14 +7345,14 @@ textarea.rt-cr-input {
     box-shadow: 0 0 7px 2px rgba(230, 99, 61, 0.6);
 }
 
-/* Moon phases Ã¢â‚¬â€ cool silvery disc, no glow (starfield sits behind it). */
+/* Moon phases ĂÂ˘Ă˘âÂŹĂ˘âŹÂ cool silvery disc, no glow (starfield sits behind it). */
 .rt-sky-night .rt-sky-disc,
 .rt-sky-lateNight .rt-sky-disc {
     background: radial-gradient(circle at 35% 35%, #f5f5ff, #9999ee);
     box-shadow: 0 0 4px 1px rgba(153, 153, 238, 0.5);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Day/Night Cycle Ã¢â‚¬â€ full-panel ambient tint Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Day/Night Cycle ĂÂ˘Ă˘âÂŹĂ˘âŹÂ full-panel ambient tint ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ
    When rt-daynight-active is set on a panel, phase classes override the theme's
    CSS variables so the entire tracker shifts hue with in-world time. @property
    registrations let the color vars crossfade smoothly between phases. */
@@ -7420,9 +7420,9 @@ textarea.rt-cr-input {
         box-shadow 2s ease;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Phase palettes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Phase palettes ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
 
-/* Late night (12 AM Ã¢â‚¬â€œ 4:59 AM): deep indigo, cool violet accent */
+/* Late night (12 AM ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 4:59 AM): deep indigo, cool violet accent */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-lateNight {
     --rt-bg: rgba(8, 10, 28, 0.97);
     --rt-text: #c8c8e8;
@@ -7436,7 +7436,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 32px rgba(0, 0, 20, 0.7), inset 0 0 30px rgba(40, 50, 120, 0.08);
 }
 
-/* Dawn (5 Ã¢â‚¬â€œ 6:59 AM): peach horizon, rose-gold warmth */
+/* Dawn (5 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 6:59 AM): peach horizon, rose-gold warmth */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-dawn {
     --rt-bg: rgba(32, 22, 28, 0.95);
     --rt-text: #ffe8d8;
@@ -7450,7 +7450,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 28px rgba(40, 20, 10, 0.55), inset 0 0 40px rgba(255, 140, 80, 0.06);
 }
 
-/* Morning (7 Ã¢â‚¬â€œ 11:59 AM): fresh golden daylight */
+/* Morning (7 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 11:59 AM): fresh golden daylight */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-morning {
     --rt-bg: rgba(26, 30, 36, 0.93);
     --rt-text: #f5f0e0;
@@ -7464,7 +7464,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 28px rgba(30, 25, 10, 0.45);
 }
 
-/* Midday (12 Ã¢â‚¬â€œ 1:59 PM): bright high-noon, neutral warm white */
+/* Midday (12 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 1:59 PM): bright high-noon, neutral warm white */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-midday {
     --rt-bg: rgba(34, 38, 44, 0.91);
     --rt-text: #fafaf5;
@@ -7478,7 +7478,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 28px rgba(20, 20, 15, 0.4), inset 0 0 20px rgba(255, 255, 200, 0.04);
 }
 
-/* Afternoon (2 Ã¢â‚¬â€œ 5:59 PM): warm golden hour building */
+/* Afternoon (2 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 5:59 PM): warm golden hour building */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-afternoon {
     --rt-bg: rgba(36, 32, 26, 0.93);
     --rt-text: #f2ead8;
@@ -7492,7 +7492,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 28px rgba(35, 25, 10, 0.5);
 }
 
-/* Sunset (6 Ã¢â‚¬â€œ 7:59 PM): orange-crimson warmth */
+/* Sunset (6 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 7:59 PM): orange-crimson warmth */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-sunset {
     --rt-bg: rgba(38, 20, 16, 0.95);
     --rt-text: #ffd4b8;
@@ -7506,7 +7506,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 32px rgba(50, 15, 5, 0.6), inset 0 0 35px rgba(255, 80, 40, 0.06);
 }
 
-/* Night (8 Ã¢â‚¬â€œ 11:59 PM): cool indigo twilight */
+/* Night (8 ĂÂ˘Ă˘âÂŹĂ˘âŹĹ 11:59 PM): cool indigo twilight */
 .rpg-tracker-panel.rt-daynight-active.rt-phase-night {
     --rt-bg: rgba(12, 16, 34, 0.96);
     --rt-text: #d0d4e8;
@@ -7520,7 +7520,7 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 32px rgba(0, 0, 25, 0.65), inset 0 0 25px rgba(60, 70, 150, 0.07);
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ User panel background image + day/night tint overlay Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ User panel background image + day/night tint overlay ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ
    Layer order: ::before = art, ::after = phase scrim, children = UI. */
 .rpg-tracker-panel.rt-has-bg-image {
     --rt-bg-overlay-color: rgba(18, 18, 24, 0.72);
@@ -7592,7 +7592,7 @@ textarea.rt-cr-input {
     --rt-bg-overlay-color: rgba(10, 14, 32, 0.78);
 }
 
-/* Settings ? help icons Ã¢â‚¬â€ tap/click friendly; hover title tooltips still work on desktop */
+/* Settings ? help icons ĂÂ˘Ă˘âÂŹĂ˘âŹÂ tap/click friendly; hover title tooltips still work on desktop */
 .rpg-tracker-settings .fa-circle-question[title] {
     cursor: pointer;
     touch-action: manipulation;
@@ -7612,7 +7612,7 @@ textarea.rt-cr-input {
 
 
 
-/* Prompt Defaults Updated — primary action emphasis */
+/* Prompt Defaults Updated â primary action emphasis */
 .rt-prompt-upgrade-callout {
     padding: 12px 14px;
     border-radius: 8px;
@@ -7662,7 +7662,7 @@ textarea.rt-cr-input {
     border-color: #ffaa66 !important;
 }
 
-/* ── CYOA Choice Block ─────────────────────────────────────────────────────── */
+/* ââ CYOA Choice Block âââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 /* Chromium leaves huge gaps around unknown <choices> tags; we normalize to
    .rt-cyoa-choices (a real div). Firefox looked fine either way. */
 
@@ -7710,7 +7710,7 @@ textarea.rt-cr-input {
 
 /* Even before JS flatten runs: kill paragraph spacing around lone choice buttons. */
 
-/* ST puts every CYOA button in one <p> separated by <br> — Chromium adds huge gaps. */
+/* ST puts every CYOA button in one <p> separated by <br> â Chromium adds huge gaps. */
 .mes_text p:has(> button:nth-of-type(2)) {
     display: flex !important;
     flex-direction: column !important;
@@ -7785,3 +7785,486 @@ textarea.rt-cr-input {
     border-left: 3px solid rgba(255, 180, 60, 0.45);
 }
 
+
+/* -- Settings Overlay (external floating window) --------------------------- */
+.rt-settings-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: none;
+    pointer-events: none;
+}
+
+.rt-settings-overlay.rt-so-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    /* Keep the dialog inside the visible frame (mobile URL bars / notches). */
+    padding:
+        max(8px, env(safe-area-inset-top, 0px))
+        max(8px, env(safe-area-inset-right, 0px))
+        max(8px, env(safe-area-inset-bottom, 0px))
+        max(8px, env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
+}
+
+.rt-settings-overlay .rt-so-dim {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.rt-settings-overlay .rt-so-panel {
+    --rt-so-fg: #e8eaef;
+    --rt-so-fg-muted: rgba(232, 234, 239, 0.88);
+    --rt-so-bg: #141820;
+    --rt-so-bg-elev: #1c2230;
+    --rt-so-bg-rail: #10141c;
+    --rt-so-border: rgba(255, 255, 255, 0.12);
+    --rt-so-input-bg: #0e1218;
+    --rt-so-input-border: rgba(255, 255, 255, 0.16);
+    --rt-so-accent: #6ea8ff;
+    --rt-so-btn-bg: rgba(255, 255, 255, 0.08);
+    --rt-so-btn-hover: rgba(255, 255, 255, 0.14);
+    --rt-so-drawer: rgba(255, 255, 255, 0.05);
+    --SmartThemeBodyColor: var(--rt-so-fg);
+    --SmartThemeEmColor: var(--rt-so-fg);
+    --SmartThemeQuoteColor: var(--rt-so-fg-muted);
+    --SmartThemeBorderColor: var(--rt-so-border);
+    --SmartThemeBlurTintColor: var(--rt-so-bg-elev);
+    --SmartThemeBotMesBlurTintColor: var(--rt-so-bg);
+    --SmartThemeUserMesBlurTintColor: var(--rt-so-bg-elev);
+    /* ST draws checkbox ticks via this var; keep it distinct from the box fill. */
+    --SmartThemeCheckboxTickColor: var(--rt-so-accent);
+    /* Flex-centered by the overlay — avoid top:50%+translate which clips on mobile vh. */
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: min(1176px, calc(100vw - 16px));
+    /* vh first — unknown units inside min() can invalidate the whole declaration. */
+    height: min(984px, 94vh);
+    max-width: 100%;
+    max-height: 94vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--rt-so-border);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.35);
+    background: var(--rt-so-bg);
+    color: var(--rt-so-fg);
+    pointer-events: auto;
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+@supports (height: 100dvh) {
+    .rt-settings-overlay .rt-so-panel {
+        height: min(984px, 94dvh);
+        max-height: 94dvh;
+    }
+}
+
+/* After a desktop drag, pin with absolute coords instead of flex centering. */
+.rt-settings-overlay .rt-so-panel.rt-so-panel-positioned {
+    position: absolute;
+    margin: 0;
+}
+
+.rt-settings-overlay.rt-so-mode-light .rt-so-panel {
+    --rt-so-fg: #12151c;
+    --rt-so-fg-muted: rgba(18, 21, 28, 0.86);
+    --rt-so-bg: #f4f6f9;
+    --rt-so-bg-elev: #ffffff;
+    --rt-so-bg-rail: #e8ecf2;
+    --rt-so-border: rgba(20, 28, 40, 0.14);
+    --rt-so-input-bg: #ffffff;
+    --rt-so-input-border: rgba(20, 28, 40, 0.2);
+    --rt-so-accent: #2f6fed;
+    --rt-so-btn-bg: rgba(20, 28, 40, 0.06);
+    --rt-so-btn-hover: rgba(20, 28, 40, 0.12);
+    --rt-so-drawer: rgba(20, 28, 40, 0.04);
+    box-shadow: 0 18px 50px rgba(20, 28, 40, 0.22), 0 0 0 1px rgba(20, 28, 40, 0.08);
+}
+
+.rt-settings-overlay .rt-so-panel.rt-so-panel-dragging {
+    user-select: none;
+}
+
+.rt-settings-overlay .rt-so-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.35;
+    pointer-events: none;
+    background-size: cover;
+    background-position: center;
+}
+
+.rt-settings-overlay.rt-so-mode-light .rt-so-bg {
+    opacity: 0.12;
+    filter: grayscale(0.2) brightness(1.35);
+}
+
+.rt-settings-overlay .rt-so-bg-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.rt-settings-overlay .rt-so-header,
+.rt-settings-overlay .rt-so-body {
+    position: relative;
+    z-index: 1;
+}
+
+.rt-settings-overlay .rt-so-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rt-so-border);
+    background: var(--rt-so-bg-elev);
+    color: var(--rt-so-fg);
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.rt-settings-overlay .rt-so-header:active {
+    cursor: grabbing;
+}
+
+.rt-settings-overlay .rt-so-title {
+    font-weight: 650;
+    font-size: 0.95em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--rt-so-fg);
+}
+
+.rt-settings-overlay .rt-so-title i {
+    opacity: 0.8;
+    color: var(--rt-so-accent);
+}
+
+.rt-settings-overlay #rt-so-close {
+    flex-shrink: 0;
+    min-width: 34px;
+    margin: 0;
+    color: var(--rt-so-fg) !important;
+    background: var(--rt-so-btn-bg) !important;
+    border: 1px solid var(--rt-so-border) !important;
+}
+
+.rt-settings-overlay .rt-so-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--rt-so-bg);
+    color: var(--rt-so-fg);
+}
+
+.rt-settings-overlay .rt-so-tabs {
+    width: 168px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 6px;
+    border-right: 1px solid var(--rt-so-border);
+    overflow-y: auto;
+    background: var(--rt-so-bg-rail);
+}
+
+.rt-settings-overlay .rt-so-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 9px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--rt-so-fg);
+    cursor: pointer;
+    font-size: 0.82em;
+    opacity: 0.78;
+}
+
+.rt-settings-overlay .rt-so-tab-btn i {
+    width: 1.1em;
+    text-align: center;
+    opacity: 0.85;
+    color: var(--rt-so-accent);
+}
+
+.rt-settings-overlay .rt-so-tab-btn:hover {
+    opacity: 1;
+    background: var(--rt-so-btn-bg);
+}
+
+.rt-settings-overlay .rt-so-tab-btn.rt-so-tab-active {
+    opacity: 1;
+    background: var(--rt-so-btn-hover);
+    border-color: var(--rt-so-border);
+}
+
+.rt-settings-overlay .rt-so-content {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: 10px 12px 16px;
+    color: var(--rt-so-fg);
+}
+
+.rt-settings-overlay .rt-settings-tab {
+    display: none;
+}
+
+.rt-settings-overlay .rpg-tracker-settings.rt-so-settings-root {
+    margin: 0;
+    color: var(--rt-so-fg);
+}
+
+.rt-settings-overlay .rpg-tracker-settings > .rt-settings-tab > .inline-drawer > .inline-drawer-toggle {
+    /* Primary section header is redundant with the left rail */
+    display: none;
+}
+
+/* Locked appearance for all settings chrome / form controls inside the window */
+.rt-settings-overlay .rt-so-panel,
+.rt-settings-overlay .rt-so-panel .rpg-tracker-settings,
+.rt-settings-overlay .rt-so-panel label,
+.rt-settings-overlay .rt-so-panel span,
+.rt-settings-overlay .rt-so-panel small,
+.rt-settings-overlay .rt-so-panel b,
+.rt-settings-overlay .rt-so-panel p,
+.rt-settings-overlay .rt-so-panel summary,
+.rt-settings-overlay .rt-so-panel .checkbox_label {
+    color: var(--rt-so-fg);
+}
+
+.rt-settings-overlay .rt-so-panel small,
+.rt-settings-overlay .rt-so-panel .rt-so-appearance-label {
+    color: var(--rt-so-fg-muted);
+}
+
+/* settings.html uses inline opacity for secondary copy; locked Dark/Light themes
+   made those blurbs too faint (e.g. World Skeleton intro). Lift the floor. */
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.5"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.5"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.55"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.55"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.6"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.6"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.65"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.65"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.7"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.7"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.75"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.75"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity: 0.8"],
+.rt-settings-overlay .rt-so-panel .inline-drawer-content [style*="opacity:0.8"] {
+    opacity: 0.92 !important;
+    color: var(--rt-so-fg) !important;
+}
+
+.rt-settings-overlay .rt-so-panel .inline-drawer-content label[style*="opacity"] {
+    color: var(--rt-so-fg) !important;
+}
+
+.rt-settings-overlay .rt-so-panel .inline-drawer > .inline-drawer-toggle,
+.rt-settings-overlay .rt-so-panel .inline-drawer-header {
+    background: var(--rt-so-drawer) !important;
+    border: 1px solid var(--rt-so-border) !important;
+    color: var(--rt-so-fg) !important;
+}
+
+.rt-settings-overlay .rt-so-panel .inline-drawer > .inline-drawer-toggle b,
+.rt-settings-overlay .rt-so-panel .inline-drawer-header b,
+.rt-settings-overlay .rt-so-panel .inline-drawer > .inline-drawer-toggle i,
+.rt-settings-overlay .rt-so-panel .inline-drawer-header i {
+    color: var(--rt-so-fg) !important;
+}
+
+.rt-settings-overlay .rt-so-panel input[type="text"],
+.rt-settings-overlay .rt-so-panel input[type="number"],
+.rt-settings-overlay .rt-so-panel input[type="password"],
+.rt-settings-overlay .rt-so-panel input.text_pole,
+.rt-settings-overlay .rt-so-panel textarea,
+.rt-settings-overlay .rt-so-panel select,
+.rt-settings-overlay .rt-so-panel .text_pole {
+    background: var(--rt-so-input-bg) !important;
+    color: var(--rt-so-fg) !important;
+    border: 1px solid var(--rt-so-input-border) !important;
+    box-shadow: none !important;
+}
+
+/* ST checkboxes use BodyColor as the box fill + CheckboxTickColor for the mark.
+   Our locked theme maps BodyColor to text, which made dark-mode boxes solid white
+   with an invisible tick â force a dark/light box and accent-colored check. */
+.rt-settings-overlay .rt-so-panel input[type="checkbox"] {
+    background-color: var(--rt-so-input-bg) !important;
+    border: 1px solid var(--rt-so-input-border) !important;
+    box-shadow: none !important;
+    filter: none !important;
+    accent-color: var(--rt-so-accent);
+}
+
+.rt-settings-overlay .rt-so-panel input[type="checkbox"]::before {
+    box-shadow: inset 1em 1em var(--rt-so-accent) !important;
+}
+
+/* Defaults only â no !important, so accent inline styles on action buttons
+   (Game System Wizard, World Progression, Theme Wizard, factory actions, etc.) win. */
+.rt-settings-overlay .rt-so-panel .menu_button,
+.rt-settings-overlay .rt-so-panel button.menu_button {
+    background: var(--rt-so-btn-bg);
+    color: var(--rt-so-fg);
+    border: 1px solid var(--rt-so-border);
+}
+
+.rt-settings-overlay .rt-so-panel .menu_button:hover,
+.rt-settings-overlay .rt-so-panel button.menu_button:hover {
+    filter: brightness(1.08);
+}
+
+.rt-settings-overlay .rt-so-panel .fa-circle-question {
+    color: var(--rt-so-fg-muted) !important;
+    opacity: 0.85;
+}
+
+.rt-so-appearance-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--rt-so-border);
+    border-radius: 10px;
+    background: var(--rt-so-bg-elev);
+}
+
+.rt-so-appearance-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.84em;
+    font-weight: 600;
+    color: var(--rt-so-fg-muted);
+}
+
+.rt-so-appearance-seg {
+    display: inline-flex;
+    border: 1px solid var(--rt-so-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--rt-so-input-bg);
+}
+
+.rt-so-appearance-btn {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 7px 12px;
+    font-size: 0.82em;
+    cursor: pointer;
+    color: var(--rt-so-fg-muted);
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rt-so-appearance-btn + .rt-so-appearance-btn {
+    border-left: 1px solid var(--rt-so-border);
+}
+
+.rt-so-appearance-btn:hover {
+    color: var(--rt-so-fg);
+    background: var(--rt-so-btn-bg);
+}
+
+.rt-so-appearance-btn.active {
+    color: #fff;
+    background: var(--rt-so-accent);
+}
+
+.rt-settings-overlay.rt-so-mode-light .rt-so-appearance-btn.active {
+    color: #fff;
+}
+
+.rpg-tracker-settings-stub .inline-drawer-content {
+    padding-bottom: 6px;
+}
+
+@media (max-width: 720px) {
+    .rt-settings-overlay.rt-so-open {
+        padding: 0;
+        display: block;
+    }
+
+    .rt-settings-overlay .rt-so-panel,
+    .rt-settings-overlay .rt-so-panel.rt-so-panel-positioned {
+        /* Fixed to the visual viewport with an explicit size — top+bottom+height:auto
+           was collapsing to the header strip on some mobile browsers. */
+        position: fixed !important;
+        left: 4px !important;
+        right: 4px !important;
+        top: max(4px, env(safe-area-inset-top, 0px)) !important;
+        bottom: auto !important;
+        width: auto !important;
+        height: calc(100vh - max(4px, env(safe-area-inset-top, 0px)) - max(4px, env(safe-area-inset-bottom, 0px))) !important;
+        max-width: none !important;
+        max-height: none !important;
+        transform: none !important;
+        border-radius: 10px;
+        flex-shrink: 0 !important;
+    }
+
+    .rt-settings-overlay .rt-so-header {
+        cursor: default;
+    }
+
+    .rt-settings-overlay .rt-so-body {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    .rt-settings-overlay .rt-so-tabs {
+        width: 52px;
+    }
+
+    .rt-settings-overlay .rt-so-tab-btn span {
+        display: none;
+    }
+
+    .rt-settings-overlay .rt-so-tab-btn {
+        justify-content: center;
+        padding: 10px 6px;
+    }
+
+    .rt-so-appearance-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@supports (height: 100dvh) {
+    @media (max-width: 720px) {
+        .rt-settings-overlay .rt-so-panel,
+        .rt-settings-overlay .rt-so-panel.rt-so-panel-positioned {
+            height: calc(100dvh - max(4px, env(safe-area-inset-top, 0px)) - max(4px, env(safe-area-inset-bottom, 0px))) !important;
+        }
+    }
+}

@@ -442,6 +442,19 @@ export function resetChatSetupToStock(settings) {
 }
 
 /**
+ * Deactivate chat-bound catalog items for an unseen chat while keeping inherited
+ * Narrator / Control Room keys and GLOBAL enablement intact.
+ */
+export function clearChatBoundActivations(settings) {
+    if (!settings) return false;
+    const setup = snapshotChatSetup(settings);
+    setup.customFieldStates = {};
+    setup.syspromptSnippetStates = {};
+    setup.gameSystemStates = {};
+    return applyChatSetup(settings, setup);
+}
+
+/**
  * Permanently remove definitions from the global catalogs and every chat's
  * activation map. Ordinary per-chat deactivation must not call this.
  */

@@ -34,9 +34,15 @@ Status: ((PILLS)) Adequate
         );
     });
 
-    it('wires the editable tracker output into the real renderer and saved template', () => {
+    it('does not preview a different tag that saving would discard', () => {
+        expect(buildGameSystemWizardPreviewMemo(output, 'OXYGEN')).toBe('');
+    });
+
+    it('wires the editable tracker source into the read-only renderer and saved template', () => {
         const source = readFileSync(new URL('../game-systems.js', import.meta.url), 'utf8');
         expect(source).toContain('id="rt-gs-ui-live-preview"');
+        expect(source).not.toContain('id="rt-gs-ui-live-preview" class="rpg-tracker-render-view" contenteditable="true"');
+        expect(source).toContain('update this read-only preview');
         expect(source).toContain("$id('rt-gs-trkcontent')?.addEventListener('input'");
         expect(source).toContain('preview.innerHTML = renderMemoAsCards(previewMemo, trackerTag, previewSectionPages, {');
         expect(source).toContain("preview.querySelector('.rt-fullview-btn')?.addEventListener('click'");

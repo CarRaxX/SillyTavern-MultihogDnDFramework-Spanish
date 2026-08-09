@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     applyChatSetup,
     buildDefaultSettings,
+    clearChatBoundActivations,
     getChatSetupItemScope,
     getChatSetupScopeOwner,
     migrateChatSetupCatalogs,
@@ -240,6 +241,58 @@ describe('per-chat Control Room and tracker setup', () => {
         expect(settings.customFields.find(item => item.tag === 'WEATHER')?.enabled).toBe(false);
     });
 
+    it('clears chat-bound activations for an unseen chat while keeping GLOBAL and Narrator config', () => {
+        const settings = buildDefaultSettings();
+        migrateChatSetupCatalogs(settings);
+        settings.narrativePacing = 'high_agency';
+        settings.syspromptModules = { ...settings.syspromptModules, loot: false, CYOA_mode: true };
+        settings.gameSystems = [
+            {
+                id: 'stress-system',
+                name: 'Stress',
+                enabled: true,
+                scope: 'chat',
+                customFieldTag: 'STRESS',
+                syspromptLibraryId: 'stress-rules',
+            },
+            {
+                id: 'weather-system',
+                name: 'Weather',
+                enabled: true,
+                scope: 'global',
+                customFieldTag: 'WEATHER',
+                syspromptLibraryId: 'weather-rules',
+            },
+        ];
+        settings.customFields = [
+            { tag: 'STRESS', label: 'Stress', enabled: true, scope: 'chat', origin: 'wizard' },
+            { tag: 'WEATHER', label: 'Weather', enabled: true, scope: 'global', origin: 'wizard' },
+            { tag: 'SANITY', label: 'Sanity', enabled: true, scope: 'chat' },
+        ];
+        settings.customSyspromptLibrary = [
+            { id: 'stress-rules', tag: 'stress_rules', content: 'Apply stress.', enabled: true, scope: 'chat', origin: 'wizard' },
+            { id: 'weather-rules', tag: 'weather_rules', content: 'Track weather.', enabled: true, scope: 'global', origin: 'wizard' },
+            { id: 'grim', tag: 'tone', content: 'Grim', enabled: true, scope: 'chat' },
+        ];
+        syncChatSetupCatalogs(settings);
+
+        expect(clearChatBoundActivations(settings)).toBe(true);
+
+        expect(settings.narrativePacing).toBe('high_agency');
+        expect(settings.syspromptModules.loot).toBe(false);
+        expect(settings.syspromptModules.CYOA_mode).toBe(true);
+
+        expect(settings.gameSystems.find(gs => gs.id === 'stress-system')?.enabled).toBe(false);
+        expect(settings.customFields.find(f => f.tag === 'STRESS')?.enabled).toBe(false);
+        expect(settings.customSyspromptLibrary.find(s => s.id === 'stress-rules')?.enabled).toBe(false);
+        expect(settings.customFields.find(f => f.tag === 'SANITY')?.enabled).toBe(false);
+        expect(settings.customSyspromptLibrary.find(s => s.id === 'grim')?.enabled).toBe(false);
+
+        expect(settings.gameSystems.find(gs => gs.id === 'weather-system')?.enabled).toBe(true);
+        expect(settings.customFields.find(f => f.tag === 'WEATHER')?.enabled).toBe(true);
+        expect(settings.customSyspromptLibrary.find(s => s.id === 'weather-rules')?.enabled).toBe(true);
+    });
+
     it('makes a Wizard Game System authoritative for both linked children', () => {
         const settings = buildDefaultSettings();
         migrateChatSetupCatalogs(settings);
@@ -310,5 +363,55 @@ describe('per-chat Control Room and tracker setup', () => {
         syncChatSetupCatalogs(settings);
         expect(settings.trackerModuleDatabase[0].scope).toBe('global');
         expect(settings.trackerModuleDatabase[0].globalEnabled).toBe(true);
+    });
+
+    it('rename after catalog sync must mutate the live field — orphan+remove deletes the module', () => {
+        // Reproduces Custom Module Editor + alt-tab: syncChatSetupCatalogs reclones
+        // customFields, so a closed-over editor reference becomes an orphan. Mutating
+        // the orphan then removeChatSetupCatalogEntries(oldTag) strips the live entry.
+        const settings = buildDefaultSettings();
+        migrateChatSetupCatalogs(settings);
+        settings.customFields = [{
+            tag: 'FOO',
+            label: 'Foo',
+            prompt: 'track foo',
+            template: 'Foo: 1',
+            enabled: true,
+        }];
+        settings.blockOrder = ['CHARACTER', 'FOO'];
+        syncChatSetupCatalogs(settings);
+
+        const orphan = settings.customFields[0];
+        syncChatSetupCatalogs(settings); // alt-tab / saveSettings flush
+        expect(settings.customFields[0]).not.toBe(orphan);
+
+        // Broken path (pre-fix): mutate orphan, then prune FOO from live catalogs.
+        orphan.tag = 'BAR';
+        orphan.prompt = 'revised';
+        removeChatSetupCatalogEntries(settings, { customFieldTags: ['FOO'] });
+        expect(settings.customFields.map(f => f.tag)).toEqual([]);
+
+        // Correct path: re-resolve by opened tag, rename live object, then prune.
+        settings.customFields = [{
+            tag: 'FOO',
+            label: 'Foo',
+            prompt: 'track foo',
+            template: 'Foo: 1',
+            enabled: true,
+        }];
+        settings.blockOrder = ['CHARACTER', 'FOO'];
+        syncChatSetupCatalogs(settings);
+        const openedTag = 'FOO';
+        syncChatSetupCatalogs(settings);
+        const liveIndex = settings.customFields.findIndex(f => f.tag === openedTag);
+        const liveField = settings.customFields[liveIndex];
+        liveField.tag = 'BAR';
+        liveField.prompt = 'revised';
+        removeChatSetupCatalogEntries(settings, { customFieldTags: ['FOO'] });
+        expect(settings.customFields.map(f => f.tag)).toEqual(['BAR']);
+        expect(settings.customFields[0].prompt).toBe('revised');
+        syncChatSetupCatalogs(settings);
+        expect(settings.trackerModuleDatabase.map(f => f.tag)).toEqual(['BAR']);
+        expect(settings.trackerModuleDatabase[0].prompt).toBe('revised');
     });
 });

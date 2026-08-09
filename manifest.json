@@ -1,6 +1,6 @@
 {
-    "display_name": "Multihog DnD Framework (Español)",
-    "version": "7.0.12",
+    "display_name": "Multihog D&D Framework (Español)",
+    "version": "7.1.52",
     "author": "Disgusting Fatbody",
     "description": "Framework y motor de juego D&D / RPG para SillyTavern con rastreador de estado reactivo, gestión de inventario, tiradas de dados, misiones, relaciones de PNJs y agente de Lorebook.",
     "js": "index.js",

@@ -356,7 +356,15 @@ export function isBlankSectionContent(content) {
 }
 
 /** Narrator Configuration tags whose enabled-state doubles as a base sysprompt toggle. */
-const KNOWN_TOGGLE_DEFAULTS = { loot: true, random_events: true, resting: true, party_bench: true, quests: true, CYOA_mode: false };
+const KNOWN_TOGGLE_DEFAULTS = {
+    loot: true,
+    random_events: true,
+    resting: true,
+    party_bench: true,
+    quests: true,
+    CYOA_mode: false,
+    dungeon_reality_and_hidden_mapping: true,
+};
 
 /** Checkbox ids from the Narrator Configuration panel, keyed by base sysprompt tag. */
 const NARRATOR_TOGGLE_IDS = {
@@ -367,6 +375,7 @@ const NARRATOR_TOGGLE_IDS = {
     quests: 'rpg_sysprompt_mod_quests',
     CYOA_mode: 'rpg_sysprompt_mod_cyoa_mode',
     relationship_tracking: 'rpg_sysprompt_mod_npc_rel_bars',
+    dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
 export function isSectionUnlocked(settings, tag) {
@@ -1616,7 +1625,7 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                 </div>
                 <textarea id="rt-gs-trkcontent" class="text_pole" rows="18" style="${GS_TEXTAREA_TALL_STYLE}">${escapeHtml(state.trackerContent)}</textarea>
                 <div style="margin-top:10px; font-size:11px; font-weight:bold;">UI Live Preview</div>
-                <div style="font-size:10px; opacity:0.58; line-height:1.35; margin:3px 0 6px;">Automatically renders the last complete [${escapeHtml(state.trackerTag)}] sample block found above. Edit that block to update this preview.</div>
+                <div style="font-size:10px; opacity:0.58; line-height:1.35; margin:3px 0 6px;">Automatically renders the last complete [${escapeHtml(state.trackerTag)}] sample block found above. Edit that source block to update this read-only preview.</div>
                 <div id="rt-gs-ui-live-preview" class="rpg-tracker-render-view" style="min-height:58px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2); padding:4px; overflow:hidden;"></div>
             </div>
 
@@ -1669,7 +1678,7 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
         const previewSectionPages = {};
         let previewFullView = false;
         let previousPreviewTag = '';
-        const renderUiLivePreview = () => {
+        const renderUiLivePreview = (force = false) => {
             const preview = $id('rt-gs-ui-live-preview');
             if (!preview) return;
             const trackerTag = sanitizeUpperTag($id('rt-gs-trktag')?.value || state.trackerTag);
@@ -1685,7 +1694,8 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                 return;
             }
 
-            const savedCustomFields = settings.customFields || [];
+            const appSettings = getSettings();
+            const savedCustomFields = appSettings.customFields || [];
             const ghostField = {
                 tag: trackerTag,
                 label: $id('rt-gs-trklabel')?.value || state.trackerLabel || trackerTag,
@@ -1694,16 +1704,18 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                 template: extractGameSystemWizardTemplate(trackerContent, trackerTag),
                 enabled: true,
             };
-            settings.customFields = [
+            appSettings.customFields = [
                 ...savedCustomFields.filter(field => String(field?.tag || '').toUpperCase() !== trackerTag),
                 ghostField,
             ];
+            settings.customFields = appSettings.customFields;
             try {
                 preview.innerHTML = renderMemoAsCards(previewMemo, trackerTag, previewSectionPages, {
                     fullViewSections: previewFullView ? [trackerTag] : [],
                     showCategorySettings: false,
                 });
             } finally {
+                appSettings.customFields = savedCustomFields;
                 settings.customFields = savedCustomFields;
             }
 
@@ -1712,7 +1724,7 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                 event.stopPropagation();
                 previewFullView = !previewFullView;
                 previewSectionPages[trackerTag] = 0;
-                renderUiLivePreview();
+                renderUiLivePreview(true);
             });
             preview.querySelectorAll('.rt-page-btn').forEach(button => {
                 button.addEventListener('click', event => {
@@ -1720,7 +1732,7 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                     event.stopPropagation();
                     const direction = Number(button.dataset.dir) || 0;
                     previewSectionPages[trackerTag] = Math.max(0, (previewSectionPages[trackerTag] || 0) + direction);
-                    renderUiLivePreview();
+                    renderUiLivePreview(true);
                 });
             });
         };

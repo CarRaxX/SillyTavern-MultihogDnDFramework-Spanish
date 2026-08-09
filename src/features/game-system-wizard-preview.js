@@ -4,13 +4,37 @@ export function normalizeWizardTrackerTag(value) {
         .replace(/^_+|_+$/g, '') || 'CUSTOM';
 }
 
-/** Extract the last complete sample block matching the wizard's tracker tag. */
+/** Extract the sample block matching the wizard's tracker tag, or fallback to raw content. */
 export function extractGameSystemWizardTemplate(trackerContent, trackerTag) {
+    let raw = String(trackerContent || '').trim();
+    if (!raw) return '';
+    // Strip markdown code fences if present
+    raw = raw.replace(/^```[a-zA-Z0-9_-]*\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+
     const tag = normalizeWizardTrackerTag(trackerTag);
     const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // 1. Exact closed [TAG]...[/TAG] block
     const blockPattern = new RegExp(`\\[${escapedTag}\\]([\\s\\S]*?)\\[\\/${escapedTag}\\]`, 'gi');
-    const matches = [...String(trackerContent || '').matchAll(blockPattern)];
-    return matches.length ? String(matches[matches.length - 1][1] || '').trim() : '';
+    const matches = [...raw.matchAll(blockPattern)];
+    if (matches.length) {
+        return String(matches[matches.length - 1][1] || '').trim();
+    }
+
+    // 2. Open [TAG] block without closing tag
+    const openTagPattern = new RegExp(`\\[${escapedTag}\\]([\\s\\S]*)$`, 'i');
+    const openMatch = raw.match(openTagPattern);
+    if (openMatch && openMatch[1].trim()) {
+        return openMatch[1].trim();
+    }
+
+    // 3. If raw has NO [TAG] tags at all, treat raw text as the template content directly
+    const hasAnyTags = /\[[A-Z0-9_-]+\]/i.test(raw);
+    if (!hasAnyTags) {
+        return raw;
+    }
+
+    return '';
 }
 
 /** Build the temporary state memo rendered by the wizard UI preview. */

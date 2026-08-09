@@ -27,8 +27,8 @@ describe('General & Visuals settings', () => {
             .toBe((settingsMarkup.match(/<\/div>/g) || []).length);
     });
 
-    it('organizes settings into Core, UI Appearance, and Portraits drawers', () => {
-        expect(settingsMarkup).toContain('<b>Core</b>');
+    it('organizes settings into Core & Branching, UI Appearance, and Portraits drawers', () => {
+        expect(settingsMarkup).toContain('<b>Core &amp; Branching</b>');
         expect(settingsMarkup).toContain('<b>UI Appearance</b>');
         expect(settingsMarkup).toContain('<b>Portraits</b>');
     });
@@ -57,6 +57,8 @@ describe('General & Visuals settings', () => {
 
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         expect(indexSource).toContain('organizeConnectionSettingsUI();');
+        expect(indexSource).toContain('initSettingsOverlay(');
+        expect(indexSource).toContain("settings-stub");
         expect(indexSource).toContain("control: '#rpg_tracker_connection_source'");
         expect(indexSource).toContain("control: '#rpg_tracker_router_source'");
         expect(indexSource).toContain("control: '#rpg_adventure_companion_connection_source'");

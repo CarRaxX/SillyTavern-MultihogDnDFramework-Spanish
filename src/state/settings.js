@@ -675,6 +675,24 @@ function getSettingsInternal(extensionSettings) {
         }
     }
 
+    // Rename CORE field Equipment → Worn Equipment so LA does not treat it as inventory/coins.
+    const renameEquipmentSection = (sections) => {
+        if (!Array.isArray(sections)) return;
+        for (const sec of sections) {
+            if (sec?.id === 'sec_equipment' && sec.name === 'Equipment') {
+                sec.name = 'Worn Equipment';
+            }
+        }
+    };
+    renameEquipmentSection(s.npcCoreSections);
+    renameEquipmentSection(s.pcCoreSections);
+    for (const presets of [s.npcSectionPresets, s.pcSectionPresets]) {
+        if (!presets || typeof presets !== 'object') continue;
+        for (const preset of Object.values(presets)) {
+            renameEquipmentSection(preset?.sections || preset);
+        }
+    }
+
     enforceRealtimeVisualizationDisabled(s);
 
     return extensionSettings[MODULE_NAME];

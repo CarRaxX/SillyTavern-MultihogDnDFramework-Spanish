@@ -38,8 +38,11 @@ describe('display-time macro substitution ({{user}} etc.)', () => {
     });
 });
 
+import { buildDefaultSettings } from '../src/state/defaults.js';
+
 describe('Lorebook Agent player-character naming rules', () => {
     it('instructs the agent to write the bare {{user}} macro without class/profession parentheticals', () => {
-        expect(routerSource).toContain('Write \\`{{user}}\\` bare — never followed by a class, profession, title, or parenthetical');
+        const defaults = buildDefaultSettings();
+        expect(defaults.routerBasicSystemPromptTemplate).toContain('Write `{{user}}` bare — never followed by a class, profession, title, or parenthetical');
     });
 });

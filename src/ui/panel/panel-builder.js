@@ -6,6 +6,8 @@ import { buildPanelMarkup } from './panel-markup.js';
 import { createSceneViewController } from './panel-scene-view.js';
 import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis } from './card-synopsis.js';
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
+import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
+import { openSettingsOverlay } from '../settings-overlay.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -223,6 +225,15 @@ export function createPanel(dependencies) {
             // 2. Stop SillyTavern generation (kills internal ST requests)
             const { stopGeneration } = SillyTavern.getContext();
             if (stopGeneration) stopGeneration();
+        });
+    }
+
+    const settingsBtn = panel.querySelector('#rpg-tracker-settings-btn');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openSettingsOverlay();
         });
     }
 
@@ -490,6 +501,7 @@ export function createPanel(dependencies) {
                 s.routerBasicMode = (/** @type {HTMLInputElement} */ (e.target)).checked;
                 $('#rpg_tracker_router_basic_mode').prop('checked', s.routerBasicMode);
                 saveSettings();
+                if (typeof globalThis._rpgSyncSettingsUi === 'function') globalThis._rpgSyncSettingsUi();
             });
         }
 
@@ -955,7 +967,7 @@ export function createPanel(dependencies) {
             };
 
             const sectionIcons = {
-                'General': '📋', 'Species': '🧬', 'Body': '👁️', 'Equipment': '🎽',
+                'General': '📋', 'Species': '🧬', 'Body': '👁️', 'Worn Equipment': '🎽', 'Equipment': '🎽',
                 'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
                 'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
                 'Behaviors': '🔄', 'Relationship': '❤️',
@@ -978,7 +990,7 @@ export function createPanel(dependencies) {
                         const sectionColor = config ? config.color : (
                             name === 'Species' ? '#0ea5e9' :
                                 (name === 'Body' || name === 'Appearance/Species' || name === 'Appearance') ? '#d4a940' :
-                                    name === 'Equipment' ? '#f59e0b' :
+                                    name === 'Worn Equipment' || name === 'Equipment' ? '#f59e0b' :
                                         name === 'Personality' ? '#8b5cf6' :
                                     name === 'Brief Background' ? '#3b82f6' :
                                         name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
@@ -1587,7 +1599,7 @@ export function createPanel(dependencies) {
 
                                             // Rebuild the NPC instruction from settings
                                             if (updS.routerModules?.npc) {
-                                                updS.routerModules.npc.instruction = buildNpcInstruction(finalMajor, finalMinor, false); // ignoreLimits only applies at import-time, not stored globally
+                                                updS.routerModules.npc.instruction = buildNpcInstruction(finalMajor, finalMinor, false, updS); // ignoreLimits only applies at import-time, not stored globally
                                             }
 
                                             saveSettings();
@@ -3290,7 +3302,7 @@ RULES:
                 }
             } catch (_) { }
 
-            const npcInstruction = buildNpcInstruction(s.npcMajorWords || 25, s.npcMinorWords || 15, !!s.ignoreNpcImportLimits);
+            const npcInstruction = buildNpcInstruction(s.npcMajorWords || 25, s.npcMinorWords || 15, !!s.ignoreNpcImportLimits, s);
 
             const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
             const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
@@ -3404,6 +3416,7 @@ Rules:
             const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
             const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
 
+            const namingRule = substituteDisplayMacros(NEW_NPC_NAMING_RULE);
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
 ---
@@ -3416,8 +3429,9 @@ ${s.routerModules?.npc?.instruction || ''}
 
 Rules:
 - Use the USER'S NPC CONCEPT as your primary source. Expand it into a full, vivid character.
-- If no name is provided, create a fitting one for the world setting.
-- You MUST NOT use any of the names listed in the Forbidden Names section. If the concept implies a name from this list, modify or create a new unique name.
+- If no name is provided, create a fitting one for the world setting using the New NPC Naming Rule below.
+- You MUST NOT use any of the names listed in the Forbidden Names section. If the concept implies a name from this list, modify or create a new unique name using the New NPC Naming Rule below.
+- If the user already provided a name, keep it (do not rename) unless it is forbidden.
 - Adapt appearance, background and habits to fit naturally into the current campaign setting/tone inferred from context.
 - Your output MUST be strictly formatted as a lorebook entry tag:
   [[NPC: Name | Description | keywords]]
@@ -3425,7 +3439,9 @@ Rules:
 - Replace "Description" with the full formatted entry. Wrap all immutable identity sections (${sectionNamesList}) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
 - CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) and ignore any other sections.
 - Replace "keywords" with a comma-separated list including their name.
-- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
+- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.
+
+${namingRule}`;
 
             const aiSettings = {
                 connectionSource: s.routerConnectionSource ?? 'default',
@@ -3470,6 +3486,7 @@ Rules:
             const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
             const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
 
+            const namingRule = substituteDisplayMacros(NEW_NPC_NAMING_RULE);
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
 ---
@@ -3482,8 +3499,9 @@ ${s.routerModules?.npc?.instruction || ''}
 
 Rules:
 - The NPC MUST embody the requested archetype (e.g. a "Lover" should have romantic motivation toward the player; an "Arch Nemesis" should be a credible threat with personal stakes).
-- Invent a name suitable for the world if not provided.
-- You MUST NOT use any of the names listed in the Forbidden Names section.
+- Invent a name suitable for the world if not provided, using the New NPC Naming Rule below.
+- You MUST NOT use any of the names listed in the Forbidden Names section. If you must invent a replacement name, use the New NPC Naming Rule below.
+- If a Desired Name is provided, keep it (do not rename) unless it is forbidden.
 - Ground the NPC's appearance, backstory, and habits in the current campaign setting inferred from context.
 - Your output MUST be strictly formatted as a lorebook entry tag:
   [[NPC: Name | Description | keywords]]
@@ -3491,7 +3509,9 @@ Rules:
 - Replace "Description" with the full formatted entry. Wrap all immutable identity sections (${sectionNamesList}) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
 - CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) and ignore any other sections.
 - Replace "keywords" with a comma-separated list including their name.
-- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
+- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.
+
+${namingRule}`;
 
             const aiSettings = {
                 connectionSource: s.routerConnectionSource ?? 'default',
@@ -4197,7 +4217,7 @@ Rules:
                         const st = getSettings();
                         if (DEFAULT_MODULES[id]) {
                             if (id === 'npc') {
-                                st.routerModules[id].instruction = buildNpcInstruction(st.npcMajorWords, st.npcMinorWords);
+                                st.routerModules[id].instruction = buildNpcInstruction(st.npcMajorWords, st.npcMinorWords, false, st);
                             } else {
                                 st.routerModules[id].instruction = DEFAULT_MODULES[id].instruction;
                             }
@@ -4327,7 +4347,8 @@ Rules:
         if (maxAct) {
             maxAct.addEventListener('input', () => {
                 const s = getSettings();
-                s.routerMaxActivations = parseInt(maxAct.value) || 8;
+                const val = parseInt(maxAct.value) || 8;
+                s.routerMaxActivations = val;
                 $('#rpg_tracker_router_max_activations').val(s.routerMaxActivations);
                 saveSettings();
             });

@@ -17,5 +17,7 @@ describe('panel markup', () => {
         expect(markup).toContain('Saved memo');
         expect(markup).toContain('id="rpg-tracker-agent"');
         expect(markup).toContain('rt-panel-collapsed');
+        expect(markup).toContain('id="rpg-tracker-settings-btn"');
+        expect(markup.indexOf('rpg-tracker-settings-btn')).toBeLessThan(markup.indexOf('rpg-tracker-help-btn'));
     });
 });

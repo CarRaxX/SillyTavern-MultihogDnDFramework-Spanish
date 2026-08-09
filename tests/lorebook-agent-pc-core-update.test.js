@@ -29,7 +29,7 @@ describe('isPcCoreTarget sentinel matching', () => {
     });
 });
 
-describe('PC Body/Equipment bio patching', () => {
+describe('PC Body/Worn Equipment bio patching', () => {
     it('patches Body in a flat PC bio string', () => {
         const bio = 'Species: Human.\nBody: Tall human with short dark hair.\nEquipment: Leather jacket.\nPersonality: Stoic.\nBackground: Ex-soldier.\n';
         const result = patchLabeledSection(bio, 'Body', 'Tall human with a fresh scar across the left cheek.', { isPc: true });
@@ -41,12 +41,21 @@ describe('PC Body/Equipment bio patching', () => {
         expect(result.text).toContain('Background: Ex-soldier.');
     });
 
-    it('patches Equipment in a flat PC bio string without touching Body', () => {
+    it('patches legacy Equipment header in place without renaming it', () => {
         const bio = 'Species: Human.\nBody: Tall human with short dark hair.\nEquipment: Leather jacket.\nPersonality: Stoic.\n';
-        const result = patchLabeledSection(bio, 'Equipment', 'Steel breastplate and a longsword.', { isPc: true });
+        const result = patchLabeledSection(bio, 'Worn Equipment', 'Steel breastplate and a longsword.', { isPc: true });
         expect(result.ok).toBe(true);
         expect(result.text).toContain('Equipment: Steel breastplate and a longsword.');
         expect(result.text).toContain('Body: Tall human with short dark hair.');
+        expect(result.text).not.toMatch(/Worn Equipment:/);
+    });
+
+    it('appends Worn Equipment when no equipment header exists', () => {
+        const bio = 'Personality: Curious.\n';
+        const result = patchLabeledSection(bio, 'Worn Equipment', 'Travel cloak and staff.', { isPc: true });
+        expect(result.ok).toBe(true);
+        expect(result.text).toMatch(/Worn Equipment:\s*Travel cloak and staff\./);
+        expect(result.text).toContain('Personality: Curious.');
     });
 
     it('lazily appends Body when missing', () => {
@@ -73,8 +82,9 @@ describe('PC Body/Equipment bio patching', () => {
         expect(isAppearanceField('Personality')).toBe(false);
     });
 
-    it('isEquipmentField recognizes Equipment/gear/worn aliases', () => {
+    it('isEquipmentField recognizes Worn Equipment/Equipment/gear/worn aliases', () => {
         expect(isEquipmentField('Equipment')).toBe(true);
+        expect(isEquipmentField('Worn Equipment')).toBe(true);
         expect(isEquipmentField('gear')).toBe(true);
         expect(isEquipmentField('Worn Gear')).toBe(true);
         expect(isEquipmentField('Personality')).toBe(false);
@@ -93,25 +103,25 @@ describe('router.js PC core-update wiring', () => {
         expect(routerSource).toContain('function applyPcCoreUpdate(pc, field, content)');
         expect(routerSource).toContain('if (isPcCoreTarget(id, linkedPcName))');
         expect(routerSource).toContain('const pcResult = applyPcCoreUpdate(linkedPc, field, newContent)');
-        expect(routerSource).toContain("PC updates are limited to Body and Equipment");
+        expect(routerSource).toContain("PC updates are limited to Body and Worn Equipment");
     });
 
     it('commit.appearance/commit.equipment schemas accept PC sentinel ids', () => {
         expect(routerSource).toContain('or "{{user}}" / "player" / "pc" / PC name for the Player Character card');
         expect(routerSource).toContain('You may update the Player Character\'s own Body via');
-        expect(routerSource).toContain('You may update the Player Character\'s own Equipment via');
+        expect(routerSource).toContain('You may update the Player Character\'s own Worn Equipment via');
         expect(routerSource).toContain('commitProperties.equipment = {');
     });
 
-    it('parses UPDATE_EQUIPMENT tags into action.equipment, mapped to field Equipment', () => {
+    it('parses UPDATE_EQUIPMENT tags into action.equipment, mapped to field Worn Equipment', () => {
         expect(routerSource).toContain('const equipRegex = /\\[\\[UPDATE_EQUIPMENT:');
         expect(routerSource).toContain("action.equipment.push({ id, content })");
-        expect(routerSource).toContain("...(action.equipment || []).map(item => ({ id: item.id, field: 'Equipment', content: item.content }))");
+        expect(routerSource).toContain("...(action.equipment || []).map(item => ({ id: item.id, field: 'Worn Equipment', content: item.content }))");
     });
 
-    it('module instructions allow PC Body/Equipment updates without creating a PC lorebook entry', () => {
+    it('module instructions allow PC Body/Worn Equipment updates without creating a PC lorebook entry', () => {
         expect(moduleInstrSource).toContain('[[UPDATE_APPEARANCE: {{user}} | new body text]]');
-        expect(moduleInstrSource).toContain('[[UPDATE_EQUIPMENT: {{user}} | new equipment text]]');
+        expect(moduleInstrSource).toContain('[[UPDATE_EQUIPMENT: {{user}} | new worn gear text]]');
         expect(moduleInstrSource).toContain('never create a PC lorebook entry');
     });
 });

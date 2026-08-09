@@ -2,6 +2,72 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.1.52] - 2026-08-09
+
+### Changed
+- **Worn Equipment**: Renamed the Lorebook Agent CORE field from Equipment to Worn Equipment (and clarified prompts) so LA treats it as visibly worn/carried gear — not coins, loot piles, or inventory lists. Legacy `Equipment:` headers in existing entries still patch in place.
+
+## [7.1.51] - 2026-08-09
+
+### Fixed
+- **CHAT-BOUND Game Systems on new chat**: Unseen chats with Chat Link + Lock Control Room no longer keep previous-chat CHAT-BOUND activations enabled. Catalog items deactivate for the new chat; GLOBAL enablement and inherited Narrator Configuration stay intact.
+
+## [7.1.50] - 2026-08-09
+
+### Added
+- **Dungeon Reality Mapping (Experimental)**: New native `<dungeon_reality_and_hidden_mapping>` sysprompt section (below `<constraints>`) that builds a full hidden location map before high-risk exploration and resolves traps, stealth, and enemies against it. Toggleable under Components; on by default.
+- **XP rule**: Do not award XP as a consequence of a failed check.
+
+### Changed
+- **Settings overlay appearance**: Defaults to Light on first boot.
+
+## [7.1.35] - 2026-08-08
+
+### Added
+- **Settings overlay**: Extensions drawer keeps a light Multihog stub with **Open Settings**; full settings open in a floating external window with a left tab rail (General, Connections, Game Systems, State Tracker, Lorebook Agent, World Progression, Adventure Companion). Not a fullscreen takeover — centered/draggable panel with mobile safe-area sizing.
+- **Settings window Dark / Light lock**: Appearance toggle at the top of General forces readable locked chrome so ST/tracker themes cannot wash out the settings menu. Defaults to Dark.
+- **State Tracker settings shortcut**: Wrench button in the tracker header (left of CHAT) opens the settings overlay.
+- **Critical settings WAL**: Browser-local backup for Display Groups and prompt-defaults acknowledgement so cancelled settings saves during reload are less likely to resurrect deleted groups or the upgrade dialog.
+
+### Fixed
+- **Prompt defaults fingerprint**: Shipped-default fingerprint no longer reads live user settings (e.g. relationship max / CORE sections) via module getters, which could false-trigger Prompt Defaults Updated.
+- **Settings overlay mobile layout**: Panel no longer spawns clipped above the viewport or collapses to a header-only strip.
+- **Settings overlay readability**: Strengthened muted/inline-opacity description text in locked Dark/Light chrome.
+- **Settings overlay background**: Removed probe for missing `assets/settings-bg.png` (kept SVG gradient only).
+
+## [7.1.2] - 2026-08-08
+
+### Changed
+- **World Skeleton prompt**: Adds a procedural NPC naming rule with culture-matched construction and randomized first/last-name root macros so new skeleton NPCs avoid high-frequency placeholder names.
+
+## [7.1.0] - 2026-08-08
+
+### Added
+- **Branch Campaign**: One-button pipeline under General & Visuals → Core & Branching that creates a SillyTavern transcript branch, deep-copies all Multihog per-chat data (memo, quests, portraits maps, setup, companion, etc.), clones the lorebook stack under the new chat’s sanitized prefix, then opens the branch — leaving the original chat intact.
+- **Chat rename migration**: Listens for SillyTavern `CHAT_RENAMED` and moves Multihog `chatStates` (plus companion / memo-recovery maps) to the new chat file name so renaming a chat no longer looks like an empty campaign.
+
+### Changed
+- **Clone Stack**: Uses the shared lorebook clone helper; tip points users at Branch Campaign for the full automated branch.
+
+## [7.0.14] - 2026-08-08
+
+### Added
+- **Lorebook Agent System Prompt Editor**: Exposed the stored Basic Mode prompt template and the Agent Mode base/shared-context templates in settings, with mode-aware reset controls. Dynamic request context and tool schemas remain generated at runtime.
+
+### Changed
+- **Game System Wizard UI Live Preview**: Added a read-only live rendering of the matching tracker sample block, including progress bars, custom markers, badges, and preview pagination controls. Edit the source block above it to update both the preview and saved template.
+
+### Fixed
+- **Lorebook Agent Prompt Updates**: Routed all four Lorebook templates through the normal prompt-fingerprint/update dialog, preserving custom prompts and cartridge backups until the user explicitly applies the update.
+- **Lorebook Agent Prompt Runtime**: Dynamic module, relationship, campaign, activation-limit, and combat guidance now expands per request without rewriting stored templates or crossing Basic/Agent editor fields.
+- **Lorebook Agent Prompt Whitespace**: Removed empty spacer lines from shipped templates and dynamic insertions.
+- **Game System Wizard Preview**: Preview extraction now matches exactly what saving retains instead of rendering unrelated fallback blocks.
+
+## [7.0.13] - 2026-08-08
+
+### Fixed
+- **Custom Module Editor**: Save/Delete after alt-tab (or any `saveSettings` → catalog sync) no longer targets an orphaned field object. Renaming a module ID could previously remove the live entry entirely; edits could silently fail to persist.
+
 ## [7.0.12] - 2026-08-08
 
 ### Changed

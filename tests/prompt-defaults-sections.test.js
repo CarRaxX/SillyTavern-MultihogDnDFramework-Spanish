@@ -14,14 +14,14 @@ describe('prompt-defaults Character Sheets category', () => {
         expect(PROMPT_DEFAULTS_CATEGORIES).toContain('sections');
     });
 
-    it('ships Species/Body/Equipment in the bundled sections snapshot', () => {
+    it('ships Species/Body/Worn Equipment in the bundled sections snapshot', () => {
         const snap = buildBundledPromptsSnapshot();
         expect(snap.sections?.pcCoreSections).toContain('name: Species');
         expect(snap.sections?.pcCoreSections).toContain('name: Body');
-        expect(snap.sections?.pcCoreSections).toContain('name: Equipment');
+        expect(snap.sections?.pcCoreSections).toContain('name: Worn Equipment');
         expect(snap.sections?.npcCoreSections).toContain('name: Species');
         expect(snap.sections?.npcCoreSections).toContain('name: Body');
-        expect(snap.sections?.npcCoreSections).toContain('name: Equipment');
+        expect(snap.sections?.npcCoreSections).toContain('name: Worn Equipment');
         expect(snap.sections?.pcCoreSections).not.toContain('name: Appearance/Species');
         expect(snap.sections?.npcCoreSections).not.toContain('name: Appearance/Species');
     });

@@ -1,10 +1,11 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
 import { buildSkeletonLorebookSourceContext } from './src/features/world-progression/skeleton-lorebooks.js';
+import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -62,7 +63,7 @@ function getLinkedPlayerCharacter() {
 }
 
 /**
- * Apply a Body or Equipment (only) patch to the linked PC card's flat bio string.
+ * Apply a Body or Worn Equipment (only) patch to the linked PC card's flat bio string.
  * Species/Personality/Background/etc. are never mutable by the Lorebook Agent for
  * the PC — those are the player's own, set at character creation.
  * @returns {{ ok: boolean, error?: string }}
@@ -70,9 +71,9 @@ function getLinkedPlayerCharacter() {
 function applyPcCoreUpdate(pc, field, content) {
     if (!pc) return { ok: false, error: 'No Player Character card linked' };
     if (!isAppearanceField(field) && !isEquipmentField(field)) {
-        return { ok: false, error: 'PC updates are limited to Body and Equipment' };
+        return { ok: false, error: 'PC updates are limited to Body and Worn Equipment' };
     }
-    const targetField = isEquipmentField(field) ? 'Equipment' : 'Body';
+    const targetField = isEquipmentField(field) ? 'Worn Equipment' : 'Body';
     const result = patchLabeledSection(pc.bio || '', targetField, content, { isPc: true });
     if (!result.ok) return { ok: false, error: result.error || 'Failed to patch PC bio' };
     pc.bio = result.text;
@@ -1006,20 +1007,20 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             coreSections = DEFAULT_NPC_SECTIONS;
         }
         const sectionNamesList = coreSections.map(s => s.name).join(', ');
-        // Body and Equipment are exclusive to their dedicated tools; automatic passes may
+        // Body and Worn Equipment are exclusive to their dedicated tools; automatic passes may
         // only additionally touch Combat Profile via commit.core / UPDATE_CORE. Species and
         // the other identity fields (Personality, Background, Habits, Strengths, Flaws) only
         // unlock on a manual/Direct Prompt pass.
         const eligibleCoreFields = getEligibleCoreFieldNames(coreSections, isManual);
         const eligibleCoreFieldsList = eligibleCoreFields.join(', ');
         const autoPassCoreRestriction = !isManual
-            ? `\n- AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field you may update this pass via UPDATE_CORE / commit.core. Do not modify Species, Personality, Background, Habits, Strengths, or Flaws unless the user gave an explicit instruction this turn (Direct Prompt). Body/Equipment changes use UPDATE_APPEARANCE / UPDATE_EQUIPMENT instead.`
-            : `\n- DIRECT PROMPT PASS: you may update any eligible [CORE] identity field (${eligibleCoreFieldsList}) when the user's instruction warrants it. Body/Equipment still use UPDATE_APPEARANCE / UPDATE_EQUIPMENT.`;
+            ? `\n- AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field you may update this pass via UPDATE_CORE / commit.core. Do not modify Species, Personality, Background, Habits, Strengths, or Flaws unless the user gave an explicit instruction this turn (Direct Prompt). Body/Worn Equipment changes use UPDATE_APPEARANCE / UPDATE_EQUIPMENT instead.`
+            : `\n- DIRECT PROMPT PASS: you may update any eligible [CORE] identity field (${eligibleCoreFieldsList}) when the user's instruction warrants it. Body/Worn Equipment still use UPDATE_APPEARANCE / UPDATE_EQUIPMENT.`;
         const pcAppearanceGuidance = `
 - You may update the Player Character's own Body via \`[[UPDATE_APPEARANCE: {{user}} | new body text]]\` (basic) or \`commit.appearance\` with id \`{{user}}\` / \`player\` / \`pc\` / the PC's name when their signature look permanently changes.
-- You may update the Player Character's own Equipment via \`[[UPDATE_EQUIPMENT: {{user}} | new equipment text]]\` (basic) or \`commit.equipment\` the same way, whenever their visibly worn/carried gear changes.
+- You may update the Player Character's own Worn Equipment via \`[[UPDATE_EQUIPMENT: {{user}} | new worn gear text]]\` (basic) or \`commit.equipment\` the same way, whenever their visibly worn/carried gear changes.
 - Never touch the PC's Species/Personality/Background/Habits/Strengths/Flaws, and never create a new PC lorebook entry.
-- Body means signature/default physical look (build, face, hair, features) — not a transient pose. Equipment means currently worn/carried gear — not Body.`;
+- Body means signature/default physical look (build, face, hair, features) — not a transient pose. Worn Equipment means currently worn/carried gear only — not Body, coins, loot piles, or inventory lists.`;
         const existingNpcChronicleNudge = `
 - For notable existing-NPC moments that do not change any [CORE] field, still append a timestamped chronicle/EVENT line so the beat is not lost.`;
 
@@ -1048,11 +1049,12 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}[\s\S]*?\{\{\/if_world\}\}/g, '');
             modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}|\{\{\/if_world\}\}|\{\{dayStr\}\}|\{\{prevDay\}\}/g, '');
 
-            const relSection = settings.npcRelationshipBars ? `
-${buildRouterRelationshipInstruction(getNpcRelationshipMax(settings))}
-` : '';
+            const relSection = settings.npcRelationshipBars
+                ? buildRouterRelationshipInstruction(getNpcRelationshipMax(settings)).trim()
+                : '';
 
             // coreSections and sectionNamesList are defined above
+            // Build the example [CORE] lines dynamically from configured sections
             const exampleLineByName = {
                 'species': 'Human.',
                 'body': 'A burly man with a scar on his cheek.',
@@ -1069,59 +1071,7 @@ ${buildRouterRelationshipInstruction(getNpcRelationshipMax(settings))}
                 .map(sec => `${sec.name}: ${exampleLineByName[sec.name.trim().toLowerCase()] || 'Notable detail here.'}`)
                 .join('\n')
                 .trim();
-
-            const basicSystemPrompt = `You are the Research Assistant. Your task is to identify and record important narrative entities and events.
-
-${modularPrompt}
-
-## ATTENTION & MEMORY
-1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
-2. **ACTIVE MEMORY**: Full details of all other currently active entities. You can update them at any time.
-3. **ARCHIVE INDEX**: Inactive entries — labels and keywords only. You CANNOT see their full biography.
-4. **RECALL**: To read or update an archive entry, use [[ACTIVATE: Name]]. Its full content becomes visible next turn.
-5. **LIMIT**: You are limited to **${settings.routerMaxActivations || 8} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends.
-${relSection}
-## [CORE] BY CATEGORY
-- **NPC**: structured \`[CORE]\` with ${sectionNamesList} (see NPC field instructions below).
-- **LOC**: plain \`[CORE]\` with 1–2 sentences describing the place. No field headers.
-- **FAC**: plain \`[CORE]\` wrapping permanent history, ideology, schemes, and members. No field headers.
-- **QUEST, EVENT**: do NOT use \`[CORE]\`. Use timestamped chronicle lines only.
-
-## PLAYER CHARACTER SAFEGUARD
-- Do NOT create a lorebook entry (NPC, Location, Faction, etc.) for the player character under any circumstances.
-- The player character is the speaker labeled "Player" (and prompt replacement "{{user}}"). In the chat logs, pay close attention to what name(s) or alias(es) the other characters use when addressing or referring to the "Player" (e.g., if they call the Player "Dave Davidson" or "Dave", then "Dave Davidson" is the player character).
-- Under no circumstances should you create an NPC entry for these names/aliases, because they refer to the player.
-- Always use the exact macro string \`{{user}}\` when referring to the player. Do NOT write the plain word "user", "player", "Player", or the player's roleplay character name (like "Dave Davidson") in plain text in any entry updates or descriptions.
-- Write \`{{user}}\` bare — never followed by a class, profession, title, or parenthetical (e.g. write "{{user}} acquires the handgun", NOT "{{user}} (Fighter) acquires the handgun" or "{{user}} (Bodybuilder) acquires..."). The player's class/role is tracked elsewhere (the CHARACTER module); repeating it in every chronicle line wastes tokens and is redundant.
-${pcAppearanceGuidance}
-
-## NPC CORE UPDATES (NPC only)
-- Body changes: output \`[[UPDATE_APPEARANCE: Book::UID or NPC Name | new body text]]\`. Body is signature/default physical look — not a transient outfit-of-the-scene.
-- Equipment changes: output \`[[UPDATE_EQUIPMENT: Book::UID or NPC Name | new equipment text]]\` whenever the narrative explicitly shows a change to what they're wearing/wielding.
-- Eligible UPDATE_CORE fields this pass: ${eligibleCoreFieldsList}.
-  [[UPDATE_CORE: Book::UID or NPC Name | FieldName | New field text]]
-Use the exact FieldName. Do NOT log core updates as normal event/update entries.${autoPassCoreRestriction}${existingNpcChronicleNudge}
-
-## DO NOT RE-RECORD EXISTING ENTITIES
-Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anything, check ACTIVE MEMORY and ARCHIVE INDEX for a matching name (they may be listed under a different label — check keywords too).
-- If the entity ALREADY EXISTS (in ACTIVE MEMORY, in NEWLY ACTIVATED, or in the ARCHIVE INDEX): do NOT output a new [[NPC:...]]/[[LOC:...]]/[[FAC:...]] tag with a fresh [CORE] block for them, even if you don't currently see their full content. Instead:
-  - To change Body: use [[UPDATE_APPEARANCE: Name | new text]].
-  - To change Equipment: use [[UPDATE_EQUIPMENT: Name | new text]].
-  - To change/add another eligible [CORE] field: use [[UPDATE_CORE: Name | FieldName | new text]].
-  - To append a chronicle/timeline note: use the module's normal update format (e.g. re-use the [[EVENT:...]] name to accumulate, or update the existing entry) — never a second [CORE] block.
-  - To bring an archived entry into full view first: use [[ACTIVATE: Name]].
-- Only use a fresh [[NPC:...]]/[[LOC:...]]/[[FAC:...]] record for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY or ARCHIVE INDEX before.
-${combatProfileGuidanceBasic}
-## RULES
-1. Only record persistent or significant entities/events.
-2. Use ACTIVATE to bring an existing entry into the current scene context.
-3. Use DEACTIVATE to remove an entry that is no longer relevant to the scene.
-4. Use DELETE to permanently remove duplicate or redundant entries.
-5. Do NOT create any entry for the player character (e.g. "Player" or "Dave Davidson").
-6. CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) for NPCs and ignore any other sections.
-7. Output your thoughts first, then the tags.
-
-Example:
+            const exampleBlock = `Example:
 Thought: I see a new NPC named Barnaby in Khelt's Rust-Lantern District. I will record him and the tavern.
 [[NPC: Barnaby | [CORE]
 ${exampleCoreLines}
@@ -1129,7 +1079,36 @@ ${exampleCoreLines}
 [[LOC: Khelt :: Rust-Lantern District :: Barnaby's Forge | [CORE]
 A squat iron building managing mining contracts; soot-stained walls and a clanging workshop floor.
 [/CORE] | Barnaby's Forge, forge, Khelt, Rust-Lantern]]
-[[FAC: Iron Syndicate | Wary of outsiders after the forge raid; still dominant in the industrial quarter. | [CORE]Founded by ex-mercenaries forty years ago; controls scrap tariffs and smuggling. Lieutenant Marna Voss handles street enforcement.[/CORE] | Iron Syndicate, Khelt, faction, smuggling]]`;
+[[FAC: Iron Syndicate | Wary of outsiders after the forge raid; still dominant in the industrial quarter. | [CORE]Founded by ex-mercenaries forty years ago; controls scrap tariffs and smuggling. Lieutenant Marna Voss handles street enforcement.[/CORE] | Iron Syndicate, Khelt, faction, smuggling]]
+
+(Note: The above Barnaby entry is a structural format example only. Do not output a profile like this exactly; you must strictly obey <CORE LENGTH TARGETS> and word target requirements for the NPC size.)`;
+
+            // Resolve the Basic Mode system prompt from the editable template.
+            // All previously-hardcoded sections now live in routerBasicSystemPromptTemplate
+            // (see defaults.js). Users can edit/remove any section including {{example}}.
+            const basicRawTemplate = settings.routerBasicSystemPromptTemplate || '';
+            const maxActNum = settings.routerMaxActivations || 8;
+            const basicSystemPrompt = adjustPromptTimestamps(
+                expandLorebookPromptTemplate(
+                    basicRawTemplate
+                    .replace(/You are limited to \*\*\d+ active entries\*\*/gi, `You are limited to **${maxActNum} active entries**`)
+                    .replace(/Maximum Active Entities:\s*\*\*\d+\*\*/gi, `Maximum Active Entities: **${maxActNum}**`),
+                    {
+                        modularPrompt,
+                        formatLines: formatLinesStr,
+                        maxActivations: maxActNum,
+                        sectionNames: sectionNamesList,
+                        relSection,
+                        pcAppearanceGuidance,
+                        eligibleCoreFields: eligibleCoreFieldsList,
+                        autoPassRestriction: autoPassCoreRestriction,
+                        existingNpcNudge: existingNpcChronicleNudge,
+                        combatProfileGuidance: combatProfileGuidanceBasic.trim(),
+                        example: exampleBlock,
+                    },
+                ),
+                settings
+            );
 
             const finalBasicSystemPrompt = basicSystemPrompt;
 
@@ -1357,54 +1336,43 @@ A squat iron building managing mining contracts; soot-stained walls and a clangi
             // text-format (Action:/Observation:) system prompt and text-based parsing instead.
             const usesNativeTools = ['openai', 'ollama'].includes(routerSettings.connectionSource);
 
-            const sharedContext = `
-## MEMORY LIMIT
-Maximum Active Entities: **${settings.routerMaxActivations || 8}**.
-- Entries you record are ACTIVATED AUTOMATICALLY. Do NOT also include them in activate.
-- Nothing is archived automatically. If you exceed the limit you will receive a **BUDGET VIOLATION** in the context and you MUST deactivate enough entries in that same commit call to return within budget. Choose the narratively least relevant entries.
-- Entries whose keywords appeared in the latest narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — you do not need to activate those again.
-- Always use exact Book::UID format (e.g. "Eldoria_NPCs::0") for activate/update/deactivate/delete_ids.
+            // Build field instructions for the {{fieldInstructions}} token
+            const fieldInstructionLines = [
+                ...Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`),
+                ...((settings.routerCustomTags || []).length
+                    ? ['', '### CUSTOM CATEGORIES', ...(settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`)]
+                    : []),
+            ].join('\n');
 
-## PLAYER CHARACTER SAFEGUARD
-- Do NOT create a lorebook entry for the player character under any circumstances.
-- Always use the exact macro string \`{{user}}\` when referring to the player in entry contents — bare, never with a class/profession parenthetical.
-${pcAppearanceGuidance}
-
-## NPC CORE UPDATES
-- Body: use \`commit.appearance\` (signature/default physical look only — not a transient outfit-of-the-scene).
-- Equipment: use \`commit.equipment\` whenever their visibly worn/carried gear changes.
-- Eligible commit.core fields this pass: ${eligibleCoreFieldsList}.${autoPassCoreRestriction}${existingNpcChronicleNudge}
-
-## DO NOT RE-RECORD EXISTING ENTITIES
-Before using \`record\` for anyone or anything, check ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and the ARCHIVE INDEX for a matching name (check keywords too, they may be listed under a different label).
-- If the entity ALREADY EXISTS anywhere in that context — even if you only see its label in the ARCHIVE INDEX with no full content — do NOT call \`record\` for it. Instead:
-  - To change Body: use \`commit({"appearance": [{"id": "Book::UID or Name", "content": "..."}]})\`.
-  - To change Equipment: use \`commit({"equipment": [{"id": "Book::UID or Name", "content": "..."}]})\`.
-  - To change/add another eligible [CORE] field: use \`commit({"core": [{"id": "Book::UID or Name", "field": "...", "content": "..."}]})\`.
-  - To append new chronicle text: use \`commit({"update": [{"id": "Book::UID or Name", "content": "..."}]})\`.
-  - To see its full content first: use \`read_entry\` or \`grep_lore\`, or \`activate\` it.
-- Only use \`record\` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.
-
-## WORLD SKELETON (OFF-LIMITS)
-World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for World Progression only. They are NOT in your archive, tools cannot access them, and you must NEVER activate, read, update, or commit changes to Skeleton entries.
-
-## CAMPAIGN CONTEXT
-Campaign Root: "${prefix || 'World Archive'}"
-  NPCs -> "${prefix ? prefix + '_NPCs' : 'NPCs'}"
-  Locations -> "${prefix ? prefix + '_Locations' : 'Locations'}" (etc.)
-Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil").
-Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names (e.g. keys: ["The Guilded Anvil", "Khelt", "Rust-Lantern District", "tavern"]).
-**Keyword cap: maximum 6 per entry.** Keep only the most essential trigger words.
-
-## CONTENT FORMAT
-- Each time-stamped event must start on its own line. Do NOT chain multiple '[Day X, ...]' entries on the same line.
-- Correct: '[Day 2, 10:42] Corruption manifests.\n[Day 2, 10:44] Sentry targets Rozach.'
-- Wrong:   '[Day 2, 10:42] Corruption manifests. [Day 2, 10:44] Sentry targets Rozach.'
-- **[CORE] by category:** NPC = structured fields inside [CORE] (see NPC instructions). LOC = plain [CORE], 1–2 sentences, no field headers. FAC = plain [CORE] wrapping permanent history/ideology, no field headers. QUEST/EVENT = no [CORE].
-- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below for NPCs and ignore any other sections.
-
-## FIELD INSTRUCTIONS
-${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}${(settings.routerCustomTags || []).length ? '\n\n### CUSTOM CATEGORIES\n' + (settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`).join('\n') : ''}${combatProfileGuidanceAgent}`;
+            // Resolve the Agent Mode shared context from the editable template.
+            // All previously-hardcoded sharedContext sections now live in
+            // routerAgentSharedContextTemplate (see defaults.js).
+            const agentRawTemplate = settings.routerAgentSharedContextTemplate || '';
+            const agentRelSection = settings.npcRelationshipBars
+                ? buildNpcRelationshipInstruction(getNpcRelationshipMax(settings)).trim()
+                : '';
+            const maxActNumAgent = settings.routerMaxActivations || 8;
+            const sharedContext = adjustPromptTimestamps(
+                expandLorebookPromptTemplate(
+                    agentRawTemplate
+                    .replace(/Maximum Active Entities:\s*\*\*\d+\*\*/gi, `Maximum Active Entities: **${maxActNumAgent}**`)
+                    .replace(/You are limited to \*\*\d+ active entries\*\*/gi, `You are limited to **${maxActNumAgent} active entries**`),
+                    {
+                        maxActivations: maxActNumAgent,
+                        pcAppearanceGuidance,
+                        eligibleCoreFields: eligibleCoreFieldsList,
+                        autoPassRestriction: autoPassCoreRestriction,
+                        existingNpcNudge: existingNpcChronicleNudge,
+                        campaignRoot: prefix || 'World Archive',
+                        campaignNpcBook: prefix ? `${prefix}_NPCs` : 'NPCs',
+                        campaignLocBook: prefix ? `${prefix}_Locations` : 'Locations',
+                        fieldInstructions: fieldInstructionLines,
+                        combatProfileGuidance: combatProfileGuidanceAgent.trim(),
+                        relSection: agentRelSection,
+                    },
+                ),
+                settings
+            );
 
             const commitActionSchema = settings.npcRelationshipBars
                 ? `commit({"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...], "rel": [...], "appearance": [...], "equipment": [...], "core": [...]}) — write all changes and finish`
@@ -1414,7 +1382,7 @@ ${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `-
                 ? `\ncommit rel items: {"id": "Book::UID or NPC Name", "field": "friendship"|"affection", "delta": ±N} — set INITIAL relationship values for newly recorded NPCs only (signed integer delta)`
                 : ``;
 
-            const adjustedSharedContext = adjustPromptTimestamps(sharedContext, settings);
+            const adjustedSharedContext = sharedContext;
 
             const agentSystemPrompt = usesNativeTools
                 // Clean prompt for native tool calling ? model gets schemas via the API
@@ -2295,7 +2263,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     //    (or the linked Player Character card for Body/Equipment only).
     const coreUpdates = [
         ...(action.appearance || []).map(item => ({ id: item.id, field: 'Body', content: item.content })),
-        ...(action.equipment || []).map(item => ({ id: item.id, field: 'Equipment', content: item.content })),
+        ...(action.equipment || []).map(item => ({ id: item.id, field: 'Worn Equipment', content: item.content })),
         ...(action.core || [])
     ];
 
@@ -2580,7 +2548,7 @@ function parseBasicTags(text, archiveBooks) {
         }
     }
 
-    // UPDATE_EQUIPMENT tag parser: [[UPDATE_EQUIPMENT: Book::UID | new equipment text]] (patches Equipment)
+    // UPDATE_EQUIPMENT tag parser: [[UPDATE_EQUIPMENT: Book::UID | new worn gear text]] (patches Worn Equipment)
     const equipRegex = /\[\[UPDATE_EQUIPMENT:\s*([^|]+)\|([\s\S]*?)\]\]/gi;
     let eqm;
     while ((eqm = equipRegex.exec(text)) !== null) {

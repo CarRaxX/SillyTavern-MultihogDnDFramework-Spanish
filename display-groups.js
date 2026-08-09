@@ -1,6 +1,6 @@
 import { BLOCK_ICONS, BLOCK_ORDER } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
-import { getSettings } from './state-manager.js';
+import { getSettings, writeCriticalSettingsBackup, stampCriticalSettingsSynced } from './state-manager.js';
 import { refreshRenderedView, saveSettings } from './src/app/runtime-bridge.js';
 import {
     DISPLAY_GROUP_EXCLUDED_TAGS,
@@ -29,6 +29,8 @@ function knownDisplayGroupModules(settings) {
 
 function persistDisplayGroups(settings) {
     settings.displayGroups = normalizeDisplayGroups(settings.displayGroups);
+    // Sync WAL before the async disk write — code-edit reloads cancel ST's save often.
+    stampCriticalSettingsSynced(settings, writeCriticalSettingsBackup(settings));
     saveSettings(true);
     refreshRenderedView();
 }

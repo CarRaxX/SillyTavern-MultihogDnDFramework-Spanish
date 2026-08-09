@@ -166,11 +166,39 @@ describe('shipped prompt fingerprint', () => {
         expect(computeBundledPromptsFingerprintForSnapshot(legacyClockSnapshot)).toBe(fingerprint);
     });
 
+    it('ignores live user toggles and custom CORE sections', () => {
+        for (const key of Object.keys(testExtensionSettings)) {
+            delete testExtensionSettings[key];
+        }
+        const settings = getSettings();
+        settings.npcRelationshipBars = true;
+        settings.npcCoreSections = [
+            { id: 'custom', name: 'CustomField', description: 'User-only section', icon: 'fa-star', color: '#fff' },
+        ];
+        const fingerprint = computeBundledPromptsFingerprint();
+
+        settings.npcRelationshipBars = false;
+        settings.npcCoreSections = [];
+        expect(computeBundledPromptsFingerprint()).toBe(fingerprint);
+
+        // Unbound / empty settings bag must not change the shipped fingerprint either.
+        delete testExtensionSettings.rpg_tracker;
+        expect(computeBundledPromptsFingerprint()).toBe(fingerprint);
+    });
+
     it('repairs repeated AM/PM placeholders when changing time format', () => {
         const legacy = 'Current Time: HH:MM AM/PM AM/PM AM/PM, Day N';
         expect(adjustPromptTimestamps(legacy, { useDdMmYyFormat: false, use24hTime: false }))
             .toBe('Current Time: HH:MM AM/PM, Day N');
         expect(adjustPromptTimestamps(legacy, { useDdMmYyFormat: false, use24hTime: true }))
             .toBe('Current Time: HH:MM, Day N');
+    });
+
+    it('does not append a second meridiem when normalizing concrete example times', () => {
+        const canonical = 'Examples: 10:42 AM, 10:44 AM, and HH:MM AM/PM.';
+        const format = { useDdMmYyFormat: false, use24hTime: false };
+
+        expect(adjustPromptTimestamps(adjustPromptTimestamps(canonical, format), format))
+            .toBe(canonical);
     });
 });

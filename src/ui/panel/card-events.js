@@ -647,7 +647,9 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     const syncOptionalMod = (onboardingId, settingKey) => {
         const cb = el.querySelector(onboardingId);
         if (cb) {
-            cb.checked = !!s.syspromptModules?.[settingKey];
+            cb.checked = settingKey === 'CYOA_mode'
+                ? s.syspromptModules?.CYOA_mode === true
+                : (s.syspromptModules?.[settingKey] ?? true);
             cb.addEventListener('change', () => {
                 syncSettingsAndUI(settings => {
                     if (!settings.syspromptModules) settings.syspromptModules = {};
@@ -665,6 +667,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     syncOptionalMod('#rt_onboarding_mod_random_events', 'random_events');
     syncOptionalMod('#rt_onboarding_mod_resting', 'resting');
     syncOptionalMod('#rt_onboarding_mod_party_bench', 'party_bench');
+    syncOptionalMod('#rt_onboarding_mod_dungeon_reality_and_hidden_mapping', 'dungeon_reality_and_hidden_mapping');
     syncOptionalMod('#rt_onboarding_mod_cyoa_mode', 'CYOA_mode');
 
     // Onboarding Relationship System Sync
@@ -675,7 +678,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             syncSettingsAndUI(settings => {
                 settings.npcRelationshipBars = !!onboardingRelBarsCb.checked;
                 if (settings.routerModules?.npc) {
-                    settings.routerModules.npc.instruction = buildNpcInstruction(settings.npcMajorWords, settings.npcMinorWords, false);
+                    settings.routerModules.npc.instruction = buildNpcInstruction(settings.npcMajorWords, settings.npcMinorWords, false, settings);
                 }
             });
             setTimeout(() => {

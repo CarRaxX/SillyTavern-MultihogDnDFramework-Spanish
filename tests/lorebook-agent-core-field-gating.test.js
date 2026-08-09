@@ -29,7 +29,9 @@ describe('getEligibleCoreFieldNames', () => {
         expect(fields.some(isCombatProfileField)).toBe(true);
         expect(fields).not.toContain('Body');
         expect(fields).not.toContain('Equipment');
+        expect(fields).not.toContain('Worn Equipment');
         expect(fields.every(f => !/^body$|^equipment$|appearance/i.test(f))).toBe(true);
+        expect(fields.every(f => !isEquipmentField(f))).toBe(true);
     });
 
     it('falls back to Combat Profile when sections are empty on automatic passes', () => {
@@ -55,11 +57,11 @@ describe('router.js core-field gating wiring', () => {
         expect(routerSource).toContain('AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field');
     });
 
-    it('Body/Species/Equipment sections exist with clear, non-overlapping descriptions', () => {
+    it('Body/Species/Worn Equipment sections exist with clear, non-overlapping descriptions', () => {
         const names = DEFAULT_NPC_SECTIONS.map(s => s.name);
-        expect(names).toEqual(expect.arrayContaining(['Species', 'Body', 'Equipment']));
+        expect(names).toEqual(expect.arrayContaining(['Species', 'Body', 'Worn Equipment']));
         expect(schemaSource).toContain('Not a transient outfit-of-the-scene');
-        expect(schemaSource).toContain('Do NOT describe worn gear here — see Equipment.');
+        expect(schemaSource).toContain('Do NOT describe worn gear here — see Worn Equipment.');
     });
 
     it('prompts nudge chronicle entries for notable existing-NPC moments', () => {
