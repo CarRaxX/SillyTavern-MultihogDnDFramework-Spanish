@@ -507,6 +507,32 @@ function getSettingsInternal(extensionSettings) {
         }
     }
 
+    // ── MIGRATION: Require explicit category on lorebook record commits (v7.10+) ──────
+    if (s.routerSystemPromptTemplate && !s.routerSystemPromptTemplate.includes('REQUIRED category field')) {
+        if (s.routerSystemPromptTemplate.includes('<formatting>')) {
+            s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
+                'When recording a new entry, keep the lorebook category separate from the entity label.',
+                'When recording a new entry, keep the lorebook category separate from the entity label.\n\n- **REQUIRED category field:** Every `record` item MUST include `"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.\n- Location labels may use `" :: "` hierarchy AND must still set `"category": "LOC"`. NPC people get `"category": "NPC"` with a plain name label (no `::`).'
+            );
+            if (!s.routerSystemPromptTemplate.includes('MISSING required "category": "NPC"')) {
+                s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
+                    'Incorrect examples:',
+                    'Incorrect examples:\n\n- {"label": "Lissa", "keys": ["Lissa"], "content": "[CORE]…"} (MISSING required "category": "NPC" — will not land in the NPCs lorebook)\n\n- {"label": "Kalvermoor :: The Ring", "keys": ["The Ring"], "content": "[CORE]…"} (MISSING required "category": "LOC" — `::` nesting is not a category)'
+                );
+            }
+        }
+    }
+    if (s.routerAgentSharedContextTemplate && !s.routerAgentSharedContextTemplate.includes('only `category` does')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            'Locations -> "{{campaignLocBook}}" (etc.)\nLocation hierarchy:',
+            'Locations -> "{{campaignLocBook}}" (etc.)\n**Routing:** every new `record` MUST set `"category"` to match the target book above (`NPC` → NPCs book, `LOC` → Locations, etc.). Labels and `::` paths do NOT choose the book — only `category` does.\nLocation hierarchy:'
+        );
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            'Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil").\nInclude the entity name/title itself',
+            'Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with `"category": "LOC"`.\nNPC people use a plain name label and `"category": "NPC"` (never put people under a `::` path).\nInclude the entity name/title itself'
+        );
+    }
+
     // ── MIGRATION: Update World Progression System Prompt with Quests/Events rule (v3.4.4+) ──────
     if (s.worldProgressionSystemPrompt && !s.worldProgressionSystemPrompt.includes('QUESTS and EVENTS are historical records')) {
         s.worldProgressionSystemPrompt = s.worldProgressionSystemPrompt.replace(

@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate, resolveRecordCategoryTag } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
@@ -1158,7 +1158,7 @@ A squat iron building managing mining contracts; soot-stained walls and a clangi
                             label: { type: 'string', description: 'Entity name only. NO tag prefix (e.g. "Iron Syndicate", NOT "FAC: Iron Syndicate"). Do NOT record the player character under any name (including "Player" or their roleplay character name/alias like "Dave Davidson").' },
                             keys:  { type: 'array', items: { type: 'string' }, description: 'Search keywords. Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names.' },
                             content:  { type: 'string', description: `Full entry body. NPC: structured [CORE] with ${sectionNamesList}. LOC: plain [CORE] with 1–2 sentences (no field headers). FAC: plain [CORE] wrapping permanent history, ideology, schemes. QUEST/EVENT: no [CORE]; use chronicle format.` },
-                            category: { type: 'string', enum: categoryEnum, description: 'Determines which lorebook the entry goes into.' }
+                            category: { type: 'string', enum: categoryEnum, description: 'REQUIRED. Chooses the lorebook book: NPC→…_NPCs, LOC→…_Locations, FAC→…_Factions, QUEST→…_Quests, EVENT→…_Events. Labels and "::" paths do NOT choose the book — omit this and the record is skipped.' }
                         },
                         required: ['label', 'keys', 'content', 'category']
                     }
@@ -1411,7 +1411,7 @@ Available actions:
 - read_entry({"uid": "Book::0"}) ? read full content of an entry
 - commit({${settings.npcRelationshipBars ? '"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...], "rel": [...], "appearance": [...], "equipment": [...], "core": [...]' : '"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...], "appearance": [...], "equipment": [...], "core": [...]'}}) ? write all changes and finish
 
-commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"}
+commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"} — category is REQUIRED on every record (NPC people → "NPC", places with optional " :: " paths → "LOC"). Omitting category skips the record.
 commit update items: {"id": "Book::UID", "content": "new text to append"}
 commit rename items: {"id": "Book::UID", "label": "New Name (optional)", "keys": ["kw1","kw2"] (optional, max 6)}${commitRelDescription}
 commit appearance items: {"id": "Book::UID or NPC Name or {{user}}", "content": "new body text"} — surgically updates Body (NPC [CORE] or linked PC card)
@@ -1419,8 +1419,8 @@ commit equipment items: {"id": "Book::UID or NPC Name or {{user}}", "content": "
 commit core items: {"id": "Book::UID or NPC Name", "field": "${eligibleCoreFields.join('|')}", "content": "new field content"} — surgically updates an eligible [CORE] field on NPC entries only (Body/Equipment use commit.appearance/commit.equipment; automatic passes = Combat Profile only)
 
 ## EXAMPLE
-Thought: I see a new faction called Iron Syndicate. I will record it.
-Action: commit({"record": [{"label": "Iron Syndicate", "keys": ["Khelt", "faction"], "content": "The dominant industrial authority.", "category": "FAC"}]})
+Thought: I see a new NPC Lissa and a tavern location. I will record both with explicit categories.
+Action: commit({"record": [{"label": "Lissa", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: Human\\n[/CORE]", "category": "NPC"}, {"label": "Kalvermoor :: The Handler's Rest", "keys": ["The Handler's Rest", "Kalvermoor", "tavern"], "content": "[CORE]\\nA weathered tavern.\\n[/CORE]", "category": "LOC"}]})
 ${adjustedSharedContext}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
@@ -1859,7 +1859,6 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     // Group entries by target book and commit once per book to avoid UID collisions
     const records = action.record || [];
     const prefix = getLivePrefix();
-    const baseBook = prefix || 'World Chronicle';
     const recordedIds = [];
 
     // -- Phase A: Route each record to its target book --
@@ -1873,10 +1872,20 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const bookQueue = new Map();
 
     const knownBookNames = Object.keys(allBooks);
+    const knownCatTags = Object.keys(catMap);
     for (const rec of records) {
-        const cat = (rec.category || rec.comment || '').toUpperCase();
-        const catName = Object.keys(catMap).find(k => cat.includes(k));
-        const idealTargetBook = catName ? (prefix ? `${prefix}_${catMap[catName]}` : catMap[catName]) : baseBook;
+        const resolved = resolveRecordCategoryTag(rec, knownCatTags);
+        if (!resolved.tag) {
+            const who = rec.label || '(untitled)';
+            errors.push(`Skipped record "${who}": missing required category (NPC|LOC|FAC|QUEST|EVENT). Re-commit with "category" set.`);
+            continue;
+        }
+        if (resolved.inferred) {
+            rec.category = resolved.tag;
+        }
+        const cat = resolved.tag;
+        const catName = cat;
+        const idealTargetBook = prefix ? `${prefix}_${catMap[catName]}` : catMap[catName];
         
         let targetBook = idealTargetBook;
         const idealLower = idealTargetBook.toLowerCase();

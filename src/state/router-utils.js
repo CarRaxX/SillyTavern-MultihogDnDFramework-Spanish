@@ -72,6 +72,62 @@ export function computeUnpinnedActiveCount(activeKeys, pinnedKeys) {
     return (Array.isArray(activeKeys) ? activeKeys : []).filter(k => !pinnedSet.has(k)).length;
 }
 
+/** Structured NPC [CORE] field headers used to infer category when the model omits it. */
+const NPC_CORE_FIELD_HINT = /\b(Species|Personality|Brief Background|Habits\s*\/\s*Behaviors|Habits & Behaviors|Strengths|Flaws|Worn Equipment|Combat Profile)\s*:/i;
+
+/**
+ * Infer lorebook category for a commit.record item when the model omitted/misspelled `category`.
+ * Conservative: only returns a tag when the signal is strong.
+ * @param {{label?: string, content?: string, category?: string, comment?: string}} rec
+ * @returns {'NPC'|'LOC'|'EVENT'|null}
+ */
+export function inferRecordCategory(rec) {
+    if (!rec || typeof rec !== 'object') return null;
+    const label = String(rec.label || '').trim();
+    const content = String(rec.content || '');
+
+    // Hierarchical location paths always route to Locations.
+    if (label.includes(' :: ')) return 'LOC';
+
+    // Structured NPC character sheets (Species/Personality/… field headers).
+    if (/\[CORE\]/i.test(content) && NPC_CORE_FIELD_HINT.test(content)) return 'NPC';
+
+    // Timestamped event-style labels (without ::, which already returned LOC).
+    if (/(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)/i.test(label)) return 'EVENT';
+
+    return null;
+}
+
+/**
+ * Resolve the category tag used for book routing.
+ * Prefers an explicit/recognized category, then comment if it matches a known tag, then inference.
+ * @param {{label?: string, content?: string, category?: string, comment?: string}} rec
+ * @param {string[]} knownTags Uppercase category tags (NPC, LOC, … plus custom)
+ * @returns {{tag: string|null, inferred: boolean}}
+ */
+export function resolveRecordCategoryTag(rec, knownTags = []) {
+    const tags = (Array.isArray(knownTags) ? knownTags : [])
+        .map(t => String(t || '').toUpperCase())
+        .filter(Boolean);
+    const matchKnown = (raw) => {
+        const cat = String(raw || '').toUpperCase().trim();
+        if (!cat) return null;
+        return tags.find(k => cat === k || cat.includes(k)) || null;
+    };
+
+    const explicit = matchKnown(rec?.category);
+    if (explicit) return { tag: explicit, inferred: false };
+
+    const fromComment = matchKnown(rec?.comment);
+    if (fromComment) return { tag: fromComment, inferred: false };
+
+    const inferred = inferRecordCategory(rec);
+    if (inferred && (!tags.length || tags.includes(inferred))) {
+        return { tag: inferred, inferred: true };
+    }
+    return { tag: null, inferred: false };
+}
+
 /** Extract canonical [CHARACTER] block from the current memo, if present. */
 export function extractCharacterBlock(memo) {
     const match = memo?.match(/\[CHARACTER\]([\s\S]*?)\[\/CHARACTER\]/i);

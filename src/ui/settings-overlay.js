@@ -19,7 +19,7 @@ const TAB_DEFS = [
     { id: 'general', icon: 'fa-gears', label: 'General y Visuales', match: /(?:General|Núcleo|Preferencias)/i },
     { id: 'connections', icon: 'fa-plug', label: 'Conexiones y Modelos', match: /(?:Connections|Conexiones)/i },
     { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Sistemas de Juego', match: /(?:Game Systems|Sistemas de Juego)/i },
-    { id: 'statetracker', icon: 'fa-brain', label: 'Rastreador de Estado', match: /(?:State Tracker|Rastreador de Estado)/i },
+    { id: 'statetracker', icon: 'fa-brain', label: 'Rastreador de Estado', match: /(?:State Tracker|Rastreador de Estado|Configuración de Ficha)/i },
     { id: 'agent', icon: 'fa-route', label: 'Agente de Lorebook', match: /(?:Lorebook Agent|Agente de Lorebook)/i },
     { id: 'worldprog', icon: 'fa-globe', label: 'Progresión del Mundo', match: /(?:World Progression|Progresión del Mundo)/i },
     { id: 'companion', icon: 'fa-comments', label: 'Acompañante de Aventura', match: /(?:Adventure Companion|Acompañante de Aventura)/i },

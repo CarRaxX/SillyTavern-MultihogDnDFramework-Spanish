@@ -45,4 +45,16 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
 
         for (const source of sources) expect(source.replaceAll('\r\n', '\n')).toContain(expectedBlock);
     });
+
+    it('spells out damage types in every shipped combat prompt example', () => {
+        const sources = [
+            readFileSync(new URL('../constants.js', import.meta.url), 'utf8'),
+            readFileSync(new URL('../index.js', import.meta.url), 'utf8'),
+            readFileSync(new URL('../sysprompt.txt', import.meta.url), 'utf8'),
+            readFileSync(new URL('../sysprompt_legacy.txt', import.meta.url), 'utf8'),
+        ];
+        const abbreviatedDamage = /\b\d+d\d+(?:[+-]\d+)?\s*[BPS]\b/i;
+
+        for (const source of sources) expect(source).not.toMatch(abbreviatedDamage);
+    });
 });

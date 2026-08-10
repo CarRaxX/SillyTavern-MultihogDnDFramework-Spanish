@@ -88,7 +88,7 @@ PERSISTENCE: If [PARTY] changes, you MUST output the ENTIRE block (all remaining
 
 Example: [PARTY]Elara (Ranger): 26/45 HP
 Combat: BAB: +3 | Ranged (1 attack): +6 | Melee (1 attack): +4 | Base AC: 13 | Total AC: 15
-Gear: Shortbow (1d6+3 P) | Leather Armor (+2 AC)
+Gear: Shortbow (1d6+3 Piercing) | Leather Armor (+2 AC)
 Proficiencies: Simple Weapons, Martial Weapons
 Attr: STR 12 (+1), DEX 16 (+3), CON 14 (+2), INT 10 (+0), WIS 14 (+2), CHA 12 (+1)
 Saves: Fort +3 | Ref +5 | Will +2
@@ -153,7 +153,7 @@ MARTIAL (fighters, beasts, thugs — omit Spells: entirely):
 Att/def: Weapon (1 attack / 2 attacks / 3 attacks, +X / damage) | Armor (AC: Z)
 Example:
 Bandit: 18/18 HP
-Att/def: Longsword (1 attack, +5 / 1d8+2 S) | Scale Mail (AC: 15)
+Att/def: Longsword (1 attack, +5 / 1d8+2 Slashing) | Scale Mail (AC: 15)
 Saves: Fort +4, Ref +2, Will +1
 Abilities: Pack Tactics
 Other: Soldier Tier
@@ -165,7 +165,7 @@ Spells: Cantrips: Spell1, Spell2
 Spells: Level N (avail/max): Spell1, Spell2
 Example:
 Cultist Acolyte: 15/15 HP
-Att/def: Spell Atk +4 | Spell DC 14 | Dagger (1 attack, +1 / 1d4-1 P) | Robes (AC: 11)
+Att/def: Spell Atk +4 | Spell DC 14 | Dagger (1 attack, +1 / 1d4-1 Piercing) | Robes (AC: 11)
 Saves: Fort +1, Ref +2, Will +3
 Abilities: Spellcasting
 Spells: Cantrips: Fire Bolt, Prestidigitation
@@ -175,7 +175,7 @@ Status: Healthy
 
 Example (Elite tier, demonstrating the 2-attack case):
 Elite Enforcer: 42/42 HP
-Att/def: Warhammer (2 attacks, +9/+4 / 1d10+4 B) | Plate Armor (AC: 17)
+Att/def: Warhammer (2 attacks, +9/+4 / 1d10+4 Bludgeoning) | Plate Armor (AC: 17)
 Saves: Fort +5, Ref +3, Will +4
 Abilities: Brutal Strike (On a Warhammer hit, deal +1d10 Bludgeoning damage and force a Fort DC 16 save or knock the target prone; 2/2)
 Other: Elite Tier
@@ -183,7 +183,7 @@ Status: Healthy
 
 Example (Elite dual-wielder, showing the 3-attack case):
 Elite Duelist: 40/40 HP
-Att/def: Twin Shortswords (3 attacks, +9/+4/+4 / 1d6+3 P) | Studded Leather (AC: 16)
+Att/def: Twin Shortswords (3 attacks, +9/+4/+4 / 1d6+3 Piercing) | Studded Leather (AC: 16)
 Saves: Fort +4, Ref +6, Will +3
 Abilities: Dual Strike (When both a primary-hand and offhand attack hit the same target in one turn, deal +1d6 Piercing damage; 2/2)
 Other: Elite Tier, Dual-Wielder

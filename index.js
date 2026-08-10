@@ -4162,7 +4162,7 @@ const RENDER_HINTS = {
     COMBAT: {
         label: 'Entity Rows — HP Bars (Enemies)',
         description: 'Entity rows with COMBAT ROUND header. Martial: weapon Att/def. Caster: Spell Atk + Spell DC + backup weapon, then Cantrips/Level N Spells lines (same rendering as PARTY).',
-        example: 'COMBAT ROUND 1\nCultist Acolyte: 15/15 HP\nAtt/def: Spell Atk +4 | Spell DC 14 | Dagger (1 attack, +1 / 1d4-1 P) | Robes (AC: 11)\nSaves: Fort +1, Ref +2, Will +3\nAbilities: Spellcasting\nSpells: Cantrips: Fire Bolt, Prestidigitation\nSpells: Level 1 (2/2): Magic Missile, Shield\nOther: Soldier Tier Spellcaster\nStatus: Healthy\n\nElite Enforcer: 42/42 HP\nAtt/def: Warhammer (2 attacks, +9/+4 / 1d10+4 B) | Plate Armor (AC: 17)\nSaves: Fort +5, Ref +3, Will +4\nAbilities: Brutal Strike (On a Warhammer hit, deal +1d10 Bludgeoning damage and force a Fort DC 16 save or knock the target prone; 2/2)\nOther: Elite Tier\nStatus: Healthy'
+        example: 'COMBAT ROUND 1\nCultist Acolyte: 15/15 HP\nAtt/def: Spell Atk +4 | Spell DC 14 | Dagger (1 attack, +1 / 1d4-1 Piercing) | Robes (AC: 11)\nSaves: Fort +1, Ref +2, Will +3\nAbilities: Spellcasting\nSpells: Cantrips: Fire Bolt, Prestidigitation\nSpells: Level 1 (2/2): Magic Missile, Shield\nOther: Soldier Tier Spellcaster\nStatus: Healthy\n\nElite Enforcer: 42/42 HP\nAtt/def: Warhammer (2 attacks, +9/+4 / 1d10+4 Bludgeoning) | Plate Armor (AC: 17)\nSaves: Fort +5, Ref +3, Will +4\nAbilities: Brutal Strike (On a Warhammer hit, deal +1d10 Bludgeoning damage and force a Fort DC 16 save or knock the target prone; 2/2)\nOther: Elite Tier\nStatus: Healthy'
     },
     SPELLS: {
         label: 'Spell Pips — Slot Tracker',

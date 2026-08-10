@@ -952,9 +952,13 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 
-- Use the "category" field for the type (NPC, LOC, FAC, QUEST, EVENT, or a custom tag).
+- **REQUIRED category field:** Every \`record\` item MUST include \`"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"\` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.
 
-- Use the "label" field for the entity name only. Do NOT prefix labels with the category tag.
+- Use the "category" field for the type. Never rely on the label, \`::\` hierarchy, or [CORE] content to imply the book — those do not route.
+
+- Use the "label" field for the entity name only. Do NOT prefix labels with the category tag. Location labels may use \`" :: "\` hierarchy (e.g. "Kalvermoor :: The Ring") AND must still set \`"category": "LOC"\`.
+
+- NPC people get \`"category": "NPC"\` with a plain name label (no \`::\`). Locations get \`"category": "LOC"\`.
 
 - **IMPORTANT FOR KEYWORDS (KEYS):** Always include the entity's own name/title (without any timestamps like "Day 1", "Day 2", "12:15 AM", etc.) in the list of keywords. The title itself (stripped of timestamps) is the most reliable trigger, so it must be present as a keyword. For example, if the entry title is "[12:15 AM, Day 2] Defense of Ironbelly's Workshop", the keys list MUST include "Defense of Ironbelly's Workshop".
 
@@ -963,6 +967,10 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 Correct examples:
+
+- {"label": "Lissa", "category": "NPC", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: …\\n[/CORE]"}
+
+- {"label": "Kalvermoor :: The Handler's Rest", "category": "LOC", "keys": ["The Handler's Rest", "Kalvermoor", "tavern"], "content": "[CORE]\\nA weathered tavern…\\n[/CORE]"}
 
 - {"label": "Iron Syndicate", "category": "FAC", "keys": ["Iron Syndicate", "faction"]}
 
@@ -973,6 +981,10 @@ Correct examples:
 
 
 Incorrect examples:
+
+- {"label": "Lissa", "keys": ["Lissa"], "content": "[CORE]…"} (MISSING required "category": "NPC" — will not land in the NPCs lorebook)
+
+- {"label": "Kalvermoor :: The Ring", "keys": ["The Ring"], "content": "[CORE]…"} (MISSING required "category": "LOC" — \`::\` nesting is not a category)
 
 - {"label": "FAC: Iron Syndicate", "category": "FAC", "keys": ["faction"]} (missing the entity name keyword)
 
@@ -1201,7 +1213,9 @@ World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for Wo
 Campaign Root: "{{campaignRoot}}"
   NPCs -> "{{campaignNpcBook}}"
   Locations -> "{{campaignLocBook}}" (etc.)
-Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil").
+**Routing:** every new \`record\` MUST set \`"category"\` to match the target book above (\`NPC\` → NPCs book, \`LOC\` → Locations, etc.). Labels and \`::\` paths do NOT choose the book — only \`category\` does.
+Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with \`"category": "LOC"\`.
+NPC people use a plain name label and \`"category": "NPC"\` (never put people under a \`::\` path).
 Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names (e.g. keys: ["The Guilded Anvil", "Khelt", "Rust-Lantern District", "tavern"]).
 **Keyword cap: maximum 6 per entry.** Keep only the most essential trigger words.
 
