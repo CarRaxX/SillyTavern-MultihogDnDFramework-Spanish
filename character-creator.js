@@ -821,10 +821,10 @@ Rules:
     try {
         const result = await sendStateRequest(getCharacterCreationConnectionSettings(s), systemPrompt, userPrompt);
         const cleanedResult = (result || '')
-            .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
-            .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
-            .replace(/<reasoning\b[^>]*>[\s\S]*?<\/reasoning>/gi, '')
-            .replace(/<\|channel\>thought[\s\S]*?<channel\|>/gi, '')
+            .replace(/<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi, '')
+            .replace(/<thinking\b[^>]*>[\s\S]*?(?:<\/thinking>|$)/gi, '')
+            .replace(/<reasoning\b[^>]*>[\s\S]*?(?:<\/reasoning>|$)/gi, '')
+            .replace(/<\|channel\>thought[\s\S]*?(?:<channel\|>|$)/gi, '')
             .trim();
         return cleanedResult || null;
     } catch (e) {

@@ -521,10 +521,10 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             : text;
         if (typeof val === 'string') {
             val = val
-                .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
-                .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
-                .replace(/<reasoning\b[^>]*>[\s\S]*?<\/reasoning>/gi, '')
-                .replace(/<\|channel\>thought[\s\S]*?<channel\|>/gi, '')
+                .replace(/<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi, '')
+                .replace(/<thinking\b[^>]*>[\s\S]*?(?:<\/thinking>|$)/gi, '')
+                .replace(/<reasoning\b[^>]*>[\s\S]*?(?:<\/reasoning>|$)/gi, '')
+                .replace(/<\|channel\>thought[\s\S]*?(?:<channel\|>|$)/gi, '')
                 .trim();
         }
         return val;
