@@ -207,9 +207,23 @@ export async function branchCampaignChat(deps) {
             || sanitizeCampaignPrefixString(oldId);
 
         if (sourcePrefix && newPrefix && sourcePrefix !== newPrefix) {
+            const sourceBooks = Array.isArray(s.chatStates[oldId]?.campaignBooks)
+                ? s.chatStates[oldId].campaignBooks
+                : [];
             toastr['info'](`Cloning lorebooks ${sourcePrefix} → ${newPrefix}…`, title);
             const cloneResult = await cloneCampaignStackToPrefix(sourcePrefix, newPrefix);
+            // Fail closed: a campaign with linked books must not branch while still
+            // pointing at the source stack (shared mutations / silent data coupling).
+            if (sourceBooks.length > 0 && cloneResult.matchingCount === 0) {
+                throw new Error(
+                    `Could not find lorebooks for prefix "${sourcePrefix}" to clone `
+                    + `(chat lists ${sourceBooks.length} linked book(s)). Aborting so the `
+                    + 'branch cannot share the original stack.',
+                );
+            }
             if (cloneResult.matchingCount > 0 && !cloneResult.ok) {
+                // createdBookNames are only books this attempt wrote; preflight collisions
+                // abort with an empty list so cleanup cannot delete pre-existing destinations.
                 await deleteWorldInfoBooks(ctx, cloneResult.createdBookNames);
                 throw new Error(
                     `Lorebook clone incomplete (${cloneResult.cloned}/${cloneResult.matchingCount}). `
