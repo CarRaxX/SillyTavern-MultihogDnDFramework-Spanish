@@ -515,9 +515,20 @@ export async function testOpenAIConnection(url, apiKey, model) {
 export async function sendStateRequest(settings, systemPrompt, userPrompt, signal = null, options = {}) {
     const preserveUserMacro = !!options.preserveUserMacro;
     const userMacroNames = options.userMacroNames || [];
-    const finalize = (text) => (preserveUserMacro && typeof text === 'string')
-        ? restoreUserMacro(text, userMacroNames)
-        : text;
+    const finalize = (text) => {
+        let val = (preserveUserMacro && typeof text === 'string')
+            ? restoreUserMacro(text, userMacroNames)
+            : text;
+        if (typeof val === 'string') {
+            val = val
+                .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
+                .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+                .replace(/<reasoning\b[^>]*>[\s\S]*?<\/reasoning>/gi, '')
+                .replace(/<\|channel\>thought[\s\S]*?<channel\|>/gi, '')
+                .trim();
+        }
+        return val;
+    };
     if (preserveUserMacro) {
         systemPrompt = shieldUserMacro(systemPrompt);
         userPrompt = shieldUserMacro(userPrompt);

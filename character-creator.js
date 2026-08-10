@@ -820,7 +820,13 @@ Rules:
 
     try {
         const result = await sendStateRequest(getCharacterCreationConnectionSettings(s), systemPrompt, userPrompt);
-        return (result || '').trim() || null;
+        const cleanedResult = (result || '')
+            .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
+            .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+            .replace(/<reasoning\b[^>]*>[\s\S]*?<\/reasoning>/gi, '')
+            .replace(/<\|channel\>thought[\s\S]*?<channel\|>/gi, '')
+            .trim();
+        return cleanedResult || null;
     } catch (e) {
         toastr['warning']('Error al generar la Ficha de Jugador.', 'Creador de Personajes');
         return null;
