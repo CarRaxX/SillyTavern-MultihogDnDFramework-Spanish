@@ -557,7 +557,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             openaiUrl: settings.routerOpenaiUrl,
             openaiKey: settings.routerOpenaiKey,
             openaiModel: settings.routerOpenaiModel,
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 1000,
         };
 
         // Budget status — computed once and reused in both basic and agent context.
@@ -1454,6 +1454,9 @@ ${adjustedSharedContext}`;
                 // Action: call from the current turn response (safe since it's single-turn).
                 let resolvedToolCall = result.toolCall;
                 if (!resolvedToolCall && result.content) {
+                    if (result.content.startsWith('Endpoint error:') || result.content.includes('AbortError') || result.content.includes('socket hang up')) {
+                        throw new Error(`Respuesta del modelo interrumpida o fuera de tiempo: ${result.content.slice(0, 150)}`);
+                    }
                     resolvedToolCall = parseTextAction(result.content);
                 }
 
@@ -2756,7 +2759,7 @@ Output a JSON object:
         const routerSettings = {
             ...settings,
             connectionSource: settings.routerConnectionSource || "default",
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 1000,
         };
 
         const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
