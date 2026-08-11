@@ -557,7 +557,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             openaiUrl: settings.routerOpenaiUrl,
             openaiKey: settings.routerOpenaiKey,
             openaiModel: settings.routerOpenaiModel,
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 1500,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 2500,
         };
 
         // Budget status — computed once and reused in both basic and agent context.
@@ -2759,7 +2759,7 @@ Output a JSON object:
         const routerSettings = {
             ...settings,
             connectionSource: settings.routerConnectionSource || "default",
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 1500,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 2500,
         };
 
         const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
