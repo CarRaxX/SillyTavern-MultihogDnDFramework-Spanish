@@ -592,6 +592,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                             extractData: true,
                             includePreset: true,
                             includeInstruct: true,
+                            reasoning_format: 'auto',
                             signal,
                         },
                     );
@@ -686,13 +687,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             prompt: userPrompt,
             systemPrompt: systemPrompt,
             bypassAll: true,
-            // We parse this output ourselves (memo/character-sheet extraction), not display it as
-            // chat dialogue. ST's default cleanUpMessage(trimNames: true) silently DELETES THE
-            // ENTIRE RESPONSE if it happens to start with "{{user}}:" or "{{char}}:" (e.g. a
-            // structured character sheet that opens with the generated name, which is common when
-            // Character Creator's "Create SillyTavern Persona" option sets {{user}} to that same
-            // name) — surfacing as an opaque "No message generated" error. Disable it here.
             trimNames: false,
+            reasoning_format: 'auto',
             signal,
         };
 
@@ -944,7 +940,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             originalPreset2 = await getCurrentCompletionPreset();
             await setCompletionPreset(settings.completionPresetId);
         }
-        const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, signal };
+        const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal };
         options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
         const result = await generateRaw(options);
         const text = typeof result === 'string' ? result : (/** @type {any} */ (result))?.choices?.[0]?.message?.content ?? '';
