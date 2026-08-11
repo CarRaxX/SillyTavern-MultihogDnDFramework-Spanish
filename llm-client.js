@@ -376,6 +376,7 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
         frequency_penalty: presetSettings.frequency_penalty ?? presetSettings.freq_pen ?? presetSettings.freq_pen_openai ?? 0,
         presence_penalty: presetSettings.presence_penalty ?? presetSettings.presence_pen ?? presetSettings.pres_pen_openai ?? 0,
         stream: true,
+        reasoning_format: 'auto',
     };
     if (maxTokens && maxTokens > 0) requestBody.max_tokens = maxTokens;
 
@@ -787,6 +788,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             temperature: presetSettings.temperature ?? presetSettings.temp ?? presetSettings.temp_openai ?? 0.1,
             top_p: presetSettings.top_p ?? presetSettings.top_p_openai ?? 1.0,
             stream: false,
+            reasoning_format: 'auto',
         };
         if (tools?.length) body.tools = tools;
         body.max_tokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
