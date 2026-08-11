@@ -553,7 +553,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 { role: 'user',   content: userPrompt   },
             ];
 
-            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
+            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
             const requestedPreset = String(settings.completionPresetId || '').trim();
             const profile = (typeof service.getProfile === 'function')
                 ? service.getProfile(settings.connectionProfileId)
@@ -692,7 +692,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             signal,
         };
 
-        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
+        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
 
         const result = await generateRaw(options);
 
@@ -787,7 +787,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             reasoning_format: 'auto',
         };
         if (tools?.length) body.tools = tools;
-        body.max_tokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
+        body.max_tokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
 
         // PATCH: always route through ST's server-side CORS proxy (requires enableCorsProxy).
         // Browser-direct fetches to remote endpoints (e.g. opencode.ai) fail CORS preflight.
@@ -859,7 +859,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
         const service = context.ConnectionManagerRequestService;
         if (service && typeof service.sendRequest === 'function') {
-            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
+            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
             const requestedPreset = String(settings.completionPresetId || '').trim();
             const profile = (typeof service.getProfile === 'function')
                 ? service.getProfile(settings.connectionProfileId)
@@ -941,7 +941,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             await setCompletionPreset(settings.completionPresetId);
         }
         const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal };
-        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 2500;
+        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
         const result = await generateRaw(options);
         const text = typeof result === 'string' ? result : (/** @type {any} */ (result))?.choices?.[0]?.message?.content ?? '';
         return { content: text, toolCall: null };

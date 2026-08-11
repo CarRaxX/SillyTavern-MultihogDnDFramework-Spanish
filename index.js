@@ -9429,6 +9429,12 @@ RULES:
             saveSettings();
         });
 
+        $('#rpg_tracker_router_max_tokens').val(settings.routerMaxTokens || '').on('input', function () {
+            const val = parseInt($(this).val(), 10);
+            settings.routerMaxTokens = isNaN(val) || val < 0 ? 0 : val;
+            saveSettings();
+        });
+
 
         $('#rpg_tracker_router_basic_mode').prop('checked', settings.routerBasicMode).on('change', function () {
             settings.routerBasicMode = $(this).prop('checked');
