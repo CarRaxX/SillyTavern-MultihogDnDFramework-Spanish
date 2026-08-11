@@ -537,6 +537,11 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
 
     const context = SillyTavern.getContext();
 
+    const reasoningGuidance = `<reasoning_guidelines>\nTu tiempo de pensamiento es moderado. Evita introducciones largas, repeticiones o desvíos dentro de tu razonamiento. Planifica la solución en pasos rápidos, evalúa los escenarios con brevedad y concluye tu análisis antes de agotar el espacio para pasar a la respuesta.\n</reasoning_guidelines>\n\n`;
+    if (systemPrompt && !systemPrompt.includes('<reasoning_guidelines>')) {
+        systemPrompt = reasoningGuidance + systemPrompt;
+    }
+
     console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${settings.connectionProfileId}", preset: "${settings.completionPresetId}"`);
 
     // ── Profile mode: use ConnectionManagerRequestService (silent, no UI flicker) ──
