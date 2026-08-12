@@ -262,6 +262,12 @@ function getProxyHeaders() {
     return { 'Content-Type': 'application/json' };
 }
 
+function resolveMaxTokens(settings) {
+    if (!settings) return 8192;
+    const val = Number(settings.maxTokens || settings.routerMaxTokens || settings.openaiMaxTokens);
+    return (val > 0) ? val : 8192;
+}
+
 // ── Ollama ─────────────────────────────────────────────────────────────────────
 
 export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null) {
@@ -378,7 +384,7 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
         stream: true,
         reasoning_format: 'auto',
     };
-    if (maxTokens && maxTokens > 0) requestBody.max_tokens = maxTokens;
+    requestBody.max_tokens = (maxTokens && Number(maxTokens) > 0) ? Number(maxTokens) : 8192;
 
     console.log(`[RPG Tracker] sendViaOpenAI — model: "${model}", url: "${endpoint}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
@@ -558,7 +564,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 { role: 'user',   content: userPrompt   },
             ];
 
-            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
+            const maxTokens = resolveMaxTokens(settings);
             const requestedPreset = String(settings.completionPresetId || '').trim();
             const profile = (typeof service.getProfile === 'function')
                 ? service.getProfile(settings.connectionProfileId)
@@ -697,7 +703,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             signal,
         };
 
-        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
+        options.responseLength = resolveMaxTokens(settings);
 
         const result = await generateRaw(options);
 
@@ -792,7 +798,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             reasoning_format: 'auto',
         };
         if (tools?.length) body.tools = tools;
-        body.max_tokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
+        body.max_tokens = resolveMaxTokens(settings);
 
         // PATCH: always route through ST's server-side CORS proxy (requires enableCorsProxy).
         // Browser-direct fetches to remote endpoints (e.g. opencode.ai) fail CORS preflight.
@@ -864,7 +870,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
         const service = context.ConnectionManagerRequestService;
         if (service && typeof service.sendRequest === 'function') {
-            const maxTokens = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
+            const maxTokens = resolveMaxTokens(settings);
             const requestedPreset = String(settings.completionPresetId || '').trim();
             const profile = (typeof service.getProfile === 'function')
                 ? service.getProfile(settings.connectionProfileId)
@@ -946,7 +952,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             await setCompletionPreset(settings.completionPresetId);
         }
         const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal };
-        options.responseLength = (settings.maxTokens && Number(settings.maxTokens) > 0) ? Number(settings.maxTokens) : 4096;
+        options.responseLength = resolveMaxTokens(settings);
         const result = await generateRaw(options);
         const text = typeof result === 'string' ? result : (/** @type {any} */ (result))?.choices?.[0]?.message?.content ?? '';
         return { content: text, toolCall: null };
