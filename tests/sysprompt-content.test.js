@@ -57,4 +57,20 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
 
         for (const source of sources) expect(source).not.toMatch(abbreviatedDamage);
     });
+
+    it('ships the one-time map and Lorebook Agent ownership contract in both narrator prompts', () => {
+        const sources = [
+            RT_PROMPTS['sysprompt.txt'],
+            RT_PROMPTS['sysprompt_legacy.txt'],
+            readFileSync(new URL('../sysprompt.txt', import.meta.url), 'utf8'),
+            readFileSync(new URL('../sysprompt_legacy.txt', import.meta.url), 'utf8'),
+        ];
+
+        for (const source of sources) {
+            expect(source).toContain('<div hidden data-dungeon-map>');
+            expect(source).toContain('Emit exactly one complete initial map');
+            expect(source).toContain('Do not emit follow-up map chunks or `data-dungeon-delta` blocks');
+            expect(source).toContain('Lorebook Agent owns persistent room/area updates');
+        }
+    });
 });

@@ -534,6 +534,37 @@ function getSettingsInternal(extensionSettings) {
         );
     }
 
+    // Dungeon persistence ownership: keep ordinary room exploration and local
+    // mutations in Location entries instead of duplicating them as Events.
+    const dungeonOwnershipRule = '**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private `[MAP]...[/MAP]` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. While the current scene is inside a mapped dungeon/site, persistent room state belongs in the exact LOC entry for that room or area. Record destroyed occupants, sprung/disarmed traps, opened/blocked routes, removed objects, damage, cleansing/corruption, and newly established sublocations as LOC updates or child LOC entries. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or these local mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).';
+    if (s.routerModularPromptTemplate && !s.routerModularPromptTemplate.includes('DUNGEON LOCATION OWNERSHIP')) {
+        s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+            'Example: [[FAC: Iron Syndicate',
+            `${dungeonOwnershipRule}\n\nExample: [[FAC: Iron Syndicate`,
+        );
+    }
+    if (s.routerAgentSharedContextTemplate && !s.routerAgentSharedContextTemplate.includes('DUNGEON LOCATION OWNERSHIP')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            '## WORLD SKELETON (OFF-LIMITS)',
+            `## DUNGEON LOCATION OWNERSHIP\n${dungeonOwnershipRule.replace(/^\*\*DUNGEON LOCATION OWNERSHIP:\*\*\s*/, '')}\n\n## WORLD SKELETON (OFF-LIMITS)`,
+        );
+    }
+    const mapAwarenessRule = 'A mapped root Location may contain a private `[MAP]...[/MAP]` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. ';
+    if (s.routerModularPromptTemplate?.includes('DUNGEON LOCATION OWNERSHIP')
+        && !s.routerModularPromptTemplate.includes('private `[MAP]...[/MAP]`')) {
+        s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+            '**DUNGEON LOCATION OWNERSHIP:** ',
+            `**DUNGEON LOCATION OWNERSHIP:** ${mapAwarenessRule}`,
+        );
+    }
+    if (s.routerAgentSharedContextTemplate?.includes('## DUNGEON LOCATION OWNERSHIP')
+        && !s.routerAgentSharedContextTemplate.includes('private `[MAP]...[/MAP]`')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            '## DUNGEON LOCATION OWNERSHIP\n',
+            `## DUNGEON LOCATION OWNERSHIP\n${mapAwarenessRule}`,
+        );
+    }
+
     // ── MIGRATION: Update World Progression System Prompt with Quests/Events rule (v3.4.4+) ──────
     if (s.worldProgressionSystemPrompt && !s.worldProgressionSystemPrompt.includes('QUESTS and EVENTS are historical records')) {
         s.worldProgressionSystemPrompt = s.worldProgressionSystemPrompt.replace(

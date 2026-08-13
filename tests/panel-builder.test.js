@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
     createPanel,
     resolveInitialPanelContentMode,
@@ -26,5 +27,14 @@ describe('panel builder', () => {
         expect(resolveInitialPanelContentMode('agent')).toBe('tracker');
         expect(resolveInitialPanelContentMode('tracker')).toBe('tracker');
         expect(resolveInitialPanelContentMode(undefined)).toBe('tracker');
+    });
+
+    it('shows a private-map viewer button on mapped Lorebook Agent locations', () => {
+        const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
+        expect(source).toContain('node.item.has_dungeon_map');
+        expect(source).toContain('rt-dungeon-map-badge');
+        expect(source).toContain('View private dungeon map attached to this root Location');
+        expect(source).toContain('openDungeonMapPopup');
+        expect(source).toContain('stripDungeonMapSection(item.content');
     });
 });

@@ -4,6 +4,7 @@ import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundL
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
 import { scanRecentOutputForPresentNpcs } from './router.js';
+import { stripDungeonMapSection } from './dungeon-reality.js';
 
 /**
  * Parse current location from recent chat status footer, then memo [TIME] block.
@@ -124,7 +125,7 @@ export async function loadLocationEntryByPath(path, settings) {
             return {
                 id: fullId,
                 label: entry.comment || label,
-                content: entry.content || '',
+                content: stripDungeonMapSection(entry.content || ''),
                 keys: entry.key,
                 is_active: (s.activeRouterKeys || []).includes(fullId),
                 book: bookName,

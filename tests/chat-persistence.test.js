@@ -47,6 +47,27 @@ describe('saveChatState', () => {
         expect(migrated.chatStates['fresh-chat'].customFields).toBeUndefined();
     });
 
+    it('preserves dungeon reality authored directly in the chat partition', () => {
+        const s = getSettings();
+        s.chatStates['vitest-chat'] = {
+            dungeonReality: {
+                version: 1,
+                sites: {
+                    'ember mine': {
+                        siteRoot: 'Ember Mine',
+                        mapChunks: ['Area: Lift'],
+                        statusLog: [],
+                    },
+                },
+            },
+        };
+
+        saveChatState('vitest-chat', { skipDiskWrite: true });
+
+        expect(s.chatStates['vitest-chat'].dungeonReality.sites['ember mine'].mapChunks)
+            .toEqual(['Area: Lift']);
+    });
+
     it('snapshots the full Control Room and tracker-module setup only when opted in', () => {
         const s = getSettings();
         s.chatSetupLinkEnabled = true;

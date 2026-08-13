@@ -396,6 +396,9 @@ export function saveChatState(chatId, opts = {}) {
         // Preserve Player Character pseudo-persona which is injected into the chat state
         playerCharacter: existing.playerCharacter,
 
+        // Authored directly in this partition by the narrative interceptor.
+        dungeonReality: existing.dungeonReality ? JSON.parse(JSON.stringify(existing.dungeonReality)) : null,
+
         // Adventure Companion (CHAT mode) — per-chat brainstorming history.
         // Only overwrite from the live session when saving the *active* chat; otherwise
         // keep the partition value (e.g. flush-before-switch already wrote the departing chat).

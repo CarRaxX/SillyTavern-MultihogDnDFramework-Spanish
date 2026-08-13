@@ -95,7 +95,7 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionExclusionList', 'use24hTime', 'useDdMmYyFormat',
     'initialDate', 'initialTime', 'npcRelationshipMax', 'setup', 'campaignBooks',
     'lastImmersionSceneArtPath', 'lastImmersionSceneArtChatLen',
-    'playerCharacter', 'adventureCompanion',
+    'playerCharacter', 'dungeonReality', 'adventureCompanion',
 ]);
 
 const hasItems = (value) => Array.isArray(value) && value.length > 0;
@@ -119,7 +119,8 @@ export function partitionHasCampaignSubstance(p) {
     if (['combatDefeatedUi', 'memoHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
         .some((key) => hasItems(p[key]))) return true;
-    if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)) return true;
+    if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)
+        || hasMapEntries(p.dungeonReality?.sites)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)
         || (Number(p.routerLastRunChatLength) || 0) > 0

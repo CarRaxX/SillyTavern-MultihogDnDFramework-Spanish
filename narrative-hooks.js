@@ -15,7 +15,7 @@
 import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgressionTimer, persistRouterLastRunWatermark, getNpcRelationshipMax, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, applyRelTierBadgeElement, showRelationshipFloatFeedback, saveChatState, getActiveChatId, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, shouldProcessRegexRelationshipUpdates, stripCoreMarkersForNarrator } from './state-manager.js';
 import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
-import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning } from './router.js';
+import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
@@ -23,7 +23,42 @@ import { isPercentFormula, resolveDiceCompare } from './src/state/dice-compare.j
 import { buildCyoaModeBlock, STATE_MEMO_INJECT_PREAMBLE } from './constants.js';
 import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
 import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/state/narrative-pacing.js';
+import {
+    buildDungeonRealityInjection,
+    findLatestDungeonLocation,
+    getSiteRootFromLocation,
+    looksLikeDungeonSite,
+    resolveActiveDungeonSite,
+    stripCapturedDungeonMapsFromPrompt,
+} from './dungeon-reality.js';
 export { isPercentFormula, resolveDiceCompare };
+
+const dungeonMissingMapWarnings = new Set();
+
+/** Keep mapped root lore visible to LA exactly while its location root is active. */
+function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation) {
+    const mappedIds = new Set(Object.values(dungeonState?.sites || {}).map(site => site?.entryId).filter(Boolean));
+    const activeSite = resolveActiveDungeonSite(dungeonState, currentLocation);
+    const wantedId = activeSite?.entryId || '';
+    const pinned = new Set(settings.pinnedRouterKeys || []);
+    const before = JSON.stringify({
+        active: settings.activeRouterKeys || [],
+        keyword: settings.keywordActivatedKeys || [],
+    });
+    settings.activeRouterKeys = (settings.activeRouterKeys || [])
+        .filter(id => !mappedIds.has(id) || id === wantedId || pinned.has(id));
+    if (wantedId && !settings.activeRouterKeys.includes(wantedId)) settings.activeRouterKeys.push(wantedId);
+    // Map roots are location-gated, never keyword-owned.
+    if (Array.isArray(settings.keywordActivatedKeys)) {
+        settings.keywordActivatedKeys = settings.keywordActivatedKeys.filter(id => !mappedIds.has(id));
+    }
+    const after = JSON.stringify({
+        active: settings.activeRouterKeys || [],
+        keyword: settings.keywordActivatedKeys || [],
+    });
+    if (before !== after) void saveSettings();
+    return activeSite;
+}
 
 /** Write plain text back onto a chat message (string or multimodal content). */
 function setChatMessageText(msg, text) {
@@ -931,6 +966,40 @@ export function installInterceptor() {
         // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
         const _rbCtx = SillyTavern.getContext();
         const _rbChat = _rbCtx?.chat;
+        const dungeonEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings);
+        const dungeonChatId = getActiveChatId();
+        const replacingLatestNarratorMessage = ['swipe', 'regenerate']
+            .includes(String(type || '').toLowerCase());
+        let dungeonState = null;
+        let dungeonInjection = '';
+
+        if (dungeonEnabled && dungeonChatId && Array.isArray(_rbChat)) {
+            // A swipe/regeneration rejects the latest selected narrator message,
+            // so read existing attachments but do not persist a map from it.
+            const capture = await syncDungeonMapsToLocationLorebook(_rbChat, {
+                capture: !replacingLatestNarratorMessage,
+            });
+            dungeonState = { version: 3, sites: capture.sites || {} };
+            if (capture.changed) {
+                console.info(`[RPG Tracker] Attached ${capture.capturedMaps} dungeon map(s) to root Location lorebook entries.`);
+            }
+            for (const error of capture.errors || []) {
+                console.error(`[RPG Tracker] Dungeon Reality capture failed: ${error}. The map was left in chat context and was not discarded.`);
+            }
+
+            const currentLocation = findLatestDungeonLocation(_rbChat);
+            const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation);
+            if (activeSite) {
+                dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation);
+                dungeonMissingMapWarnings.delete(`${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`);
+            } else if (currentLocation && looksLikeDungeonSite(currentLocation)) {
+                const warningKey = `${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`;
+                if (!dungeonMissingMapWarnings.has(warningKey)) {
+                    dungeonMissingMapWarnings.add(warningKey);
+                    console.error(`[RPG Tracker] Dungeon Reality is enabled and the party appears to be inside "${currentLocation}", but no captured site map is available. Adjudication is missing its objective map until the GM emits a valid <div hidden> map with a footer location.`);
+                }
+            }
+        }
         const _rbLastAi = _rbChat ? [..._rbChat].reverse().find(m => !m.is_user && !m.is_system) : null;
         if (_rbLastAi) {
             applyMemoSwipeRollback(_rbLastAi, settings);
@@ -954,7 +1023,7 @@ export function installInterceptor() {
         const routerActive = !!settings.routerEnabled;
         const cyoaActive = isEffectiveSectionEnabled('CYOA_mode', settings);
         const pacingInject = hasInjectableNarrativePacing(settings.narrativePacing);
-        if (!settings.enabled && !routerActive && !cyoaActive && !pacingInject) {
+        if (!settings.enabled && !routerActive && !cyoaActive && !pacingInject && !dungeonEnabled) {
             if (settings.debugMode) console.groupEnd();
             return;
         }
@@ -984,6 +1053,13 @@ export function installInterceptor() {
             if (typeof m.mes === 'string') {
                 m.mes = m.mes.replace(rtCommentRe, '');
             }
+        }
+
+        // The durable store now owns captured hidden maps. Remove only those
+        // exact blocks from the outgoing prompt so inactive sites cannot leak
+        // into context and active sites have one deterministic source.
+        if (dungeonEnabled && dungeonState) {
+            stripCapturedDungeonMapsFromPrompt(chat, dungeonState);
         }
 
         let idx = -1;
@@ -1034,6 +1110,7 @@ export function installInterceptor() {
         let injections = "";     // core: pacing + CYOA + RNG + State Memo + Quests → user msg
         let loreInjections = ""; // lore: keyword/agent entries (configurable depth)
         let wpInjections = "";   // world progression reports (configurable depth)
+        const dungeonInjections = dungeonInjection;
         
         if (settings.debugMode) {
             console.log(`Found user message at index ${idx}.`);
@@ -1274,7 +1351,7 @@ export function installInterceptor() {
 
         if (settings.debugMode) console.groupEnd();
 
-        if (skipInjection || (!injections && !loreInjections && !wpInjections)) return;
+        if (skipInjection || (!injections && !loreInjections && !wpInjections && !dungeonInjections)) return;
 
         // ── Injection dispatch ───────────────────────────────────────────────────
         //
@@ -1343,6 +1420,21 @@ export function installInterceptor() {
         // The `chat` array here is SillyTavern's internal format (.mes / .is_user /
         // .name / .extra). Setting extra.type = 'narrator' maps to role:'system'
         // when setOpenAIMessages() converts it to API format.
+        if (dungeonInjections) {
+            const dungeonDepth = settings.loreInjectionDepth ?? 4;
+            const insertIdx = Math.max(0, chat.length - dungeonDepth);
+            chat.splice(insertIdx, 0, {
+                name: 'Dungeon Reality',
+                mes: dungeonInjections,
+                is_user: false,
+                extra: { type: 'narrator' },
+            });
+            if (settings.debugMode) {
+                console.log(`[Multihog Framework] Dungeon Reality depth injection: spliced at index ${insertIdx} (depth ${dungeonDepth}).`);
+                logTransaction('Dungeon Reality (Depth Splice)', [{ role: 'system', content: dungeonInjections }]);
+            }
+        }
+
         if (useDepthInjection && loreInjections) {
             const depth = settings.loreInjectionDepth ?? 4;
             const insertIdx = Math.max(0, chat.length - depth);
@@ -2350,6 +2442,26 @@ export async function onGenerationEnded() {
             activeChar: ctx?.name2 || null,
         });
         return;
+    }
+
+    // Persist a newly generated initial map immediately, before the Lorebook
+    // Agent pass. Swipe/regenerate outputs are provisional and are captured
+    // only after the replacement becomes the selected response.
+    if (isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings)
+        && !['swipe', 'regenerate'].includes(String(currentType || '').toLowerCase())) {
+        try {
+            const capture = await syncDungeonMapsToLocationLorebook(chat, { capture: true });
+            if (capture.changed) {
+                console.info(`[RPG Tracker] Attached ${capture.capturedMaps} dungeon map(s) to root Location lorebook entries.`);
+            }
+            for (const error of capture.errors || []) {
+                console.error(`[RPG Tracker] Dungeon Reality capture failed: ${error}.`);
+            }
+            const state = { version: 3, sites: capture.sites || {} };
+            syncDungeonLoreAgentActivation(settings, state, findLatestDungeonLocation(chat));
+        } catch (error) {
+            console.error('[RPG Tracker] Could not persist the dungeon map to the Locations lorebook:', error);
+        }
     }
 
     const combinedNarrative = getNarrativeBlocks(chat, -1, !!settings.routerIncludeHidden);

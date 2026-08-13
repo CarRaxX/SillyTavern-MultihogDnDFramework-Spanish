@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { cleanMessageContent } from '../memo-processor.js';
+
+describe('Lorebook Agent dungeon-map filtering', () => {
+    it('removes private map payloads while preserving visible narration', () => {
+        const cleaned = cleanMessageContent({
+            mes: `The chamber smells of dust.
+<div hidden data-dungeon-map>
+Dungeon Site: Varnholde Crypts
+Area: Secret Reliquary
+A shade guards an undiscovered key.
+</div hidden>
+The altar is visibly scorched.`,
+        });
+
+        expect(cleaned).toContain('The chamber smells of dust.');
+        expect(cleaned).toContain('The altar is visibly scorched.');
+        expect(cleaned).not.toContain('Secret Reliquary');
+        expect(cleaned).not.toContain('undiscovered key');
+    });
+
+    it('provides [MAP] through active lore rather than duplicate transcript text', () => {
+        const routerSource = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
+        const hookSource = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
+        expect(routerSource).toContain('Content: ${entry.content}');
+        expect(hookSource).toContain('syncDungeonLoreAgentActivation');
+        expect(defaultsSource).toContain('private \\`[MAP]...[/MAP]\\`');
+        expect(defaultsSource).toContain('identify exactly which mapped creature, trap, object, or area');
+    });
+});

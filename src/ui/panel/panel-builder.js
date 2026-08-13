@@ -8,6 +8,7 @@ import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis } from './card
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
+import { extractDungeonMapSection, stripDungeonMapSection } from '../../../dungeon-reality.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -526,6 +527,22 @@ export function createPanel(dependencies) {
         // Tracks entries whose body is currently expanded
         const _openEntries = new Set();
 
+        const openDungeonMapPopup = async (item) => {
+            const map = extractDungeonMapSection(item?.content);
+            if (!map) return;
+            const ctx = SillyTavern.getContext();
+            if (!ctx.callGenericPopup) return;
+            const popupDom = document.createElement('div');
+            popupDom.className = 'rt-dungeon-map-popup';
+            popupDom.innerHTML = `
+                <div style="font-size:16px;font-weight:700;color:#7dd3fc;margin-bottom:4px;"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(item.label || 'Dungeon Map')}</div>
+                <div style="font-size:11px;opacity:0.58;margin-bottom:12px;">Private objective map attached to this Location. Lorebook Agent can read this section.</div>
+                <pre style="white-space:pre-wrap;word-break:break-word;max-height:65vh;overflow:auto;margin:0;padding:14px;border-radius:8px;background:rgba(0,0,0,0.32);border:1px solid rgba(125,211,252,0.28);font:12px/1.55 var(--rt-font-mono, monospace);color:var(--rt-text);">${escapeHtml(map)}</pre>`;
+            await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
+                okButton: 'Close', cancelButton: false, wide: true, large: true,
+            });
+        };
+
         /**
          * @param {object} item - manifest row from getLorebookManifest
          * @param {{ stale?: boolean, dirty?: {content:string, keys:string, comment:string} | null, isNpcEntry?: boolean }} [opts]
@@ -561,7 +578,7 @@ export function createPanel(dependencies) {
 
             const syncReadFromItem = () => {
                 keysRead.textContent = '[' + item.keys.join(', ') + ']';
-                const raw = item.content || '';
+                const raw = stripDungeonMapSection(item.content || '');
                 const coreMatch = raw.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
                 const dynamic = sanitizeLorebookRecordContent(
                     raw.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '').trim()
@@ -979,7 +996,7 @@ export function createPanel(dependencies) {
                 buildCardAppearanceSynopsis(content, substituteDisplayMacros);
 
             const renderSectionsHtml = (rawContent, isPC = false) => {
-                const parsed = parseNpcSections(rawContent, isPC);
+                const parsed = parseNpcSections(stripDungeonMapSection(rawContent), isPC);
                 const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
                 let html = '';
                 const coreEntries = Object.entries(parsed.core);
@@ -2238,7 +2255,7 @@ export function createPanel(dependencies) {
 
                                 getLocationDescription = (content) => {
                                     if (!content) return '';
-                                    const cleanContent = content.replace(/\[\/?CORE\]/gi, '');
+                                    const cleanContent = stripDungeonMapSection(content).replace(/\[\/?CORE\]/gi, '');
                                     const coreMatch = cleanContent.match(/(?:^|\n)\s*(?:\[CORE\])?\s*([\s\S]*?)(?=\n\s*(?:Atmosphere|Notable Features|History|Connections|Dangers|Resources):|$)/i);
                                     if (coreMatch?.[1]?.trim()) {
                                         return substituteDisplayMacros(coreMatch[1].trim().substring(0, 260));
@@ -2317,7 +2334,7 @@ export function createPanel(dependencies) {
                                                 heroWrap.innerHTML = renderLocPopupHeroInner(meta.src);
                                                 if (typeof refreshManifest === 'function') refreshManifest();
                                             };
-                                            await showLocationImageSettingsMenu(normPath, refreshPopupHero, item.content || '');
+                                            await showLocationImageSettingsMenu(normPath, refreshPopupHero, stripDungeonMapSection(item.content || ''));
                                         });
                                     }
 
@@ -2786,6 +2803,7 @@ export function createPanel(dependencies) {
 
                                     // Tokens and action buttons
                                     let tokensHtml = '';
+                                    let dungeonMapBadgeHtml = '';
                                     let cleanHtml = '';
                                     let viewNpcHtml = '';
                                     let viewLocHtml = '';
@@ -2801,6 +2819,9 @@ export function createPanel(dependencies) {
                                     if (node.item) {
                                         const entryTokens = Math.round((node.item.content || '').length / 4);
                                         tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
+                                        if (node.item.has_dungeon_map) {
+                                            dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
+                                        }
                                         if (isNpcBook) {
                                             viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
                                             if (s.npcRelationshipBars && renderCompactRelStats) {
@@ -2831,6 +2852,7 @@ export function createPanel(dependencies) {
                             ${statusDotHtml}
                             <span class="rt-agent-entry-label-span" style="${labelStyle}">${escapeHtml(node.name)}${isDirty ? ' <span style="color:#ffa500; font-size:8px;" title="Unsaved edits">●</span>' : ''}</span>
                             ${relStatsHtml}
+                            ${dungeonMapBadgeHtml}
                             ${tokensHtml}
                             ${pinHtml}
                             ${editHtml}
@@ -2854,11 +2876,19 @@ export function createPanel(dependencies) {
                                         });
                                     }
 
+                                    const dungeonMapBtn = entryHdr.querySelector('.rt-dungeon-map-badge');
+                                    if (dungeonMapBtn && node.item) {
+                                        dungeonMapBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            await openDungeonMapPopup(node.item);
+                                        });
+                                    }
+
                                     const locThumbWrap = entryHdr.querySelector('.rt-loc-thumb-wrap');
                                     if (locThumbWrap && node.item && locFullPath) {
                                         locThumbWrap.addEventListener('click', async (e) => {
                                             e.stopPropagation();
-                                            await showLocationImageSettingsMenu(locFullPath, () => refreshManifest(), node.item.content || '');
+                                            await showLocationImageSettingsMenu(locFullPath, () => refreshManifest(), stripDungeonMapSection(node.item.content || ''));
                                         });
                                         locThumbWrap.addEventListener('dragover', (ev) => { ev.preventDefault(); locThumbWrap.classList.add('rt-loc-thumb-drag'); });
                                         locThumbWrap.addEventListener('dragleave', () => { locThumbWrap.classList.remove('rt-loc-thumb-drag'); });
@@ -2921,7 +2951,7 @@ export function createPanel(dependencies) {
 
                                     if (node.item) {
                                         entryHdr.addEventListener('click', (e) => {
-                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-loc-thumb-wrap')) return;
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-loc-thumb-wrap')) return;
                                             const opening = entryBody.style.display === 'none';
                                             entryBody.style.display = opening ? 'flex' : 'none';
                                             entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';

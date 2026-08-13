@@ -107,6 +107,7 @@ describe('chat rename migration helpers', () => {
         ['quest', { quests: [{ id: 'q1' }] }],
         ['portrait', { customPortraits: { Hero: 'hero.png' } }],
         ['location image', { customLocationImages: { Camp: 'camp.png' } }],
+        ['dungeon reality', { dungeonReality: { sites: { crypt: { mapChunks: ['Area: Gate'] } } } }],
         ['companion history', { adventureCompanion: { lookback: 5, history: [{ role: 'user', content: 'Plan' }] } }],
         ['world progression timer', { worldProgressionLastFiredAtMinutes: 60 }],
         ['future schema field', { futureCampaignPayload: {} }],

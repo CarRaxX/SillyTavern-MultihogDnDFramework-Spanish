@@ -16,6 +16,15 @@ import {
     getCreatedLorebookNames,
     getLorebookSnapshotNames,
 } from './src/state/lorebook-history.js';
+import {
+    attachDungeonMapToLocationEntry,
+    buildDungeonSitesFromLocationEntries,
+    collectDungeonMapCandidates,
+    dungeonLabelsMatch,
+    getDungeonMapAttachment,
+    migrateDungeonMapAttachmentToContent,
+    stripDungeonMapSection,
+} from './dungeon-reality.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -420,6 +429,105 @@ async function saveWorldInfoSnapshot(bookName, bookData, ctx, operationLabel) {
     }
 }
 
+/**
+ * Persist the GM's one-time hidden map on a real root Location entry, then
+ * return every attached site with its descendant Location records. The map is
+ * stored in entry extension metadata so normal lorebook views never reveal it.
+ */
+export async function syncDungeonMapsToLocationLorebook(chat, { capture = true } = {}) {
+    const ctx = SillyTavern.getContext();
+    const prefix = getLivePrefix();
+    if (!prefix) return { sites: {}, changed: false, capturedMaps: 0, errors: ['no campaign prefix is available'] };
+
+    const bookName = `${prefix}_Locations`;
+    const collected = capture ? collectDungeonMapCandidates(chat) : { maps: [], errors: [] };
+    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    if (!bookData) {
+        if (!collected.maps.length) {
+            return { bookName, sites: {}, changed: false, capturedMaps: 0, errors: collected.errors };
+        }
+        const knownNames = await getWorldInfoNamesSafe();
+        if (knownNames.includes(bookName)) {
+            throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
+        }
+        bookData = {
+            entries: {},
+            name: bookName,
+            scan_depth: 4,
+            token_budget: 400,
+            recursive: false,
+            extensions: {},
+        };
+    }
+
+    let changed = false;
+    let capturedMaps = 0;
+    for (const entry of Object.values(bookData.entries || {})) {
+        if (migrateDungeonMapAttachmentToContent(entry)) changed = true;
+        if (getDungeonMapAttachment(entry) && entry.disable !== true) {
+            entry.disable = true;
+            changed = true;
+        }
+    }
+    for (const map of collected.maps) {
+        let rootEntry = Object.values(bookData.entries || {}).find(entry => {
+            const label = String(entry?.comment || '').trim();
+            return label && !label.includes('::') && dungeonLabelsMatch(label, map.siteRoot);
+        });
+
+        if (!rootEntry) {
+            const uids = Object.keys(bookData.entries || {}).map(Number).filter(Number.isFinite);
+            const nextUid = uids.length ? Math.max(...uids) + 1 : 0;
+            rootEntry = {
+                uid: nextUid,
+                key: [map.siteRoot],
+                keysecondary: [],
+                comment: map.siteRoot,
+                content: `[CORE]\n${map.siteRoot} is a mapped site. Persistent room and area changes are recorded in its child Location entries.\n[/CORE]`,
+                constant: false,
+                selective: false,
+                selectiveLogic: 0,
+                addMemo: true,
+                order: getSettings().routerDefaultOrder ?? 100,
+                position: getSettings().routerDefaultPosition ?? 0,
+                disable: true,
+                probability: 100,
+                useProbability: false,
+                depth: getSettings().routerDefaultDepth ?? 4,
+                group: '',
+                groupOverride: false,
+                groupWeight: 100,
+                extensions: {},
+            };
+            bookData.entries[nextUid] = rootEntry;
+            changed = true;
+        }
+
+        if (attachDungeonMapToLocationEntry(rootEntry, map)) {
+            rootEntry.disable = true;
+            capturedMaps++;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map persistence');
+        if (typeof ctx.updateWorldInfoList === 'function') {
+            try { await ctx.updateWorldInfoList(); } catch (_) {}
+        }
+        if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+        document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+    }
+
+    return {
+        bookName,
+        sites: buildDungeonSitesFromLocationEntries(bookData.entries, bookName),
+        changed,
+        capturedMaps,
+        errors: collected.errors,
+    };
+}
+
 /** Captures the complete current campaign state for lossless redo. */
 export async function captureRouterLoreState() {
     const settings = getSettings();
@@ -761,7 +869,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 
                 for (const [uid, entry] of Object.entries(book.entries)) {
                     const fullId = `${bookName}::${uid}`;
-                    const tokens = estimateTokens(entry.content);
+                    const tokens = estimateTokens(stripDungeonMapSection(entry.content));
                     const useThreshold = settings.routerCleanupUseThreshold !== false;
                     const isTarget = targetEntryId && fullId === targetEntryId;
                     const overThreshold = !useThreshold || tokens >= CLEANUP_TOKEN_THRESHOLD;
@@ -1682,7 +1790,7 @@ ${adjustedSharedContext}`;
             const CLEANUP_TOKEN_THRESHOLD = settings.routerCleanupTokenThreshold || 300;
             const bloatedCount = Object.values(archiveBooks)
                 .flatMap(b => Object.values(b.entries || {}))
-                .filter(e => estimateTokens(e.content) >= CLEANUP_TOKEN_THRESHOLD).length;
+                .filter(e => estimateTokens(stripDungeonMapSection(e.content)) >= CLEANUP_TOKEN_THRESHOLD).length;
 
             _routerNormalRunCount++;
             const cleanupEvery = settings.routerCleanupEvery || 0;
@@ -3009,6 +3117,7 @@ export async function getLorebookManifest(skipUpdate = false) {
                 content: entry.content,
                 is_active: activeRouterSet.has(id) || activeWorldSet.has(id),
                 is_pinned: pinnedSet.has(id),
+                has_dungeon_map: !!getDungeonMapAttachment(entry),
             });
         }
     }
@@ -3194,6 +3303,9 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
         bookCache.set(bookName, book);
 
         for (const [uid, entry] of Object.entries(book.entries)) {
+            // Mapped roots are activated exclusively by the authoritative
+            // current-location hierarchy, never by incidental keyword mentions.
+            if (getDungeonMapAttachment(entry)) continue;
             const fullId = `${bookName}::${uid}`;
             const keywords = Array.isArray(entry.key) ? entry.key : [];
             if (keywords.length === 0) continue;
@@ -3591,20 +3703,30 @@ function deduplicateContent(existing, delta) {
  * @returns {string}
  */
 function protectCoreBlock(originalContent, newContent) {
-    if (!originalContent || !newContent) return newContent;
+    if (!originalContent) return newContent;
+    let protectedContent = String(newContent || '');
     const coreRegex = /\[CORE\]([\s\S]*?)\[\/CORE\]/i;
     const originalCoreMatch = originalContent.match(coreRegex);
-    if (!originalCoreMatch) return newContent;
-
-    const originalCoreBlock = originalCoreMatch[0];
-    const newCoreMatch = newContent.match(coreRegex);
-    if (newCoreMatch) {
-        // Swap out the new core block with the original pristine one
-        return newContent.replace(coreRegex, originalCoreBlock);
-    } else {
-        // Prepend the original pristine core block if omitted
-        return `${originalCoreBlock}\n${newContent}`;
+    if (originalCoreMatch) {
+        const originalCoreBlock = originalCoreMatch[0];
+        const newCoreMatch = protectedContent.match(coreRegex);
+        protectedContent = newCoreMatch
+            ? protectedContent.replace(coreRegex, originalCoreBlock)
+            : `${originalCoreBlock}${protectedContent ? `\n${protectedContent}` : ''}`;
     }
+
+    // [MAP] is immutable objective canon. Cleanup/rewrite passes may see it for
+    // context but can neither summarize, modify, nor omit it.
+    const mapRegex = /\[MAP\]([\s\S]*?)\[\/MAP\]/i;
+    const originalMapMatch = originalContent.match(mapRegex);
+    if (originalMapMatch) {
+        const originalMapBlock = originalMapMatch[0];
+        const newMapMatch = protectedContent.match(mapRegex);
+        protectedContent = newMapMatch
+            ? protectedContent.replace(mapRegex, originalMapBlock)
+            : `${protectedContent.trimEnd()}${protectedContent.trim() ? '\n\n' : ''}${originalMapBlock}`;
+    }
+    return protectedContent;
 }
 
 

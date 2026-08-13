@@ -1111,6 +1111,8 @@ Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keywor
 
 NPC / FAC / QUEST / EVENT labels: Name only — NO " :: " hierarchy, NO tag prefix.
 
+**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private \`[MAP]...[/MAP]\` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote \`[MAP]\` into visible lore. While the current scene is inside a mapped dungeon/site, persistent room state belongs in the exact LOC entry for that room or area. Record destroyed occupants, sprung/disarmed traps, opened/blocked routes, removed objects, damage, cleansing/corruption, and newly established sublocations as LOC updates or child LOC entries. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or these local mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).
+
 Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
 
 
@@ -1221,6 +1223,9 @@ Before using \`record\` for anyone or anything, check ACTIVE MEMORY, NEWLY ACTIV
 - Only use \`record\` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.
 
 {{combatProfileGuidance}}
+
+## DUNGEON LOCATION OWNERSHIP
+A mapped root Location may contain a private \`[MAP]...[/MAP]\` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote \`[MAP]\` into visible lore. While the current scene is inside a mapped dungeon/site, persistent room state belongs in the exact LOC entry for that room or area. Record destroyed occupants, sprung/disarmed traps, opened/blocked routes, removed objects, damage, cleansing/corruption, and newly established sublocations as LOC updates or child LOC entries. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or these local mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).
 
 ## WORLD SKELETON (OFF-LIMITS)
 World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for World Progression only. They are NOT in your archive, tools cannot access them, and you must NEVER activate, read, update, or commit changes to Skeleton entries.
