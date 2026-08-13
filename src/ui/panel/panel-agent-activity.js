@@ -4,6 +4,7 @@ import { t } from '../../i18n/index.js';
 /** Wires Lorebook Agent history, active-key refresh, and last-run status controls. */
 export function wireAgentActivity({
     agentPanel,
+    captureRouterLoreState,
     getRouterTick,
     getSettings,
     reapplyRouterPass,
@@ -33,27 +34,6 @@ export function wireAgentActivity({
         }
     };
 
-    /** Snapshot the current lorebook state for the books touched by the given history entry. */
-    const captureCurrentLoreState = async (histEntry) => {
-        const ctx = SillyTavern.getContext();
-        const s = getSettings();
-        const bookNames = Object.keys(histEntry.bookSnapshots || {});
-        const bookSnapshots = {};
-        for (const name of bookNames) {
-            try {
-                const book = await ctx.loadWorldInfo(name);
-                if (book) bookSnapshots[name] = JSON.parse(JSON.stringify(book));
-            } catch (_) { }
-        }
-        return {
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            activeRouterKeys: JSON.parse(JSON.stringify(s.activeRouterKeys || [])),
-            activeWorldKeys: JSON.parse(JSON.stringify(s.activeWorldKeys || [])),
-            routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
-            bookSnapshots,
-        };
-    };
-
     if (agentNavBack) {
         agentNavBack.addEventListener('click', async () => {
             const s = getSettings();
@@ -61,15 +41,20 @@ export function wireAgentActivity({
             agentNavBack.disabled = true;
             if (agentNavFwd) agentNavFwd.disabled = true;
             const histEntry = s.routerHistory[0];
-            const postPassState = await captureCurrentLoreState(histEntry);
-            const ok = await rollbackRouterPass(0);
-            if (ok) {
-                runtimeState.loreRedoStack.push({ prePassSnapshot: histEntry, postPassState });
-            } else {
-                toastr['error']('Rollback failed. Check console.', 'Lorebook Agent');
+            try {
+                const postPassState = await captureRouterLoreState();
+                const ok = await rollbackRouterPass(0, postPassState);
+                if (ok) {
+                    runtimeState.loreRedoStack.push({ prePassSnapshot: histEntry, postPassState });
+                } else {
+                    toastr['error']('Rollback failed; safety recovery was attempted. Check console.', 'Lorebook Agent');
+                }
+            } catch (error) {
+                console.error('[RPG Tracker] Could not capture a safe rollback recovery state:', error);
+                toastr['error']('Undo stopped because a complete safety snapshot could not be made.', 'Lorebook Agent');
             }
             syncAgentNav();
-            await refreshManifest();
+            await refreshManifest('rollback');
         });
     }
 
@@ -85,7 +70,7 @@ export function wireAgentActivity({
                 toastr['error']('Redo failed. Check console.', 'Lorebook Agent');
             }
             syncAgentNav();
-            await refreshManifest();
+            await refreshManifest('redo');
         });
     }
 
@@ -123,6 +108,9 @@ export function wireAgentActivity({
                 try { await _ctx.updateWorldInfoList(); } catch (_) { }
             }
             await runtimeState.renderRouterUI();
+            if (typeof runtimeState.refreshAgentManifest === 'function') {
+                await runtimeState.refreshAgentManifest('manual-button');
+            }
             keysRefreshBtn.querySelector('i')?.classList.remove('fa-spin');
         });
     }
@@ -156,17 +144,18 @@ export function wireAgentActivity({
     }
     syncLastRunDisplay();
 
-    document.addEventListener('rt_lore_agent_updated', async () => {
+    document.addEventListener('rt_lore_agent_updated', async (event) => {
         saveSettings();
-        // Flush ST's in-memory lorebook cache before re-rendering so that
-        // loadWorldInfo() picks up the entries we just wrote via the HTTP API.
+        // Refresh ST's lorebook registry before re-rendering. Rollback/redo events
+        // additionally force the manifest down its disk-authoritative path.
         const _ctx = SillyTavern.getContext();
         if (typeof _ctx.updateWorldInfoList === 'function') {
             try { await _ctx.updateWorldInfoList(); } catch (_) { }
         }
         await runtimeState.renderRouterUI();
         if (typeof runtimeState.refreshAgentManifest === 'function') {
-            await runtimeState.refreshAgentManifest();
+            const source = (/** @type {CustomEvent} */ (event)).detail?.source || 'auto';
+            await runtimeState.refreshAgentManifest(source);
         }
         updateUndoLabel();
         syncLastRunDisplay();

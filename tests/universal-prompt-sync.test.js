@@ -148,9 +148,14 @@ describe('Lorebook prompt templates', () => {
         expect(defaults.routerBasicSystemPromptTemplate).toContain('{{eligibleCoreFields}}');
         expect(defaults.routerBasicSystemPromptTemplate).toContain('{{autoPassRestriction}}');
         expect(defaults.routerBasicSystemPromptTemplate).toContain('{{combatProfileGuidance}}');
+        expect(defaults.routerBasicSystemPromptTemplate).not.toContain('{{example}}');
+        expect(defaults.routerBasicSystemPromptTemplate).not.toContain('Barnaby');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{fieldInstructions}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{campaignRoot}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{relSection}}');
+        expect(defaults.routerCombatProfileGuidanceBasicTemplate).toContain('COMBAT PROFILE');
+        expect(defaults.routerAutoPassRestrictionTemplate).toContain('AUTOMATIC PASS RESTRICTION');
+        expect(defaults.routerRelSectionBasicTemplate).toContain('{{max}}');
     });
 
     it('composes all Basic and Agent runtime fields while leaving only SillyTavern macros', () => {
@@ -169,7 +174,6 @@ describe('Lorebook prompt templates', () => {
             ...common,
             modularPrompt,
             sectionNames: 'Species, Body, Personality',
-            example: 'Example output.',
         });
         const agent = expandLorebookPromptTemplate(defaults.routerAgentSharedContextTemplate, {
             ...common,
@@ -181,11 +185,41 @@ describe('Lorebook prompt templates', () => {
 
         expect(basic).toContain('[[CLUE: Name | Details | Keywords]]');
         expect(basic).toContain('You are limited to **11 active entries**');
+        expect(basic).not.toContain('Barnaby');
         expect(agent).toContain('Campaign Root: "Shadowfell"');
         expect(agent).toContain('- CLUE: custom instruction');
         for (const prompt of [basic, agent]) {
             expect(prompt).not.toMatch(/\n[ \t]*\n/);
             expect(prompt.match(/\{\{(?!user\b|char\b)[a-zA-Z0-9_]+\}\}/g)).toBeNull();
         }
+    });
+
+    it('resets runtime fragments with Basic and Agent scopes', () => {
+        const defaults = buildDefaultSettings();
+        const settings = {
+            routerBasicSystemPromptTemplate: 'custom basic',
+            routerSystemPromptTemplate: 'custom agent base',
+            routerModularPromptTemplate: 'custom modular',
+            routerAgentSharedContextTemplate: 'custom shared context',
+            routerCombatProfileGuidanceBasicTemplate: 'custom combat basic',
+            routerCombatProfileGuidanceAgentTemplate: 'custom combat agent',
+            routerAutoPassRestrictionTemplate: 'custom auto',
+            routerManualPassRestrictionTemplate: 'custom manual',
+            routerExistingNpcNudgeTemplate: 'custom nudge',
+            routerRelSectionBasicTemplate: 'custom rel basic',
+            routerRelSectionAgentTemplate: 'custom rel agent',
+        };
+
+        resetLorebookPromptTemplates(settings, 'basic', defaults);
+        expect(settings.routerCombatProfileGuidanceBasicTemplate).toBe(defaults.routerCombatProfileGuidanceBasicTemplate);
+        expect(settings.routerRelSectionBasicTemplate).toBe(defaults.routerRelSectionBasicTemplate);
+        expect(settings.routerAutoPassRestrictionTemplate).toBe(defaults.routerAutoPassRestrictionTemplate);
+        expect(settings.routerCombatProfileGuidanceAgentTemplate).toBe('custom combat agent');
+        expect(settings.routerRelSectionAgentTemplate).toBe('custom rel agent');
+
+        resetLorebookPromptTemplates(settings, 'agent', defaults);
+        expect(settings.routerCombatProfileGuidanceAgentTemplate).toBe(defaults.routerCombatProfileGuidanceAgentTemplate);
+        expect(settings.routerRelSectionAgentTemplate).toBe(defaults.routerRelSectionAgentTemplate);
+        expect(settings.routerSystemPromptTemplate).toBe(defaults.routerSystemPromptTemplate);
     });
 });

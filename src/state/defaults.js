@@ -7,6 +7,15 @@ import { MODULE_NAME } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
 import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
+import {
+    DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
+    DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
+    DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC,
+    DEFAULT_ROUTER_EXISTING_NPC_NUDGE,
+    DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION,
+    DEFAULT_ROUTER_REL_SECTION_AGENT,
+    DEFAULT_ROUTER_REL_SECTION_BASIC,
+} from './lorebook-runtime-fragments.js';
 
 /**
  * Keep shipped Lorebook prompts compact. Empty spacer lines add no meaning,
@@ -241,9 +250,9 @@ export function buildDefaultSettings() {
 
         pcSectionPresets: {},
 
-        npcMajorWords: 25,
+        npcMajorWords: 225,
 
-        npcMinorWords: 15,
+        npcMinorWords: 135,
 
         npcRelationshipMaxDefault: 150,
 
@@ -679,8 +688,12 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         routerCampaignPrefixOverride: "",
 
-        /** ST chat id for which `routerCampaignPrefixOverride` applies; empty = legacy (override only when chatId === active ctx chat id). */
-
+        /**
+         * ST chat id for which `routerCampaignPrefixOverride` applies.
+         * Empty = legacy (override only when chatId === active ctx chat id).
+         * Set whenever the override field is edited so Branch Campaign / rename
+         * cannot keep writing into another chat's lorebook stack.
+         */
         routerCampaignPrefixOverrideAnchorChatId: "",
 
         routerLookback: 4,
@@ -1144,7 +1157,9 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
 - Worn Equipment changes: output \`[[UPDATE_EQUIPMENT: Book::UID or NPC Name | new worn gear text]]\` whenever the narrative explicitly shows a change to what they're wearing/wielding. Do not put coins or inventory lists here.
 - Eligible UPDATE_CORE fields this pass: {{eligibleCoreFields}}.
   [[UPDATE_CORE: Book::UID or NPC Name | FieldName | New field text]]
-Use the exact FieldName. Do NOT log core updates as normal event/update entries.{{autoPassRestriction}}{{existingNpcNudge}}
+Use the exact FieldName. Do NOT log core updates as normal event/update entries.
+{{autoPassRestriction}}
+{{existingNpcNudge}}
 
 ## DO NOT RE-RECORD EXISTING ENTITIES
 Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anything, check ACTIVE MEMORY and ARCHIVE INDEX for a matching name (they may be listed under a different label — check keywords too).
@@ -1166,8 +1181,7 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
 5. Do NOT create any entry for the player character (e.g. "Player" or "Dave Davidson").
 6. CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below ({{sectionNames}}) for NPCs and ignore any other sections.
 7. Output your thoughts first, then the tags.
-
-{{example}}`),
+`),
 
         // ── Agent Mode shared context template ────────────────────────────────
         // The complete context appended to the agent instructions in Agent Mode.
@@ -1192,7 +1206,9 @@ Maximum Active Entities: **{{maxActivations}}**.
 ## NPC CORE UPDATES
 - Body: use \`commit.appearance\` (signature/default physical look only — not a transient outfit-of-the-scene).
 - Worn Equipment: use \`commit.equipment\` whenever their visibly worn/carried gear changes. Not coins, loot piles, or inventory lists.
-- Eligible commit.core fields this pass: {{eligibleCoreFields}}.{{autoPassRestriction}}{{existingNpcNudge}}
+- Eligible commit.core fields this pass: {{eligibleCoreFields}}.
+{{autoPassRestriction}}
+{{existingNpcNudge}}
 
 ## DO NOT RE-RECORD EXISTING ENTITIES
 Before using \`record\` for anyone or anything, check ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and the ARCHIVE INDEX for a matching name (check keywords too, they may be listed under a different label).
@@ -1228,6 +1244,15 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 
 ## FIELD INSTRUCTIONS
 {{fieldInstructions}}`),
+
+        // Editable runtime fragments injected into Basic/Agent templates at request time.
+        routerCombatProfileGuidanceBasicTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC),
+        routerCombatProfileGuidanceAgentTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT),
+        routerAutoPassRestrictionTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_AUTO_PASS_RESTRICTION),
+        routerManualPassRestrictionTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION),
+        routerExistingNpcNudgeTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_EXISTING_NPC_NUDGE),
+        routerRelSectionBasicTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_REL_SECTION_BASIC),
+        routerRelSectionAgentTemplate: prepareShippedLorebookPromptTemplate(DEFAULT_ROUTER_REL_SECTION_AGENT),
 
         categoryRenderOptions: {},
 
@@ -1444,7 +1469,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '5.5.16';
+export const FACTORY_SETTINGS_VERSION = '5.5.17';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */

@@ -1,10 +1,16 @@
 import { buildDefaultSettings } from './defaults.js';
+import {
+    LOREBOOK_AGENT_FRAGMENT_KEYS,
+    LOREBOOK_BASIC_FRAGMENT_KEYS,
+    LOREBOOK_RUNTIME_FRAGMENT_KEYS,
+} from './lorebook-runtime-fragments.js';
 
 export const LOREBOOK_PROMPT_TEMPLATE_KEYS = Object.freeze([
     'routerBasicSystemPromptTemplate',
     'routerSystemPromptTemplate',
     'routerModularPromptTemplate',
     'routerAgentSharedContextTemplate',
+    ...LOREBOOK_RUNTIME_FRAGMENT_KEYS,
 ]);
 
 /**
@@ -21,9 +27,9 @@ export function resetLorebookPromptTemplates(settings, scope = 'all', defaults =
     if (!settings || !defaults) return settings;
 
     const keys = scope === 'basic'
-        ? ['routerBasicSystemPromptTemplate', 'routerModularPromptTemplate']
+        ? ['routerBasicSystemPromptTemplate', 'routerModularPromptTemplate', ...LOREBOOK_BASIC_FRAGMENT_KEYS]
         : scope === 'agent'
-            ? ['routerSystemPromptTemplate', 'routerAgentSharedContextTemplate']
+            ? ['routerSystemPromptTemplate', 'routerAgentSharedContextTemplate', ...LOREBOOK_AGENT_FRAGMENT_KEYS]
             : LOREBOOK_PROMPT_TEMPLATE_KEYS;
 
     for (const key of keys) {

@@ -2,7 +2,12 @@
  * Relationship instruction / sysprompt string builders.
  */
 
-import { getNpcRelationshipMax, relPctOfMax } from './relationship-math.js';
+import { getNpcRelationshipMax } from './relationship-math.js';
+import {
+    DEFAULT_ROUTER_REL_SECTION_AGENT,
+    DEFAULT_ROUTER_REL_SECTION_BASIC,
+    expandRelationshipPctPlaceholders,
+} from './lorebook-runtime-fragments.js';
 
 export const RELATIONSHIP_UPDATE_MODES = {
     REGEX: 'regex',
@@ -32,39 +37,28 @@ export function shouldProcessRegexRelationshipUpdates(settings) {
         && getRelationshipUpdateMode(settings) === RELATIONSHIP_UPDATE_MODES.REGEX;
 }
 
-export function buildNpcRelationshipInstruction(max) {
-    const m = max ?? getNpcRelationshipMax();
-    const p = (f) => relPctOfMax(f, m);
-    return `## NPC RELATIONSHIPS
-When recording a NEW NPC, set their starting relationship values using the \`rel\` parameter in your commit call. Infer appropriate starting deltas from the narrative context. Valid range: -${m} to +${m}.
-- Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +${p(0.30)} to +${p(0.60)}).
-- Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +${p(0.10)} to +${p(0.25)}).
-- Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +${p(0.20)} to +${p(0.50)}).
-- Minor foes, hostile rivals, or unfriendly targets: set a minor negative starting friendship (e.g., ${p(-0.05)} to ${p(-0.15)}).
-- Direct enemies, antagonist figures, or deadly threats: set a strong negative starting friendship (e.g., ${p(-0.20)} to ${p(-0.60)}).
-- Unknown/neutral: default to 0 (no delta).
-Ongoing relationship changes are tracked automatically by the system from the narrative output. Do NOT emit relationship deltas for existing NPCs.`;
+export function buildNpcRelationshipInstruction(max, passedSettings = null) {
+    const settings = passedSettings && typeof passedSettings === 'object' ? passedSettings : {};
+    const m = max ?? getNpcRelationshipMax(settings);
+    return expandRelationshipPctPlaceholders(
+        String(settings.routerRelSectionAgentTemplate || DEFAULT_ROUTER_REL_SECTION_AGENT),
+        m,
+    );
 }
 
 /**
  * Basic-mode router prompt block for [[REL:]] tags — same scaled guidelines.
  * @param {number} [max]
+ * @param {Record<string, any>} [passedSettings]
  * @returns {string}
  */
-export function buildRouterRelationshipInstruction(max) {
-    const m = max ?? getNpcRelationshipMax();
-    const p = (f) => relPctOfMax(f, m);
-    return `## NPC INITIAL RELATIONSHIP VALUES
-When you record a NEW NPC, you MUST set their starting relationship values using [[REL:]] tags based on narrative context. This is ONLY for initial values when first recording an NPC — ongoing relationship changes are tracked automatically by the system. Valid range: -${m} to +${m}. Examples:
-  [[REL: NameOrUID | friendship | +${p(0.30)}]]
-  [[REL: NameOrUID | affection | ${p(-0.05)}]]
-Starting value guidelines:
-- Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +${p(0.30)} to +${p(0.60)}).
-- Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +${p(0.10)} to +${p(0.25)}).
-- Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +${p(0.20)} to +${p(0.50)}).
-- Minor foes, hostile rivals, or unfriendly targets: set a minor negative starting friendship (e.g., ${p(-0.05)} to ${p(-0.15)}).
-- Direct enemies, antagonist figures, or deadly threats: set a strong negative starting friendship (e.g., ${p(-0.20)} to ${p(-0.60)}).
-- Unknown/neutral: default to 0 (no delta).`;
+export function buildRouterRelationshipInstruction(max, passedSettings = null) {
+    const settings = passedSettings && typeof passedSettings === 'object' ? passedSettings : {};
+    const m = max ?? getNpcRelationshipMax(settings);
+    return expandRelationshipPctPlaceholders(
+        String(settings.routerRelSectionBasicTemplate || DEFAULT_ROUTER_REL_SECTION_BASIC),
+        m,
+    );
 }
 
 /**

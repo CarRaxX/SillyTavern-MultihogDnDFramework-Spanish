@@ -11,6 +11,7 @@ import {
 } from './src/state/player-identity.js';
 import { CHARACTER_CREATOR_NAME_ADDITIONS } from './src/state/character-names.js';
 import { t } from './src/i18n/index.js';
+import { buildInstantActionPromptSection, normalizeInstantActionInstructions } from './src/state/instant-action-instructions.js';
 import { findCharacterCreatorPresetByName, upsertCharacterCreatorPreset } from './src/features/character-creator/presets.js';
 import { getCharacterCreationConnectionSettings } from './character-creation-connection.js';
 
@@ -95,6 +96,7 @@ export function getArchetypesForGenre(genre) {
  * @param {string} [opts.backgroundVal]
  * @param {string} [opts.appearanceVal]
  * @param {string} [opts.additionalVal]
+ * @param {string} [opts.instantActionInstructions] One-time Quick Start guidance; specified details override rolled defaults.
  * @returns {{ prompt: string, extraHints: string, cardSnippet: string }}
  */
 export function buildCharacterGenerationPrompt(opts) {
@@ -122,6 +124,8 @@ export function buildCharacterGenerationPrompt(opts) {
     const backgroundVal = (opts.backgroundVal || '').trim();
     const appearanceVal = (opts.appearanceVal || '').trim();
     const additionalVal = (opts.additionalVal || '').trim();
+    const instantActionInstructions = normalizeInstantActionInstructions(opts.instantActionInstructions);
+    const instantActionPromptSection = buildInstantActionPromptSection(instantActionInstructions);
 
     const isStoryFitting = classRaw === '__story__';
     const isOther = classRaw === '__other__';
@@ -196,7 +200,7 @@ export function buildCharacterGenerationPrompt(opts) {
 
     const prompt = `${levelPrefix}
 
-Design a complete player character that fits naturally into the current scenario, card, and recent chat history. Be authentic to the setting, era, and tone.
+Design a complete player character that fits naturally into the current scenario, card, and recent chat history. Be authentic to the setting, era, and tone.${instantActionPromptSection}
 
 --- PLAYER PREFERENCES ---
 Name:         ${f(nameVal, '(invent a creative, setting-appropriate name — NEVER use "User", "Unknown", or any placeholder)')}
@@ -220,7 +224,9 @@ ${nameVal ? `• Use the provided name "${nameVal}" exactly; do not alter or rep
 • Output every currently active state-memo field (enabled stock modules and custom fields): ${blockListStr}.${spellsClause}
 • Do NOT output a [PARTY] block under any circumstances unless explicitly instructed.
 • Do NOT add quests or output a [QUESTS] block under any circumstances unless explicitly instructed.
-• ${isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`}
+• ${instantActionInstructions
+    ? `Treat the randomly chosen class "${classRaw}" as a fallback. If the Initial Setup specifies or clearly implies a different class, profession, or archetype, follow the Initial Setup instead.`
+    : (isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`)}
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
 • CRITICAL SPANISH LANGUAGE RULE: Write ALL generated character traits, abilities, skill names, gear names, item descriptions, background, proficiencies, and status effects in SPANISH (e.g. "Maza (1d6 C)", "Abrigo de Piel (+3 CA)", "Mente Analítica (permite identificar patrones)", "Sano").
 ${noLevel
@@ -234,7 +240,7 @@ ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 
 /**
  * Generate a character sheet for Quick Start (no persona overlay).
- * @param {{ genre: string, className: string, level?: number|null, gearTier?: string, nameVal?: string }} opts
+ * @param {{ genre: string, className: string, level?: number|null, gearTier?: string, nameVal?: string, instantActionInstructions?: string }} opts
  * @returns {Promise<{ charName: string }>}
  */
 export async function generateQuickStartCharacter(opts) {
@@ -254,6 +260,7 @@ export async function generateQuickStartCharacter(opts) {
         level,
         gearTier,
         classRaw: className,
+        instantActionInstructions: opts.instantActionInstructions,
     });
 
     await sendDirectPrompt(prompt, {

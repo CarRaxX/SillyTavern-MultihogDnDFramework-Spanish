@@ -23,8 +23,8 @@ function factoryInstructionSettings(defaults) {
         use24hTime: false,
         npcRelationshipBars: !!defaults.npcRelationshipBars,
         npcCoreSections: DEFAULT_NPC_SECTIONS,
-        npcMajorWords: defaults.npcMajorWords ?? 25,
-        npcMinorWords: defaults.npcMinorWords ?? 15,
+        npcMajorWords: defaults.npcMajorWords ?? 225,
+        npcMinorWords: defaults.npcMinorWords ?? 135,
     };
 }
 
@@ -183,6 +183,13 @@ export function buildBundledPromptsSnapshot() {
             routerSystemPromptTemplate: defaults.routerSystemPromptTemplate || '',
             routerModularPromptTemplate: defaults.routerModularPromptTemplate || '',
             routerAgentSharedContextTemplate: defaults.routerAgentSharedContextTemplate || '',
+            routerCombatProfileGuidanceBasicTemplate: defaults.routerCombatProfileGuidanceBasicTemplate || '',
+            routerCombatProfileGuidanceAgentTemplate: defaults.routerCombatProfileGuidanceAgentTemplate || '',
+            routerAutoPassRestrictionTemplate: defaults.routerAutoPassRestrictionTemplate || '',
+            routerManualPassRestrictionTemplate: defaults.routerManualPassRestrictionTemplate || '',
+            routerExistingNpcNudgeTemplate: defaults.routerExistingNpcNudgeTemplate || '',
+            routerRelSectionBasicTemplate: defaults.routerRelSectionBasicTemplate || '',
+            routerRelSectionAgentTemplate: defaults.routerRelSectionAgentTemplate || '',
             modules,
         },
         world: {
@@ -263,6 +270,13 @@ export function getSnapshotCategoryBlocks(snap, category) {
             { label: 'Modular Prompt Template', text: snap.lorebook?.routerModularPromptTemplate || '' },
             { label: 'Agent Shared Context Template', text: snap.lorebook?.routerAgentSharedContextTemplate || '' },
             { label: 'Router System Prompt', text: snap.lorebook?.routerSystemPromptTemplate || '' },
+            { label: 'Combat Profile Guidance (Basic)', text: snap.lorebook?.routerCombatProfileGuidanceBasicTemplate || '' },
+            { label: 'Combat Profile Guidance (Agent)', text: snap.lorebook?.routerCombatProfileGuidanceAgentTemplate || '' },
+            { label: 'Auto-Pass Restriction', text: snap.lorebook?.routerAutoPassRestrictionTemplate || '' },
+            { label: 'Manual-Pass Restriction', text: snap.lorebook?.routerManualPassRestrictionTemplate || '' },
+            { label: 'Existing NPC Chronicle Nudge', text: snap.lorebook?.routerExistingNpcNudgeTemplate || '' },
+            { label: 'Relationship Section (Basic)', text: snap.lorebook?.routerRelSectionBasicTemplate || '' },
+            { label: 'Relationship Section (Agent)', text: snap.lorebook?.routerRelSectionAgentTemplate || '' },
         ];
         const modules = snap.lorebook?.modules || {};
         for (const id of Object.keys(modules).sort()) {
@@ -334,6 +348,34 @@ export function getLivePromptCategoryBlocks(settings, category, opts = {}) {
             {
                 label: 'Router System Prompt',
                 text: s.routerSystemPromptTemplate ?? defaults.routerSystemPromptTemplate ?? '',
+            },
+            {
+                label: 'Combat Profile Guidance (Basic)',
+                text: s.routerCombatProfileGuidanceBasicTemplate ?? defaults.routerCombatProfileGuidanceBasicTemplate ?? '',
+            },
+            {
+                label: 'Combat Profile Guidance (Agent)',
+                text: s.routerCombatProfileGuidanceAgentTemplate ?? defaults.routerCombatProfileGuidanceAgentTemplate ?? '',
+            },
+            {
+                label: 'Auto-Pass Restriction',
+                text: s.routerAutoPassRestrictionTemplate ?? defaults.routerAutoPassRestrictionTemplate ?? '',
+            },
+            {
+                label: 'Manual-Pass Restriction',
+                text: s.routerManualPassRestrictionTemplate ?? defaults.routerManualPassRestrictionTemplate ?? '',
+            },
+            {
+                label: 'Existing NPC Chronicle Nudge',
+                text: s.routerExistingNpcNudgeTemplate ?? defaults.routerExistingNpcNudgeTemplate ?? '',
+            },
+            {
+                label: 'Relationship Section (Basic)',
+                text: s.routerRelSectionBasicTemplate ?? defaults.routerRelSectionBasicTemplate ?? '',
+            },
+            {
+                label: 'Relationship Section (Agent)',
+                text: s.routerRelSectionAgentTemplate ?? defaults.routerRelSectionAgentTemplate ?? '',
             },
         ];
         const liveMods = s.routerModules || {};
@@ -479,6 +521,13 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     'routerModularPromptTemplate',
     'routerBasicSystemPromptTemplate',
     'routerAgentSharedContextTemplate',
+    'routerCombatProfileGuidanceBasicTemplate',
+    'routerCombatProfileGuidanceAgentTemplate',
+    'routerAutoPassRestrictionTemplate',
+    'routerManualPassRestrictionTemplate',
+    'routerExistingNpcNudgeTemplate',
+    'routerRelSectionBasicTemplate',
+    'routerRelSectionAgentTemplate',
     'routerModules',
     'routerCustomTags',
     // ── World Progression ──────────────────────────────────────────────────────
@@ -551,7 +600,14 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
         id: 'lorebookAgent',
         label: 'Lorebook Agent',
         description: 'Researcher agent system prompt, modular format prompt, module definitions, custom tags',
-        keys: ['routerSystemPromptTemplate', 'routerModularPromptTemplate', 'routerBasicSystemPromptTemplate', 'routerAgentSharedContextTemplate', 'routerModules', 'routerCustomTags'],
+        keys: [
+            'routerSystemPromptTemplate', 'routerModularPromptTemplate',
+            'routerBasicSystemPromptTemplate', 'routerAgentSharedContextTemplate',
+            'routerCombatProfileGuidanceBasicTemplate', 'routerCombatProfileGuidanceAgentTemplate',
+            'routerAutoPassRestrictionTemplate', 'routerManualPassRestrictionTemplate',
+            'routerExistingNpcNudgeTemplate', 'routerRelSectionBasicTemplate', 'routerRelSectionAgentTemplate',
+            'routerModules', 'routerCustomTags',
+        ],
     },
     {
         id: 'worldProgression',

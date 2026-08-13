@@ -144,6 +144,33 @@ describe('onChatRenamedMigrate', () => {
         });
     });
 
+    it('pins the prior lorebook prefix so rename does not split the campaign stack', async () => {
+        const s = getSettings();
+        s.chatStates = {
+            'Old Chat': {
+                currentMemo: 'alive',
+                campaignBooks: ['Old_Chat_NPCs', 'Old_Chat_Locations'],
+                routerCampaignPrefix: 'Old_Chat',
+                activeRouterKeys: ['Old_Chat_NPCs::0'],
+                playerCharacter: { name: 'Ada' },
+            },
+        };
+        runtimeState.currentChatId = 'Old Chat';
+
+        await onChatRenamedMigrate(
+            { oldFileName: 'Old Chat.jsonl', newFileName: 'Renamed Chat.jsonl' },
+            { saveSettings: vi.fn(), loadChatState: vi.fn(() => true) },
+        );
+
+        expect(s.routerCampaignPrefixOverride).toBe('Old_Chat');
+        expect(s.routerCampaignPrefixOverrideAnchorChatId).toBe('Renamed Chat');
+        expect(s.routerCampaignPrefix).toBe('Old_Chat');
+        expect(s.chatStates['Renamed Chat']?.campaignBooks).toEqual([
+            'Old_Chat_NPCs',
+            'Old_Chat_Locations',
+        ]);
+    });
+
     it('moves a partition and browser-local state when the destination is unused', async () => {
         const s = getSettings();
         s.chatStates = {

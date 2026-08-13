@@ -225,6 +225,17 @@ export async function branchCampaignChat(deps) {
         copyLocalChatMapEntry(COMPANION_BY_CHAT_KEY, oldId, newChatId);
         copyLocalChatMapEntry(MEMO_RECOVERY_KEY, oldId, newChatId);
 
+        // Keep Campaign Prefix Override on the SOURCE chat. Otherwise the branch
+        // inherits a global/legacy override and keeps writing into the original
+        // lorebook stack while cloned books under newPrefix sit unused.
+        const ov = (s.routerCampaignPrefixOverride || '').trim();
+        if (ov) {
+            const anchor = (s.routerCampaignPrefixOverrideAnchorChatId || '').trim();
+            if (!anchor || anchor === newChatId) {
+                s.routerCampaignPrefixOverrideAnchorChatId = oldId;
+            }
+        }
+
         let saved = false;
         try {
             await Promise.resolve(saveSettings(true));

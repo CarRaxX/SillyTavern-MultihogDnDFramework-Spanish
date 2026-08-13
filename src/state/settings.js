@@ -3,7 +3,7 @@
  * Self-binds into settings-ref so leaf modules can call getSettings() safely.
  */
 
-import { MODULE_NAME, DEFAULT_PC_SECTIONS } from './schema-sections.js';
+import { MODULE_NAME, DEFAULT_PC_SECTIONS, DEFAULT_NPC_SECTIONS } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
 import { buildDefaultSettings } from './defaults.js';
 import { isOlderThan } from './versions.js';
@@ -20,6 +20,7 @@ import {
     setRealtimeVisualizationDisabled,
 } from './realtime-visualization-guard.js';
 import { migrateChatSetupCatalogs } from './chat-setup.js';
+import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -690,6 +691,49 @@ function getSettingsInternal(extensionSettings) {
         s.settingsVersion = '5.5.16';
     }
 
+    // 5.5.17: remove Barnaby {{example}}, expose runtime fragments, NPC word targets → overall totals.
+    if (isOlderThan(s.settingsVersion, '5.5.17')) {
+        if (typeof s.routerBasicSystemPromptTemplate === 'string') {
+            s.routerBasicSystemPromptTemplate = s.routerBasicSystemPromptTemplate
+                .replace(/\n\{\{example\}\}\s*$/u, '')
+                .replace(/\{\{example\}\}\s*$/u, '');
+        }
+
+        const defaults = buildDefaultSettings();
+        for (const key of LOREBOOK_RUNTIME_FRAGMENT_KEYS) {
+            if (typeof s[key] !== 'string' || !s[key]) {
+                s[key] = String(defaults[key] ?? '');
+            }
+        }
+
+        const sectionCount = (Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0)
+            ? s.npcCoreSections.length
+            : DEFAULT_NPC_SECTIONS.length;
+        const prevMajor = Number(s.npcMajorWords);
+        const prevMinor = Number(s.npcMinorWords);
+        if (Number.isFinite(prevMajor) && prevMajor > 0) {
+            s.npcMajorWords = Math.max(1, Math.min(5000, Math.round(prevMajor * sectionCount)));
+        } else {
+            s.npcMajorWords = defaults.npcMajorWords;
+        }
+        if (Number.isFinite(prevMinor) && prevMinor > 0) {
+            s.npcMinorWords = Math.max(1, Math.min(5000, Math.round(prevMinor * sectionCount)));
+        } else {
+            s.npcMinorWords = defaults.npcMinorWords;
+        }
+        s.npcWordTargetRescaleNotice = {
+            fromMajor: Number.isFinite(prevMajor) ? prevMajor : null,
+            fromMinor: Number.isFinite(prevMinor) ? prevMinor : null,
+            toMajor: s.npcMajorWords,
+            toMinor: s.npcMinorWords,
+            sectionCount,
+        };
+        if (s.routerModules?.npc) {
+            s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false, s);
+        }
+        s.settingsVersion = '5.5.17';
+    }
+
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {
         // We check by ID rather than name, because the legacy version might have had "Appearance" instead of "Appearance/Species"
         const idsMatch = s.pcCoreSections.every((sec, idx) => sec.id === DEFAULT_PC_SECTIONS[idx].id);
@@ -806,14 +850,37 @@ export function sanitizeCampaignPrefixString(raw) {
 
 /**
  * Prefix used for world activation and router: optional user override, else from chat id.
+ *
+ * When `routerCampaignPrefixOverride` is set, it applies only to the anchored chat
+ * (`routerCampaignPrefixOverrideAnchorChatId`). Legacy settings with an override but
+ * no anchor keep prior behavior for the active chat only — other chats derive from
+ * their own ids so Branch Campaign / cross-chat deactivate cannot share one stack.
+ *
  * @param {string} chatId
  * @returns {string}
  */
 export function getEffectiveRouterCampaignPrefix(chatId) {
     const s = getSettings();
     const ov = (s.routerCampaignPrefixOverride || '').trim();
-    if (ov) return sanitizeCampaignPrefixString(ov);
-    return sanitizeCampaignPrefixString(chatId || '');
+    const id = String(chatId || '');
+    if (!ov) return sanitizeCampaignPrefixString(id);
+
+    const sanitizedOv = sanitizeCampaignPrefixString(ov);
+    const anchor = (s.routerCampaignPrefixOverrideAnchorChatId || '').trim();
+    if (anchor) {
+        return id && id === anchor ? sanitizedOv : sanitizeCampaignPrefixString(id);
+    }
+
+    // Legacy unanchored override: only while evaluating the active chat.
+    try {
+        const ctx = SillyTavern.getContext();
+        const activeId = String(ctx?.getCurrentChatId?.() || ctx?.chatId || '');
+        if (id && activeId && id !== activeId) {
+            return sanitizeCampaignPrefixString(id);
+        }
+    } catch (_) { /* fall through */ }
+
+    return sanitizedOv;
 }
 
 // ── One-time data migrations ───────────────────────────────────────────────────

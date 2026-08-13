@@ -9,6 +9,7 @@ import {
 import { DEFAULT_NPC_SECTIONS } from '../src/state/schema-sections.js';
 
 const routerSource = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
+const fragmentSource = readFileSync(new URL('../src/state/lorebook-runtime-fragments.js', import.meta.url), 'utf8');
 const schemaSource = readFileSync(new URL('../src/state/schema-sections.js', import.meta.url), 'utf8');
 const moduleInstrSource = readFileSync(new URL('../src/state/module-instructions.js', import.meta.url), 'utf8');
 
@@ -54,7 +55,8 @@ describe('router.js core-field gating wiring', () => {
     it('commit.core enum uses eligibleCoreFields (not the full section list)', () => {
         expect(routerSource).toContain('const eligibleCoreFields = getEligibleCoreFieldNames(coreSections, isManual)');
         expect(routerSource).toContain("field:   { type: 'string', enum: eligibleCoreFields, description: 'The exact eligible [CORE] field to update this pass.' }");
-        expect(routerSource).toContain('AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field');
+        expect(fragmentSource).toContain('AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field');
+        expect(routerSource).toContain('resolveAutoPassRestriction(settings, isManual, eligibleCoreFieldsList)');
     });
 
     it('Body/Species/Worn Equipment sections exist with clear, non-overlapping descriptions', () => {
@@ -65,7 +67,8 @@ describe('router.js core-field gating wiring', () => {
     });
 
     it('prompts nudge chronicle entries for notable existing-NPC moments', () => {
-        expect(routerSource).toContain('For notable existing-NPC moments that do not change any [CORE] field');
+        expect(fragmentSource).toContain('For notable existing-NPC moments that do not change any [CORE] field');
+        expect(routerSource).toContain('resolveExistingNpcNudge(settings)');
         expect(moduleInstrSource).toContain('For notable existing-NPC moments that do not change any [CORE] field');
     });
 });

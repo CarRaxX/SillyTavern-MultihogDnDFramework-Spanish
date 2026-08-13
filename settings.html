@@ -1111,11 +1111,11 @@
                             </div>
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
-                                    <label style="font-size: 11px; opacity: 0.7;">Objetivo de Palabras para PNJ Principal</label>
-                                    <input id="rpg_tracker_npc_major_words" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="25" title="PNJs recurrentes e importantes en la trama. Predeterminado: 25 palabras por sección de [CORE]" />
+                                    <label style="font-size: 11px; opacity: 0.7;">Objetivo de Palabras Totales para PNJ Principal</label>
+                                    <input id="rpg_tracker_npc_major_words" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="225" title="PNJs recurrentes e importantes en la trama. Predeterminado: 225 palabras totales en todas las secciones de [CORE]" />
                                     
-                                    <label style="font-size: 11px; opacity: 0.7;">Objetivo de Palabras para PNJ Secundario</label>
-                                    <input id="rpg_tracker_npc_minor_words" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="15" title="Tenderos, guardias, encuentros puntuales. Predeterminado: 15 palabras por sección de [CORE]" />
+                                    <label style="font-size: 11px; opacity: 0.7;">Objetivo de Palabras Totales para PNJ Secundario</label>
+                                    <input id="rpg_tracker_npc_minor_words" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="135" title="Tenderos, guardias, encuentros puntuales. Predeterminado: 135 palabras totales en todas las secciones de [CORE]" />
 
                                     <label class="checkbox_label">
                                         <input id="rpg_tracker_npc_rel_bars" type="checkbox" />
@@ -1250,6 +1250,32 @@
                                         <label style="font-size:10px; font-weight:600;">Plantilla de Contexto Compartido del Agente</label>
                                         <div style="font-size:9px; opacity:0.52; margin:3px 0 5px; line-height:1.35;">Reglas añadidas tras el prompt base del Agente. Los esquemas de herramientas nativas y contratos de acciones de texto se generan a partir de los módulos habilitados.</div>
                                         <textarea id="rpg_tracker_router_agent_context" class="text_pole autoSetHeight" rows="12"></textarea>
+                                    </div>
+                                    <div id="rpg_tracker_router_fragments_wrap" style="margin-top:10px;">
+                                        <details>
+                                            <summary style="cursor:pointer; user-select:none; font-size:10px; font-weight:600; opacity:0.85;">Fragmentos de Prompts en Tiempo de Ejecución (editables)</summary>
+                                            <div style="font-size:9px; opacity:0.52; margin:6px 0 8px; line-height:1.35;">
+                                                Anteriormente estaban definidos de forma fija en la extensión. La selección de ramas (pase automático vs manual, combate activo, barras de relaciones) ocurre en cada petición; puedes personalizar la redacción aquí. Los marcadores como <span style="font-family:monospace">{{eligibleCoreFields}}</span>, <span style="font-family:monospace">{{max}}</span> y <span style="font-family:monospace">{{p30}}</span> se expanden dinámicamente.
+                                            </div>
+                                            <div id="rpg_tracker_router_fragments_basic" style="display:none;">
+                                                <label style="font-size:10px; font-weight:600;">Guía de Perfil de Combate (Modo Básico)</label>
+                                                <textarea id="rpg_tracker_router_combat_guidance_basic" class="text_pole autoSetHeight" rows="6" style="margin-bottom:8px;"></textarea>
+                                                <label style="font-size:10px; font-weight:600;">Sección de Relaciones (Modo Básico)</label>
+                                                <textarea id="rpg_tracker_router_rel_section_basic" class="text_pole autoSetHeight" rows="6" style="margin-bottom:8px;"></textarea>
+                                            </div>
+                                            <div id="rpg_tracker_router_fragments_agent" style="display:none;">
+                                                <label style="font-size:10px; font-weight:600;">Guía de Perfil de Combate (Agente)</label>
+                                                <textarea id="rpg_tracker_router_combat_guidance_agent" class="text_pole autoSetHeight" rows="6" style="margin-bottom:8px;"></textarea>
+                                                <label style="font-size:10px; font-weight:600;">Sección de Relaciones (Agente)</label>
+                                                <textarea id="rpg_tracker_router_rel_section_agent" class="text_pole autoSetHeight" rows="6" style="margin-bottom:8px;"></textarea>
+                                            </div>
+                                            <label style="font-size:10px; font-weight:600;">Restricción de Pase Automático</label>
+                                            <textarea id="rpg_tracker_router_auto_pass_restriction" class="text_pole autoSetHeight" rows="4" style="margin-bottom:8px;"></textarea>
+                                            <label style="font-size:10px; font-weight:600;">Restricción de Pase Manual / Prompt Directo</label>
+                                            <textarea id="rpg_tracker_router_manual_pass_restriction" class="text_pole autoSetHeight" rows="4" style="margin-bottom:8px;"></textarea>
+                                            <label style="font-size:10px; font-weight:600;">Aviso de Crónica para PNJs Existentes</label>
+                                            <textarea id="rpg_tracker_router_existing_npc_nudge" class="text_pole autoSetHeight" rows="3"></textarea>
+                                        </details>
                                     </div>
                                     <button id="rpg_tracker_router_btn_reset_prompt" class="menu_button interactable" style="width: 100%; margin-top: 4px; font-size: 11px;"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer Prompt del Sistema</button>
                                 </div>

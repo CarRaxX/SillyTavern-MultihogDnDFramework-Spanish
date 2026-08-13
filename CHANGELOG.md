@@ -2,6 +2,38 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.20.1] - 2026-08-12
+
+### Changed
+- **Optional Instant Action names**: A rolled or typed name is no longer required. Leave the name blank and the AI chooses one; the roll button remains available as an option.
+- **Instant Action Player Card length**: Quick Start now offers preset and custom word counts from 50–5000 words.
+
+### Fixed
+- **Initial Setup reaches the Player Card**: Character details, setting, premise, and tone are now passed to Player Card/persona generation as well as the state memo creator and opening narrator message.
+
+## [7.20.0] - 2026-08-11
+
+### Changed
+- **Initial Setup label**: Instant Action guidance is labeled `Initial Setup:` in the character-generation prompt and opening adventure message.
+
+## [7.10.6] - 2026-08-11
+
+### Added
+- **Instant Action instructions**: Quick Start now has an optional guidance box for character details, setting, premise, or tone. Specified details override rolled defaults, and the same guidance is included with the opening `Begin the adventure` message so the narrator starts in the requested scenario.
+
+## [7.10.5] - 2026-08-11
+
+### Fixed
+- **First-pass Lorebook Agent undo**: The initial generated campaign can now be undone to a true empty baseline, with complete metadata restoration and lossless redo state.
+- **Rollback display consistency**: Undo, redo, and manual refresh now read authoritative lorebook data from disk instead of reviving deleted entries from historical logs or SillyTavern's stale cache.
+
+## [7.10.4] - 2026-08-11
+
+### Changed
+- **Removed Barnaby few-shot**: The Lorebook Agent Basic Mode no longer injects the hardcoded `{{example}}` / Barnaby sample NPC that was overriding word-target instructions.
+- **Editable runtime prompt fragments**: Combat Profile guidance, auto/manual pass restrictions, existing-NPC chronicle nudge, and relationship-section wording are now editable templates (Lorebook Agent → System Prompt → Runtime Prompt Fragments) instead of hardcoded router strings.
+- **NPC word targets are overall totals**: Major/Minor NPC targets now mean "exactly N words across the whole [CORE] block" (matching PC framing), not per-section minimums. Existing installs are rescaled by section count (defaults 225 / 135).
+
 ## [7.1.52] - 2026-08-09
 
 ### Changed

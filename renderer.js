@@ -2133,7 +2133,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Acción Instantánea</div>
-                    <div class="rt-quickstart-sub">Elige un género, genera nombres hasta encontrar uno que te guste y comienza. La extensión usará tu Configuración del Narrador, generará el resto de tu personaje, creará una Ficha de Jugador en el Agente de Lorebook junto con una persona en SillyTavern y comenzará la aventura.</div>
+                    <div class="rt-quickstart-sub">Elige un género literario, opcionalmente escribe un nombre o una Configuración Inicial y comienza. Si dejas el nombre en blanco, la IA elegirá uno. La extensión usará tu Configuración del Narrador, generará el resto del personaje, creará una Ficha de Jugador en el Agente de Lorebook junto con una persona de solo nombre en SillyTavern y comenzará la aventura.</div>
                     <div class="rt-quickstart-genres" role="group" aria-label="Quick Start genre">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasía</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Moderno</button>
@@ -2141,11 +2141,27 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="horror" aria-pressed="false">👻 Terror</button>
                     </div>
                     <div class="rt-quickstart-name-picker">
-                        <input type="text" class="rt-quickstart-name" id="rt-quickstart-name" placeholder="Genera o escribe un nombre" aria-label="Instant Action character name" autocomplete="off" />
+                        <input type="text" class="rt-quickstart-name" id="rt-quickstart-name" placeholder="Opcional: escribe, genera o deja que la IA elija" aria-label="Nombre opcional del personaje de Acción Instantánea" autocomplete="off" />
                         <button type="button" class="rt-quickstart-roll-btn" id="rt-quickstart-roll-name" disabled>🎲 Generar Nombre</button>
                     </div>
+                    <label class="rt-quickstart-instructions-label" for="rt-quickstart-instructions">
+                        <span>Configuración Inicial (opcional)</span>
+                        <small>Guía el personaje, entorno, premisa o tono. Todo lo que dejes sin especificar se generará aleatoriamente.</small>
+                    </label>
+                    <textarea class="rt-quickstart-instructions" id="rt-quickstart-instructions" rows="2" maxlength="1000" placeholder="Ej. Una exploradora de 28 años con ballesta, comenzando en un pueblo fronterizo azotado por la tormenta" aria-label="Configuración Inicial opcional de Acción Instantánea"></textarea>
+                    <div class="rt-quickstart-player-card-length">
+                        <label for="rt-quickstart-persona-words">Longitud de Ficha de Jugador</label>
+                        <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Recuento de palabras de la Ficha de Jugador">
+                            ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
+                                const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
+                                return `<option value="${n}"${selected}>${n} palabras</option>`;
+                            }).join('')}
+                            <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Personalizada…</option>
+                        </select>
+                        <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras" />
+                    </div>
                     <button type="button" class="rt-quickstart-begin-btn" id="rt-quickstart-begin" disabled>⚡ Comenzar Acción Instantánea</button>
-                    <div class="rt-quickstart-status" id="rt-quickstart-status">Selecciona un género literario y genera un nombre</div>
+                    <div class="rt-quickstart-status" id="rt-quickstart-status">Selecciona un género literario para comenzar</div>
                 </div>
 
                 <div class="rt-onboarding-secondary rt-onboarding-drawer rt-onboarding-other-drawer">
@@ -2481,9 +2497,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div style="font-size: 13px; opacity: 0.9; flex-shrink: 0; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
                     <b style="color: var(--rt-accent); font-size: 14px;">Configuración Inicial:</b><br><br>
-                    1. Establece tu nivel inicial, género y formato de fecha/hora en los controles superiores, luego usa los botones de arquetipos o el Creador de Personajes para definir tu personaje.<br><br>
-                    2. Crea una ficha de personaje para tu "narrador" (ej. Director de Juego). <b>Deja los campos vacíos</b>, ya que el framework gestiona toda la lógica mediante el prompt del sistema.<br><br>
-                    3. Si utilizas el modo RNG híbrido que combina llamadas a herramientas con la Cola RNG pre-generada, asegúrate de activar <b>Habilitar llamadas a funciones</b> en la configuración de IA. De lo contrario, la herramienta <b>RollTheDice</b> no se ejecutará.<br><br>
+                    1. Crea una ficha de personaje para tu "narrador" (ej. Director de Juego). <b>Deja los campos vacíos</b>, ya que el framework gestiona toda la lógica mediante el prompt del sistema.<br><br>
+                    2. Usa una de las opciones de creación de personajes anteriores para definir tu personaje. Puedes usar la opción Creador de Personajes para especificar los detalles, usar "Otras Formas de Iniciar" para un resumen rápido o usar "Acción Instantánea" para que la extensión genere automáticamente todo lo que dejes sin especificar.<br><br>
+                    3. Si utilizas el modo RNG híbrido que combina llamadas a herramientas con la Cola RNG pre-generada de la extensión, asegúrate de activar <b>Habilitar llamadas a funciones</b> en la configuración de IA. De lo contrario, la herramienta <b>RollTheDice</b> no funcionará.<br><br>
                     <div style="margin-top: 8px;">
                         🪙 <b>Optimización de Tokens:</b> Para reducir el costo de tokens, especialmente en modo de herramientas, considera usar una extensión de resumen como <b>Summaryception</b>. La resumización combinada con el <b>Agente de Lorebook</b> garantizará que la IA se mantenga enfocada.
                     </div>

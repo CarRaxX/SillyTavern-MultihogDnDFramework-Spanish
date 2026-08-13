@@ -1,10 +1,58 @@
-import { getSettings, saveChatState } from '../../../state-manager.js';
+import { getSettings, saveChatState, sanitizeCampaignPrefixString } from '../../../state-manager.js';
 import { runtimeState } from '../../app/runtime-state.js';
 import {
     COMPANION_BY_CHAT_KEY,
     MEMO_RECOVERY_KEY,
     moveLocalChatMapEntry,
 } from './local-chat-map.js';
+
+/**
+ * After a rename, keep the campaign lorebook stack attached when the new chat
+ * filename would derive a different prefix than the books already in use.
+ * Pins `routerCampaignPrefixOverride` + anchor to the renamed chat.
+ * @param {object} s
+ * @param {string} oldId
+ * @param {string} newId
+ * @returns {boolean} true when settings were updated
+ */
+export function preserveCampaignPrefixAfterRename(s, oldId, newId) {
+    const part = s.chatStates?.[newId];
+    if (!s || !part || !oldId || !newId) return false;
+
+    const derivedNew = sanitizeCampaignPrefixString(newId);
+    const derivedOld = sanitizeCampaignPrefixString(oldId);
+    const fromPart = String(part.routerCampaignPrefix || '').trim();
+    const existingOv = (s.routerCampaignPrefixOverride || '').trim();
+    const anchor = (s.routerCampaignPrefixOverrideAnchorChatId || '').trim();
+
+    // Bind a legacy (unanchored) or previously-oldId override to the new chat id.
+    if (existingOv && (!anchor || anchor === oldId || anchor === newId)) {
+        const pinned = sanitizeCampaignPrefixString(existingOv);
+        s.routerCampaignPrefixOverride = existingOv;
+        s.routerCampaignPrefixOverrideAnchorChatId = newId;
+        s.routerCampaignPrefix = pinned;
+        part.routerCampaignPrefix = pinned;
+        return true;
+    }
+
+    const preserved = fromPart || derivedOld;
+    if (!preserved || preserved === derivedNew) return false;
+
+    const hasLinkedStack = (Array.isArray(part.campaignBooks) && part.campaignBooks.length > 0)
+        || (Array.isArray(part.activeRouterKeys) && part.activeRouterKeys.length > 0)
+        || (Array.isArray(part.activeWorldKeys) && part.activeWorldKeys.length > 0)
+        || (!!fromPart && fromPart !== derivedNew);
+    if (!hasLinkedStack) return false;
+
+    // Do not steal an override that belongs to a different chat.
+    if (existingOv && anchor && anchor !== newId && anchor !== oldId) return false;
+
+    s.routerCampaignPrefixOverride = preserved;
+    s.routerCampaignPrefixOverrideAnchorChatId = newId;
+    s.routerCampaignPrefix = preserved;
+    part.routerCampaignPrefix = preserved;
+    return true;
+}
 
 /**
  * Strip .jsonl from ST CHAT_RENAMED filenames.
@@ -180,7 +228,9 @@ export async function onChatRenamedMigrate(detail, deps) {
     }
 
     let settingsChanged = migratedPartition;
-    if (s.routerCampaignPrefixOverrideAnchorChatId === oldId) {
+    if (migratedPartition && preserveCampaignPrefixAfterRename(s, oldId, newId)) {
+        settingsChanged = true;
+    } else if (s.routerCampaignPrefixOverrideAnchorChatId === oldId) {
         s.routerCampaignPrefixOverrideAnchorChatId = newId;
         settingsChanged = true;
     }

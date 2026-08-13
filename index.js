@@ -10,7 +10,7 @@ import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemo
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
-import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
+import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -3886,6 +3886,7 @@ function createPanel() {
         buildLocationPath,
         buildNpcInstruction,
         canResizePanels,
+        captureRouterLoreState,
         checkAndTriggerAutoGenerations,
         clampFloatingPanelToViewport,
         resolveViewportClampedGeometry,
@@ -5157,8 +5158,8 @@ function organizeConnectionSettingsUI() {
                             if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                             if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
                         }
-                        $('#rpg_tracker_npc_major_words').val(sTempTracker.npcMajorWords ?? 25);
-                        $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 15);
+                        $('#rpg_tracker_npc_major_words').val(sTempTracker.npcMajorWords ?? 225);
+                        $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 135);
                         $('#rpg_tracker_npc_rel_max_default').val(getNpcRelationshipMaxDefault(sTempTracker));
                         $('#rpg_tracker_npc_portraits').prop('checked', sTempTracker.npcPortraits !== false);
                         syncNpcPortraitDependentUi(sTempTracker);
@@ -5429,8 +5430,8 @@ function organizeConnectionSettingsUI() {
                                         if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                                         if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
                                     }
-                                    $('#rpg_tracker_npc_major_words').val(sTempTracker.npcMajorWords ?? 25);
-                                    $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 15);
+                                    $('#rpg_tracker_npc_major_words').val(sTempTracker.npcMajorWords ?? 225);
+                                    $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 135);
                                     $('#rpg_tracker_npc_rel_max_default').val(getNpcRelationshipMaxDefault(sTempTracker));
                                     $('#rpg_tracker_npc_portraits').prop('checked', sTempTracker.npcPortraits !== false);
                                     syncNpcPortraitDependentUi(sTempTracker);
@@ -9169,7 +9170,19 @@ RULES:
         updateSettingsLorePrefixReadout();
 
         $('#rpg_tracker_router_prefix_override').val(settings.routerCampaignPrefixOverride || '').on('input', function () {
-            settings.routerCampaignPrefixOverride = String($(this).val() || '');
+            const raw = String($(this).val() || '');
+            settings.routerCampaignPrefixOverride = raw;
+            if (raw.trim()) {
+                const ctx = SillyTavern.getContext();
+                settings.routerCampaignPrefixOverrideAnchorChatId = String(
+                    runtimeState.currentChatId || ctx.getCurrentChatId?.() || ctx.chatId || '',
+                );
+            } else {
+                settings.routerCampaignPrefixOverrideAnchorChatId = '';
+            }
+            const ctx = SillyTavern.getContext();
+            const chatId = runtimeState.currentChatId || ctx.getCurrentChatId?.() || ctx.chatId || '';
+            settings.routerCampaignPrefix = getEffectiveRouterCampaignPrefix(chatId);
             saveSettings();
             updateSettingsLorePrefixReadout();
         });
@@ -9539,12 +9552,12 @@ RULES:
         $('#rpg_tracker_location_images').prop('checked', !!settings.locationImages);
         syncLocationImageDependentUi(settings);
 
-        $('#rpg_tracker_npc_major_words').val(settings.npcMajorWords ?? 25).on('change', function () {
+        $('#rpg_tracker_npc_major_words').val(settings.npcMajorWords ?? 225).on('change', function () {
             // Use 'change' instead of 'input' to only save once the user is done editing.
             // Fall back to the current saved value (not a hardcoded default) if the field is empty.
             const raw = parseInt(String($(this).val() || ''), 10);
-            const val = isNaN(raw) ? (settings.npcMajorWords ?? 25) : raw;
-            settings.npcMajorWords = Math.max(1, Math.min(1000, val));
+            const val = isNaN(raw) ? (settings.npcMajorWords ?? 225) : raw;
+            settings.npcMajorWords = Math.max(1, Math.min(5000, val));
             $(this).val(settings.npcMajorWords); // update display with clamped value
             if (settings.routerModules?.npc) {
                 settings.routerModules.npc.instruction = buildNpcInstruction(settings.npcMajorWords, settings.npcMinorWords, false, settings);
@@ -9554,10 +9567,10 @@ RULES:
                 globalThis._rpgRenderAgentModules();
             }
         });
-        $('#rpg_tracker_npc_minor_words').val(settings.npcMinorWords ?? 15).on('change', function () {
+        $('#rpg_tracker_npc_minor_words').val(settings.npcMinorWords ?? 135).on('change', function () {
             const raw = parseInt(String($(this).val() || ''), 10);
-            const val = isNaN(raw) ? (settings.npcMinorWords ?? 15) : raw;
-            settings.npcMinorWords = Math.max(1, Math.min(1000, val));
+            const val = isNaN(raw) ? (settings.npcMinorWords ?? 135) : raw;
+            settings.npcMinorWords = Math.max(1, Math.min(5000, val));
             $(this).val(settings.npcMinorWords); // update display with clamped value
             if (settings.routerModules?.npc) {
                 settings.routerModules.npc.instruction = buildNpcInstruction(settings.npcMajorWords, settings.npcMinorWords, false, settings);
@@ -9706,6 +9719,8 @@ RULES:
             const $modular = $('#rpg_tracker_router_modular_prompt');
             const $agentContextWrap = $('#rpg_tracker_router_agent_context_wrap');
             const $agentContext = $('#rpg_tracker_router_agent_context');
+            const $fragmentsBasic = $('#rpg_tracker_router_fragments_basic');
+            const $fragmentsAgent = $('#rpg_tracker_router_fragments_agent');
             const $desc = $('#rpg_tracker_router_prompt_desc');
             const $btn = $('#rpg_tracker_router_btn_reset_prompt');
 
@@ -9716,6 +9731,8 @@ RULES:
                 $modular.val(settings.routerModularPromptTemplate || '');
                 $modularWrap.show();
                 $agentContextWrap.hide();
+                $fragmentsBasic.show();
+                $fragmentsAgent.hide();
                 $btn.html('<i class="fa-solid fa-arrow-rotate-left"></i> Reset Basic Mode Prompts');
             } else {
                 $desc.html('The editable <strong>Agent Mode</strong> base prompt. Shared rules are editable below; action/tool schemas are generated from enabled modules at request time.');
@@ -9723,8 +9740,17 @@ RULES:
                 $modularWrap.hide();
                 $agentContext.val(settings.routerAgentSharedContextTemplate || '');
                 $agentContextWrap.show();
+                $fragmentsBasic.hide();
+                $fragmentsAgent.show();
                 $btn.html('<i class="fa-solid fa-arrow-rotate-left"></i> Reset Agent Mode Prompts');
             }
+            $('#rpg_tracker_router_combat_guidance_basic').val(settings.routerCombatProfileGuidanceBasicTemplate || '');
+            $('#rpg_tracker_router_combat_guidance_agent').val(settings.routerCombatProfileGuidanceAgentTemplate || '');
+            $('#rpg_tracker_router_rel_section_basic').val(settings.routerRelSectionBasicTemplate || '');
+            $('#rpg_tracker_router_rel_section_agent').val(settings.routerRelSectionAgentTemplate || '');
+            $('#rpg_tracker_router_auto_pass_restriction').val(settings.routerAutoPassRestrictionTemplate || '');
+            $('#rpg_tracker_router_manual_pass_restriction').val(settings.routerManualPassRestrictionTemplate || '');
+            $('#rpg_tracker_router_existing_npc_nudge').val(settings.routerExistingNpcNudgeTemplate || '');
             isSyncingRouterPrompt = false;
 
             if (typeof (/** @type {any} */ ($prompt)).trigger === 'function') {
@@ -9769,10 +9795,27 @@ RULES:
             saveSettings();
         });
 
+        const routerFragmentBindings = [
+            ['#rpg_tracker_router_combat_guidance_basic', 'routerCombatProfileGuidanceBasicTemplate'],
+            ['#rpg_tracker_router_combat_guidance_agent', 'routerCombatProfileGuidanceAgentTemplate'],
+            ['#rpg_tracker_router_rel_section_basic', 'routerRelSectionBasicTemplate'],
+            ['#rpg_tracker_router_rel_section_agent', 'routerRelSectionAgentTemplate'],
+            ['#rpg_tracker_router_auto_pass_restriction', 'routerAutoPassRestrictionTemplate'],
+            ['#rpg_tracker_router_manual_pass_restriction', 'routerManualPassRestrictionTemplate'],
+            ['#rpg_tracker_router_existing_npc_nudge', 'routerExistingNpcNudgeTemplate'],
+        ];
+        for (const [selector, key] of routerFragmentBindings) {
+            $(selector).on('input', function () {
+                if (isSyncingRouterPrompt) return;
+                settings[key] = String($(this).val() || '');
+                saveSettings();
+            });
+        }
+
         $('#rpg_tracker_router_btn_reset_prompt').on('click', function () {
             const isBasic = !!settings.routerBasicMode;
             const modeName = isBasic ? 'Basic Mode' : 'Agent Mode';
-            const promptLabel = isBasic ? 'base and format/module prompts' : 'base and shared-context prompts';
+            const promptLabel = isBasic ? 'base, format/module, and runtime-fragment prompts' : 'base, shared-context, and runtime-fragment prompts';
             if (!confirm(`Reset ${modeName} ${promptLabel} to default?`)) return;
 
             resetLorebookPromptTemplates(settings, isBasic ? 'basic' : 'agent');
@@ -9782,6 +9825,20 @@ RULES:
         });
 
         syncRouterPromptUi();
+
+        // One-time notice after migrating NPC word targets from per-section to overall totals.
+        if (settings.npcWordTargetRescaleNotice && typeof settings.npcWordTargetRescaleNotice === 'object') {
+            const notice = settings.npcWordTargetRescaleNotice;
+            delete settings.npcWordTargetRescaleNotice;
+            saveSettings();
+            toastr['info'](
+                `NPC word targets are now overall [CORE] totals (exactly N words). ` +
+                `Rescaled ${notice.fromMajor}→${notice.toMajor} major and ${notice.fromMinor}→${notice.toMinor} minor ` +
+                `(×${notice.sectionCount} sections).`,
+                'NPC Word Targets',
+                { timeOut: 12000 },
+            );
+        }
 
         // ── World Progression settings ─────────────────────────────────────────
         const $wpEnabled = $('#rpg_world_progression_enabled');

@@ -7,7 +7,7 @@ import { DEFAULT_NPC_SECTIONS } from './schema-sections.js';
 import { getNpcRelationshipMax } from './relationship-math.js';
 import { buildNpcRelationshipInstruction } from './relationship-prompts.js';
 
-export function buildNpcInstruction(majorWords = 25, minorWords = 15, ignoreLimits = false, passedSettings = null) {
+export function buildNpcInstruction(majorWords = 225, minorWords = 135, ignoreLimits = false, passedSettings = null) {
     let settings = passedSettings || {};
     if (!passedSettings) {
         try {
@@ -60,10 +60,8 @@ For notable existing-NPC moments that do not change any [CORE] field, still appe
 
     if (!ignoreLimits) {
         instruction += `\n\n<CORE LENGTH TARGETS>
-Major NPCs (recurring, plot-important): target AT LEAST ${majorWords} words per each section of [CORE].
-Minor NPCs (shopkeepers, guards, one-off encounters): target AT LEAST ${minorWords} words per each section of [CORE].
-
-Expand/extrapolate thematically if you can't otherwise meet the specified length targets.
+Major NPCs (recurring, plot-important): the [CORE] block's sections must together total exactly ${majorWords} words. Distribute freely across sections based on what each NPC needs — do not pad every section to match the longest one.
+Minor NPCs (shopkeepers, guards, one-off encounters): the [CORE] block's sections must together total exactly ${minorWords} words. Distribute freely across sections based on what each NPC needs — do not pad every section to match the longest one.
 </CORE_LENGTH TARGETS>`;
     }
 

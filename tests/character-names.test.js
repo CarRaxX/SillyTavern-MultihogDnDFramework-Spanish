@@ -45,18 +45,21 @@ describe('genre character-name pools', () => {
         }
     });
 
-    it('lets Instant Action reroll a genre name before forwarding the accepted name', () => {
+    it('lets Instant Action use an optional typed/rolled name or let the AI choose', () => {
         const quickStartSource = readFileSync(new URL('../quickstart.js', import.meta.url), 'utf8');
         const creatorSource = readFileSync(new URL('../character-creator.js', import.meta.url), 'utf8');
         const rendererSource = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
 
-        expect(rendererSource).toContain('id="rt-quickstart-name" placeholder="Roll or enter a name"');
+        expect(rendererSource).toContain('id="rt-quickstart-name" placeholder="Optional — enter, roll, or let AI choose"');
         expect(rendererSource).toContain('id="rt-quickstart-roll-name"');
         expect(rendererSource).toContain('id="rt-quickstart-begin"');
         expect(quickStartSource).toMatch(/selectedName = pickGenreCharacterName\(selectedGenre\)/);
         expect(quickStartSource).toMatch(/selectedName = nameInput\.value\.trim\(\)/);
-        expect(quickStartSource).toMatch(/runQuickStart\(selectedGenre, rootEl, selectedName\)/);
+        expect(quickStartSource).toMatch(/runQuickStart\(selectedGenre, rootEl, selectedName, instructionsInput\?\.value \|\| ''\)/);
         expect(quickStartSource).toMatch(/const nameVal = String\(selectedName \|\| ''\)\.trim\(\)/);
+        expect(quickStartSource).not.toContain('Roll a character name before starting.');
+        expect(quickStartSource).toMatch(/if \(!selectedGenre\) return;/);
+        expect(quickStartSource).not.toMatch(/if \(!selectedGenre \|\| !selectedName\) return;/);
         expect(quickStartSource).toMatch(/generateQuickStartCharacter\(\{[\s\S]*?\bnameVal,/);
         expect(creatorSource).toMatch(/buildCharacterGenerationPrompt\(\{\s*nameVal: opts\.nameVal,/);
     });
