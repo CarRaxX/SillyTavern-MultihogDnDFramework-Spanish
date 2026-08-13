@@ -14,6 +14,7 @@ export const runtimeState = {
     renderRouterUI: null,
     refreshAgentManifest: async () => {},
     refreshImmersionView: async () => {},
+    hasActiveDungeonMap: false,
     refreshNpcManifest: async () => {},
     updateAgentWorldStatusRef: null,
     updateWorldProgressionLastFiredDisplayRef: null,

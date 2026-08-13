@@ -1,4 +1,5 @@
 import { getRuntimeActions, sectionPages } from '../../app/runtime-bridge.js';
+import { runtimeState } from '../../app/runtime-state.js';
 import { pickGenreCharacterName } from '../../state/character-names.js';
 
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
@@ -660,6 +661,13 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                         if (cb.checked) settings.modules.party = true;
                     }
                 });
+                if (settingKey === 'dungeon_reality_and_hidden_mapping') {
+                    // Keep the optional Components toggle authoritative for
+                    // the live Scene View and any detached map window.
+                    runtimeState.hasActiveDungeonMap = false;
+                    globalThis._rpgSyncAgentImmersionUi?.();
+                    void globalThis._rpgRefreshImmersionView?.();
+                }
             });
         }
     };

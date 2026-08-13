@@ -22,6 +22,7 @@ import {
     reconcileDungeonMapAreaKnowledge,
     resolveActiveDungeonSite,
     stripCapturedDungeonMapBlocks,
+    stripDungeonRealityBlocksFromPrompt,
     stripDungeonMapSection,
     syncDungeonRealityState,
     validateDungeonMapArchitecture,
@@ -596,6 +597,38 @@ The last guard falls and a loose stone reveals a niche.
         expect(stripCapturedDungeonMapBlocks(malformed, captured.state)).toBe(malformed);
         const uncaptured = '<div hidden data-dungeon-delta>Dungeon Site: Ember Mine\nMutation: Lift | repaired</div>';
         expect(stripCapturedDungeonMapBlocks(uncaptured, captured.state)).toBe(uncaptured);
+    });
+
+    it('removes all hidden map and delta blocks when the component is disabled', () => {
+        const storedEntry = {
+            comment: 'Ember Mine',
+            content: '[CORE]\nA mapped mine.\n[/CORE]\n\n[MAP]\n{"version":3,"site":"Ember Mine","areas":[],"assets":[]}\n[/MAP]',
+        };
+        const storedContentBefore = storedEntry.content;
+        const prompt = [
+            {
+                role: 'assistant',
+                mes: '<div hidden data-dungeon-map>{"version":3,"site":"Ember Mine"}</div>Visible map prose',
+            },
+            {
+                role: 'assistant',
+                content: [{ type: 'text', text: '<div hidden data-dungeon-delta>Dungeon Site: Ember Mine\nMutation: Lift | cleared</div>Keep this' }],
+            },
+            {
+                name: 'Dungeon Reality',
+                mes: '[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: Ember Mine\n[/DUNGEON_REALITY]',
+            },
+            { role: 'system', content: '<div hidden data-other-private>Keep unrelated hidden data</div>' },
+        ];
+
+        stripDungeonRealityBlocksFromPrompt(prompt);
+
+        expect(prompt[0].mes).toBe('Visible map prose');
+        expect(prompt[1].content[0].text).toBe('Keep this');
+        expect(prompt.some(message => message.name === 'Dungeon Reality')).toBe(false);
+        expect(prompt.at(-1).content).toContain('data-other-private');
+        expect(storedEntry.content).toBe(storedContentBefore);
+        expect(extractDungeonMapSection(storedEntry.content)).toContain('"site":"Ember Mine"');
     });
 
     it('uses the latest narrator footer and diagnoses obvious high-risk roots', () => {

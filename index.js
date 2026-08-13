@@ -817,9 +817,9 @@ export function syncLocationImageDependentUi(settings) {
         realtimeNote.style.display = realTimeOn ? 'block' : 'none';
         if (realTimeOn) {
             const notes = {
-                location_enter: 'Generate once when entering a place that has no scene image yet. Open Visualization Mode in the Lorebook Agent to view scene art.',
-                location_change: 'Regenerate whenever the location changes (including revisits). Open Visualization Mode in the Lorebook Agent to view scene art.',
-                every_n_outputs: `Regenerate on location change, and also every ${everyN} chat output${everyN === 1 ? '' : 's'}. Open Visualization Mode in the Lorebook Agent to view scene art.`,
+                location_enter: 'Generate once when entering a place that has no scene image yet. Open Visuals/Map in the Lorebook Agent to view scene art.',
+                location_change: 'Regenerate whenever the location changes (including revisits). Open Visuals/Map in the Lorebook Agent to view scene art.',
+                every_n_outputs: `Regenerate on location change, and also every ${everyN} chat output${everyN === 1 ? '' : 's'}. Open Visuals/Map in the Lorebook Agent to view scene art.`,
             };
             realtimeNote.textContent = notes[triggerMode] || notes.location_change;
         }
@@ -1675,6 +1675,7 @@ function onChatChanged(newChatId) {
     snapshotPortraitMapsForChat(s, oldChatId);
 
     runtimeState.currentChatId = resolvedId;
+    runtimeState.hasActiveDungeonMap = false;
 
     // Snapshot the departing chat's state BEFORE resetRouterTick mutates shared pools.
     // resetRouterTick(true) zeroes keywordActivatedKeys in-place; if saveChatState ran
@@ -2297,6 +2298,7 @@ function resetTrackerUi(opts = {}) {
     // Layout / visibility keys that can leave the UI unreachable
     localStorage.removeItem('rpg_tracker_agent_detached');
     localStorage.removeItem('rpg_tracker_adventure_companion_detached');
+    localStorage.removeItem('rpg_tracker_dungeon_map_detached');
     localStorage.removeItem('rpg_tracker_agent_visible');
     localStorage.setItem('rpg_tracker_content_mode', 'tracker');
     localStorage.setItem('rpg_tracker_visible', 'true');
@@ -2992,18 +2994,18 @@ async function showLorebookAgentDocumentation() {
 
                             <h4 style="margin-bottom: 5px;">📂 Campaign Records</h4>
                             <p>The Agent writes directly into SillyTavern's native Lorebook system, creating namespaced campaign books for the current story (e.g. <i>Eldoria_NPCs</i>, <i>Eldoria_Locations</i>, <i>Eldoria_Factions</i>). All books for the active campaign are shown here, grouped by type. Click any folder to expand it; click any entry to read its full content. Books are automatically activated and deactivated based on the current chat — no manual action needed. This includes the <b>World Section</b> (<code>{prefix}_World</code>) created by the World Progression engine, which houses off-screen progression reports.</p>
-                            <p style="margin-top:4px;">When <b>Show Location Images</b> is enabled (see below), the panel header switches between <b>Campaign Records</b> and <b>Visualization Mode</b>. With Location Images off, only the standard Campaign Records tree is shown.</p>
+                            <p style="margin-top:4px;">When <b>Show Location Images</b> is enabled or the party is inside a mapped site, the panel header switches between <b>Campaign Records</b> and <b>Visuals/Map</b>. Otherwise only the standard Campaign Records tree is shown.</p>
 
-                            <h4 style="margin-bottom: 5px;">🗺️ Location Images &amp; Visualization Mode</h4>
-                            <p>Location scene art and Visualization Mode are <b>opt-in</b> and <b>off by default</b>. Enable them from <b>Extension Settings → Portraits → Location Images &amp; Visualization</b>.</p>
+                            <h4 style="margin-bottom: 5px;">🗺️ Location Images &amp; Visuals/Map</h4>
+                            <p>Location scene art is <b>opt-in</b> and <b>off by default</b>. Enable it from <b>Extension Settings → Portraits → Location Images &amp; Visualization</b>.</p>
                             <ul style="padding-left: 20px; margin-top: 0;">
-                                <li><b>Show Location Images</b> — Master toggle. When on, the Locations book gains hierarchical scene art: thumbnails on the location tree, wide 16:9 images in detail view, drag-and-drop upload, and the <b>Campaign Records / Visualization Mode</b> switch in this panel. Also turns on automatically if you enable Real-Time Visualization Mode or Auto-Generate Locations.</li>
+                                <li><b>Show Location Images</b> — Master toggle. When on, the Locations book gains hierarchical scene art: thumbnails on the location tree, wide 16:9 images in detail view, drag-and-drop upload, and the <b>Campaign Records / Visuals/Map</b> switch in this panel. Also turns on automatically if you enable Real-Time Visualization Mode or Auto-Generate Locations.</li>
                                 <li><b>Auto-Generate Locations</b> — Background scene art for new location lorebook entries that do not already have an image. Mutually exclusive with Real-Time Visualization Mode.</li>
                                 <li><b>Include Present NPCs in Location Scene Prompts</b> — Injects NPCs named in the latest narrator output (Present-Now name scanner: first/last name only, not Lorebook Agent keys) plus the linked Player Character into location image prompts. Locked on while Real-Time Visualization Mode is active.</li>
-                                                <li><b>Real-Time Visualization Mode</b> — Generates location images in Visualization Mode from current chat context and characters present. Choose a trigger: <b>On location enter</b> (once per place with no image), <b>On location change</b> (fresh image on each path change including revisits), or <b>Every N outputs</b> (still regenerates on location change, plus every N chat outputs — set N to 1 for every output). Enables Show Location Images and present-NPC prompts as a locked bundle; disables Auto-Generate Locations. Can be turned on without Show Location Images already being enabled first.</li>
+                                                <li><b>Real-Time Visualization Mode</b> — Generates location images in Visuals/Map from current chat context and characters present. Choose a trigger: <b>On location enter</b> (once per place with no image), <b>On location change</b> (fresh image on each path change including revisits), or <b>Every N outputs</b> (still regenerates on location change, plus every N chat outputs — set N to 1 for every output). Enables Show Location Images and present-NPC prompts as a locked bundle; disables Auto-Generate Locations. Can be turned on without Show Location Images already being enabled first.</li>
                             </ul>
-                            <p style="margin-top:8px;"><b>Visualization Mode</b> (agent panel) shows a scene layout driven by your current location from the state memo: a wide location hero image, breadcrumb path, and tiles for characters present (active Lorebook NPCs plus the linked Player Character). Click the hero or a tile to open the full location or character card. Scene art is generated according to your Location Images settings — either on lorebook entry creation (Auto-Generate Locations) or on arrival (Real-Time Visualization Mode).</p>
-                            <p style="margin-top:4px;"><i>Tip: With Real-Time Visualization Mode on, use Visualization Mode in the Lorebook Agent to see scene art as you move through the story (trigger depends on your Real-Time settings).</i></p>
+                            <p style="margin-top:8px;"><b>Visuals/Map</b> (agent panel) shows the current location: a wide location hero image when scene art is on, a knowledge-filtered site map while inside a mapped dungeon, and tiles for characters present (active Lorebook NPCs plus the linked Player Character). The site map can be popped out into its own window. Click the hero, a revealed room, or a tile to open the matching location or character card. The Lorebook MAP badge on a mapped root remains the private GM inspector. Scene art is generated according to your Location Images settings — either on lorebook entry creation (Auto-Generate Locations) or on arrival (Real-Time Visualization Mode).</p>
+                            <p style="margin-top:4px;"><i>Tip: With Real-Time Visualization Mode on, use Visuals/Map in the Lorebook Agent to see scene art as you move through the story (trigger depends on your Real-Time settings).</i></p>
 
                             <h4 style="margin-bottom: 5px;">🧹 Cleanup & Compression</h4>
                             <p>To keep context sizes optimized, the framework uses a two-fold cleanup system:</p>
@@ -9023,6 +9025,13 @@ RULES:
                 saveSettings();
                 scheduleAutoApply();
                 refreshRenderedView();
+                if (key === 'dungeon_reality_and_hidden_mapping') {
+                    // Remove the live map surface immediately; the next scene
+                    // refresh also closes any detached map window.
+                    runtimeState.hasActiveDungeonMap = false;
+                    globalThis._rpgSyncAgentImmersionUi?.();
+                    void globalThis._rpgRefreshImmersionView?.();
+                }
             });
 
             if (key === 'quests') {

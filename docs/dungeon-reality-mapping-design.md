@@ -107,7 +107,7 @@ Abbey Undercroft is a mapped site. Its private map stores current objective real
 
 The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Lorebook Agent map transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
 
-The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing.
+The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing. Visuals/Map in the Lorebook Agent shows the player-facing node graph (visited/discovered rooms plus unlabeled fog stubs) and can be popped out into its own window.
 
 ## Conditional Lorebook Agent capability
 
@@ -224,7 +224,7 @@ Ordinary exploration, perception checks, room combat, movement, traps, opened ro
 
 ## Explicitly out of scope
 
-- Visual minimaps or coordinate grids
+- Visual coordinate-grid floorplans (a knowledge-filtered node graph lives in Visuals/Map)
 - Enumerating legal player actions
 - Turn-by-turn simulation of every off-screen actor
 - Keyword-based map activation

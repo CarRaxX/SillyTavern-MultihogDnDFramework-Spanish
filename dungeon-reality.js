@@ -733,12 +733,22 @@ export function extractFooterLocation(text) {
     return location;
 }
 
-/** Top-level footer segment, used as the stable site binding unit. */
-export function getSiteRootFromLocation(location) {
+function splitLocationSegments(location) {
     return String(location || '')
         .split(/\s*(?:::|,|\/|>|›|»|→)\s*/)
         .map(part => part.trim())
-        .find(Boolean) || '';
+        .filter(Boolean);
+}
+
+/** Top-level footer segment, used as the stable site binding unit. */
+export function getSiteRootFromLocation(location) {
+    return splitLocationSegments(location)[0] || '';
+}
+
+/** Deepest footer segment, used to highlight the current mapped area. */
+export function getLocationLeaf(location) {
+    const parts = splitLocationSegments(location);
+    return parts.at(-1) || '';
 }
 
 /** Light normalization for footer drift without introducing opaque IDs. */
@@ -1660,6 +1670,19 @@ export function resolveActiveDungeonSite(state, currentLocation) {
     return findSiteRecord(state, root)?.site || null;
 }
 
+/** Parse the active site's current map document for a footer/lore location. */
+export function resolveDungeonMapForLocation(entries, locationText, bookName = '') {
+    const sites = buildDungeonSitesFromLocationEntries(entries, bookName);
+    const site = resolveActiveDungeonSite({ version: 3, sites }, locationText);
+    if (!site?.mapChunks?.length) return null;
+    const parsed = parseDungeonMapDocument(site.mapChunks[0], site.siteRoot);
+    return {
+        siteRoot: site.siteRoot || parsed.document.site,
+        document: parsed.document,
+        entryId: site.entryId || '',
+    };
+}
+
 /** Remove only map/delta blocks whose durable copy is already in the site store. */
 export function stripCapturedDungeonMapBlocks(text, state) {
     const storedMaps = new Set();
@@ -1701,6 +1724,48 @@ export function stripCapturedDungeonMapsFromPrompt(chat, state) {
                 if (part?.type === 'text' && typeof part.text === 'string') {
                     part.text = stripCapturedDungeonMapBlocks(part.text, state);
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Strip all Dungeon Reality hidden blocks from an outgoing prompt.
+ *
+ * This is intentionally separate from stripCapturedDungeonMapsFromPrompt:
+ * when the component is disabled there is no reason to load the durable map
+ * state just to identify blocks that must not reach the narrator. Existing
+ * chat history is left untouched; only the prompt copy is sanitized.
+ */
+export function stripDungeonRealityBlocksFromPrompt(chat) {
+    if (!Array.isArray(chat)) return;
+    const strip = (text) => {
+        const source = String(text || '');
+        DIV_RE.lastIndex = 0;
+        return source.replace(DIV_RE, (full, attributes) => {
+            const attrs = String(attributes || '');
+            return hasHiddenAttribute(attrs)
+                && (hasDungeonMapAttribute(attrs) || hasDungeonDeltaAttribute(attrs))
+                ? ''
+                : full;
+        });
+    };
+    for (let index = chat.length - 1; index >= 0; index--) {
+        const message = chat[index];
+        const messageText = getDungeonMessageText(message);
+        // Depth injections are prompt-only messages. Remove a stale one as
+        // well, since it is not wrapped in a hidden HTML block.
+        if (String(message?.name || '').trim() === 'Dungeon Reality'
+            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)) {
+            chat.splice(index, 1);
+            continue;
+        }
+        if (typeof message?.mes === 'string') message.mes = strip(message.mes);
+        if (typeof message?.content === 'string') {
+            message.content = strip(message.content);
+        } else if (Array.isArray(message?.content)) {
+            for (const part of message.content) {
+                if (part?.type === 'text' && typeof part.text === 'string') part.text = strip(part.text);
             }
         }
     }

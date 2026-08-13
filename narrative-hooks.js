@@ -30,6 +30,7 @@ import {
     looksLikeDungeonSite,
     resolveActiveDungeonSite,
     stripCapturedDungeonMapsFromPrompt,
+    stripDungeonRealityBlocksFromPrompt,
 } from './dungeon-reality.js';
 import { runMapArchitect } from './map-architect.js';
 export { isPercentFormula, resolveDiceCompare };
@@ -1009,6 +1010,13 @@ export function installInterceptor() {
             .includes(String(type || '').toLowerCase());
         let dungeonState = null;
         let dungeonInjection = '';
+
+        // A disabled component must also neutralize hidden map/delta blocks
+        // already present in the current prompt copy. Do not mutate the
+        // persisted SillyTavern chat; the sanitizer only touches `chat` below.
+        if (!dungeonEnabled && Array.isArray(chat)) {
+            stripDungeonRealityBlocksFromPrompt(chat);
+        }
 
         if (dungeonEnabled && dungeonChatId && Array.isArray(_rbChat)) {
             // A swipe/regeneration rejects the latest selected narrator message,

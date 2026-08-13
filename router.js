@@ -4,6 +4,7 @@ import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
+import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
 import { buildSkeletonLorebookSourceContext } from './src/features/world-progression/skeleton-lorebooks.js';
 import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 import {
@@ -916,6 +917,7 @@ async function applyActiveDungeonMapCommit(transaction, expectedContext, allBook
  */
 export async function runRouterPass(narrativeOutput, manualPrompt = null, customLookback = null, isManual = false, newlyTriggeredIds = [], overrideChatLog = null) {
     const settings = getSettings();
+    const dungeonRealityEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings);
     if (!settings.routerEnabled || _routerRunning) return;
     // routerPaused blocks auto-runs only; manual UI runs always go through
     if (settings.routerPaused && !isManual) return;
@@ -1080,7 +1082,9 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 
         const currentHierarchy = extractFooterLocation(recentChatString) || findLatestDungeonLocation(chat);
         const breadcrumb = currentHierarchy ? currentHierarchy.replace(/,\s*/g, ' :: ') : '';
-        activeDungeonContext = resolveActiveDungeonContext(archiveBooks, prefix, currentHierarchy);
+        activeDungeonContext = dungeonRealityEnabled
+            ? resolveActiveDungeonContext(archiveBooks, prefix, currentHierarchy)
+            : null;
         activeDungeonEntryId = activeDungeonContext?.entryId || '';
         // Rebuild after authoritative location resolution so [MAP] is present only
         // while its own site is active, even if a mapped root happens to be pinned.
@@ -2148,7 +2152,9 @@ ${adjustedSharedContext}`;
                     }
                     archiveBooks = await fetchArchiveBooks();
                     keyringText = buildKeyringText(archiveBooks, settings.activeRouterKeys);
-                    activeDungeonContext = resolveActiveDungeonContext(archiveBooks, prefix, currentHierarchy);
+                    activeDungeonContext = dungeonRealityEnabled
+                        ? resolveActiveDungeonContext(archiveBooks, prefix, currentHierarchy)
+                        : null;
                     activeDungeonEntryId = activeDungeonContext?.entryId || '';
                     updateActiveEntries();
                 } else if (toolName === 'grep_lore') {

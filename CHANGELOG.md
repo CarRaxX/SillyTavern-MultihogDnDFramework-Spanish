@@ -7,11 +7,14 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 ### Added
 - **Dedicated Map Architect**: The narrator can call a one-shot private agent with its own prompt, connection profile, model, preset, lookback, and output budget to create dangerous-site maps.
 - **Initial-map validation and correction**: New maps are checked for valid JSON, exact site/entrance identity, scale, stable IDs, asset references, reciprocal passage details, and a fully connected physical graph. Invalid output receives up to two correction passes and is never partially saved.
+- **Visuals/Map site graph**: While inside a mapped dungeon, Visuals/Map shows a knowledge-filtered node graph (visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled stubs). It can be popped out into its own window. The Lorebook MAP badge remains the private GM inspector.
 
 ### Changed
 - **Lightweight narrator contract**: The full map-authoring specification is no longer carried in every GM prompt. A short `CreateDungeonMap` contract replaces it, while the dedicated agent stores validated JSON directly in the root Location entry and returns compact prose to the narrator.
+- **Visuals/Map rename**: The Lorebook Agent **Visualization Mode** tab is now **Visuals/Map**. Real-Time Visualization Mode (scene-art generation) keeps its settings name. The Campaign Records / Visuals/Map switch appears when location images are on or the party is inside a mapped site.
 
 ### Fixed
+- **Site map connectors**: Connection lines now stop at each room’s border instead of running through node labels.
 - **Map Architect progress feedback**: A persistent toast now indicates when a location map is being generated, then reports completion or failure when the tool call ends.
 - **Reliable Map Architect tool calls**: Main API map creation now reads the untouched provider response, bypassing both unsupported provider-level JSON schemas (`Bad Request`) and SillyTavern dialogue cleanup (`No message generated`). Connection Profile, Ollama, and direct OpenAI-compatible modes retain structured-output support.
 - **No immediate retry loops**: Architect transport, configuration, validation, and persistence failures are now real tool errors. The narrator remains outside the site and must not retry the tool during the same turn.

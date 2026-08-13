@@ -5035,7 +5035,7 @@ textarea.rt-cr-input {
     color: #a8e0f0;
 }
 
-/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent view mode switch (Campaign Records / Visualization Mode) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
+/* Lorebook Agent view mode switch (Campaign Records / Visuals/Map) */
 /* Dungeon map viewer */
 .rt-dungeon-map-popup {
     color: var(--rt-text);
@@ -6975,6 +6975,10 @@ textarea.rt-cr-input {
     border-bottom: 1px solid rgba(94, 184, 212, 0.15);
 }
 .rt-immersion-section-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 0.72em;
     font-weight: bold;
     text-transform: uppercase;
@@ -7055,7 +7059,127 @@ textarea.rt-cr-input {
     font-style: italic;
 }
 
-/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Character Card Picker Popup ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
+.rt-immersion-map {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.rt-immersion-map .rt-immersion-section-label {
+    opacity: 0.7;
+}
+.rt-dungeon-map-detach,
+.rt-dungeon-map-reattach {
+    opacity: 0.85;
+    font-size: 0.85em;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.rt-immersion-map-popped-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    border-radius: 6px;
+    background: rgba(14, 116, 144, 0.1);
+    font-size: 0.8em;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    opacity: 0.9;
+}
+.rt-dungeon-graph-scroll {
+    overflow: auto;
+    max-height: 220px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    padding: 4px;
+}
+.rt-dungeon-graph-scroll-expanded {
+    max-height: none;
+    height: 100%;
+    box-sizing: border-box;
+}
+.rt-dungeon-graph-empty {
+    padding: 16px 10px;
+    text-align: center;
+    opacity: 0.5;
+    font-size: 0.8em;
+    font-style: italic;
+}
+.rt-dungeon-graph-svg {
+    display: block;
+    max-width: none;
+}
+.rt-dungeon-graph-edge {
+    stroke: rgba(125, 211, 252, 0.55);
+    stroke-width: 1.6;
+}
+.rt-dungeon-graph-edge-locked,
+.rt-dungeon-graph-edge-closed {
+    stroke-dasharray: 5 4;
+    stroke: rgba(212, 169, 64, 0.7);
+}
+.rt-dungeon-graph-edge-blocked,
+.rt-dungeon-graph-edge-destroyed {
+    stroke-dasharray: 2 3;
+    stroke: rgba(234, 67, 53, 0.55);
+}
+.rt-dungeon-graph-node rect,
+.rt-dungeon-graph-node circle {
+    fill: rgba(14, 116, 144, 0.28);
+    stroke: rgba(125, 211, 252, 0.45);
+    stroke-width: 1.2;
+}
+.rt-dungeon-graph-node text {
+    fill: var(--rt-text, #e8e8e8);
+    pointer-events: none;
+}
+.rt-dungeon-graph-node-discovered rect {
+    fill: rgba(14, 116, 144, 0.14);
+    stroke: rgba(125, 211, 252, 0.28);
+}
+.rt-dungeon-graph-node-discovered text {
+    opacity: 0.72;
+}
+.rt-dungeon-graph-node-fog circle {
+    fill: rgba(255, 255, 255, 0.06);
+    stroke: rgba(255, 255, 255, 0.22);
+    stroke-dasharray: 2 2;
+}
+.rt-dungeon-graph-node-fog text {
+    fill: var(--rt-text-muted, #aaa);
+    font-size: 10px;
+}
+.rt-dungeon-graph-node-current rect {
+    fill: rgba(125, 211, 252, 0.28);
+    stroke: #7dd3fc;
+    stroke-width: 2;
+}
+.rt-dungeon-graph-node-revealed {
+    cursor: pointer;
+}
+.rt-dungeon-graph-node-revealed:focus {
+    outline: none;
+}
+.rt-dungeon-graph-node-revealed:hover rect {
+    fill: rgba(125, 211, 252, 0.22);
+}
+.rt-dungeon-map-detached-panel {
+    display: flex;
+    flex-direction: column;
+}
+.rt-dungeon-map-detached-panel .rpg-tracker-detached-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Character Card Picker Popup */
 .rt-charpicker-overlay {
     position: fixed;
     inset: 0;

@@ -262,11 +262,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <div id="rt-agent-campaign-section" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; display: flex; flex-direction: column; flex-shrink: 0;">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; gap: 8px;">
                             <div id="rt-agent-campaign-header-title" style="font-weight: bold; opacity: 0.8; font-size: 0.846em; flex: 1; min-width: 0;${settings.locationImages ? ' display: none;' : ''}">CAMPAIGN RECORDS</div>
-                            <div class="rt-agent-view-mode-switch" id="rt-agent-view-mode-switch" role="tablist" aria-label="Lorebook view mode"${settings.locationImages ? '' : ' style="display: none;"'}>
+                            <div class="rt-agent-view-mode-switch" id="rt-agent-view-mode-switch" role="tablist" aria-label="Campaign Records or Visuals/Map"${settings.locationImages ? '' : ' style="display: none;"'}>
                                 <button type="button" class="rt-agent-view-mode-btn${settings.agentImmersionMode ? '' : ' rt-agent-view-mode-btn-active'}" id="rt-agent-view-mode-records" role="tab" aria-selected="${settings.agentImmersionMode ? 'false' : 'true'}">Campaign Records</button>
                                 <button type="button" class="rt-agent-view-mode-btn rt-agent-view-mode-btn-visualization${settings.agentImmersionMode ? ' rt-agent-view-mode-btn-active' : ''}" id="rt-agent-view-mode-visualization" role="tab" aria-selected="${settings.agentImmersionMode ? 'true' : 'false'}">
                                     <span class="rt-agent-view-mode-glow" aria-hidden="true"></span>
-                                    <span class="rt-agent-view-mode-label">Visualization Mode</span>
+                                    <span class="rt-agent-view-mode-label">Visuals/Map</span>
                                 </button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">

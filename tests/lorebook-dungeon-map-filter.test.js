@@ -23,6 +23,7 @@ The altar is visibly scorched.`,
     it('provides [MAP] through active lore rather than duplicate transcript text', () => {
         const routerSource = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
         const hookSource = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        const immersionSource = readFileSync(new URL('../immersion.js', import.meta.url), 'utf8');
         const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
         expect(routerSource).toContain('fullId !== activeDungeonEntryId');
         expect(routerSource).toContain('buildDungeonMapCommitSchema()');
@@ -30,6 +31,9 @@ The altar is visibly scorched.`,
         expect(routerSource).toContain("name: 'list_map_assets'");
         expect(routerSource).toContain('Invalid JSON/map operation, nudging model');
         expect(hookSource).toContain('syncDungeonLoreAgentActivation');
+        expect(hookSource).toContain('stripDungeonRealityBlocksFromPrompt');
+        expect(routerSource).toContain('const dungeonRealityEnabled = isEffectiveSectionEnabled');
+        expect(immersionSource).toContain("isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s)");
         expect(defaultsSource).toContain('private \\`[MAP]...[/MAP]\\`');
         expect(defaultsSource).toContain('identify exactly which mapped creature, trap, object, or area');
     });

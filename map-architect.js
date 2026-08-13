@@ -13,6 +13,7 @@ import { persistArchitectDungeonMap, syncDungeonMapsToLocationLorebook } from '.
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
+import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
 export { parseMapArchitectResponse } from './map-architect-parser.js';
 
 const architectRuns = new Map();
@@ -122,6 +123,9 @@ async function runMapArchitectOnce(rawArgs) {
 
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
+    if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings)) {
+        throw mapArchitectFailure('Dungeon Reality Mapping is disabled in Components. No map was generated or saved.');
+    }
     const current = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if ((current.errors || []).some(error => /no campaign prefix/i.test(String(error)))) {
         throw mapArchitectFailure('No campaign prefix is available, so there is no safe Locations lorebook target. Nothing was generated or saved.');
@@ -149,6 +153,9 @@ async function runMapArchitectOnce(rawArgs) {
             ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale })
             : { valid: false, errors: [] };
         if (validation.valid) {
+            if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) {
+                throw mapArchitectFailure('Dungeon Reality Mapping was disabled while the map was being generated. Nothing was saved.');
+            }
             const saved = await persistArchitectDungeonMap(args.site, validation.document);
             const status = saved.existing ? 'A concurrent map already existed and was preserved.' : `Map saved to ${saved.entryId}.`;
             return `[MAP_ARCHITECT_RESULT — PRIVATE]\n${status}\nTreat this as objective current canon. Do not expose unseen facts.\n\n${formatDungeonMapForNarrator(saved.document)}\n\nContinue narration from ${args.entrance}; reveal only what the player can perceive.\n[/MAP_ARCHITECT_RESULT]`;

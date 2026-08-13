@@ -509,7 +509,7 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 
 - Portraits via SillyTavern Image Generation **or** Pollinations.ai.
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
-- **Visualization Mode**: location hero image + present NPC/PC tiles (immersion / realtime scene view).
+- **Visuals/Map**: location hero image, present NPC/PC tiles, and a knowledge-filtered dungeon graph while inside a mapped site.
 - Real-time triggers: on location enter/change and/or every N outputs.
 
 ### Slash command

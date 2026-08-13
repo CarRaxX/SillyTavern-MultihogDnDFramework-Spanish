@@ -9,6 +9,7 @@ import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompan
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -574,6 +575,7 @@ export function createPanel(dependencies) {
         };
 
         const openDungeonMapPopup = async (item) => {
+            if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) return;
             const map = extractDungeonMapSection(item?.content);
             if (!map) return;
             const mapDocument = parseDungeonMapDocument(map, item.label || '').document;
@@ -936,7 +938,12 @@ export function createPanel(dependencies) {
 
         refreshManifest = async (source = 'auto') => {
             const s = getSettings();
-            if (s.agentImmersionMode && !_manifestBypassImmersion) {
+            const dungeonRealityEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s);
+            if (!_manifestBypassImmersion && (!s.locationImages || s.agentImmersionMode)) {
+                await runtimeState.refreshImmersionView();
+            }
+            const visualsOpen = !!(s.agentImmersionMode && (s.locationImages || runtimeState.hasActiveDungeonMap));
+            if (visualsOpen && !_manifestBypassImmersion) {
                 if (!areAgentCharacterDetailHandlersReady()) {
                     _manifestBypassImmersion = true;
                     try {
@@ -945,7 +952,6 @@ export function createPanel(dependencies) {
                         _manifestBypassImmersion = false;
                     }
                 }
-                await runtimeState.refreshImmersionView();
                 return;
             }
 
@@ -2884,7 +2890,7 @@ export function createPanel(dependencies) {
                                     if (node.item) {
                                         const entryTokens = Math.round((node.item.content || '').length / 4);
                                         tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
-                                        if (node.item.has_dungeon_map) {
+                                        if (dungeonRealityEnabled && node.item.has_dungeon_map) {
                                             dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
                                         }
                                         if (isNpcBook) {
@@ -4154,7 +4160,7 @@ ${namingRule}`;
                 if (!btn || btn.classList.contains('rt-agent-view-mode-btn-active')) return;
                 e.stopPropagation();
                 const s = getSettings();
-                if (btn.id === 'rt-agent-view-mode-visualization' && !s.locationImages) return;
+                if (btn.id === 'rt-agent-view-mode-visualization' && !s.locationImages && !runtimeState.hasActiveDungeonMap) return;
                 s.agentImmersionMode = btn.id === 'rt-agent-view-mode-visualization';
                 saveSettings(true);
                 await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
