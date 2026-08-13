@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.25.1] - 2026-08-13
+
+### Fixed
+- **Safe campaign cloning**: Clone Stack and Branch Campaign now abort before writing when a destination lorebook already exists, preventing whole-book overwrite and cleanup of pre-existing books.
+- **Chat-scoped Lorebook Agent history**: Undo and redo now operate only on the active chat, preserve other chats' history, reject mismatched redo snapshots, and follow safe chat renames.
+
 ## [7.25.0] - 2026-08-13
 
 ### Changed
