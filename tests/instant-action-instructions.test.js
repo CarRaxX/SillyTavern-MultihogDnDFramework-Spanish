@@ -71,12 +71,13 @@ describe('Instant Action instructions', () => {
         expect(quickStartSource).toContain('resolveInstantActionPlayerCardWords(');
     });
 
-    it('makes the Instant Action starter message opt-in and off by default', () => {
-        expect(buildDefaultSettings().onboardingSendStarterMessage).toBe(false);
+    it('makes the Instant Action starter message optional and on by default', () => {
+        expect(buildDefaultSettings().onboardingSendStarterMessage).toBe(true);
         expect(rendererSource).toContain('id="rt-quickstart-send-starter"');
         expect(rendererSource).toContain('Send Starter Message?');
         expect(rendererSource).toContain('If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.');
-        expect(quickStartSource).toMatch(/if \(s\.onboardingSendStarterMessage\)/);
+        expect(rendererSource).toContain("obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''");
+        expect(quickStartSource).toMatch(/if \(s\.onboardingSendStarterMessage !== false\)/);
         expect(quickStartSource).toMatch(/sendStarterCheckbox\?\.addEventListener\('change', persistQuickStartOptions\)/);
         expect(quickStartSource).toContain('Type your first action.');
     });

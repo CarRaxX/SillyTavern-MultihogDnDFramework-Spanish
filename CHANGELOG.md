@@ -5,7 +5,7 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 ## [7.25.0] - 2026-08-13
 
 ### Changed
-- **Optional Instant Action starter message**: Quick Start no longer auto-sends `Begin the adventure`. A **Send Starter Message?** checkbox sits below Player Card length and is off by default, so you can type your own first action once the character is ready.
+- **Optional Instant Action starter message**: A **Send Starter Message?** checkbox sits below Player Card length. It is on by default so Instant Action still opens the campaign automatically; uncheck it if you want to type your own first action.
 
 ### Fixed
 - **Instant Action honors Initial Setup level and class**: A requested level such as "A level 7 ranger" now overrides the Other Ways level dropdown. The prompt no longer forces `STARTING LEVEL: 6` as mandatory when Initial Setup asked for a different level, and the random archetype is treated as a fallback when a class is specified.

@@ -1987,7 +1987,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Instant Action</div>
-                    <div class="rt-quickstart-sub">Choose a genre, optionally enter a name or Initial Setup, then begin. Leave the name blank to let the AI choose it. The extension uses your Narrator Configuration, rolls everything you leave unspecified, and builds a Lorebook Agent Player Card plus a name-only ST persona. Enable Send Starter Message only if you want the AI to open the campaign for you.</div>
+                    <div class="rt-quickstart-sub">Choose a genre, optionally enter a name or Initial Setup, then begin. Leave the name blank to let the AI choose it. The extension uses your Narrator Configuration, rolls everything you leave unspecified, and builds a Lorebook Agent Player Card plus a name-only ST persona. Uncheck Send Starter Message if you want to type your own first action instead of letting the AI open the campaign.</div>
                     <div class="rt-quickstart-genres" role="group" aria-label="Quick Start genre">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasy</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Modern</button>
@@ -2018,7 +2018,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <div class="rt-quickstart-starter-message">
                             <label for="rt-quickstart-send-starter" title="If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.">
                                 <span>Send Starter Message?</span>
-                                <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage ? 'checked' : ''} aria-label="Send Starter Message" />
+                                <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''} aria-label="Send Starter Message" />
                             </label>
                             <span class="rt-cr-help-icon" title="If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.">?</span>
                         </div>

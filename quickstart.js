@@ -170,7 +170,7 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
         await activateSillyTavernPersona(charName);
 
         const readyDetail = instantActionInstructions ? 'custom instructions' : className;
-        if (s.onboardingSendStarterMessage) {
+        if (s.onboardingSendStarterMessage !== false) {
             setQuickStartStatus(root, 'Starting adventure…');
             sendOutgoingChatMessage(buildInstantActionOpeningMessage(instantActionInstructions));
             setQuickStartStatus(root, `Ready — ${charName} (${readyDetail})`);

@@ -318,8 +318,8 @@ export function buildDefaultSettings() {
 
         onboardingPersonaWordsCustom: "",
 
-        /** Instant Action: when true, auto-send "Begin the adventure" after the character is ready. Off by default so the player chooses their first action. */
-        onboardingSendStarterMessage: false,
+        /** Instant Action: when true, auto-send "Begin the adventure" after the character is ready. On by default; uncheck to type your own first action. */
+        onboardingSendStarterMessage: true,
 
         /** Last Character Creator form values, saved when Generate Character is pressed. */
 
