@@ -523,7 +523,12 @@ export function registerMapArchitectTool() {
                 required: ['site', 'entrance', 'scale', 'premise'],
             },
             action: async args => runMapArchitect(args),
-            formatMessage: () => '',
+            formatMessage: args => {
+                const site = String(args?.site || '').trim();
+                return site
+                    ? `Generating a location map for ${site}...`
+                    : 'Generating a location map...';
+            },
         });
     } catch (error) {
         console.warn('[RPG Tracker] Could not register Map Architect tool:', error);

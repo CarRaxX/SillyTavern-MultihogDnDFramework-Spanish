@@ -18,6 +18,23 @@ export { parseMapArchitectResponse } from './map-architect-parser.js';
 const architectRuns = new Map();
 const MAX_CORRECTION_ATTEMPTS = 2;
 
+function finishMapArchitectToast(site, succeeded) {
+    const toastrApi = globalThis.toastr;
+    if (!toastrApi) return;
+    const method = succeeded ? toastrApi.success : toastrApi.error;
+    if (typeof method !== 'function') return;
+    const label = String(site || 'location').trim() || 'location';
+    try {
+        method(
+            succeeded
+                ? `Location map ready for ${label}.`
+                : `Location map generation failed for ${label}. See the tool result for details.`,
+            'Map Architect',
+            { timeOut: succeeded ? 5000 : 10000, extendedTimeOut: succeeded ? 10000 : 20000 },
+        );
+    } catch (_) { /* notification display is best effort */ }
+}
+
 function normalizeKey(value) {
     return String(value || '').trim().toLocaleLowerCase();
 }
@@ -153,7 +170,12 @@ export function runMapArchitect(args) {
     const key = normalizeKey(args?.site);
     if (architectRuns.has(key)) return architectRuns.get(key);
     const run = runMapArchitectOnce(args)
+        .then(result => {
+            finishMapArchitectToast(args?.site, true);
+            return result;
+        })
         .catch(error => {
+            finishMapArchitectToast(args?.site, false);
             console.error('[RPG Tracker] Map Architect failed:', error);
             if (String(error?.message || '').includes('[MAP_ARCHITECT_ERROR')) throw error;
             throw mapArchitectFailure(`Map Architect failed before a validated map could be saved: ${describeFailure(error)}`);

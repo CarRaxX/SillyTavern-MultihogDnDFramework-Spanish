@@ -20,13 +20,15 @@ describe('Map Architect component', () => {
         const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const architect = readFileSync(new URL('../map-architect.js', import.meta.url), 'utf8');
         expect(hooks).toContain("name: 'CreateDungeonMap'");
-        expect(hooks).toContain("formatMessage: () => ''");
+        expect(hooks).toContain('Generating a location map for');
         expect(hooks).toContain("isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping'");
         expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
         expect(architect).toContain('persistArchitectDungeonMap');
         expect(architect).toContain('mapArchitectConnectionSource');
         expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA }');
         expect(architect).toContain('throw mapArchitectFailure');
+        expect(architect).toContain('Location map ready for');
+        expect(architect).toContain('Location map generation failed for');
     });
 
     it('defines the complete structured map response contract', () => {
