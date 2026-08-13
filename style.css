@@ -5036,6 +5036,230 @@ textarea.rt-cr-input {
 }
 
 /* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ Lorebook Agent view mode switch (Campaign Records / Visualization Mode) ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
+/* Dungeon map viewer */
+.rt-dungeon-map-popup {
+    color: var(--rt-text);
+}
+
+.rt-dungeon-map-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: #7dd3fc;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.rt-dungeon-map-subtitle {
+    margin-bottom: 10px;
+    opacity: 0.58;
+    font-size: 11px;
+}
+
+.rt-dungeon-map-view-switch {
+    display: inline-flex;
+    gap: 3px;
+    margin-bottom: 12px;
+    padding: 3px;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.24);
+}
+
+.rt-dungeon-map-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    border-radius: 5px;
+    padding: 5px 10px;
+    background: transparent;
+    color: var(--rt-text-muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.rt-dungeon-map-view-btn-active {
+    background: rgba(14, 116, 144, 0.32);
+    color: #bae6fd;
+    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.28);
+}
+
+.rt-dungeon-map-readable,
+.rt-dungeon-map-raw {
+    max-height: 65vh;
+    overflow: auto;
+}
+
+.rt-dungeon-map-popup [hidden] {
+    display: none !important;
+}
+
+.rt-dungeon-map-raw {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.32);
+    color: var(--rt-text);
+    font: 12px/1.55 var(--rt-font-mono, monospace);
+}
+
+.rt-dungeon-map-summary {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.rt-dungeon-map-area-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.rt-dungeon-map-area {
+    padding: 11px 12px;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.rt-dungeon-map-area-head,
+.rt-dungeon-map-asset-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rt-dungeon-map-area-head {
+    margin-bottom: 8px;
+    color: #bae6fd;
+    font-size: 13px;
+}
+
+.rt-dungeon-map-section-label {
+    display: block;
+    margin: 7px 0 4px;
+    color: var(--rt-text-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.rt-dungeon-map-geometry {
+    margin: 0;
+    padding-left: 19px;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.rt-dungeon-map-geometry li + li {
+    margin-top: 3px;
+}
+
+.rt-dungeon-map-connections {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.rt-dungeon-map-route {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    background: rgba(94, 184, 212, 0.09);
+    color: var(--rt-text);
+    font-size: 10px;
+}
+
+.rt-dungeon-map-route-detail {
+    opacity: 0.65;
+}
+
+.rt-dungeon-map-assets {
+    margin-top: 7px;
+    padding-top: 1px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.rt-dungeon-map-asset {
+    margin-top: 5px;
+    padding: 7px 8px;
+    border-left: 3px solid rgba(212, 169, 64, 0.65);
+    border-radius: 5px;
+    background: rgba(212, 169, 64, 0.07);
+}
+
+.rt-dungeon-map-asset-head {
+    color: #f6dda0;
+    font-size: 11px;
+}
+
+.rt-dungeon-map-tag {
+    display: inline-flex;
+    padding: 2px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--rt-text-muted);
+    font: 700 8px/1.25 var(--rt-font-mono, monospace);
+    letter-spacing: 0.03em;
+}
+
+.rt-dungeon-map-state {
+    border-color: rgba(212, 169, 64, 0.28);
+    color: #f6dda0;
+}
+
+.rt-dungeon-map-knowledge {
+    border-color: rgba(125, 211, 252, 0.25);
+    color: #bae6fd;
+}
+
+.rt-dungeon-map-asset-detail {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.rt-dungeon-map-asset-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 4px;
+    color: var(--rt-text-muted);
+    font-size: 9px;
+}
+
+.rt-dungeon-map-meta-sep {
+    opacity: 0.4;
+}
+
+.rt-dungeon-map-empty {
+    color: var(--rt-text-muted);
+    font-size: 10px;
+    font-style: italic;
+}
+
+.rt-dungeon-map-unplaced {
+    margin-top: 9px;
+}
+
+/* Lorebook Agent view mode switch */
 .rt-agent-view-mode-switch {
     display: inline-flex;
     align-items: stretch;

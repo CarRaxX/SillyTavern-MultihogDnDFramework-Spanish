@@ -100,7 +100,7 @@ Abbey Undercroft is a mapped site. Its private map stores current objective real
 
 The initial narrator map is write-once: later narrator outputs cannot replace it. After capture, only the validated Lorebook Agent map transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
 
-The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. It remains visible through raw entry editing and the root Location's blue `MAP` button.
+The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing.
 
 ## Conditional Lorebook Agent capability
 
@@ -204,8 +204,10 @@ Malformed native tool JSON, invalid Basic Mode JSON, schema errors, and semantic
 
 While the party is inside the site, the deterministic Dungeon Reality block contains:
 
-- the current structured `[MAP]` snapshot; and
+- a compact prose conversion of the current `[MAP]` snapshot, never the raw JSON; and
 - root/descendant Location entries as player-observable history.
+
+JSON remains the storage and Lorebook Agent transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost.
 
 The map is current truth, so the narrator does not need to infer that a later chronicle overrides a stale original enemy description. Leaving the site stops injection without deleting anything; returning resumes it.
 

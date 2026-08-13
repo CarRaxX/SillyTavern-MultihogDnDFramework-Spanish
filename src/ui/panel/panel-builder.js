@@ -8,7 +8,7 @@ import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis } from './card
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
-import { extractDungeonMapSection, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -527,17 +527,82 @@ export function createPanel(dependencies) {
         // Tracks entries whose body is currently expanded
         const _openEntries = new Set();
 
+        const renderDungeonMapReadableHtml = (mapDocument) => {
+            const areasById = new Map(mapDocument.areas.map(area => [area.id, area]));
+            const renderTag = (value, className = '') => `<span class="rt-dungeon-map-tag ${className}">${escapeHtml(value)}</span>`;
+            const renderAsset = (asset) => {
+                const metadata = [];
+                if (asset.behavior) metadata.push(`<b>Behavior:</b> ${escapeHtml(asset.behavior)}`);
+                if (asset.route?.length) metadata.push(`<b>Route:</b> ${asset.route.map(id => escapeHtml(areasById.get(id)?.name || id)).join(' &rarr; ')}`);
+                if (asset.faction) metadata.push(`<b>Faction:</b> ${escapeHtml(asset.faction)}`);
+                if (asset.owner) metadata.push(`<b>Owner:</b> ${escapeHtml(asset.owner)}`);
+                if (asset.duration) metadata.push(`<b>Duration:</b> ${escapeHtml(asset.duration)}`);
+                if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origin:</b> ${escapeHtml(asset.origin)}`);
+                if (asset.last_location) metadata.push(`<b>Last location:</b> ${escapeHtml(areasById.get(asset.last_location)?.name || asset.last_location)}`);
+                return `<div class="rt-dungeon-map-asset">
+                    <div class="rt-dungeon-map-asset-head"><i class="fa-solid fa-diamond"></i><strong>${escapeHtml(asset.name)}</strong>${renderTag(asset.kind)}${renderTag(asset.state, 'rt-dungeon-map-state')}${renderTag(asset.knowledge, 'rt-dungeon-map-knowledge')}</div>
+                    ${asset.detail ? `<div class="rt-dungeon-map-asset-detail">${escapeHtml(asset.detail)}</div>` : ''}
+                    ${metadata.length ? `<div class="rt-dungeon-map-asset-meta">${metadata.join('<span class="rt-dungeon-map-meta-sep">&bull;</span>')}</div>` : ''}
+                </div>`;
+            };
+            const renderArea = (area) => {
+                const assets = mapDocument.assets.filter(asset => asset.location === area.id);
+                const geometry = area.geometry.length
+                    ? `<ul class="rt-dungeon-map-geometry">${area.geometry.map(fact => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>`
+                    : `<div class="rt-dungeon-map-empty">No structural notes.</div>`;
+                const connections = area.connections.length
+                    ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Routes</span>${area.connections.map(connection => {
+                        const target = areasById.get(connection.to);
+                        return `<span class="rt-dungeon-map-route"><i class="fa-solid fa-arrow-right"></i>${escapeHtml(target?.name || connection.to)}${renderTag(connection.state)}${connection.detail ? `<span class="rt-dungeon-map-route-detail">${escapeHtml(connection.detail)}</span>` : ''}</span>`;
+                    }).join('')}</div>`
+                    : '';
+                return `<section class="rt-dungeon-map-area">
+                    <div class="rt-dungeon-map-area-head"><i class="fa-solid fa-location-dot"></i><strong>${escapeHtml(area.name)}</strong>${renderTag(area.knowledge, 'rt-dungeon-map-knowledge')}</div>
+                    <div class="rt-dungeon-map-section-label">Geometry &amp; prose</div>
+                    ${geometry}
+                    ${connections}
+                    ${assets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Assets (${assets.length})</span>${assets.map(renderAsset).join('')}</div>` : ''}
+                </section>`;
+            };
+            const unplaced = mapDocument.assets.filter(asset => !asset.location || !areasById.has(asset.location));
+            return `<div class="rt-dungeon-map-summary">
+                    <span>${renderTag(`${mapDocument.areas.length} areas`)}</span>
+                    <span>${renderTag(`${mapDocument.assets.length} assets`)}</span>
+                </div>
+                <div class="rt-dungeon-map-area-list">${mapDocument.areas.map(renderArea).join('')}</div>
+                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Removed / unplaced assets</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
+        };
+
         const openDungeonMapPopup = async (item) => {
             const map = extractDungeonMapSection(item?.content);
             if (!map) return;
+            const mapDocument = parseDungeonMapDocument(map, item.label || '').document;
             const ctx = SillyTavern.getContext();
             if (!ctx.callGenericPopup) return;
             const popupDom = document.createElement('div');
             popupDom.className = 'rt-dungeon-map-popup';
             popupDom.innerHTML = `
-                <div style="font-size:16px;font-weight:700;color:#7dd3fc;margin-bottom:4px;"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(item.label || 'Dungeon Map')}</div>
-                <div style="font-size:11px;opacity:0.58;margin-bottom:12px;">Private objective map attached to this Location. Lorebook Agent can read this section.</div>
-                <pre style="white-space:pre-wrap;word-break:break-word;max-height:65vh;overflow:auto;margin:0;padding:14px;border-radius:8px;background:rgba(0,0,0,0.32);border:1px solid rgba(125,211,252,0.28);font:12px/1.55 var(--rt-font-mono, monospace);color:var(--rt-text);">${escapeHtml(map)}</pre>`;
+                <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(mapDocument.site || item.label || 'Dungeon Map')}</div>
+                <div class="rt-dungeon-map-subtitle">Private objective current state. Lorebook Agent reads the structured version while this site is active.</div>
+                <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Dungeon map view">
+                    <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Readable</button>
+                    <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false"><i class="fa-solid fa-code"></i> Raw JSON</button>
+                </div>
+                <div class="rt-dungeon-map-readable" data-map-panel="readable">${renderDungeonMapReadableHtml(mapDocument)}</div>
+                <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden>${escapeHtml(map)}</pre>`;
+            const setMapView = (view) => {
+                for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+                    const active = button.dataset.mapView === view;
+                    button.classList.toggle('rt-dungeon-map-view-btn-active', active);
+                    button.setAttribute('aria-selected', String(active));
+                }
+                for (const panel of popupDom.querySelectorAll('[data-map-panel]')) {
+                    panel.hidden = panel.dataset.mapPanel !== view;
+                }
+            };
+            for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+                button.addEventListener('click', () => setMapView(button.dataset.mapView));
+            }
             await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
                 okButton: 'Close', cancelButton: false, wide: true, large: true,
             });

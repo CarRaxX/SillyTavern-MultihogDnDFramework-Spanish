@@ -321,6 +321,83 @@ export function serializeDungeonMapDocument(document) {
     return JSON.stringify(normalizeDungeonMapDocument(document, document?.site), null, 2);
 }
 
+function formatMapAsset(asset, areasById) {
+    const tags = [asset.kind, asset.state, asset.knowledge].filter(Boolean).join(' / ');
+    const lines = [`- ${asset.name} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
+    const metadata = [];
+    if (asset.behavior) metadata.push(`Behavior: ${asset.behavior}`);
+    if (asset.route?.length) {
+        metadata.push(`Route: ${asset.route.map(id => areasById.get(id)?.name || id).join(' -> ')}`);
+    }
+    if (asset.faction) metadata.push(`Faction: ${asset.faction}`);
+    if (asset.owner) metadata.push(`Owner: ${asset.owner}`);
+    if (asset.duration) metadata.push(`Duration: ${asset.duration}`);
+    if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`Origin: ${asset.origin}`);
+    if (asset.last_location) metadata.push(`Last location: ${areasById.get(asset.last_location)?.name || asset.last_location}`);
+    if (metadata.length) lines.push(`  ${metadata.join('; ')}`);
+    return lines;
+}
+
+function formatMapRoutes(document, areasById) {
+    const routes = [];
+    const seen = new Set();
+    for (const area of document.areas) {
+        for (const connection of area.connections || []) {
+            const target = areasById.get(connection.to);
+            if (!target) continue;
+            const reverse = (target.connections || []).find(candidate =>
+                candidate.to === area.id
+                && candidate.state === connection.state
+                && String(candidate.detail || '') === String(connection.detail || ''));
+            const pairKey = [area.id, target.id].sort().join('|');
+            const key = reverse ? `pair:${pairKey}:${connection.state}:${connection.detail || ''}` : `one:${area.id}:${target.id}:${connection.state}:${connection.detail || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const arrow = reverse ? '<->' : '->';
+            routes.push(`- ${area.name} ${arrow} ${target.name} [${connection.state}]${connection.detail ? ` — ${connection.detail}` : ''}`);
+        }
+    }
+    return routes;
+}
+
+/**
+ * Render a structured current map as compact adjudication prose. The stored JSON
+ * remains authoritative for Lorebook Agent tools; this representation is for
+ * humans and the narrator, where field names/braces/IDs are needless token cost.
+ */
+export function formatDungeonMapForNarrator(documentOrContent, siteFallback = '') {
+    const document = typeof documentOrContent === 'string'
+        ? parseDungeonMapDocument(documentOrContent, siteFallback).document
+        : normalizeDungeonMapDocument(documentOrContent, siteFallback || documentOrContent?.site);
+    const areasById = new Map(document.areas.map(area => [area.id, area]));
+    const assetsByArea = new Map(document.areas.map(area => [area.id, []]));
+    const unplacedAssets = [];
+    for (const asset of document.assets) {
+        const bucket = asset.location ? assetsByArea.get(asset.location) : null;
+        if (bucket) bucket.push(asset);
+        else unplacedAssets.push(asset);
+    }
+
+    const lines = [`Dungeon Site: ${document.site}`];
+    const routes = formatMapRoutes(document, areasById);
+    if (routes.length) lines.push('', 'Routes:', ...routes);
+
+    for (const area of document.areas) {
+        lines.push('', `Area: ${area.name} [${area.knowledge}]`);
+        for (const fact of area.geometry) lines.push(`- ${fact}`);
+        const assets = assetsByArea.get(area.id) || [];
+        if (assets.length) {
+            lines.push('Assets:');
+            for (const asset of assets) lines.push(...formatMapAsset(asset, areasById));
+        }
+    }
+    if (unplacedAssets.length) {
+        lines.push('', 'Removed / unplaced assets:');
+        for (const asset of unplacedAssets) lines.push(...formatMapAsset(asset, areasById));
+    }
+    return lines.join('\n').trim();
+}
+
 /** Replace only the private map section, retaining [CORE] and visible chronicles. */
 export function replaceDungeonMapSection(content, mapBody) {
     const body = String(mapBody || '').trim();
@@ -1455,15 +1532,22 @@ function renderStatusEntry(entry) {
     return `- ${entry.type === 'addition' ? 'ADDITION' : 'MUTATION'} — ${label}${detail ? `: ${detail}` : ''}`;
 }
 
+function extractPlayerObservableChronicle(content) {
+    return stripDungeonMapSection(content)
+        .replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '')
+        .trim();
+}
+
 /** Build the correctness-critical system block injected while inside the site. */
 export function buildDungeonRealityInjection(site, currentLocation) {
     if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) return '';
     const chunks = site.mapChunks
-        .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${chunk}`)
+        .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${formatDungeonMapForNarrator(chunk, site.siteRoot)}`)
         .join('\n\n');
     const locationState = (site.locationEntries || [])
-        .filter(entry => entry?.content)
-        .map(entry => `### ${entry.label}\n${entry.content}`)
+        .map(entry => ({ ...entry, chronicle: extractPlayerObservableChronicle(entry?.content) }))
+        .filter(entry => entry.chronicle)
+        .map(entry => `### ${entry.label}\n${entry.chronicle}`)
         .join('\n\n');
     const legacyDeltas = (site.statusLog || []).map(renderStatusEntry).filter(Boolean);
     const persistedState = locationState

@@ -35,6 +35,10 @@ describe('panel builder', () => {
         expect(source).toContain('rt-dungeon-map-badge');
         expect(source).toContain('View private dungeon map attached to this root Location');
         expect(source).toContain('openDungeonMapPopup');
+        expect(source).toContain('renderDungeonMapReadableHtml');
+        expect(source).toContain('data-map-view="readable"');
+        expect(source).toContain('data-map-view="raw"');
+        expect(source).toContain('Raw JSON');
         expect(source).toContain('stripDungeonMapSection(item.content');
     });
 });

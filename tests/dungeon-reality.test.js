@@ -12,6 +12,7 @@ import {
     extractHiddenDungeonDeltaBlocks,
     extractHiddenDungeonMapBlocks,
     findLatestDungeonLocation,
+    formatDungeonMapForNarrator,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
     migrateDungeonMapAttachmentToContent,
@@ -128,6 +129,26 @@ Area: Ossuary Behind Rotten Tapestry
             location: 'crypt-passage-east',
             state: 'ACTIVE',
         }));
+    });
+
+    it('renders structured maps as compact prose with visible assets and deduplicated routes', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [
+                { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['Low oak beams cross the ceiling.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'Iron-banded door' }] },
+                { id: 'crypt', name: 'Crypt Passage', knowledge: 'DISCOVERED', geometry: ['A collapsed arch provides cover.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'Iron-banded door' }] },
+            ],
+            assets: [{ id: 'ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains beneath the arch.', origin: 'INITIAL_MAP' }],
+        };
+        const raw = JSON.stringify(map, null, 2);
+        const readable = formatDungeonMapForNarrator(map);
+        expect(readable).toContain('Area: Cellar Landing [VISITED]');
+        expect(readable).toContain('Cellar Landing <-> Crypt Passage [OPEN] — Iron-banded door');
+        expect(readable.match(/Cellar Landing <-> Crypt Passage/g)).toHaveLength(1);
+        expect(readable).toContain('Crypt Ghoul [CREATURE / DESTROYED / KNOWN] — Smoldering remains beneath the arch.');
+        expect(readable).not.toContain('"version"');
+        expect(readable.length).toBeLessThan(raw.length * 0.7);
     });
 
     it('uses explicit child chronicles once when establishing current state from a legacy map', () => {
@@ -324,6 +345,8 @@ Area: Ossuary Behind Rotten Tapestry
         const injection = buildDungeonRealityInjection(site, 'Varnholde Crypts, Main Chamber');
         expect(injection).toContain('The altar was scorched.');
         expect(injection.match(/A desecrated altar\./g)).toHaveLength(1);
+        expect(injection).not.toContain('A stone chamber.');
+        expect(injection).not.toContain('A mapped crypt.');
         expect(injection).not.toContain('A market.');
         expect(resolveActiveDungeonSite(state, 'Oakbridge, Market')).toBeNull();
     });
@@ -471,9 +494,30 @@ The last guard falls and a loose stone reveals a niche.
         site.statusLog.push({ type: 'mutation', label: 'Lift', state: 'disabled' });
         const injection = buildDungeonRealityInjection(site, 'Ember Mine, Lower Shaft');
         expect(injection).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
-        expect(injection).toContain(captured);
+        expect(injection).toContain('Dungeon Site: Ember Mine');
+        expect(injection).toContain('Area: Lift [UNREVEALED]');
+        expect(injection).toContain('The cable is frayed.');
         expect(injection).toContain('MUTATION — Lift: disabled');
         expect(injection).toContain('Do not treat it as a menu of allowed actions');
+    });
+
+    it('never sends stored structured JSON to the narrator', () => {
+        const raw = JSON.stringify({
+            version: 3,
+            site: 'Blackglass Vault',
+            areas: [{ id: 'entry', name: 'Entry Lock', knowledge: 'VISITED', geometry: ['A narrow stone lock chamber.'], connections: [] }],
+            assets: [{ id: 'needle', kind: 'TRAP', name: 'Poison Needle', location: 'entry', state: 'ARMED', knowledge: 'SUSPECTED', detail: 'Set inside the lock.', origin: 'INITIAL_MAP' }],
+        }, null, 2);
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Blackglass Vault',
+            mapChunks: [raw],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Blackglass Vault, Entry Lock');
+        expect(injection).toContain('Poison Needle [TRAP / ARMED / SUSPECTED]');
+        expect(injection).not.toContain('"version"');
+        expect(injection).not.toContain('"assets"');
+        expect(injection.length).toBeLessThan(raw.length + 900);
     });
 
     it('strips a valid captured delta cue but keeps malformed or uncaptured cues', () => {
