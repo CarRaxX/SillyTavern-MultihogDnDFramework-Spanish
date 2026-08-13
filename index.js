@@ -1672,6 +1672,9 @@ function onChatChanged(newChatId) {
     // Portraits and location images are always chat-owned, even when broader Chat Link is off.
     snapshotPortraitMapsForChat(s, oldChatId);
 
+    // Redo stack is in-memory and chat-scoped; never replay another chat's pass here.
+    runtimeState.loreRedoStack = [];
+
     runtimeState.currentChatId = resolvedId;
 
     // Snapshot the departing chat's state BEFORE resetRouterTick mutates shared pools.

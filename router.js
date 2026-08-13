@@ -15,6 +15,7 @@ import {
     bookBelongsToCampaignPrefix as bookBelongsToPrefix,
     getCreatedLorebookNames,
     getLorebookSnapshotNames,
+    isLoreHistoryEntryForChat,
 } from './src/state/lorebook-history.js';
 
 let _routerRunning = false;
@@ -2507,10 +2508,21 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
 
     const snapshot = history[index];
     if (!snapshot) return false;
+    const activeChatId = getRouterChatId(ctx);
+    const livePrefix = getLivePrefix();
+    if (!isLoreHistoryEntryForChat(snapshot, { chatId: activeChatId, campaignPrefix: livePrefix })) {
+        console.warn('[RPG Tracker] Rollback refused: history entry belongs to a different chat/campaign.', {
+            entryChatId: snapshot.chatId ?? null,
+            activeChatId,
+            entryPrefix: snapshot.campaignPrefix || '',
+            livePrefix,
+        });
+        return false;
+    }
     let safeRecoveryState = recoveryState;
 
     try {
-        const prefix = snapshot.campaignPrefix || getLivePrefix();
+        const prefix = snapshot.campaignPrefix || livePrefix;
 
         // -- Step 1: Delete lorebooks proven to be CREATED during the pass ------
         // The stored campaign prefix and exact modern delta keep unrelated books
@@ -2587,6 +2599,19 @@ export async function reapplyRouterPass(prePassSnapshot, postPassState) {
     const ctx = SillyTavern.getContext();
     const originalHistory = [...(settings.routerHistory || [])];
     let safeRecoveryState = null;
+    const activeChatId = getRouterChatId(ctx);
+    const livePrefix = getLivePrefix();
+    const scopeEntry = prePassSnapshot || postPassState;
+    if (!isLoreHistoryEntryForChat(scopeEntry, { chatId: activeChatId, campaignPrefix: livePrefix })
+        && !isLoreHistoryEntryForChat(postPassState, { chatId: activeChatId, campaignPrefix: livePrefix })) {
+        console.warn('[RPG Tracker] Redo refused: history entry belongs to a different chat/campaign.', {
+            entryChatId: scopeEntry?.chatId ?? postPassState?.chatId ?? null,
+            activeChatId,
+            entryPrefix: scopeEntry?.campaignPrefix || postPassState?.campaignPrefix || '',
+            livePrefix,
+        });
+        return false;
+    }
 
     try {
         safeRecoveryState = await captureRouterLoreState();
@@ -2596,7 +2621,7 @@ export async function reapplyRouterPass(prePassSnapshot, postPassState) {
         if (settings.routerHistory.length > 5) settings.routerHistory.length = 5;
 
         // Re-delete only books the original pass is known to have deleted.
-        const prefix = postPassState.campaignPrefix || prePassSnapshot.campaignPrefix || getLivePrefix();
+        const prefix = postPassState.campaignPrefix || prePassSnapshot.campaignPrefix || livePrefix;
         const deletedBookNames = Array.isArray(prePassSnapshot.deletedBookNames)
             ? prePassSnapshot.deletedBookNames.filter(name => prefix && bookBelongsToPrefix(name, prefix) && !isSkeletonBookName(name))
             : [];

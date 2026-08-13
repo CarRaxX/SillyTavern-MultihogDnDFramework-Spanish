@@ -1,4 +1,24 @@
 import { runtimeState } from '../../app/runtime-state.js';
+import {
+    findLoreHistoryIndexForChat,
+    isLoreHistoryEntryForChat,
+} from '../../state/lorebook-history.js';
+
+function getActiveLoreHistoryScope(settings = {}) {
+    const chatId = runtimeState.currentChatId
+        || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null)
+        || (typeof SillyTavern !== 'undefined' ? SillyTavern.getContext()?.chatId : null)
+        || null;
+    return {
+        chatId,
+        campaignPrefix: settings.routerCampaignPrefix || '',
+    };
+}
+
+function getScopedRedoEntries(scope) {
+    return (runtimeState.loreRedoStack || []).filter(entry =>
+        isLoreHistoryEntryForChat(entry?.prePassSnapshot || entry?.postPassState, scope));
+}
 
 /** Wires Lorebook Agent history, active-key refresh, and last-run status controls. */
 export function wireAgentActivity({
@@ -17,9 +37,10 @@ export function wireAgentActivity({
 
     const syncAgentNav = () => {
         const s = getSettings();
-        const histLen = (s.routerHistory || []).length;
-        const redoLen = runtimeState.loreRedoStack.length;
-        if (agentNavBack) agentNavBack.disabled = histLen === 0;
+        const scope = getActiveLoreHistoryScope(s);
+        const histIdx = findLoreHistoryIndexForChat(s.routerHistory || [], scope);
+        const redoLen = getScopedRedoEntries(scope).length;
+        if (agentNavBack) agentNavBack.disabled = histIdx < 0;
         if (agentNavFwd) agentNavFwd.disabled = redoLen === 0;
         if (agentNavLabel) {
             if (redoLen === 0) {
@@ -36,13 +57,15 @@ export function wireAgentActivity({
     if (agentNavBack) {
         agentNavBack.addEventListener('click', async () => {
             const s = getSettings();
-            if (!(s.routerHistory || []).length) return;
+            const scope = getActiveLoreHistoryScope(s);
+            const histIdx = findLoreHistoryIndexForChat(s.routerHistory || [], scope);
+            if (histIdx < 0) return;
             agentNavBack.disabled = true;
             if (agentNavFwd) agentNavFwd.disabled = true;
-            const histEntry = s.routerHistory[0];
+            const histEntry = s.routerHistory[histIdx];
             try {
                 const postPassState = await captureRouterLoreState();
-                const ok = await rollbackRouterPass(0, postPassState);
+                const ok = await rollbackRouterPass(histIdx, postPassState);
                 if (ok) {
                     runtimeState.loreRedoStack.push({ prePassSnapshot: histEntry, postPassState });
                 } else {
@@ -59,10 +82,15 @@ export function wireAgentActivity({
 
     if (agentNavFwd) {
         agentNavFwd.addEventListener('click', async () => {
-            if (!runtimeState.loreRedoStack.length) return;
+            const s = getSettings();
+            const scope = getActiveLoreHistoryScope(s);
+            const scopedRedo = getScopedRedoEntries(scope);
+            if (!scopedRedo.length) return;
             if (agentNavBack) agentNavBack.disabled = true;
             agentNavFwd.disabled = true;
-            const redoEntry = runtimeState.loreRedoStack.pop();
+            const redoEntry = scopedRedo[scopedRedo.length - 1];
+            const stackIdx = runtimeState.loreRedoStack.lastIndexOf(redoEntry);
+            if (stackIdx >= 0) runtimeState.loreRedoStack.splice(stackIdx, 1);
             const ok = await reapplyRouterPass(redoEntry.prePassSnapshot, redoEntry.postPassState);
             if (!ok) {
                 runtimeState.loreRedoStack.push(redoEntry);
