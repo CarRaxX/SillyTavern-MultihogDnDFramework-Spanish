@@ -209,6 +209,17 @@ export async function onChatRenamedMigrate(detail, deps) {
         // Already under new key (e.g. Branch Campaign seeded then renamed).
     }
 
+    if (migratedPartition) {
+        for (const entry of Array.isArray(s.routerHistory) ? s.routerHistory : []) {
+            if (String(entry?.chatId || '') === oldId) entry.chatId = newId;
+        }
+        for (const redoEntry of runtimeState.loreRedoStack || []) {
+            for (const state of [redoEntry?.prePassSnapshot, redoEntry?.postPassState]) {
+                if (String(state?.chatId || '') === oldId) state.chatId = newId;
+            }
+        }
+    }
+
     // A genuine partition collision may represent two different chats, so keep
     // both local-map entries untouched. Otherwise move only into an unused key;
     // moveLocalChatMapEntry itself preserves both sides on a local-only collision.
