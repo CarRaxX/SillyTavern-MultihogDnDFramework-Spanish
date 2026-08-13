@@ -19,6 +19,20 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 - **Reliable Map Architect tool calls**: Main API map creation now reads the untouched provider response, bypassing both unsupported provider-level JSON schemas (`Bad Request`) and SillyTavern dialogue cleanup (`No message generated`). Connection Profile, Ollama, and direct OpenAI-compatible modes retain structured-output support.
 - **No immediate retry loops**: Architect transport, configuration, validation, and persistence failures are now real tool errors. The narrator remains outside the site and must not retry the tool during the same turn.
 
+## [7.25.1] - 2026-08-13
+
+### Fixed
+- **Safe campaign cloning**: Clone Stack and Branch Campaign now abort before writing when a destination lorebook already exists, preventing whole-book overwrite and cleanup of pre-existing books.
+- **Chat-scoped Lorebook Agent history**: Undo and redo now operate only on the active chat, preserve other chats' history, reject mismatched redo snapshots, and follow safe chat renames.
+
+## [7.25.0] - 2026-08-13
+
+### Changed
+- **Optional Instant Action starter message**: A **Send Starter Message?** checkbox sits below Player Card length. It is on by default so Instant Action still opens the campaign automatically; uncheck it if you want to type your own first action.
+
+### Fixed
+- **Instant Action honors Initial Setup level and class**: A requested level such as "A level 7 ranger" now overrides the Other Ways level dropdown. The prompt no longer forces `STARTING LEVEL: 6` as mandatory when Initial Setup asked for a different level, and the random archetype is treated as a fallback when a class is specified.
+
 ## [7.20.1] - 2026-08-12
 
 ### Changed

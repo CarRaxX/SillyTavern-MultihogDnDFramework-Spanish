@@ -1158,11 +1158,14 @@ export function resolveOnboardingLevelPreference(raw) {
 }
 
 /** Prompt fragment requiring an [XP] block for onboarding character creation. */
-export function buildOnboardingXpHint(level) {
+export function buildOnboardingXpHint(level, opts = {}) {
     const { level: lvl, currentXp, nextXp } = getOnboardingLevelXpValues(level);
     const fmt = (n) => n.toLocaleString('en-US');
+    const overrideNote = opts.allowInitialSetupOverride
+        ? ' If the Initial Setup specifies or clearly implies a different level, use that level in this block instead (with the matching threshold from the table below) and scale the character to it.'
+        : '';
     return `\n\nMANDATORY [XP] BLOCK — DO NOT OMIT:
-The character MUST be Level ${lvl}. Output an [XP] block using exactly this format:
+The character MUST be Level ${lvl}.${overrideNote} Output an [XP] block using exactly this format:
 [XP]
 Level: ${lvl} | XP: ${fmt(currentXp)}/${fmt(nextXp)}
 [/XP]

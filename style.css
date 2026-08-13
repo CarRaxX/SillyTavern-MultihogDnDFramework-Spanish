@@ -2282,16 +2282,48 @@
 .rt-quickstart-player-card-length select,
 .rt-quickstart-player-card-length input {
     box-sizing: border-box;
-    height: 30px;
+    width: auto;
+    height: 22px;
+    min-height: 22px;
     min-width: 92px;
-    padding: 3px 6px;
-    border-radius: 5px;
+    margin: 0;
+    padding: 2px 4px;
+    border-radius: 4px;
     font-size: 11px;
+    line-height: 1.2;
 }
 
 .rt-quickstart-player-card-length input {
     width: 76px;
     min-width: 76px;
+}
+
+.rt-quickstart-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rt-quickstart-starter-message {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--rt-text, #e8e4f5);
+    font-size: 0.78em;
+}
+
+.rt-quickstart-starter-message label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 650;
+    cursor: pointer;
+    user-select: none;
+}
+
+.rt-quickstart-starter-message input {
+    margin: 0;
+    cursor: pointer;
 }
 
 .rt-quickstart-roll-btn,

@@ -1987,7 +1987,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Instant Action</div>
-                    <div class="rt-quickstart-sub">Choose a genre, optionally enter a name or Initial Setup, then begin. Leave the name blank to let the AI choose it. The extension uses your Narrator Configuration, rolls everything you leave unspecified, builds a Lorebook Agent Player Card plus a name-only ST persona, and starts the adventure.</div>
+                    <div class="rt-quickstart-sub">Choose a genre, optionally enter a name or Initial Setup, then begin. Leave the name blank to let the AI choose it. The extension uses your Narrator Configuration, rolls everything you leave unspecified, and builds a Lorebook Agent Player Card plus a name-only ST persona. Uncheck Send Starter Message if you want to type your own first action instead of letting the AI open the campaign.</div>
                     <div class="rt-quickstart-genres" role="group" aria-label="Quick Start genre">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasy</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Modern</button>
@@ -2003,16 +2003,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <small>Guide the character, setting, premise, or tone. Anything left unspecified is still randomized.</small>
                     </label>
                     <textarea class="rt-quickstart-instructions" id="rt-quickstart-instructions" rows="2" maxlength="1000" placeholder="e.g. A 28-year-old female ranger with a crossbow, starting in a storm-battered frontier town" aria-label="Optional Instant Action Initial Setup"></textarea>
-                    <div class="rt-quickstart-player-card-length">
-                        <label for="rt-quickstart-persona-words">Player Card length</label>
-                        <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Instant Action Player Card word count">
-                            ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
-                                const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
-                                return `<option value="${n}"${selected}>${n} words</option>`;
-                            }).join('')}
-                            <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Custom…</option>
-                        </select>
-                        <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Custom Instant Action Player Card word count" />
+                    <div class="rt-quickstart-options">
+                        <div class="rt-quickstart-player-card-length">
+                            <label for="rt-quickstart-persona-words">Player Card length</label>
+                            <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Instant Action Player Card word count">
+                                ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
+                                    const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
+                                    return `<option value="${n}"${selected}>${n} words</option>`;
+                                }).join('')}
+                                <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Custom…</option>
+                            </select>
+                            <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Custom Instant Action Player Card word count" />
+                        </div>
+                        <div class="rt-quickstart-starter-message">
+                            <label for="rt-quickstart-send-starter" title="If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.">
+                                <span>Send Starter Message?</span>
+                                <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''} aria-label="Send Starter Message" />
+                            </label>
+                            <span class="rt-cr-help-icon" title="If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.">?</span>
+                        </div>
                     </div>
                     <button type="button" class="rt-quickstart-begin-btn" id="rt-quickstart-begin" disabled>⚡ Begin Instant Action</button>
                     <div class="rt-quickstart-status" id="rt-quickstart-status">Select a genre to begin</div>

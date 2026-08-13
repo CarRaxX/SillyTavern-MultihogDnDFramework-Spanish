@@ -1343,8 +1343,13 @@ async function activateCampaignBooks(opts = {}) {
 async function cloneCampaignStack() {
     const s = getSettings();
     const ctx = SillyTavern.getContext();
+    const liveChatId = ctx.getCurrentChatId?.() || ctx.chatId || runtimeState.currentChatId || '';
 
-    const currentPrefix = s.routerCampaignPrefix || '';
+    const currentPrefix = (
+        getEffectiveRouterCampaignPrefix(liveChatId)
+        || s.routerCampaignPrefix
+        || ''
+    ).trim();
     if (!currentPrefix) {
         toastr['warning']('No campaign prefix is active. Activate the Lorebook Agent and load a chat first.', 'Clone Stack');
         return;
@@ -1369,7 +1374,7 @@ async function cloneCampaignStack() {
         toastr['warning']('New prefix cannot be empty or contain only special characters.', 'Clone Stack');
         return;
     }
-    if (newPrefix === currentPrefix) {
+    if (newPrefix.toLowerCase() === currentPrefix.toLowerCase()) {
         toastr['warning']('New prefix is the same as the current prefix. Please choose a different name.', 'Clone Stack');
         return;
     }
@@ -1379,6 +1384,16 @@ async function cloneCampaignStack() {
 
     if (result.matchingCount === 0) {
         toastr['warning'](`No lorebooks found for prefix "${currentPrefix}". Nothing to clone.`, 'Clone Stack');
+        return;
+    }
+
+    if (result.collisions?.length) {
+        toastr['error'](
+            `Clone aborted to protect existing lorebooks:\n${result.collisions.join(', ')}\n`
+            + 'Choose a different prefix, or rename/delete the conflicting books first.',
+            'Clone Stack',
+            { timeOut: 12000 }
+        );
         return;
     }
 
@@ -1673,6 +1688,9 @@ function onChatChanged(newChatId) {
 
     // Portraits and location images are always chat-owned, even when broader Chat Link is off.
     snapshotPortraitMapsForChat(s, oldChatId);
+
+    // Redo stack is in-memory and chat-scoped; never replay another chat's pass here.
+    runtimeState.loreRedoStack = [];
 
     runtimeState.currentChatId = resolvedId;
     runtimeState.hasActiveDungeonMap = false;

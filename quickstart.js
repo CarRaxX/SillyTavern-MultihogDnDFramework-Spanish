@@ -169,11 +169,14 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
         setQuickStartStatus(root, 'Creating name-only chat persona…');
         await activateSillyTavernPersona(charName);
 
-        setQuickStartStatus(root, 'Starting adventure…');
-        sendOutgoingChatMessage(buildInstantActionOpeningMessage(instantActionInstructions));
-
         const readyDetail = instantActionInstructions ? 'custom instructions' : className;
-        setQuickStartStatus(root, `Ready — ${charName} (${readyDetail})`);
+        if (s.onboardingSendStarterMessage !== false) {
+            setQuickStartStatus(root, 'Starting adventure…');
+            sendOutgoingChatMessage(buildInstantActionOpeningMessage(instantActionInstructions));
+            setQuickStartStatus(root, `Ready — ${charName} (${readyDetail})`);
+        } else {
+            setQuickStartStatus(root, `Ready — ${charName} (${readyDetail}). Type your first action.`);
+        }
         toastr['success'](`Quick Start ready: ${charName} · ${readyDetail}`, 'Quick Start');
     } catch (err) {
         const msg = err?.message || String(err);
@@ -203,14 +206,16 @@ export function bindQuickStartEvents(rootEl) {
     const instructionsInput = /** @type {HTMLTextAreaElement|null} */ (section.querySelector('#rt-quickstart-instructions'));
     const wordCountSelect = /** @type {HTMLSelectElement|null} */ (section.querySelector('#rt-quickstart-persona-words'));
     const wordCountCustom = /** @type {HTMLInputElement|null} */ (section.querySelector('#rt-quickstart-persona-words-custom'));
+    const sendStarterCheckbox = /** @type {HTMLInputElement|null} */ (section.querySelector('#rt-quickstart-send-starter'));
     let selectedGenre = '';
     let selectedName = '';
 
-    const persistWordCount = () => {
+    const persistQuickStartOptions = () => {
         const s = getSettings();
         if (wordCountSelect) s.onboardingPersonaWords = wordCountSelect.value || '150';
         if (wordCountCustom) s.onboardingPersonaWordsCustom = wordCountCustom.value;
         if (wordCountCustom) wordCountCustom.style.display = wordCountSelect?.value === 'other' ? 'block' : 'none';
+        if (sendStarterCheckbox) s.onboardingSendStarterMessage = !!sendStarterCheckbox.checked;
         saveSettings();
     };
 
@@ -249,14 +254,15 @@ export function bindQuickStartEvents(rootEl) {
         }
     });
 
-    wordCountSelect?.addEventListener('change', persistWordCount);
-    wordCountCustom?.addEventListener('input', persistWordCount);
+    wordCountSelect?.addEventListener('change', persistQuickStartOptions);
+    wordCountCustom?.addEventListener('input', persistQuickStartOptions);
+    sendStarterCheckbox?.addEventListener('change', persistQuickStartOptions);
 
     startButton?.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (!selectedGenre) return;
-        persistWordCount();
+        persistQuickStartOptions();
         void runQuickStart(selectedGenre, rootEl, selectedName, instructionsInput?.value || '');
     });
 }
