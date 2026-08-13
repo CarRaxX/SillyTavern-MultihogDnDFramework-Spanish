@@ -58,7 +58,7 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         for (const source of sources) expect(source).not.toMatch(abbreviatedDamage);
     });
 
-    it('ships the one-time map and Lorebook Agent ownership contract in both narrator prompts', () => {
+    it('ships the short Map Architect and Lorebook Agent ownership contract in both narrator prompts', () => {
         const sources = [
             RT_PROMPTS['sysprompt.txt'],
             RT_PROMPTS['sysprompt_legacy.txt'],
@@ -67,11 +67,11 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         ];
 
         for (const source of sources) {
-            expect(source).toContain('<div hidden data-dungeon-map>');
-            expect(source).toContain('Emit exactly one complete initial map');
-            expect(source).toContain('one valid JSON object');
-            expect(source).toContain('Put every mutable or movable thing in top-level `assets`');
-            expect(source).toContain('Do not emit follow-up map chunks or `data-dungeon-delta` blocks');
+            expect(source).toContain('call `CreateDungeonMap` exactly once');
+            expect(source).toContain('Do not design or emit the hidden map yourself');
+            expect(source).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
+            expect(source).not.toContain('<div hidden data-dungeon-map>');
+            expect(source).not.toContain('one valid JSON object');
             expect(source).toContain('Lorebook Agent owns validated current-map updates');
         }
     });

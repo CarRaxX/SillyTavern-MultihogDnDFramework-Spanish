@@ -308,6 +308,187 @@ export function normalizeDungeonMapDocument(raw, siteFallback = '') {
     return { version: DUNGEON_MAP_FORMAT_VERSION, site, areas, assets };
 }
 
+function architectureError(code, path, received, hint) {
+    return { code, path, received, hint };
+}
+
+/**
+ * Strictly validate a newly generated map before it becomes campaign canon.
+ * Unlike normalizeDungeonMapDocument(), this never repairs missing topology or
+ * silently invents IDs: the Map Architect gets actionable errors and retries.
+ */
+export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', scale = '' } = {}) {
+    const errors = [];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return {
+            valid: false,
+            errors: [architectureError('INVALID_DOCUMENT', '$', raw, 'Output one JSON object with version, site, areas, and assets.')],
+            document: null,
+        };
+    }
+
+    const allowedTop = new Set(['version', 'site', 'areas', 'assets']);
+    for (const key of Object.keys(raw)) {
+        if (!allowedTop.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `$.${key}`, raw[key], `Remove unsupported top-level field "${key}".`));
+    }
+    if (raw.version !== DUNGEON_MAP_FORMAT_VERSION) {
+        errors.push(architectureError('INVALID_VERSION', '$.version', raw.version, `Use numeric version ${DUNGEON_MAP_FORMAT_VERSION}.`));
+    }
+    const rawSite = typeof raw.site === 'string' ? raw.site.trim() : '';
+    if (!rawSite) errors.push(architectureError('MISSING_SITE', '$.site', raw.site, 'Supply the exact site root as a non-empty string.'));
+    const exactSiteMatches = rawSite.replace(/\s+/g, ' ').toLocaleLowerCase() === String(site || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    if (site && rawSite && !exactSiteMatches) {
+        errors.push(architectureError('SITE_MISMATCH', '$.site', raw.site, `Use the requested site root exactly: "${site}".`));
+    }
+    if (!Array.isArray(raw.areas) || raw.areas.length < 2) {
+        errors.push(architectureError('TOO_FEW_AREAS', '$.areas', raw.areas, 'Supply at least two connected areas.'));
+    }
+    if (!Array.isArray(raw.assets)) {
+        errors.push(architectureError('INVALID_ASSETS', '$.assets', raw.assets, 'Supply an assets array; use [] when there are no assets.'));
+    }
+
+    const areas = Array.isArray(raw.areas) ? raw.areas : [];
+    const scaleBounds = {
+        SMALL: [4, 7],
+        MEDIUM: [7, 12],
+        LARGE: [12, 20],
+    }[String(scale || '').toUpperCase()];
+    if (scaleBounds && (areas.length < scaleBounds[0] || areas.length > scaleBounds[1])) {
+        errors.push(architectureError('SCALE_AREA_COUNT', '$.areas', areas.length, `${String(scale).toUpperCase()} maps require ${scaleBounds[0]}-${scaleBounds[1]} meaningful areas.`));
+    }
+    const areaIds = new Set();
+    const areaNames = new Set();
+    const allowedArea = new Set(['id', 'name', 'knowledge', 'geometry', 'connections']);
+    areas.forEach((area, index) => {
+        const path = `$.areas[${index}]`;
+        if (!area || typeof area !== 'object' || Array.isArray(area)) {
+            errors.push(architectureError('INVALID_AREA', path, area, 'Each area must be a JSON object.'));
+            return;
+        }
+        for (const key of Object.keys(area)) {
+            if (!allowedArea.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, area[key], `Remove unsupported area field "${key}".`));
+        }
+        const id = typeof area.id === 'string' ? area.id.trim() : '';
+        const name = typeof area.name === 'string' ? area.name.trim() : '';
+        if (!id || mapSlug(id) !== id) errors.push(architectureError('INVALID_AREA_ID', `${path}.id`, area.id, 'Use a non-empty stable kebab-case ID.'));
+        else if (areaIds.has(id)) errors.push(architectureError('DUPLICATE_AREA_ID', `${path}.id`, id, 'Every area ID must be unique.'));
+        else areaIds.add(id);
+        const nameKey = normalizeDungeonLabel(name);
+        if (!name) errors.push(architectureError('MISSING_AREA_NAME', `${path}.name`, area.name, 'Supply a short natural area name.'));
+        else if (areaNames.has(nameKey)) errors.push(architectureError('DUPLICATE_AREA_NAME', `${path}.name`, name, 'Every area name must be distinguishable.'));
+        else areaNames.add(nameKey);
+        if (!AREA_KNOWLEDGE.includes(area.knowledge)) errors.push(architectureError('INVALID_AREA_KNOWLEDGE', `${path}.knowledge`, area.knowledge, `Use one of: ${AREA_KNOWLEDGE.join(', ')}.`));
+        if (index === 0 && area.knowledge !== 'VISITED') errors.push(architectureError('ENTRANCE_NOT_VISITED', `${path}.knowledge`, area.knowledge, 'The first/entrance area must be VISITED.'));
+        if (index > 0 && area.knowledge === 'VISITED') errors.push(architectureError('PREMATURELY_VISITED', `${path}.knowledge`, area.knowledge, 'Only the entrance is VISITED on initial creation; use DISCOVERED or UNREVEALED.'));
+        if (index === 0 && entrance && name && !dungeonLabelsMatch(name, entrance)) {
+            errors.push(architectureError('ENTRANCE_MISMATCH', `${path}.name`, name, `The first area must match the requested entrance: "${entrance}".`));
+        }
+        if (!Array.isArray(area.geometry)) errors.push(architectureError('INVALID_GEOMETRY', `${path}.geometry`, area.geometry, 'Supply an array of durable geometry strings.'));
+        else area.geometry.forEach((fact, factIndex) => {
+            if (typeof fact !== 'string' || !fact.trim()) errors.push(architectureError('INVALID_GEOMETRY_FACT', `${path}.geometry[${factIndex}]`, fact, 'Geometry facts must be non-empty strings.'));
+        });
+        if (!Array.isArray(area.connections)) errors.push(architectureError('INVALID_CONNECTIONS', `${path}.connections`, area.connections, 'Supply a connections array.'));
+        else if (areas.length > 1 && area.connections.length === 0) errors.push(architectureError('AREA_WITHOUT_CONNECTION', `${path}.connections`, area.connections, 'Every area must have at least one route. Represent inaccessibility with LOCKED or BLOCKED, never by omitting passages.'));
+    });
+
+    const graph = new Map([...areaIds].map(id => [id, new Set()]));
+    areas.forEach((area, areaIndex) => {
+        if (!area || typeof area !== 'object' || !Array.isArray(area.connections)) return;
+        const from = String(area.id || '').trim();
+        const seenTargets = new Set();
+        area.connections.forEach((connection, connectionIndex) => {
+            const path = `$.areas[${areaIndex}].connections[${connectionIndex}]`;
+            if (!connection || typeof connection !== 'object' || Array.isArray(connection)) {
+                errors.push(architectureError('INVALID_CONNECTION', path, connection, 'Each connection must be an object with to, state, and detail.'));
+                return;
+            }
+            for (const key of Object.keys(connection)) {
+                if (!['to', 'state', 'detail'].includes(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, connection[key], `Remove unsupported connection field "${key}".`));
+            }
+            const to = typeof connection.to === 'string' ? connection.to.trim() : '';
+            if (!areaIds.has(to)) errors.push(architectureError('UNKNOWN_CONNECTION_TARGET', `${path}.to`, connection.to, 'Reference an existing area ID.'));
+            else if (to === from) errors.push(architectureError('SELF_CONNECTION', `${path}.to`, to, 'Connect to a different area.'));
+            else {
+                if (seenTargets.has(to)) errors.push(architectureError('DUPLICATE_CONNECTION', `${path}.to`, to, 'List each outgoing route only once.'));
+                seenTargets.add(to);
+                graph.get(from)?.add(to);
+            }
+            if (!CONNECTION_STATES.includes(connection.state)) errors.push(architectureError('INVALID_CONNECTION_STATE', `${path}.state`, connection.state, `Use one of: ${CONNECTION_STATES.join(', ')}.`));
+            if (typeof connection.detail !== 'string') errors.push(architectureError('INVALID_CONNECTION_DETAIL', `${path}.detail`, connection.detail, 'Supply a concise string; use "" when no detail is needed.'));
+        });
+    });
+
+    // Routes are physical topology even when CLOSED/LOCKED/BLOCKED. Every route
+    // must be reciprocal so an area can never become unreachable by omission.
+    areas.forEach((area, areaIndex) => {
+        for (const connection of Array.isArray(area?.connections) ? area.connections : []) {
+            const targetIndex = areas.findIndex(candidate => candidate?.id === connection?.to);
+            if (targetIndex < 0) continue;
+            const reverse = (areas[targetIndex].connections || []).find(candidate => candidate?.to === area.id);
+            if (!reverse) {
+                errors.push(architectureError('MISSING_RECIPROCAL_CONNECTION', `$.areas[${areaIndex}].connections`, connection.to, `Add the reverse connection from "${connection.to}" to "${area.id}" with the same state.`));
+            } else if (reverse.state !== connection.state) {
+                errors.push(architectureError('CONNECTION_STATE_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.state, `Use ${connection.state} in both directions.`));
+            } else if (String(reverse.detail || '') !== String(connection.detail || '')) {
+                errors.push(architectureError('CONNECTION_DETAIL_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.detail, 'Use the same route detail in both directions so the reciprocal passage has one canonical description.'));
+            }
+        }
+    });
+    if (areas[0]?.id && graph.has(areas[0].id)) {
+        const reached = new Set([areas[0].id]);
+        const queue = [areas[0].id];
+        while (queue.length) {
+            for (const target of graph.get(queue.shift()) || []) {
+                if (!reached.has(target)) { reached.add(target); queue.push(target); }
+            }
+        }
+        for (const area of areas) {
+            if (area?.id && !reached.has(area.id)) errors.push(architectureError('UNREACHABLE_AREA', '$.areas', area.id, 'Connect this area to the entrance graph. Use a LOCKED/BLOCKED route when access is initially prevented.'));
+        }
+    }
+
+    const assetIds = new Set();
+    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration']);
+    for (let index = 0; index < (Array.isArray(raw.assets) ? raw.assets.length : 0); index++) {
+        const asset = raw.assets[index];
+        const path = `$.assets[${index}]`;
+        if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
+            errors.push(architectureError('INVALID_ASSET', path, asset, 'Each asset must be a JSON object.'));
+            continue;
+        }
+        for (const key of Object.keys(asset)) {
+            if (!allowedAsset.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, asset[key], `Remove unsupported asset field "${key}".`));
+        }
+        const id = typeof asset.id === 'string' ? asset.id.trim() : '';
+        if (!id || mapSlug(id) !== id) errors.push(architectureError('INVALID_ASSET_ID', `${path}.id`, asset.id, 'Use a non-empty stable kebab-case ID.'));
+        else if (assetIds.has(id)) errors.push(architectureError('DUPLICATE_ASSET_ID', `${path}.id`, id, 'Every asset ID must be unique.'));
+        else assetIds.add(id);
+        if (typeof asset.name !== 'string' || !asset.name.trim()) errors.push(architectureError('MISSING_ASSET_NAME', `${path}.name`, asset.name, 'Supply a concise entity name.'));
+        if (!ASSET_KINDS.includes(asset.kind)) errors.push(architectureError('INVALID_ASSET_KIND', `${path}.kind`, asset.kind, `Use one of: ${ASSET_KINDS.join(', ')}.`));
+        if (!ASSET_STATES.includes(asset.state)) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        if (!ASSET_KNOWLEDGE.includes(asset.knowledge)) errors.push(architectureError('INVALID_ASSET_KNOWLEDGE', `${path}.knowledge`, asset.knowledge, `Use one of: ${ASSET_KNOWLEDGE.join(', ')}.`));
+        if (!areaIds.has(asset.location)) errors.push(architectureError('UNKNOWN_ASSET_LOCATION', `${path}.location`, asset.location, 'Place every initial asset in an existing area.'));
+        if (typeof asset.detail !== 'string') errors.push(architectureError('INVALID_ASSET_DETAIL', `${path}.detail`, asset.detail, 'Supply a concise string; use "" when no detail is needed.'));
+        if (asset.origin !== 'INITIAL_MAP') errors.push(architectureError('INVALID_ASSET_ORIGIN', `${path}.origin`, asset.origin, 'Initial Map Architect assets must use origin "INITIAL_MAP".'));
+        for (const field of ['behavior', 'faction', 'owner', 'duration']) {
+            if (asset[field] !== undefined && (typeof asset[field] !== 'string' || !asset[field].trim())) {
+                errors.push(architectureError('INVALID_ASSET_METADATA', `${path}.${field}`, asset[field], `Optional ${field} must be a non-empty string when present.`));
+            }
+        }
+        if (asset.route !== undefined) {
+            if (!Array.isArray(asset.route) || asset.route.some(ref => !areaIds.has(ref))) errors.push(architectureError('INVALID_ASSET_ROUTE', `${path}.route`, asset.route, 'Route must be an array containing only existing area IDs.'));
+        }
+    }
+
+    const document = errors.length === 0 ? normalizeDungeonMapDocument(raw, site || rawSite) : null;
+    if (document && site) document.site = String(site).trim();
+    return {
+        valid: errors.length === 0,
+        errors,
+        document,
+    };
+}
+
 /** Parse either a v3 JSON map or a legacy prose map without losing its facts. */
 export function parseDungeonMapDocument(content, siteFallback = '') {
     const structured = tryParseStructuredMap(content);

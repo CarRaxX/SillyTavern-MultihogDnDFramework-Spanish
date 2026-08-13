@@ -552,6 +552,110 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     };
 }
 
+/**
+ * Atomically attach a validated Map Architect document to its root Location.
+ * Existing maps always win: concurrent/repeated tool calls never overwrite canon.
+ */
+export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
+    const ctx = SillyTavern.getContext();
+    const settings = getSettings();
+    const prefix = getLivePrefix();
+    const site = String(siteRoot || '').trim();
+    if (!prefix) throw new Error('No campaign prefix is available for the Locations lorebook.');
+    if (!site) throw new Error('Map Architect requires an exact site root.');
+
+    const bookName = `${prefix}_Locations`;
+    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    if (!bookData) {
+        const knownNames = await getWorldInfoNamesSafe();
+        if (knownNames.includes(bookName)) {
+            throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
+        }
+        bookData = {
+            entries: {},
+            name: bookName,
+            scan_depth: 4,
+            token_budget: 400,
+            recursive: false,
+            extensions: {},
+        };
+    }
+
+    let rootEntry = Object.values(bookData.entries || {}).find(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonLabelsMatch(label, site);
+    });
+    const existing = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
+    if (existing) {
+        return {
+            bookName,
+            entryId: `${bookName}::${rootEntry.uid}`,
+            created: false,
+            existing: true,
+            document: parseDungeonMapDocument(existing.content, site).document,
+        };
+    }
+
+    if (!rootEntry) {
+        const uids = Object.keys(bookData.entries || {}).map(Number).filter(Number.isFinite);
+        const nextUid = uids.length ? Math.max(...uids) + 1 : 0;
+        rootEntry = {
+            uid: nextUid,
+            key: [site],
+            keysecondary: [],
+            comment: site,
+            content: `[CORE]\n${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.\n[/CORE]`,
+            constant: false,
+            selective: false,
+            selectiveLogic: 0,
+            addMemo: true,
+            order: settings.routerDefaultOrder ?? 100,
+            position: settings.routerDefaultPosition ?? 0,
+            disable: true,
+            probability: 100,
+            useProbability: false,
+            depth: settings.routerDefaultDepth ?? 4,
+            group: '',
+            groupOverride: false,
+            groupWeight: 100,
+            extensions: {},
+        };
+        bookData.entries[nextUid] = rootEntry;
+    }
+
+    if (!attachDungeonMapToLocationEntry(rootEntry, {
+        siteRoot: site,
+        content: serializeDungeonMapDocument(mapDocument),
+    })) {
+        throw new Error(`Could not attach the generated map to "${site}".`);
+    }
+    rootEntry.disable = true;
+    await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Map Architect persistence');
+
+    const chatId = ctx.chatId || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : '');
+    if (chatId) {
+        settings.chatStates = settings.chatStates || {};
+        settings.chatStates[chatId] = settings.chatStates[chatId] || {};
+        const campaignBooks = new Set(settings.chatStates[chatId].campaignBooks || []);
+        campaignBooks.add(bookName);
+        settings.chatStates[chatId].campaignBooks = [...campaignBooks];
+        void saveSettings();
+    }
+    if (typeof ctx.updateWorldInfoList === 'function') {
+        try { await ctx.updateWorldInfoList(); } catch (_) {}
+    }
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+
+    return {
+        bookName,
+        entryId: `${bookName}::${rootEntry.uid}`,
+        created: true,
+        existing: false,
+        document: mapDocument,
+    };
+}
+
 /** Captures the complete current campaign state for lossless redo. */
 export async function captureRouterLoreState() {
     const settings = getSettings();

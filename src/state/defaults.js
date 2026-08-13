@@ -7,6 +7,7 @@ import { MODULE_NAME } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
 import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
+import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -1346,6 +1347,30 @@ Rules:
         portraitLocationSystemPrompt: getDefaultPortraitLocationSystemPrompt(false),
 
         savedPortraitPromptPresets: {},
+
+        // Dedicated one-shot hidden site generator. The Dungeon Reality section
+        // toggle controls tool availability; these settings remain global.
+        mapArchitectLookback: 12,
+
+        mapArchitectMaxTokens: 6000,
+
+        mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
+
+        mapArchitectConnectionSource: "default",
+
+        mapArchitectConnectionProfileId: "",
+
+        mapArchitectCompletionPresetId: "",
+
+        mapArchitectOllamaUrl: "http://localhost:11434",
+
+        mapArchitectOllamaModel: "",
+
+        mapArchitectOpenaiUrl: "",
+
+        mapArchitectOpenaiKey: "",
+
+        mapArchitectOpenaiModel: "",
 
         worldConnectionSource: "default",
 

@@ -1,28 +1,35 @@
 # Dungeon Reality Mapping — Persistence Design
 
-**Status:** Structured current-state implementation complete
+**Status:** Structured current-state and dedicated Map Architect implementation complete
 
 **Related:** `<dungeon_reality_and_hidden_mapping>` narrator module and Lorebook Agent
 
-**Updated:** 2026-08-13
+**Updated:** 2026-08-14
 
 ## Problem
 
-The narrator creates an objective hidden map for a dangerous site so layout, enemies, traps, secrets, and environmental conditions exist before the player tests them. The map must survive chat pruning and remain deterministic while the party is inside the site.
+The narrator requests an objective hidden map for a dangerous site so layout, enemies, traps, secrets, and environmental conditions exist before the player tests them. A dedicated Map Architect creates it with its own model connection and prompt; the narrator's permanent prompt carries only the small tool-use contract. The map must survive chat pruning and remain deterministic while the party is inside the site.
 
 An immutable initial map plus append-only room updates creates two competing fact layers. For example, the original map may say a ghoul is active while a later child Location chronicle says it was destroyed. The current design instead makes `[MAP]` the current operational snapshot and keeps child Location entries as readable player-observable history.
 
 ## Authority model
 
-- The narrator establishes immediate fiction and creates the complete initial map.
+- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site.
+- Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
 - Lorebook Agent interprets established consequences and maintains current map state.
 - Player attempts become map facts only after narrator resolution.
 - Lorebook Agent may make a constrained off-screen reaction only after an established trigger and only for an asset with an explicit behavior or route.
 - Speculation never mutates the map.
 
-## Initial map format
+## Map Architect generation
 
-The narrator emits exactly one hidden JSON map:
+Map Architect receives the exact site root, entrance label, scale, premise, and a configurable recent-story lookback. It emits one version 3 JSON object internally. Before persistence, a strict validator checks the site and entrance, scale-appropriate area count, stable IDs, enum values, all references, reciprocal passages, and reachability of every area from the entrance. A locked or blocked destination remains part of the physical graph through a `LOCKED` or `BLOCKED` connection; inaccessible space is never represented by omitting its route.
+
+Invalid JSON or semantic errors are returned to Map Architect for up to two complete correction passes. A rejected map writes nothing. On success, JSON is stored directly in Lorebook Agent and only compact human-readable private canon is returned to the narrator. Repeated or concurrent calls preserve an already attached map instead of replacing it.
+
+## Legacy initial map format
+
+For campaign compatibility, the parser still accepts the earlier narrator-emitted hidden JSON map:
 
 ```html
 <div hidden data-dungeon-map>
@@ -98,7 +105,7 @@ Abbey Undercroft is a mapped site. Its private map stores current objective real
 [/MAP]
 ```
 
-The initial narrator map is write-once: later narrator outputs cannot replace it. After capture, only the validated Lorebook Agent map transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
+The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Lorebook Agent map transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
 
 The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing.
 
@@ -226,4 +233,4 @@ Ordinary exploration, perception checks, room combat, movement, traps, opened ro
 
 ## Verification
 
-Tests cover hidden wrappers, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, and the Lorebook Agent map indicator.
+Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, and the Lorebook Agent map indicator.

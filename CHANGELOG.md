@@ -2,6 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Dedicated Map Architect**: The narrator can call a one-shot private agent with its own prompt, connection profile, model, preset, lookback, and output budget to create dangerous-site maps.
+- **Initial-map validation and correction**: New maps are checked for valid JSON, exact site/entrance identity, scale, stable IDs, asset references, reciprocal passage details, and a fully connected physical graph. Invalid output receives up to two correction passes and is never partially saved.
+
+### Changed
+- **Lightweight narrator contract**: The full map-authoring specification is no longer carried in every GM prompt. A short `CreateDungeonMap` contract replaces it, while the dedicated agent stores validated JSON directly in the root Location entry and returns compact prose to the narrator.
+
 ## [7.20.1] - 2026-08-12
 
 ### Changed

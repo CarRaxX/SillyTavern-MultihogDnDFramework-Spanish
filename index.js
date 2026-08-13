@@ -4,7 +4,7 @@ import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSe
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride, isCombatActive } from './llm-client.js';
-import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
+import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerMapArchitectTool, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
 import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
@@ -50,6 +50,7 @@ import { buildCombatDisplayMemo } from './src/state/combat-persistence.js';
 import { isRealtimeVisualizationDisabled } from './src/state/realtime-visualization-guard.js';
 import { normalizeActivePersonaIdentity } from './src/state/player-identity.js';
 import { replacePromptArray, stripSupersededChoicesFromChatPrompt, stripSupersededChoicesFromTextPromptMessages } from './src/features/cyoa-prompt-history.js';
+import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 
 export { RENDERING_TAGS_LIBRARY };
 export { bindRenderedCardEvents };
@@ -2599,6 +2600,18 @@ function loadProfile(name) {
     s.portraitOpenaiKey = p.portraitOpenaiKey || "";
     s.portraitOpenaiModel = p.portraitOpenaiModel || "";
 
+    s.mapArchitectLookback = p.mapArchitectLookback ?? 12;
+    s.mapArchitectMaxTokens = p.mapArchitectMaxTokens ?? 6000;
+    s.mapArchitectSystemPrompt = p.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+    s.mapArchitectConnectionSource = p.mapArchitectConnectionSource ?? "default";
+    s.mapArchitectConnectionProfileId = p.mapArchitectConnectionProfileId || "";
+    s.mapArchitectCompletionPresetId = p.mapArchitectCompletionPresetId || "";
+    s.mapArchitectOllamaUrl = p.mapArchitectOllamaUrl || "http://localhost:11434";
+    s.mapArchitectOllamaModel = p.mapArchitectOllamaModel || "";
+    s.mapArchitectOpenaiUrl = p.mapArchitectOpenaiUrl || "";
+    s.mapArchitectOpenaiKey = p.mapArchitectOpenaiKey || "";
+    s.mapArchitectOpenaiModel = p.mapArchitectOpenaiModel || "";
+
     s.worldConnectionSource = p.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = p.worldConnectionProfileId || "";
     s.worldCompletionPresetId = p.worldCompletionPresetId || "";
@@ -2684,6 +2697,20 @@ function loadProfile(name) {
     $('#rpg_portrait_openai_model').val(s.portraitOpenaiModel || '');
     $('#rpg_portrait_openai_model_manual').val(s.portraitOpenaiModel || '');
 
+    // Sync Map Architect settings UI
+    $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
+    $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 6000);
+    $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
+    $('#rpg_map_architect_connection_source').val(s.mapArchitectConnectionSource || 'default');
+    $('#rpg_map_architect_connection_profile').val(s.mapArchitectConnectionProfileId || '');
+    $('#rpg_map_architect_completion_preset').val(s.mapArchitectCompletionPresetId || '');
+    $('#rpg_map_architect_ollama_url').val(s.mapArchitectOllamaUrl || 'http://localhost:11434');
+    $('#rpg_map_architect_ollama_model').val(s.mapArchitectOllamaModel || '');
+    $('#rpg_map_architect_openai_url').val(s.mapArchitectOpenaiUrl || '');
+    $('#rpg_map_architect_openai_key').val(s.mapArchitectOpenaiKey || '');
+    $('#rpg_map_architect_openai_model').val(s.mapArchitectOpenaiModel || '');
+    $('#rpg_map_architect_openai_model_manual').val(s.mapArchitectOpenaiModel || '');
+
     // Sync world progression connection settings UI
     $('#rpg_world_connection_source').val(s.worldConnectionSource || 'default');
     $('#rpg_world_connection_profile').val(s.worldConnectionProfileId || '');
@@ -2709,6 +2736,9 @@ function loadProfile(name) {
     $('#rpg_portrait_profile_group').toggle(s.portraitConnectionSource === 'profile');
     $('#rpg_portrait_ollama_group').toggle(s.portraitConnectionSource === 'ollama');
     $('#rpg_portrait_openai_group').toggle(s.portraitConnectionSource === 'openai');
+    $('#rpg_map_architect_profile_group').toggle(s.mapArchitectConnectionSource === 'profile');
+    $('#rpg_map_architect_ollama_group').toggle(s.mapArchitectConnectionSource === 'ollama');
+    $('#rpg_map_architect_openai_group').toggle(s.mapArchitectConnectionSource === 'openai');
     $('#rpg_world_profile_group').toggle(s.worldConnectionSource === 'profile');
     $('#rpg_world_ollama_group').toggle(s.worldConnectionSource === 'ollama');
     $('#rpg_world_openai_group').toggle(s.worldConnectionSource === 'openai');
@@ -4394,6 +4424,7 @@ globalThis._rpgSyncDynamicRngPrompt = syncDynamicRngPrompt;
 
 function scheduleAutoApply() {
     const s = getSettings();
+    registerMapArchitectTool();
     if (!s.enabled || s.customSysprompt) return;
     if (_autoApplyTimer) clearTimeout(_autoApplyTimer);
     _autoApplyTimer = setTimeout(() => { _autoApplyTimer = null; autoApplySysprompt(); }, 400);
@@ -4680,6 +4711,7 @@ const CONNECTION_SETTINGS_UI = [
     { key: 'lorebook_agent', control: '#rpg_tracker_router_source', slot: '#rpg_connection_slot_lorebook_agent', label: 'Lorebook Agent', recommendation: 'Same models work fine here as with the State Tracker.' },
     { key: 'adventure_companion', control: '#rpg_adventure_companion_connection_source', slot: '#rpg_connection_slot_adventure_companion', label: 'Adventure Companion' },
     { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Game System Wizard', recommendation: 'I recommend using a somewhat better model here such as Sonnet 5 or above for more robust and complex systems. Your mileage varies a lot here. Experiment.' },
+    { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Map Architect', recommendation: 'A capable reasoning model is recommended for coherent topology, hidden information, and entity placement.' },
     { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'World Progression' },
     { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Portrait Generation', recommendation: 'A lightweight model should do fine.' },
 ];
@@ -4935,6 +4967,32 @@ function organizeConnectionSettingsUI() {
             keyPrefix: 'adventureCompanion',
             settings,
             presetManager: pm,
+        });
+        await bindFeatureConnectionSettings({
+            uiPrefix: 'rpg_map_architect',
+            keyPrefix: 'mapArchitect',
+            settings,
+            presetManager: pm,
+        });
+        $('#rpg_map_architect_lookback').val(settings.mapArchitectLookback ?? 12).on('change', function () {
+            settings.mapArchitectLookback = Math.max(0, Math.min(100, parseInt(String($(this).val()), 10) || 0));
+            $(this).val(settings.mapArchitectLookback);
+            saveSettings();
+        });
+        $('#rpg_map_architect_max_tokens').val(settings.mapArchitectMaxTokens ?? 6000).on('change', function () {
+            settings.mapArchitectMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 6000));
+            $(this).val(settings.mapArchitectMaxTokens);
+            saveSettings();
+        });
+        $('#rpg_map_architect_system_prompt').val(settings.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).on('input', function () {
+            settings.mapArchitectSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $('#rpg_map_architect_reset_prompt').on('click', function () {
+            settings.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+            $('#rpg_map_architect_system_prompt').val(settings.mapArchitectSystemPrompt);
+            saveSettings();
+            toastr['success']('Map Architect prompt reset.');
         });
 
 
@@ -5289,7 +5347,7 @@ function organizeConnectionSettingsUI() {
                                         </label>
                                         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
                                             <input type="checkbox" id="rt-reset-world" ${chk('world')} style="cursor:pointer;">
-                                            <span>World Progression Prompts${changedCats.has('world') ? ' <span class="rt-prompt-cat-changed">changed</span>' : ''}</span>
+                                            <span>World &amp; Map Architect Prompts${changedCats.has('world') ? ' <span class="rt-prompt-cat-changed">changed</span>' : ''}</span>
                                         </label>
                                         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
                                             <input type="checkbox" id="rt-reset-sections" ${chk('sections')} style="cursor:pointer;">
@@ -5502,10 +5560,15 @@ function organizeConnectionSettingsUI() {
 
                                 if (worldReset) {
                                     if (extensionSettings[MODULE_NAME]) {
+                                        delete extensionSettings[MODULE_NAME].mapArchitectSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
                                     }
                                     const sTemp = getSettings();
+                                    const $mapPromptEl = $('#rpg_map_architect_system_prompt');
+                                    if ($mapPromptEl.length) {
+                                        $mapPromptEl.val(sTemp.mapArchitectSystemPrompt).trigger('input');
+                                    }
                                     const $wpPromptEl = $('#rpg_world_progression_system_prompt');
                                     if ($wpPromptEl.length) {
                                         $wpPromptEl.val(sTemp.worldProgressionSystemPrompt).trigger('input');
@@ -5515,7 +5578,7 @@ function organizeConnectionSettingsUI() {
                                         $wpSkelPromptEl.val(sTemp.worldProgressionSkeletonSystemPrompt).trigger('input');
                                     }
                                     resetCount++;
-                                    console.log('[RPG Tracker] World progression prompts reset to defaults.');
+                                    console.log('[RPG Tracker] World and Map Architect prompts reset to defaults.');
                                 }
 
                                 await acknowledgePromptDefaults(fresh);
@@ -6287,6 +6350,7 @@ function organizeConnectionSettingsUI() {
         }
 
         registerDiceFunctionTool();
+        registerMapArchitectTool();
         registerDiceSlashCommand();
 
         // ─── Quest System ───
@@ -10787,6 +10851,23 @@ RULES:
             $('#rpg_portrait_openai_group').toggle(s.portraitConnectionSource === 'openai');
             $('#rpg_portrait_location_include_present_npcs').prop('checked', !!s.portraitLocationIncludePresentNpcs);
             $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
+
+            // Map Architect
+            $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
+            $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 6000);
+            $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
+            $('#rpg_map_architect_connection_source').val(s.mapArchitectConnectionSource || 'default');
+            $('#rpg_map_architect_connection_profile').val(s.mapArchitectConnectionProfileId || '');
+            $('#rpg_map_architect_completion_preset').val(s.mapArchitectCompletionPresetId || '');
+            $('#rpg_map_architect_ollama_url').val(s.mapArchitectOllamaUrl || 'http://localhost:11434');
+            $('#rpg_map_architect_ollama_model').val(s.mapArchitectOllamaModel || '');
+            $('#rpg_map_architect_openai_url').val(s.mapArchitectOpenaiUrl || '');
+            $('#rpg_map_architect_openai_key').val(s.mapArchitectOpenaiKey || '');
+            $('#rpg_map_architect_openai_model').val(s.mapArchitectOpenaiModel || '');
+            $('#rpg_map_architect_openai_model_manual').val(s.mapArchitectOpenaiModel || '');
+            $('#rpg_map_architect_profile_group').toggle(s.mapArchitectConnectionSource === 'profile');
+            $('#rpg_map_architect_ollama_group').toggle(s.mapArchitectConnectionSource === 'ollama');
+            $('#rpg_map_architect_openai_group').toggle(s.mapArchitectConnectionSource === 'openai');
 
             // Inventory/Core Prompt
             $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');

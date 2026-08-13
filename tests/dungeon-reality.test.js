@@ -24,7 +24,72 @@ import {
     stripCapturedDungeonMapBlocks,
     stripDungeonMapSection,
     syncDungeonRealityState,
+    validateDungeonMapArchitecture,
 } from '../dungeon-reality.js';
+
+const connectedArchitectMap = {
+    version: 3,
+    site: 'Abbey Undercroft',
+    areas: [
+        {
+            id: 'cellar-landing',
+            name: 'Cellar Landing',
+            knowledge: 'VISITED',
+            geometry: ['A low flagstone landing.'],
+            connections: [{ to: 'crypt-passage', state: 'LOCKED', detail: 'Iron-banded door between the landing and passage.' }],
+        },
+        {
+            id: 'crypt-passage',
+            name: 'Crypt Passage',
+            knowledge: 'UNREVEALED',
+            geometry: ['A barrel-vaulted corridor.'],
+            connections: [{ to: 'cellar-landing', state: 'LOCKED', detail: 'Iron-banded door between the landing and passage.' }],
+        },
+    ],
+    assets: [{
+        id: 'listening-ghoul',
+        kind: 'CREATURE',
+        name: 'Listening Ghoul',
+        location: 'crypt-passage',
+        state: 'ACTIVE',
+        knowledge: 'UNREVEALED',
+        detail: 'Waits behind a fallen arch.',
+        origin: 'INITIAL_MAP',
+    }],
+};
+
+describe('Map Architect validation', () => {
+    it('accepts a connected graph even when its entrance route is locked', () => {
+        const result = validateDungeonMapArchitecture(connectedArchitectMap, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(result.valid).toBe(true);
+        expect(result.document.areas).toHaveLength(2);
+    });
+
+    it('rejects omitted reverse passages and orphaned areas with correction hints', () => {
+        const broken = structuredClone(connectedArchitectMap);
+        broken.areas[1].connections = [];
+        const result = validateDungeonMapArchitecture(broken, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(result.valid).toBe(false);
+        expect(result.errors.map(error => error.code)).toEqual(expect.arrayContaining([
+            'AREA_WITHOUT_CONNECTION',
+            'MISSING_RECIPROCAL_CONNECTION',
+        ]));
+    });
+
+    it('rejects unknown asset locations before persistence', () => {
+        const broken = structuredClone(connectedArchitectMap);
+        broken.assets[0].location = 'missing-room';
+        const result = validateDungeonMapArchitecture(broken, { site: 'Abbey Undercroft', entrance: 'Cellar Landing' });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(error => error.code === 'UNKNOWN_ASSET_LOCATION')).toBe(true);
+    });
+});
 
 function assistant(mes, extra = {}) {
     return { is_user: false, is_system: false, mes, ...extra };

@@ -17,6 +17,7 @@ describe('General & Visuals settings', () => {
             '<b>Game Systems & Customization</b>',
             '<b>State Tracker & Modules</b>',
             '<b>Lorebook Agent</b>',
+            '<b>Map Architect</b>',
             '<b>World Progression</b>',
             '<b>Adventure Companion</b>',
         ];
@@ -51,6 +52,7 @@ describe('General & Visuals settings', () => {
             'rpg_connection_slot_character_creation',
             'rpg_connection_slot_adventure_companion',
             'rpg_connection_slot_game_system_wizard',
+            'rpg_connection_slot_map_architect',
             'rpg_connection_slot_world_progression',
             'rpg_connection_slot_portraits',
         ].forEach(id => expect(settingsMarkup).toContain(`id="${id}"`));
@@ -63,6 +65,7 @@ describe('General & Visuals settings', () => {
         expect(indexSource).toContain("control: '#rpg_tracker_router_source'");
         expect(indexSource).toContain("control: '#rpg_adventure_companion_connection_source'");
         expect(indexSource).toContain("control: '#rpg_gs_wizard_connection_source'");
+        expect(indexSource).toContain("control: '#rpg_map_architect_connection_source'");
         expect(indexSource).toContain("control: '#rpg_world_connection_source'");
         expect(indexSource).toContain("control: '#rpg_portrait_connection_source'");
         expect(indexSource).toContain('I recommend a cheap mid-tier model such as GPT-5.6 Luna, Gemini Flash/Flash-Lite series, or Deepseek V4 Flash latest.');

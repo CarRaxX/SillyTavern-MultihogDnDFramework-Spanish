@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { parseMapArchitectResponse } from '../map-architect-parser.js';
+
+describe('Map Architect component', () => {
+    it('recovers a valid JSON object from a fenced response', () => {
+        const result = parseMapArchitectResponse('```json\n{"version":3,"site":"Crypt","areas":[],"assets":[]}\n```');
+        expect(result.error).toBeNull();
+        expect(result.value.site).toBe('Crypt');
+    });
+
+    it('reports malformed JSON so it can be fed into a correction pass', () => {
+        const result = parseMapArchitectResponse('{"version":3,"areas":[');
+        expect(result.value).toBeNull();
+        expect(result.error).toMatch(/incomplete|Invalid JSON/i);
+    });
+
+    it('registers a hidden narrator tool and a dedicated connection path', () => {
+        const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        const architect = readFileSync(new URL('../map-architect.js', import.meta.url), 'utf8');
+        expect(hooks).toContain("name: 'CreateDungeonMap'");
+        expect(hooks).toContain("formatMessage: () => ''");
+        expect(hooks).toContain("isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping'");
+        expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
+        expect(architect).toContain('persistArchitectDungeonMap');
+        expect(architect).toContain('mapArchitectConnectionSource');
+    });
+});

@@ -31,6 +31,7 @@ import {
     resolveActiveDungeonSite,
     stripCapturedDungeonMapsFromPrompt,
 } from './dungeon-reality.js';
+import { runMapArchitect } from './map-architect.js';
 export { isPercentFormula, resolveDiceCompare };
 
 const dungeonMissingMapWarnings = new Set();
@@ -496,6 +497,37 @@ async function executeDiceToolAction(args, opts = {}) {
         }
     }
     return result;
+}
+
+export function registerMapArchitectTool() {
+    try {
+        const ctx = SillyTavern.getContext();
+        const { registerFunctionTool, unregisterFunctionTool } = ctx;
+        if (!registerFunctionTool || !unregisterFunctionTool) return;
+        unregisterFunctionTool('CreateDungeonMap');
+
+        const settings = getSettings();
+        if (!settings.enabled || !isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings)) return;
+        registerFunctionTool({
+            name: 'CreateDungeonMap',
+            displayName: 'Map Architect',
+            description: 'Creates and saves the complete private objective map for a dangerous site before its first exploration. Call exactly once when the player enters an unmapped dungeon, ruin, lair, stronghold, trapped complex, or similarly high-risk location. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    site: { type: 'string', description: 'Exact root Location label used in the location footer and Lorebook Agent, e.g. "Abbey Undercroft".' },
+                    entrance: { type: 'string', description: 'Short natural label for the area the player is entering now. This becomes the first VISITED map area.' },
+                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate site scope: SMALL 4-7 areas, MEDIUM 7-12, LARGE 12-20.' },
+                    premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },
+                },
+                required: ['site', 'entrance', 'scale', 'premise'],
+            },
+            action: async args => runMapArchitect(args),
+            formatMessage: () => '',
+        });
+    } catch (error) {
+        console.warn('[RPG Tracker] Could not register Map Architect tool:', error);
+    }
 }
 
 export function registerDiceFunctionTool() {
