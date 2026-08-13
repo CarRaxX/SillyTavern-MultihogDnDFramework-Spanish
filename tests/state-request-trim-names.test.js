@@ -32,15 +32,19 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
         expect(result).toBe('Hyperion Blackwood: a grim mercenary...');
     });
 
-    it('passes an optional JSON schema through generateRaw for structured requests', async () => {
+    it('reads raw Main API data for structured requests without sending provider-level schema', async () => {
         let capturedOptions = null;
         globalThis.SillyTavern.getContext = () => ({
             ...originalGetContext(),
             mainApi: 'openai',
-            generateRaw: async (opts) => {
-                capturedOptions = opts;
-                return '{"ok":true}';
+            generateRaw: async () => {
+                throw new Error('generateRaw cleanup path must not be used');
             },
+            generateRawData: async (opts) => {
+                capturedOptions = opts;
+                return { choices: [{ message: { content: '{"ok":true}' } }] };
+            },
+            extractMessageFromData: raw => raw.choices[0].message.content,
         });
         const jsonSchema = { name: 'test', value: { type: 'object' }, returnInvalid: true };
 
@@ -52,8 +56,29 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
             { jsonSchema },
         );
 
-        expect(capturedOptions.jsonSchema).toBe(jsonSchema);
+        expect(capturedOptions.jsonSchema).toBeNull();
         expect(result).toBe('{"ok":true}');
+    });
+
+    it('recovers reasoning-only raw responses for downstream parsing and validation', async () => {
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            generateRawData: async () => ({
+                choices: [{ message: { content: '', reasoning_content: '{"version":3}' } }],
+            }),
+            extractMessageFromData: () => '',
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema: { name: 'test', value: { type: 'object' } } },
+        );
+
+        expect(result).toBe('{"version":3}');
     });
 
     it('passes JSON schema to profile requests and serializes structured content', async () => {

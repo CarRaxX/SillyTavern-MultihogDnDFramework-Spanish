@@ -512,6 +512,60 @@ export async function testOpenAIConnection(url, apiKey, model) {
     }
 }
 
+function responsePartText(value) {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+        return value.map(part => {
+            if (typeof part === 'string') return part;
+            return part?.text ?? part?.content ?? '';
+        }).filter(Boolean).join('\n');
+    }
+    if (value && typeof value === 'object') return JSON.stringify(value);
+    return '';
+}
+
+/** Extract provider output without SillyTavern's dialogue cleanup layer. */
+function extractRawStateResponse(context, raw) {
+    if (typeof raw === 'string') return raw.trim();
+
+    let extracted = '';
+    try {
+        extracted = responsePartText(context.extractMessageFromData?.(raw, context.mainApi));
+    } catch (_) { /* use provider-shape fallbacks below */ }
+    if (extracted.trim()) return extracted.trim();
+
+    const finalCandidates = [
+        raw?.choices?.[0]?.message?.content,
+        raw?.choices?.[0]?.text,
+        raw?.message?.content,
+        raw?.content,
+        raw?.response,
+        raw?.text,
+        raw?.output,
+        raw?.responseContent?.parts,
+    ];
+    for (const candidate of finalCandidates) {
+        const text = responsePartText(candidate).trim();
+        if (text) return text;
+    }
+
+    // Some reasoning models put their only usable payload in a reasoning field.
+    // The caller still parses and validates it as a map before persistence.
+    const reasoningCandidates = [
+        raw?.choices?.[0]?.message?.reasoning_content,
+        raw?.choices?.[0]?.message?.reasoning,
+        raw?.message?.reasoning_content,
+        raw?.message?.reasoning,
+        raw?.reasoning_content,
+        raw?.reasoning,
+    ];
+    for (const candidate of reasoningCandidates) {
+        const text = responsePartText(candidate).trim();
+        if (text) return text;
+    }
+    return '';
+}
+
 // ── Primary dispatch ───────────────────────────────────────────────────────────
 
 /**
@@ -679,7 +733,9 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
 
     // ── Default mode: generateRaw through the active connection ──
     const { generateRaw } = context;
-    if (!generateRaw) throw new Error('[RPG Tracker] generateRaw is not available.');
+    if (!generateRaw && !(jsonSchema && typeof context.generateRawData === 'function')) {
+        throw new Error('[RPG Tracker] Neither generateRaw nor generateRawData is available.');
+    }
 
     let originalPreset = null;
     try {
@@ -711,7 +767,17 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             options.responseLength = settings.maxTokens;
         }
 
-        const result = await generateRaw(options);
+        let result;
+        if (jsonSchema && typeof context.generateRawData === 'function') {
+            // Map Architect already owns parsing, validation, and correction.
+            // Read the untouched provider response so unsupported response_format
+            // schemas cannot cause HTTP 400 and ST cleanup cannot erase the JSON.
+            const raw = await context.generateRawData({ ...options, jsonSchema: null });
+            result = extractRawStateResponse(context, raw);
+            if (!result) throw new Error('Main API returned no usable response content.');
+        } else {
+            result = await generateRaw(options);
+        }
 
         let text = "";
         if (typeof result === 'string') {
