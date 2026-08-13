@@ -31,4 +31,54 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
         expect(capturedOptions.trimNames).toBe(false);
         expect(result).toBe('Hyperion Blackwood: a grim mercenary...');
     });
+
+    it('passes an optional JSON schema through generateRaw for structured requests', async () => {
+        let capturedOptions = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            generateRaw: async (opts) => {
+                capturedOptions = opts;
+                return '{"ok":true}';
+            },
+        });
+        const jsonSchema = { name: 'test', value: { type: 'object' }, returnInvalid: true };
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema },
+        );
+
+        expect(capturedOptions.jsonSchema).toBe(jsonSchema);
+        expect(result).toBe('{"ok":true}');
+    });
+
+    it('passes JSON schema to profile requests and serializes structured content', async () => {
+        let capturedOverride = null;
+        const jsonSchema = { name: 'test', value: { type: 'object' } };
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            ConnectionManagerRequestService: {
+                getProfile: () => ({ preset: '' }),
+                sendRequest: async (_profileId, _messages, _maxTokens, _options, override) => {
+                    capturedOverride = override;
+                    return { content: { ok: true }, reasoning: '' };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema },
+        );
+
+        expect(capturedOverride).toEqual({ json_schema: jsonSchema });
+        expect(result).toBe('{"ok":true}');
+    });
 });

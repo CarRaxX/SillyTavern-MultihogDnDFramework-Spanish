@@ -515,7 +515,7 @@ export function registerMapArchitectTool() {
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'Exact root Location label used in the location footer and Lorebook Agent, e.g. "Abbey Undercroft".' },
+                    site: { type: 'string', description: 'Exact root Location label used in the location footer and external campaign archive, e.g. "Abbey Undercroft".' },
                     entrance: { type: 'string', description: 'Short natural label for the area the player is entering now. This becomes the first VISITED map area.' },
                     scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate site scope: SMALL 4-7 areas, MEDIUM 7-12, LARGE 12-20.' },
                     premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },

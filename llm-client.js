@@ -264,7 +264,7 @@ function getProxyHeaders() {
 
 // ── Ollama ─────────────────────────────────────────────────────────────────────
 
-export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null) {
+export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null) {
     if (!url) throw new Error('Ollama URL is not configured.');
     if (!model) throw new Error('Ollama model is not selected.');
 
@@ -286,6 +286,7 @@ export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTok
             num_predict: (maxTokens && maxTokens > 0) ? maxTokens : undefined,
         },
     };
+    if (jsonSchema?.value) requestBody.format = jsonSchema.value;
     console.log(`[RPG Tracker] sendViaOllama — model: "${model}", url: "${targetUrl}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
     console.log(`[RPG Tracker] Parameters — Temp: ${requestBody.options.temperature}, Top_P: ${requestBody.options.top_p}, Top_K: ${requestBody.options.top_k}`);
@@ -353,7 +354,7 @@ export async function fetchOllamaModels(url) {
 
 // ── OpenAI Compatible ──────────────────────────────────────────────────────────
 
-export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null) {
+export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null) {
     if (!url) throw new Error('OpenAI Compatible URL is not configured.');
     if (!model) throw new Error('OpenAI Compatible model name is not set.');
 
@@ -378,6 +379,17 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
         stream: true,
     };
     if (maxTokens && maxTokens > 0) requestBody.max_tokens = maxTokens;
+    if (jsonSchema?.value) {
+        requestBody.response_format = {
+            type: 'json_schema',
+            json_schema: {
+                name: jsonSchema.name || 'structured_response',
+                description: jsonSchema.description,
+                schema: jsonSchema.value,
+                strict: jsonSchema.strict ?? false,
+            },
+        };
+    }
 
     console.log(`[RPG Tracker] sendViaOpenAI — model: "${model}", url: "${endpoint}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
@@ -509,12 +521,13 @@ export async function testOpenAIConnection(url, apiKey, model) {
  * @param {string} systemPrompt
  * @param {string} userPrompt
  * @param {AbortSignal|null} [signal]
- * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[] }} [options]
+ * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null }} [options]
  * @returns {Promise<string>}
  */
 export async function sendStateRequest(settings, systemPrompt, userPrompt, signal = null, options = {}) {
     const preserveUserMacro = !!options.preserveUserMacro;
     const userMacroNames = options.userMacroNames || [];
+    const jsonSchema = options.jsonSchema || null;
     const finalize = (text) => (preserveUserMacro && typeof text === 'string')
         ? restoreUserMacro(text, userMacroNames)
         : text;
@@ -525,7 +538,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
 
     const context = SillyTavern.getContext();
 
-    console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${settings.connectionProfileId}", preset: "${settings.completionPresetId}"`);
+    const activeProfileId = settings.connectionSource === 'profile' ? (settings.connectionProfileId || '') : '(inactive)';
+    console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${activeProfileId}", preset: "${settings.completionPresetId}"`);
 
     // ── Profile mode: use ConnectionManagerRequestService (silent, no UI flicker) ──
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
@@ -548,6 +562,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 : null;
             const profilePreset = String(profile?.preset || '').trim();
             const shouldOverrideProfilePreset = !!requestedPreset && !!profile;
+            const overridePayload = jsonSchema ? { json_schema: jsonSchema } : {};
 
             // Use the canonical ST service path. This correctly handles secret_id
             // lookup, prompt formatting for text-completion backends (instruct
@@ -569,6 +584,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                             includeInstruct: true,
                             signal,
                         },
+                        overridePayload,
                     );
                 } else {
                     raw = await service.sendRequest(
@@ -582,6 +598,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                             includeInstruct: true,
                             signal,
                         },
+                        overridePayload,
                     );
                 }
             } finally {
@@ -620,6 +637,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                     ?? text;
             }
 
+            if (text && typeof text === 'object') text = JSON.stringify(text);
+
             if (typeof text === 'string') {
                 logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
                 return finalize(text);
@@ -649,13 +668,13 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── Ollama Mode ──
     if (settings.connectionSource === 'ollama') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via Ollama: ${settings.ollamaModel}`);
-        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal));
+        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, jsonSchema));
     }
 
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal));
+        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, jsonSchema));
     }
 
     // ── Default mode: generateRaw through the active connection ──
@@ -682,6 +701,10 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             // name) — surfacing as an opaque "No message generated" error. Disable it here.
             trimNames: false,
             signal,
+            // SillyTavern's built-in structured-output extraction currently
+            // supports Chat Completion here. Other Main API types still use the
+            // prompt contract plus Map Architect's runtime validator.
+            jsonSchema: context.mainApi === 'openai' ? jsonSchema : null,
         };
 
         if (settings.maxTokens && settings.maxTokens > 0) {

@@ -11,6 +11,10 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 ### Changed
 - **Lightweight narrator contract**: The full map-authoring specification is no longer carried in every GM prompt. A short `CreateDungeonMap` contract replaces it, while the dedicated agent stores validated JSON directly in the root Location entry and returns compact prose to the narrator.
 
+### Fixed
+- **Reliable Map Architect tool calls**: Map creation now requests schema-constrained JSON through Main API, Connection Profile, Ollama, and direct OpenAI-compatible modes. This bypasses SillyTavern message cleanup that could turn a valid structured response into `No message generated`.
+- **No immediate retry loops**: Architect transport, configuration, validation, and persistence failures are now real tool errors. The narrator remains outside the site and must not retry the tool during the same turn.
+
 ## [7.20.1] - 2026-08-12
 
 ### Changed

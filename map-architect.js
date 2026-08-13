@@ -12,6 +12,7 @@ import {
 import { persistArchitectDungeonMap, syncDungeonMapsToLocationLorebook } from './router.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
+import { MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
 export { parseMapArchitectResponse } from './map-architect-parser.js';
 
 const architectRuns = new Map();
@@ -73,6 +74,23 @@ function existingResult(siteRecord) {
     return `[MAP_ARCHITECT_RESULT — PRIVATE]\nA map for ${siteRecord.siteRoot} was already attached. Reuse it; do not create or replace it.\n\n${formatDungeonMapForNarrator(document)}\n\nKeep unseen facts private and continue narration from the player-observable entrance.\n[/MAP_ARCHITECT_RESULT]`;
 }
 
+function describeFailure(error) {
+    const messages = [];
+    const seen = new Set();
+    let current = error;
+    while (current && !seen.has(current)) {
+        seen.add(current);
+        const message = String(current?.message || current).trim();
+        if (message && !messages.includes(message)) messages.push(message);
+        current = current?.cause;
+    }
+    return messages.join(': ') || 'Unknown failure';
+}
+
+function mapArchitectFailure(message) {
+    return new Error(`[MAP_ARCHITECT_ERROR — PRIVATE]\n${message}\nDo not call CreateDungeonMap again in this turn. Remain outside the site and continue only after a later player turn permits a fresh attempt.\n[/MAP_ARCHITECT_ERROR]`);
+}
+
 async function runMapArchitectOnce(rawArgs) {
     const args = {
         site: String(rawArgs?.site || '').trim(),
@@ -81,7 +99,7 @@ async function runMapArchitectOnce(rawArgs) {
         scale: String(rawArgs?.scale || 'MEDIUM').trim().toUpperCase(),
     };
     if (!args.site || !args.entrance || !args.premise) {
-        return '[MAP_ARCHITECT_ERROR — PRIVATE] site, entrance, and premise are required. Establish those facts, then call CreateDungeonMap again before narrating entry. [/MAP_ARCHITECT_ERROR]';
+        throw mapArchitectFailure('site, entrance, and premise are required. Establish those facts before a later attempt.');
     }
     if (!['SMALL', 'MEDIUM', 'LARGE'].includes(args.scale)) args.scale = 'MEDIUM';
 
@@ -89,7 +107,7 @@ async function runMapArchitectOnce(rawArgs) {
     const settings = getSettings();
     const current = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if ((current.errors || []).some(error => /no campaign prefix/i.test(String(error)))) {
-        return '[MAP_ARCHITECT_ERROR — PRIVATE]\nNo campaign prefix is available, so there is no safe Locations lorebook target. Nothing was generated or saved. Ask the user to configure the Lorebook Agent campaign prefix before entering the site.\n[/MAP_ARCHITECT_ERROR]';
+        throw mapArchitectFailure('No campaign prefix is available, so there is no safe Locations lorebook target. Nothing was generated or saved.');
     }
     const existing = Object.values(current.sites || {}).find(record => dungeonLabelsMatch(record?.siteRoot, args.site));
     if (existing?.mapChunks?.length) return existingResult(existing);
@@ -102,7 +120,13 @@ async function runMapArchitectOnce(rawArgs) {
     let lastIssues = [];
 
     for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
-        const output = await sendStateRequest(requestSettings(settings), systemPrompt, prompt);
+        const output = await sendStateRequest(
+            requestSettings(settings),
+            systemPrompt,
+            prompt,
+            null,
+            { jsonSchema: MAP_ARCHITECT_JSON_SCHEMA },
+        );
         const parsed = parseMapArchitectResponse(output);
         const validation = parsed.value
             ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale })
@@ -121,7 +145,7 @@ async function runMapArchitectOnce(rawArgs) {
     }
 
     const concise = lastIssues.slice(0, 12).map(issue => `${issue.code} at ${issue.path}: ${issue.hint}`).join('; ');
-    return `[MAP_ARCHITECT_ERROR — PRIVATE]\nThe architect could not produce a valid connected map after ${MAX_CORRECTION_ATTEMPTS + 1} attempts. Nothing was saved. Problems: ${concise}\nDo not narrate entry yet; call CreateDungeonMap again with clearer premise details.\n[/MAP_ARCHITECT_ERROR]`;
+    throw mapArchitectFailure(`The architect could not produce a valid connected map after ${MAX_CORRECTION_ATTEMPTS + 1} attempts. Nothing was saved. Problems: ${concise}`);
 }
 
 /** Dedupe parallel/repeated tool calls for the same site within one generation. */
@@ -131,7 +155,8 @@ export function runMapArchitect(args) {
     const run = runMapArchitectOnce(args)
         .catch(error => {
             console.error('[RPG Tracker] Map Architect failed:', error);
-            return `[MAP_ARCHITECT_ERROR — PRIVATE]\nMap Architect failed before a validated map could be saved: ${String(error?.message || error)}\nDo not invent or narrate the hidden site map. Retry CreateDungeonMap once the connection or persistence problem is resolved.\n[/MAP_ARCHITECT_ERROR]`;
+            if (String(error?.message || '').includes('[MAP_ARCHITECT_ERROR')) throw error;
+            throw mapArchitectFailure(`Map Architect failed before a validated map could be saved: ${describeFailure(error)}`);
         })
         .finally(() => architectRuns.delete(key));
     architectRuns.set(key, run);

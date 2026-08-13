@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseMapArchitectResponse } from '../map-architect-parser.js';
+import { MAP_ARCHITECT_JSON_SCHEMA } from '../map-architect-schema.js';
 
 describe('Map Architect component', () => {
     it('recovers a valid JSON object from a fenced response', () => {
@@ -24,5 +25,15 @@ describe('Map Architect component', () => {
         expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
         expect(architect).toContain('persistArchitectDungeonMap');
         expect(architect).toContain('mapArchitectConnectionSource');
+        expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA }');
+        expect(architect).toContain('throw mapArchitectFailure');
+    });
+
+    it('defines the complete structured map response contract', () => {
+        expect(MAP_ARCHITECT_JSON_SCHEMA.name).toBe('dungeon_map_v3');
+        expect(MAP_ARCHITECT_JSON_SCHEMA.returnInvalid).toBe(true);
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.required).toEqual(['version', 'site', 'areas', 'assets']);
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.areas.items.required).toContain('connections');
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.required).toContain('origin');
     });
 });
