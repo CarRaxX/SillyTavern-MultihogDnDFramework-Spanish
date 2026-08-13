@@ -164,7 +164,7 @@ Supported operations are:
 
 The extension generates stable IDs for new areas/assets. `ADD_ASSET` performs duplicate detection; the agent must use an existing asset or explicitly identify candidates from which the new entity is distinct.
 
-`chronicles` are optional and contain only player-observable history. Off-screen movement changes `[MAP]` without leaking into a child Location. If an observed area's child entry does not exist, it is created in the same transaction.
+`chronicles` are optional and contain only player-observable history. A chronicle makes its area `VISITED`; an asset reported by it should be made `KNOWN` in the corresponding operation. Off-screen movement changes `[MAP]` without leaking into a child Location. If an observed area's child entry does not exist, it is created in the same transaction.
 
 The root map and every included child chronicle are changed in one Locations-lorebook save. Both persist or neither does. Operation IDs make successful retries idempotent.
 

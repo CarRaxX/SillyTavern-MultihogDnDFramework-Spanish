@@ -527,6 +527,13 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
         }
     }
 
+    // A map captured during this pass did not exist during the reconciliation
+    // above. Reconcile once more so pre-existing child Locations immediately mark
+    // its areas VISITED instead of requiring a second Lorebook Agent pass.
+    for (const entry of Object.values(bookData.entries || {})) {
+        if (getDungeonMapAttachment(entry) && reconcileDungeonMapAreaKnowledge(entry, bookData.entries)) changed = true;
+    }
+
     if (changed) {
         await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map persistence');
         if (typeof ctx.updateWorldInfoList === 'function') {
@@ -650,6 +657,7 @@ The current location hierarchy activates exactly one private v3 [MAP]. It is the
 - Existing but newly encountered entity: SET_ASSET/MOVE_ASSET, not ADD_ASSET. Genuinely new narrator-established or narrator-resolved player-created entity: ADD_ASSET; the extension generates its ID. If duplicate validation names candidates, retry with that asset or list every genuinely distinct candidate in \`distinct_from\`.
 - Narrator facts are CONFIRMED; strongly entailed consequences are IMPLIED. AUTONOMOUS is allowed only for a logical reaction to an established trigger and only when the existing asset has an explicit behavior/route. Never mutate from speculation or from an unresolved player attempt.
 - Enemies may move off-screen. Update objective [MAP], but add a child chronicle only for facts the player observed. A chronicle makes its area VISITED. Ordinary room changes never become EVENT entries.
+- When a chronicle reports an asset, set that asset's knowledge to KNOWN in the corresponding operation. Objective off-screen changes do not reveal assets.
 - Put an observed mapped change in map.chronicles and do not duplicate the same fact through commit.update/record; the atomic map transaction creates the child Location when needed.
 - Use inspect_map/list_map_assets when IDs or current positions are uncertain. Validation is atomic: on an error, make no other changes, read the structured error, and retry the corrected commit with the SAME operation_id.
 - If no durable map fact changed, omit \`map\` entirely.`;
@@ -657,7 +665,7 @@ The current location hierarchy activates exactly one private v3 [MAP]. It is the
 
 function buildActiveDungeonBasicGuidance(context) {
     if (!context) return '';
-    return `\n\n**ACTIVE MAP CAPABILITY — ${context.siteRoot}:** The private v3 [MAP] is the objective current snapshot; ordinary LOC text is player-observable history. If the narrative durably changed a mapped area/asset, emit exactly one \`[MAP_COMMIT]{valid JSON}[/MAP_COMMIT]\` block in addition to normal Lorebook tags. JSON shape: {"operation_id":"stable-id","operations":[{"op":"SET_ASSET|MOVE_ASSET|ADD_ASSET|REMOVE_ASSET|SET_AREA|ADD_AREA|SET_CONNECTION","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-area-id","text":"observable history"}]}. Omit chronicles for hidden/off-screen changes and do not duplicate a map chronicle through ordinary LOC tags. Existing entities use SET/MOVE, genuinely new narrator-established entities use ADD_ASSET, and AUTONOMOUS movement requires the asset's explicit behavior/route. Never output this block when no durable map fact changed.`;
+    return `\n\n**ACTIVE MAP CAPABILITY — ${context.siteRoot}:** The private v3 [MAP] is the objective current snapshot; ordinary LOC text is player-observable history. If the narrative durably changed a mapped area/asset, emit exactly one \`[MAP_COMMIT]{valid JSON}[/MAP_COMMIT]\` block in addition to normal Lorebook tags. JSON shape: {"operation_id":"stable-id","operations":[{"op":"SET_ASSET|MOVE_ASSET|ADD_ASSET|REMOVE_ASSET|SET_AREA|ADD_AREA|SET_CONNECTION","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-area-id","text":"observable history"}]}. A chronicle makes its area VISITED; if it reports an asset, set that asset's knowledge to KNOWN. Omit chronicles for hidden/off-screen changes and do not duplicate a map chronicle through ordinary LOC tags. Existing entities use SET/MOVE, genuinely new narrator-established entities use ADD_ASSET, and AUTONOMOUS movement requires the asset's explicit behavior/route. Never output this block when no durable map fact changed.`;
 }
 
 function extractBasicMapTransaction(text) {

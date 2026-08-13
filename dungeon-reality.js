@@ -1025,6 +1025,10 @@ export function applyDungeonMapTransaction(document, transaction) {
         if (!area.area) {
             errors.push(mapError('AREA_NOT_FOUND', `${path}.area_id`, chronicle.area_id, 'Use the exact area ID whose player-observable history changed.', { allowed: working.areas.map(item => item.id), candidates: area.candidates.map(item => item.id) }));
         } else if (text) {
+            // A player-observable chronicle is direct evidence that the area has
+            // been visited. Keep this invariant in the pure transaction result so
+            // every caller sees the same current map, not only the persistence path.
+            area.area.knowledge = 'VISITED';
             resolvedChronicles.push({ areaId: area.area.id, areaName: area.area.name, text });
         }
     }

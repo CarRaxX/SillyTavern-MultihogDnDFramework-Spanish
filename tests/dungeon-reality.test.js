@@ -183,7 +183,25 @@ Area: Ossuary Behind Rotten Tapestry
         });
         expect(destroyed.ok).toBe(true);
         expect(destroyed.document.assets[0].state).toBe('DESTROYED');
+        expect(destroyed.document.areas.find(area => area.id === 'cellar').knowledge).toBe('VISITED');
         expect(destroyed.chronicles).toEqual([{ areaId: 'cellar', areaName: 'Cellar Landing', text: 'The crypt ghoul was destroyed.' }]);
+    });
+
+    it('marks a chronicled area visited in the pure transaction result', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'cellar', name: 'Cellar Landing', knowledge: 'UNREVEALED', geometry: [], connections: [] }],
+            assets: [],
+        };
+        const applied = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-0813-enter-cellar',
+            operations: [{ op: 'SET_AREA', evidence: 'CONFIRMED', area_id: 'cellar', geometry_append: ['Loose stones were braced.'] }],
+            chronicles: [{ area_id: 'cellar', text: 'The party entered the cellar and braced its loose stones.' }],
+        });
+        expect(applied.ok).toBe(true);
+        expect(applied.document.areas[0].knowledge).toBe('VISITED');
+        expect(map.areas[0].knowledge).toBe('UNREVEALED');
     });
 
     it('requires blocked geometry to be changed before an asset traverses it', () => {
