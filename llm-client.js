@@ -801,9 +801,12 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         const _reasoning = msg?.reasoning_content ?? msg?.reasoning ?? null;
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
+            const rawArguments = tc.function.arguments;
             let args;
-            try { args = JSON.parse(tc.function.arguments); } catch (_) { args = {}; }
-            return { content: msg.content || '', reasoning: _reasoning, toolCall: { name: tc.function.name, args, id: tc.id } };
+            let argumentError = null;
+            try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : (rawArguments ?? {}); }
+            catch (error) { args = {}; argumentError = String(error?.message || error); }
+            return { content: msg.content || '', reasoning: _reasoning, toolCall: { name: tc.function.name, args, id: tc.id, argumentError, rawArguments } };
         }
         const text = msg?.content ?? data.choices?.[0]?.text ?? '';
         return { content: text, reasoning: _reasoning, toolCall: null };
@@ -842,8 +845,14 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         const msg = data.message;
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
-            const args = tc.function?.arguments ?? {};
-            return { content: msg.content || '', toolCall: { name: tc.function.name, args, id: `call_${Date.now()}` } };
+            const rawArguments = tc.function?.arguments ?? {};
+            let args = rawArguments;
+            let argumentError = null;
+            if (typeof rawArguments === 'string') {
+                try { args = JSON.parse(rawArguments); }
+                catch (error) { args = {}; argumentError = String(error?.message || error); }
+            }
+            return { content: msg.content || '', toolCall: { name: tc.function.name, args, id: `call_${Date.now()}`, argumentError, rawArguments } };
         }
         return { content: msg?.content ?? '', toolCall: null };
     }
@@ -892,9 +901,12 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             // Check for native tool_calls first
             const tc = r?.choices?.[0]?.message?.tool_calls?.[0] ?? r?.tool_calls?.[0] ?? null;
             if (tc) {
+                const rawArguments = tc.function?.arguments ?? {};
                 let args;
-                try { args = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : (tc.function?.arguments ?? {}); } catch (_) { args = {}; }
-                return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}` } };
+                let argumentError = null;
+                try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : rawArguments; }
+                catch (error) { args = {}; argumentError = String(error?.message || error); }
+                return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}`, argumentError, rawArguments } };
             }
             let text = r?.content
                 ?? r?.message?.content

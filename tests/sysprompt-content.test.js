@@ -69,8 +69,10 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         for (const source of sources) {
             expect(source).toContain('<div hidden data-dungeon-map>');
             expect(source).toContain('Emit exactly one complete initial map');
+            expect(source).toContain('one valid JSON object');
+            expect(source).toContain('Put every mutable or movable thing in top-level `assets`');
             expect(source).toContain('Do not emit follow-up map chunks or `data-dungeon-delta` blocks');
-            expect(source).toContain('Lorebook Agent owns persistent room/area updates');
+            expect(source).toContain('Lorebook Agent owns validated current-map updates');
         }
     });
 });

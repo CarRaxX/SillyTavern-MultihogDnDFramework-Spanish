@@ -24,7 +24,11 @@ The altar is visibly scorched.`,
         const routerSource = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
         const hookSource = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
-        expect(routerSource).toContain('Content: ${entry.content}');
+        expect(routerSource).toContain('fullId !== activeDungeonEntryId');
+        expect(routerSource).toContain('buildDungeonMapCommitSchema()');
+        expect(routerSource).toContain("name: 'inspect_map'");
+        expect(routerSource).toContain("name: 'list_map_assets'");
+        expect(routerSource).toContain('Invalid JSON/map operation, nudging model');
         expect(hookSource).toContain('syncDungeonLoreAgentActivation');
         expect(defaultsSource).toContain('private \\`[MAP]...[/MAP]\\`');
         expect(defaultsSource).toContain('identify exactly which mapped creature, trap, object, or area');
