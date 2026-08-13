@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [7.20.2] - 2026-08-13
+## [7.25.0] - 2026-08-13
 
 ### Changed
 - **Optional Instant Action starter message**: Quick Start no longer auto-sends `Begin the adventure`. A **Send Starter Message?** checkbox sits below Player Card length and is off by default, so you can type your own first action once the character is ready.
