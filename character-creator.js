@@ -10,7 +10,7 @@ import {
     resolveActivatedPersonaDescription,
 } from './src/state/player-identity.js';
 import { CHARACTER_CREATOR_NAME_ADDITIONS } from './src/state/character-names.js';
-import { buildInstantActionPromptSection, normalizeInstantActionInstructions } from './src/state/instant-action-instructions.js';
+import { buildInstantActionPromptSection, extractInstantActionLevel, normalizeInstantActionInstructions } from './src/state/instant-action-instructions.js';
 import { findCharacterCreatorPresetByName, upsertCharacterCreatorPreset } from './src/features/character-creator/presets.js';
 import { getCharacterCreationConnectionSettings } from './character-creation-connection.js';
 
@@ -110,8 +110,7 @@ export function buildCharacterGenerationPrompt(opts) {
     // only fall back to the saved/default genre when the caller didn't pass one at all.
     const genre = opts.genre !== undefined ? opts.genre : (s.onboardingGenre || 'fantasy');
     // opts.level === null means "no numeric levels" (custom system) was chosen.
-    const noLevel = opts.level === null;
-    const level = noLevel ? null : (opts.level || 1);
+    // Instant Action Initial Setup can still override that below if it names a level.
     const gearTier = opts.gearTier || s.onboardingGearTier || 'auto';
     const useCombatScalingGuide = opts.useCombatScalingGuide !== undefined
         ? !!opts.useCombatScalingGuide
@@ -125,6 +124,11 @@ export function buildCharacterGenerationPrompt(opts) {
     const additionalVal = (opts.additionalVal || '').trim();
     const instantActionInstructions = normalizeInstantActionInstructions(opts.instantActionInstructions);
     const instantActionPromptSection = buildInstantActionPromptSection(instantActionInstructions);
+    const extractedLevel = extractInstantActionLevel(instantActionInstructions);
+    // An explicit Initial Setup level wins over the onboarding dropdown, including "no levels".
+    const noLevel = extractedLevel === null && opts.level === null;
+    const level = noLevel ? null : (extractedLevel ?? (opts.level || 1));
+    const instantActionLevelFallback = !!instantActionInstructions && extractedLevel === null && !noLevel;
 
     const isStoryFitting = classRaw === '__story__';
     const isOther = classRaw === '__other__';
@@ -139,7 +143,9 @@ export function buildCharacterGenerationPrompt(opts) {
     } else if (isOther && classOtherVal) {
         classLine = `Class: ${classOtherVal}`;
     } else if (!isOther && !isStoryFitting && classRaw) {
-        classLine = `Class: ${classRaw}`;
+        classLine = instantActionInstructions
+            ? `Class: ${classRaw} (fallback — if the Initial Setup specifies or clearly implies a different class, follow the Initial Setup instead)`
+            : `Class: ${classRaw}`;
     } else {
         classLine = `Class: (invent a class fitting the setting and era — do NOT use fantasy D&D class names in non-fantasy contexts)`;
     }
@@ -173,11 +179,17 @@ export function buildCharacterGenerationPrompt(opts) {
 
     const levelPrefix = noLevel
         ? `LEVEL SYSTEM: This character creation system does not use numeric character levels. Do NOT invent, assign, or output a level number, an [XP] block, or any D&D-style level indicator — balance the character using the setting's own internal logic instead.`
-        : hasXp
-            ? `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`
-            : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, capabilities, and gear (everything a character of that level might have) to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
+        : instantActionLevelFallback
+            ? (hasXp
+                ? `STARTING LEVEL: ${level} (fallback — If the Initial Setup specifies or clearly implies a different level, follow the Initial Setup instead. The character MUST be exactly that level.)`
+                : `STARTING LEVEL: ${level} (fallback — If the Initial Setup specifies or clearly implies a different level, follow the Initial Setup instead; scale/adjust HP, stats, saves, capabilities, and gear to that level, but do NOT output an [XP] block as it is disabled).`)
+            : hasXp
+                ? `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`
+                : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, capabilities, and gear (everything a character of that level might have) to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
 
-    const xpHint = (hasXp && !noLevel) ? buildOnboardingXpHint(level) : '';
+    const xpHint = (hasXp && !noLevel)
+        ? buildOnboardingXpHint(level, { allowInitialSetupOverride: instantActionLevelFallback })
+        : '';
     const TIME_FORMAT_HINT = hasTime ? buildOnboardingTimeHint(startDateVal, s.initialTime || '08:00 AM') : '';
     const magicGearHint = buildStartingGearHint(noLevel ? 1 : level, genre, hasInventory, gearTier);
 
@@ -210,7 +222,7 @@ Species:      ${f(speciesVal, '(your choice)')}
 Ethnicity:    ${f(ethnicityVal, '(your choice)')}
 ${classLine}
 Traits:       ${f(traitsVal, '(invent 2–3 distinctive traits)')}
-Level:        ${noLevel ? 'N/A — this system has no numeric levels' : level}
+Level:        ${noLevel ? 'N/A — this system has no numeric levels' : (instantActionLevelFallback ? `${level} (fallback — if the Initial Setup specifies a different level, follow the Initial Setup instead)` : level)}
 ${hasAbilities ? `Abilities:    ${f(abilitiesVal, '(generate fitting, creative abilities)')}\n` : ''}Background:   ${f(backgroundVal, '(invent a brief origin)')}
 Appearance:   ${f(appearanceVal, '(invent a memorable appearance)')}
 ${additionalVal ? `Additional:   ${additionalVal}` : ''}
@@ -229,7 +241,9 @@ ${nameVal ? `• Use the provided name "${nameVal}" exactly; do not alter or rep
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
 ${noLevel
     ? `• There is no numeric level for this character. All stats, gear, and saves must be internally consistent and appropriately balanced for the setting.${magicGearHint}`
-    : `• All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.${magicGearHint}`}
+    : instantActionLevelFallback
+        ? `• Treat Level ${level} as a fallback. If the Initial Setup specifies or clearly implies a different level, follow the Initial Setup instead. All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with the chosen level.${magicGearHint}`
+        : `• All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.${magicGearHint}`}
 ${combatSkillHint}
 ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 
