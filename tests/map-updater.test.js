@@ -112,7 +112,8 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"op":"ADD_ASSET"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"area_id":"shrine-quarter"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
-        expect(updater).toContain('mapArchitectConnectionSource');
+        expect(updater).toContain('mapRuntimeConnectionSource');
+        expect(updater).not.toContain('mapArchitectConnectionSource');
         expect(updater).toContain('mapUpdaterMaxTokens');
         expect(updater).toContain('Number(settings.mapUpdaterMaxTokens) || 25000');
         const defaults = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');

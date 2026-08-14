@@ -78,14 +78,14 @@ function broadcastStep(type, content, metadata = {}) {
 
 function requestSettings(settings) {
     return {
-        connectionSource: settings.mapArchitectConnectionSource || 'default',
-        connectionProfileId: settings.mapArchitectConnectionProfileId || '',
-        completionPresetId: settings.mapArchitectCompletionPresetId || '',
-        ollamaUrl: settings.mapArchitectOllamaUrl || 'http://localhost:11434',
-        ollamaModel: settings.mapArchitectOllamaModel || '',
-        openaiUrl: settings.mapArchitectOpenaiUrl || '',
-        openaiKey: settings.mapArchitectOpenaiKey || '',
-        openaiModel: settings.mapArchitectOpenaiModel || '',
+        connectionSource: settings.mapRuntimeConnectionSource || 'default',
+        connectionProfileId: settings.mapRuntimeConnectionProfileId || '',
+        completionPresetId: settings.mapRuntimeCompletionPresetId || '',
+        ollamaUrl: settings.mapRuntimeOllamaUrl || 'http://localhost:11434',
+        ollamaModel: settings.mapRuntimeOllamaModel || '',
+        openaiUrl: settings.mapRuntimeOpenaiUrl || '',
+        openaiKey: settings.mapRuntimeOpenaiKey || '',
+        openaiModel: settings.mapRuntimeOpenaiModel || '',
         maxTokens: Math.max(1000, Number(settings.mapEvolutionMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };
@@ -122,8 +122,8 @@ function formatFailure(errors) {
 
 function kindPolicy(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT: World Report is primary. Do not invent a coup, occupation, or named arrival the report did not mention. Interiors are OBJECT assets in a district, not new areas.'
-        : 'DUNGEON: local restlessness is allowed in UNREVEALED or vacated rooms. Do not revive DESTROYED/DEAD assets.';
+        ? 'SETTLEMENT: district and OBJECT change is expected in any way that makes logical and narrative sense — ordinary civic occupancy or unrest. Ground named World Report events when present; do not wait for WP to invent local occupancy. Interiors are OBJECT assets in a district, not new areas.'
+        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
 }
 
 function triggerHeadline(trigger) {
@@ -163,7 +163,7 @@ ${reportBlock}
 ## PRIOR EVOLUTION THIS PERIOD
 ${digestBlock}
 
-Output only the required JSON object. Use {"noop":true} when this site is unaffected.`;
+Output only the required JSON object. Prefer a durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
 function correctionPrompt({ site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere, priorOutput, errors, attempt }) {

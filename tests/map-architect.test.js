@@ -29,8 +29,14 @@ describe('Map Architect component', () => {
         expect(index).toContain('Math.min(32000, parseInt(String($(this).val()), 10) || 25000)');
         expect(profiles).toContain('mapArchitectMaxTokens: s.mapArchitectMaxTokens ?? 25000');
         expect(settingsMarkup).toMatch(/id="rpg_map_architect_max_tokens"[^>]*max="32000"/);
+        expect(settingsMarkup).toContain('<b>Persistent Maps</b>');
+        expect(settingsMarkup).toContain('<b>Map Architect</b>');
+        expect(settingsMarkup).not.toContain('<b>Architect Prompt</b>');
         expect(defaults).not.toContain('mapArchitectMaxTokens: 6000');
         expect(index).not.toContain('mapArchitectMaxTokens ?? 6000');
+        const settingsSource = readFileSync(new URL('../src/state/settings.js', import.meta.url), 'utf8');
+        expect(settingsSource).toContain('mapArchitectMaxTokensFloored');
+        expect(settingsSource).toContain('architectTokens < 25000');
     });
 
     it('registers a hidden narrator tool and a dedicated connection path', () => {
@@ -48,6 +54,7 @@ describe('Map Architect component', () => {
         expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
         expect(architect).toContain('persistArchitectDungeonMap');
         expect(architect).toContain('mapArchitectConnectionSource');
+        expect(architect).not.toContain('mapRuntimeConnectionSource');
         expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA }');
         expect(architect).toContain('CreateAreaMap');
         expect(architect).not.toContain('CreateDungeonMap');

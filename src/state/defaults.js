@@ -1362,6 +1362,8 @@ Rules:
 
         mapArchitectMaxTokens: 25000,
 
+        mapArchitectMaxTokensFloored: true,
+
         mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
 
         mapArchitectConnectionSource: "default",
@@ -1379,6 +1381,22 @@ Rules:
         mapArchitectOpenaiKey: "",
 
         mapArchitectOpenaiModel: "",
+
+        mapRuntimeConnectionSource: "default",
+
+        mapRuntimeConnectionProfileId: "",
+
+        mapRuntimeCompletionPresetId: "",
+
+        mapRuntimeOllamaUrl: "http://localhost:11434",
+
+        mapRuntimeOllamaModel: "",
+
+        mapRuntimeOpenaiUrl: "",
+
+        mapRuntimeOpenaiKey: "",
+
+        mapRuntimeOpenaiModel: "",
 
         mapUpdaterEnabled: true,
 

@@ -77,14 +77,14 @@ export function isMapUpdaterNoop(value) {
 
 function requestSettings(settings) {
     return {
-        connectionSource: settings.mapArchitectConnectionSource || 'default',
-        connectionProfileId: settings.mapArchitectConnectionProfileId || '',
-        completionPresetId: settings.mapArchitectCompletionPresetId || '',
-        ollamaUrl: settings.mapArchitectOllamaUrl || 'http://localhost:11434',
-        ollamaModel: settings.mapArchitectOllamaModel || '',
-        openaiUrl: settings.mapArchitectOpenaiUrl || '',
-        openaiKey: settings.mapArchitectOpenaiKey || '',
-        openaiModel: settings.mapArchitectOpenaiModel || '',
+        connectionSource: settings.mapRuntimeConnectionSource || 'default',
+        connectionProfileId: settings.mapRuntimeConnectionProfileId || '',
+        completionPresetId: settings.mapRuntimeCompletionPresetId || '',
+        ollamaUrl: settings.mapRuntimeOllamaUrl || 'http://localhost:11434',
+        ollamaModel: settings.mapRuntimeOllamaModel || '',
+        openaiUrl: settings.mapRuntimeOpenaiUrl || '',
+        openaiKey: settings.mapRuntimeOpenaiKey || '',
+        openaiModel: settings.mapRuntimeOpenaiModel || '',
         maxTokens: Math.max(1000, Number(settings.mapUpdaterMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };

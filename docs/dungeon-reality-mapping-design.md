@@ -132,7 +132,7 @@ Map data, instructions, and occupancy updates are exposed only while the latest 
 
 Pinned mapped roots may keep their visible `[CORE]` text active outside the site, but their `[MAP]` payload is stripped from Lorebook Agent context. Incidental keywords and prose mentions do not activate map capability. While a site is current, its location-owned mapped root is also excluded from the Lorebook Agent's ordinary activation budget.
 
-Map Updater is a dedicated one-shot JSON pass (same connection as Map Architect). It emits either `{"noop":true}` or an occupancy transaction. Lorebook Agent no longer receives `inspect_map`, `list_map_assets`, `commit.map`, or `[MAP_COMMIT]`.
+Map Updater is a dedicated one-shot JSON pass (shared Map Updater & Evolution connection, separate from Map Architect). It emits either `{"noop":true}` or an occupancy transaction. Lorebook Agent no longer receives `inspect_map`, `list_map_assets`, `commit.map`, or `[MAP_COMMIT]`.
 
 The two occupancy/lore cadences are independent: Map Updater defaults to every turn; Lorebook Agent defaults to every 3 messages. The Lorebook Agent header play button expands into a manual choice between Lorebook Agent, Map Updater, and Map Evolution.
 
@@ -148,7 +148,7 @@ Map Evolution is a dedicated module (`map-evolution.js`, own prompt) — never m
 
 JavaScript prefilters sites (site-name hit, asset-name hit, faction hit) and calls Evolution **sequentially**, one site per request. Hosts (matched living assets) run first; destination sites follow. Cross-site continuity is a short **PRIOR EVOLUTION THIS PERIOD** digest (leave = FLEEING/REMOVE_ASSET; arrive = ADD_ASSET). All maps in the campaign stack are writable; occupancy stays active-site-only.
 
-Authority: play/occupancy owns the player bubble and established deaths. WP owns off-screen named entities outside that bubble. Interval restlessness must not undo a WP report from the same period. `DESTROYED` stays destroyed; add a new remnant instead of resurrecting. New assets are `UNREVEALED`. Dungeons may restock locally; settlements stay WP-primary (no invented coups).
+Authority: play/occupancy owns the player bubble and established deaths. Map Evolution owns off-screen map change. World Progression is optional macro flavor: named report hits are grounded when present, but Evolution does not wait for WP to restock, occupy, or stir a site. Interval restlessness must not undo a WP report from the same period. `DESTROYED` stays destroyed; add a new remnant instead of resurrecting. New assets are `UNREVEALED`. Dungeons may invent new local occupants (rival delvers, scavengers). Settlements may evolve as ordinary civic occupancy or unrest; neither is preferred. WP is not a permission gate. Every change must still make logical and narrative sense for the site.
 
 Pipeline after each narrator reply: State Tracker → Map Updater (occupancy) → World Progression (if due) → Map Evolution (grounding and/or interval) → Lorebook Agent.
 

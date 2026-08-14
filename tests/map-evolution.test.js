@@ -50,6 +50,16 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evidence "EVOLVED"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('PLAYER BUBBLE');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Do not ADD_AREA');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Local change is the default');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('not a permission gate');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('logical and narrative sense');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('neither is preferred');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('or larger unrest');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toMatch(/SETTLEMENT: restlessness/);
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('not chaos by default');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Do not invent raids');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('own factions');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('WP is primary');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('World Report');
@@ -222,7 +232,8 @@ describe('Map Evolution', () => {
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 
         expect(evolution).toContain("trigger === 'world_progression'");
-        expect(evolution).toContain('pickSitesForEvolutionTick');
+        expect(evolution).toContain('restock and new occupants are expected');
+        expect(evolution).not.toContain('World Report is primary');
         expect(evolution).toContain('siteRoots');
         expect(evolution).toContain('listMappedEvolutionSites');
         expect(evolution).toContain("scope === 'active'");
@@ -254,6 +265,8 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_evolve_now"');
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
         expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
+        expect(evolution).toContain('mapRuntimeConnectionSource');
+        expect(evolution).not.toContain('mapArchitectConnectionSource');
         expect(panelMarkup).toContain('id="rt-research-map-evolution"');
         expect(indexSource).toContain('rpg_map_evolution_evolve_now');
         expect(indexSource).toContain('listMappedEvolutionSites');

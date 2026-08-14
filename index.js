@@ -254,6 +254,22 @@ function applyMapEvolutionTickSettingsToUi(settings) {
     if ((s.mapEvolutionTickScope || 'active') === 'selected') void refreshMapEvolutionSelectedList();
 }
 
+function applyMapRuntimeConnectionSettingsToUi(settings) {
+    const s = settings || getSettings();
+    $('#rpg_map_runtime_connection_source').val(s.mapRuntimeConnectionSource || 'default');
+    $('#rpg_map_runtime_connection_profile').val(s.mapRuntimeConnectionProfileId || '');
+    $('#rpg_map_runtime_completion_preset').val(s.mapRuntimeCompletionPresetId || '');
+    $('#rpg_map_runtime_ollama_url').val(s.mapRuntimeOllamaUrl || 'http://localhost:11434');
+    $('#rpg_map_runtime_ollama_model').val(s.mapRuntimeOllamaModel || '');
+    $('#rpg_map_runtime_openai_url').val(s.mapRuntimeOpenaiUrl || '');
+    $('#rpg_map_runtime_openai_key').val(s.mapRuntimeOpenaiKey || '');
+    $('#rpg_map_runtime_openai_model').val(s.mapRuntimeOpenaiModel || '');
+    $('#rpg_map_runtime_openai_model_manual').val(s.mapRuntimeOpenaiModel || '');
+    $('#rpg_map_runtime_profile_group').toggle(s.mapRuntimeConnectionSource === 'profile');
+    $('#rpg_map_runtime_ollama_group').toggle(s.mapRuntimeConnectionSource === 'ollama');
+    $('#rpg_map_runtime_openai_group').toggle(s.mapRuntimeConnectionSource === 'openai');
+}
+
 
 /** Confirms then wipes World/Skeleton lorebooks + per-chat WP timer state for the active prefix. */
 async function confirmAndPurgeWorldHistory() {
@@ -2735,6 +2751,15 @@ function loadProfile(name) {
     s.mapArchitectOpenaiUrl = p.mapArchitectOpenaiUrl || "";
     s.mapArchitectOpenaiKey = p.mapArchitectOpenaiKey || "";
     s.mapArchitectOpenaiModel = p.mapArchitectOpenaiModel || "";
+    s.mapRuntimeConnectionSource = p.mapRuntimeConnectionSource ?? p.mapArchitectConnectionSource ?? "default";
+    s.mapRuntimeConnectionProfileId = p.mapRuntimeConnectionProfileId || p.mapArchitectConnectionProfileId || "";
+    s.mapRuntimeCompletionPresetId = p.mapRuntimeCompletionPresetId || p.mapArchitectCompletionPresetId || "";
+    s.mapRuntimeOllamaUrl = p.mapRuntimeOllamaUrl || p.mapArchitectOllamaUrl || "http://localhost:11434";
+    s.mapRuntimeOllamaModel = p.mapRuntimeOllamaModel || p.mapArchitectOllamaModel || "";
+    s.mapRuntimeOpenaiUrl = p.mapRuntimeOpenaiUrl || p.mapArchitectOpenaiUrl || "";
+    s.mapRuntimeOpenaiKey = p.mapRuntimeOpenaiKey || p.mapArchitectOpenaiKey || "";
+    s.mapRuntimeOpenaiModel = p.mapRuntimeOpenaiModel || p.mapArchitectOpenaiModel || "";
+    s.mapRuntimeConnectionSeeded = true;
     s.mapUpdaterEnabled = p.mapUpdaterEnabled !== false;
     s.mapUpdaterRunEvery = Math.max(1, Number(p.mapUpdaterRunEvery) || 1);
     s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 25000;
@@ -2836,7 +2861,7 @@ function loadProfile(name) {
     $('#rpg_portrait_openai_model').val(s.portraitOpenaiModel || '');
     $('#rpg_portrait_openai_model_manual').val(s.portraitOpenaiModel || '');
 
-    // Sync Map Architect settings UI
+    // Sync Persistent Maps settings UI
     $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
     $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
     $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
@@ -2849,6 +2874,7 @@ function loadProfile(name) {
     $('#rpg_map_architect_openai_key').val(s.mapArchitectOpenaiKey || '');
     $('#rpg_map_architect_openai_model').val(s.mapArchitectOpenaiModel || '');
     $('#rpg_map_architect_openai_model_manual').val(s.mapArchitectOpenaiModel || '');
+    applyMapRuntimeConnectionSettingsToUi(s);
     $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
     $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
     $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
@@ -4907,7 +4933,8 @@ const CONNECTION_SETTINGS_UI = [
     { key: 'lorebook_agent', control: '#rpg_tracker_router_source', slot: '#rpg_connection_slot_lorebook_agent', label: 'Lorebook Agent', recommendation: 'Same models work fine here as with the State Tracker.' },
     { key: 'adventure_companion', control: '#rpg_adventure_companion_connection_source', slot: '#rpg_connection_slot_adventure_companion', label: 'Adventure Companion' },
     { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Game System Wizard', recommendation: 'I recommend using a somewhat better model here such as Sonnet 5 or above for more robust and complex systems. Your mileage varies a lot here. Experiment.' },
-    { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Map Architect', recommendation: 'A capable reasoning model is recommended for coherent topology, hidden information, and entity placement.' },
+    { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Map Architect', recommendation: 'A capable reasoning model is recommended for coherent topology, hidden information, and entity placement. Map Architect builds the foundation map; give it a stronger model than occupancy and evolution.' },
+    { key: 'map_runtime', control: '#rpg_map_runtime_connection_source', slot: '#rpg_connection_slot_map_runtime', label: 'Map Updater & Evolution', recommendation: 'Occupancy and off-screen evolution can use a cheaper model than Map Architect. JSON discipline still helps.' },
     { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'World Progression' },
     { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Portrait Generation', recommendation: 'A lightweight model should do fine.' },
 ];
@@ -5167,6 +5194,12 @@ function organizeConnectionSettingsUI() {
         await bindFeatureConnectionSettings({
             uiPrefix: 'rpg_map_architect',
             keyPrefix: 'mapArchitect',
+            settings,
+            presetManager: pm,
+        });
+        await bindFeatureConnectionSettings({
+            uiPrefix: 'rpg_map_runtime',
+            keyPrefix: 'mapRuntime',
             settings,
             presetManager: pm,
         });
@@ -11177,7 +11210,7 @@ RULES:
             $('#rpg_portrait_location_include_present_npcs').prop('checked', !!s.portraitLocationIncludePresentNpcs);
             $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
 
-            // Map Architect
+            // Persistent Maps
             $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
             $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
             $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
@@ -11193,6 +11226,7 @@ RULES:
             $('#rpg_map_architect_profile_group').toggle(s.mapArchitectConnectionSource === 'profile');
             $('#rpg_map_architect_ollama_group').toggle(s.mapArchitectConnectionSource === 'ollama');
             $('#rpg_map_architect_openai_group').toggle(s.mapArchitectConnectionSource === 'openai');
+            applyMapRuntimeConnectionSettingsToUi(s);
             $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
             $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
             $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);

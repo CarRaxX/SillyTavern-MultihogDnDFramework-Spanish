@@ -819,6 +819,24 @@ function getSettingsInternal(extensionSettings) {
     // stream is killed. Treat it as unset so existing chats pick up 25000.
     if (Number(s.mapUpdaterMaxTokens) === 2500) s.mapUpdaterMaxTokens = 25000;
     if (Number(s.mapEvolutionMaxTokens) === 2500) s.mapEvolutionMaxTokens = 25000;
+    // One-time floor so old saved 6000/etc. pick up 25000. After this flag is set,
+    // the user can lower the budget again without it bouncing back.
+    if (!s.mapArchitectMaxTokensFloored) {
+        const architectTokens = Number(s.mapArchitectMaxTokens);
+        if (!Number.isFinite(architectTokens) || architectTokens < 25000) s.mapArchitectMaxTokens = 25000;
+        s.mapArchitectMaxTokensFloored = true;
+    }
+    if (!s.mapRuntimeConnectionSeeded) {
+        s.mapRuntimeConnectionSource = s.mapArchitectConnectionSource ?? 'default';
+        s.mapRuntimeConnectionProfileId = s.mapArchitectConnectionProfileId || '';
+        s.mapRuntimeCompletionPresetId = s.mapArchitectCompletionPresetId || '';
+        s.mapRuntimeOllamaUrl = s.mapArchitectOllamaUrl || 'http://localhost:11434';
+        s.mapRuntimeOllamaModel = s.mapArchitectOllamaModel || '';
+        s.mapRuntimeOpenaiUrl = s.mapArchitectOpenaiUrl || '';
+        s.mapRuntimeOpenaiKey = s.mapArchitectOpenaiKey || '';
+        s.mapRuntimeOpenaiModel = s.mapArchitectOpenaiModel || '';
+        s.mapRuntimeConnectionSeeded = true;
+    }
     const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
     s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'active';
     const tickCount = Number(s.mapEvolutionTickCount);
@@ -1014,6 +1032,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitOpenaiModel',
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
+    'mapArchitectMaxTokensFloored',
     'mapArchitectSystemPrompt',
     'mapArchitectConnectionSource',
     'mapArchitectConnectionProfileId',
@@ -1023,6 +1042,15 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapArchitectOpenaiUrl',
     'mapArchitectOpenaiKey',
     'mapArchitectOpenaiModel',
+    'mapRuntimeConnectionSource',
+    'mapRuntimeConnectionProfileId',
+    'mapRuntimeCompletionPresetId',
+    'mapRuntimeOllamaUrl',
+    'mapRuntimeOllamaModel',
+    'mapRuntimeOpenaiUrl',
+    'mapRuntimeOpenaiKey',
+    'mapRuntimeOpenaiModel',
+    'mapRuntimeConnectionSeeded',
     'mapUpdaterEnabled',
     'mapUpdaterRunEvery',
     'mapUpdaterMaxTokens',

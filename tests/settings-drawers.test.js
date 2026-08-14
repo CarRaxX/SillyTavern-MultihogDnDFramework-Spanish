@@ -17,7 +17,7 @@ describe('General & Visuals settings', () => {
             '<b>Game Systems & Customization</b>',
             '<b>State Tracker & Modules</b>',
             '<b>Lorebook Agent</b>',
-            '<b>Map Architect</b>',
+            '<b>Persistent Maps</b>',
             '<b>World Progression</b>',
             '<b>Adventure Companion</b>',
         ];
@@ -53,6 +53,7 @@ describe('General & Visuals settings', () => {
             'rpg_connection_slot_adventure_companion',
             'rpg_connection_slot_game_system_wizard',
             'rpg_connection_slot_map_architect',
+            'rpg_connection_slot_map_runtime',
             'rpg_connection_slot_world_progression',
             'rpg_connection_slot_portraits',
         ].forEach(id => expect(settingsMarkup).toContain(`id="${id}"`));
@@ -66,6 +67,7 @@ describe('General & Visuals settings', () => {
         expect(indexSource).toContain("control: '#rpg_adventure_companion_connection_source'");
         expect(indexSource).toContain("control: '#rpg_gs_wizard_connection_source'");
         expect(indexSource).toContain("control: '#rpg_map_architect_connection_source'");
+        expect(indexSource).toContain("control: '#rpg_map_runtime_connection_source'");
         expect(indexSource).toContain("control: '#rpg_world_connection_source'");
         expect(indexSource).toContain("control: '#rpg_portrait_connection_source'");
         expect(indexSource).toContain('I recommend a cheap mid-tier model such as GPT-5.6 Luna, Gemini Flash/Flash-Lite series, or Deepseek V4 Flash latest.');
@@ -130,14 +132,16 @@ describe('General & Visuals settings', () => {
         ].forEach((id) => expect(companionMarkup).toContain(`id="${id}"`));
     });
 
-    it('places Map Architect directly below Lorebook Agent', () => {
+    it('places Persistent Maps directly below Lorebook Agent', () => {
         const agentStart = settingsMarkup.indexOf('<b>Lorebook Agent</b>');
-        const mapStart = settingsMarkup.indexOf('<b>Map Architect</b>');
+        const mapStart = settingsMarkup.indexOf('<b>Persistent Maps</b>');
         const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
 
         expect(agentStart).toBeGreaterThanOrEqual(0);
         expect(mapStart).toBeGreaterThan(agentStart);
         expect(worldStart).toBeGreaterThan(mapStart);
+        expect(settingsMarkup.indexOf('<b>Map Architect</b>')).toBeGreaterThan(mapStart);
+        expect(settingsMarkup.indexOf('<b>Architect Prompt</b>')).toBeLessThan(0);
     });
 
     it('places Adventure Companion directly below World Progression', () => {

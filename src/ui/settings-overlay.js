@@ -26,7 +26,7 @@ const TAB_DEFS = [
     { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Game Systems', match: /Game Systems/i },
     { id: 'statetracker', icon: 'fa-brain', label: 'State Tracker', match: /State Tracker/i },
     { id: 'agent', icon: 'fa-route', label: 'Lorebook Agent', match: /Lorebook Agent/i },
-    { id: 'maparchitect', icon: 'fa-map', label: 'Map Architect', match: /Map Architect/i },
+    { id: 'maparchitect', icon: 'fa-map', label: 'Persistent Maps', match: /Persistent Maps/i },
     { id: 'worldprog', icon: 'fa-globe', label: 'World Progression', match: /World Progression/i },
     { id: 'companion', icon: 'fa-comments', label: 'Adventure Companion', match: /Adventure Companion/i },
 ];

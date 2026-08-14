@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.85.0] - 2026-08-15
+
+### Changed
+- **Persistent Maps settings**: the left-rail section is renamed from Map Architect. Map Architect lookback, tokens, and prompt live in their own nested drawer beside Map Updater and Map Evolution.
+- **Map Architect max tokens**: saved values below 25000 are raised once to match Map Updater / Map Evolution. After that one-time floor, you can lower the budget again.
+- **Separate map connections**: Map Architect keeps its own connection for the foundation pass. Map Updater and Map Evolution share a second connection so occupancy and off-screen change can use a cheaper model. Existing chats copy the current Architect connection onto that new slot once, then the two can diverge.
+- **Map Evolution stance**: off-screen map change is primary. World Progression is optional macro flavor, not a permission gate. Dungeons may restock from rival adventurers, scavengers, or anyone the site could attract — not only the original faction. Settlements may evolve as ordinary civic occupancy or unrest; neither is preferred. Changes must still make logical and narrative sense for the site.
+
 ## [7.84.0] - 2026-08-15
 
 ### Added
