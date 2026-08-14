@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [Unreleased]
+## [7.50.0] - 2026-08-14
 
 ### Added
 - **Dedicated Map Architect**: The narrator can call a one-shot private agent with its own prompt, connection profile, model, preset, lookback, and output budget to create dangerous-site maps.
