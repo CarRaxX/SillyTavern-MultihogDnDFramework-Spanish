@@ -36,9 +36,20 @@ describe('panel builder', () => {
         expect(source).toContain('View private dungeon map (alpha) attached to this root Location');
         expect(source).toContain('openDungeonMapPopup');
         expect(source).toContain('renderDungeonMapReadableHtml');
+        expect(source).toContain('revealAll: true');
         expect(source).toContain('data-map-view="readable"');
         expect(source).toContain('data-map-view="raw"');
         expect(source).toContain('Raw JSON');
         expect(source).toContain('stripDungeonMapSection(item.content');
+    });
+
+    it('opens a knowledge-filtered site inspector from Visuals/Map', () => {
+        const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
+        expect(source).toContain('bindDungeonMapPan');
+        expect(source).toContain('openDungeonMapReadablePopup');
+        expect(source).toContain('Reveal all');
+        expect(source).toContain('playerFacing: true');
+        expect(source).toContain('dataset.didPan');
+        expect(source).toContain('rt-dungeon-map-details');
     });
 });

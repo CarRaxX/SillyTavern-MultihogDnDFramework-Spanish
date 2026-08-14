@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.1] - 2026-08-14
+
+### Changed
+- **Draggable site graph**: Dragging the Visuals/Map graph pans the view instead of selecting text. Revealed rooms still open on click.
+- **Site details from Visuals/Map**: The list button next to the graph opens the readable map (rooms, geometry, routes, and assets). Unrevealed rooms and assets stay hidden unless **Reveal all** is turned on. The Lorebook MAP badge remains the full GM inspector, including Raw JSON.
+
 ## [7.50.0] - 2026-08-14
 
 Dungeon Reality Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats.

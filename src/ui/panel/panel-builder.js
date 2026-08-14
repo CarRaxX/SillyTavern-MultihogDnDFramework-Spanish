@@ -9,6 +9,7 @@ import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompan
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
 
 /**
@@ -528,52 +529,6 @@ export function createPanel(dependencies) {
         // Tracks entries whose body is currently expanded
         const _openEntries = new Set();
 
-        const renderDungeonMapReadableHtml = (mapDocument) => {
-            const areasById = new Map(mapDocument.areas.map(area => [area.id, area]));
-            const renderTag = (value, className = '') => `<span class="rt-dungeon-map-tag ${className}">${escapeHtml(value)}</span>`;
-            const renderAsset = (asset) => {
-                const metadata = [];
-                if (asset.behavior) metadata.push(`<b>Behavior:</b> ${escapeHtml(asset.behavior)}`);
-                if (asset.route?.length) metadata.push(`<b>Route:</b> ${asset.route.map(id => escapeHtml(areasById.get(id)?.name || id)).join(' &rarr; ')}`);
-                if (asset.faction) metadata.push(`<b>Faction:</b> ${escapeHtml(asset.faction)}`);
-                if (asset.owner) metadata.push(`<b>Owner:</b> ${escapeHtml(asset.owner)}`);
-                if (asset.duration) metadata.push(`<b>Duration:</b> ${escapeHtml(asset.duration)}`);
-                if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origin:</b> ${escapeHtml(asset.origin)}`);
-                if (asset.last_location) metadata.push(`<b>Last location:</b> ${escapeHtml(areasById.get(asset.last_location)?.name || asset.last_location)}`);
-                return `<div class="rt-dungeon-map-asset">
-                    <div class="rt-dungeon-map-asset-head"><i class="fa-solid fa-diamond"></i><strong>${escapeHtml(asset.name)}</strong>${renderTag(asset.kind)}${renderTag(asset.state, 'rt-dungeon-map-state')}${renderTag(asset.knowledge, 'rt-dungeon-map-knowledge')}</div>
-                    ${asset.detail ? `<div class="rt-dungeon-map-asset-detail">${escapeHtml(asset.detail)}</div>` : ''}
-                    ${metadata.length ? `<div class="rt-dungeon-map-asset-meta">${metadata.join('<span class="rt-dungeon-map-meta-sep">&bull;</span>')}</div>` : ''}
-                </div>`;
-            };
-            const renderArea = (area) => {
-                const assets = mapDocument.assets.filter(asset => asset.location === area.id);
-                const geometry = area.geometry.length
-                    ? `<ul class="rt-dungeon-map-geometry">${area.geometry.map(fact => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>`
-                    : `<div class="rt-dungeon-map-empty">No structural notes.</div>`;
-                const connections = area.connections.length
-                    ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Routes</span>${area.connections.map(connection => {
-                        const target = areasById.get(connection.to);
-                        return `<span class="rt-dungeon-map-route"><i class="fa-solid fa-arrow-right"></i>${escapeHtml(target?.name || connection.to)}${renderTag(connection.state)}${connection.detail ? `<span class="rt-dungeon-map-route-detail">${escapeHtml(connection.detail)}</span>` : ''}</span>`;
-                    }).join('')}</div>`
-                    : '';
-                return `<section class="rt-dungeon-map-area">
-                    <div class="rt-dungeon-map-area-head"><i class="fa-solid fa-location-dot"></i><strong>${escapeHtml(area.name)}</strong>${renderTag(area.knowledge, 'rt-dungeon-map-knowledge')}</div>
-                    <div class="rt-dungeon-map-section-label">Geometry &amp; prose</div>
-                    ${geometry}
-                    ${connections}
-                    ${assets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Assets (${assets.length})</span>${assets.map(renderAsset).join('')}</div>` : ''}
-                </section>`;
-            };
-            const unplaced = mapDocument.assets.filter(asset => !asset.location || !areasById.has(asset.location));
-            return `<div class="rt-dungeon-map-summary">
-                    <span>${renderTag(`${mapDocument.areas.length} areas`)}</span>
-                    <span>${renderTag(`${mapDocument.assets.length} assets`)}</span>
-                </div>
-                <div class="rt-dungeon-map-area-list">${mapDocument.areas.map(renderArea).join('')}</div>
-                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Removed / unplaced assets</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
-        };
-
         const openDungeonMapPopup = async (item) => {
             if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) return;
             const map = extractDungeonMapSection(item?.content);
@@ -590,7 +545,7 @@ export function createPanel(dependencies) {
                     <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Readable</button>
                     <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false"><i class="fa-solid fa-code"></i> Raw JSON</button>
                 </div>
-                <div class="rt-dungeon-map-readable" data-map-panel="readable">${renderDungeonMapReadableHtml(mapDocument)}</div>
+                <div class="rt-dungeon-map-readable" data-map-panel="readable">${renderDungeonMapReadableHtml(mapDocument, { revealAll: true })}</div>
                 <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden>${escapeHtml(map)}</pre>`;
             const setMapView = (view) => {
                 for (const button of popupDom.querySelectorAll('[data-map-view]')) {

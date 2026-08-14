@@ -18,6 +18,10 @@ function escapeXml(value) {
         .replace(/"/g, '&quot;');
 }
 
+function escapeHtml(value) {
+    return escapeXml(value).replace(/'/g, '&#039;');
+}
+
 function truncateLabel(name, max = 18) {
     const text = String(name || '').trim();
     if (text.length <= max) return text;
@@ -273,7 +277,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
             : `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="6"></rect>`;
         return `<g ${attrs}><title>${title}</title>${shape}<text x="${node.cx}" y="${node.cy}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}">${escapeXml(label)}</text></g>`;
     }).join('');
-    return `<svg class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
+    return `<svg class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
 }
 
 /**
@@ -289,7 +293,10 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
             <div class="rt-immersion-section-label"><span>Site map</span><small class="rt-dungeon-alpha-tag">ALPHA</small></div>
             <div class="rt-immersion-map-popped-body">
                 <span>${site} is open in a separate window.</span>
-                <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reattach site map">Reattach</button>
+                <span class="rt-dungeon-map-label-actions">
+                    <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Open site details" aria-label="Open site details"><i class="fa-solid fa-list"></i></button>
+                    <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reattach site map">Reattach</button>
+                </span>
             </div>
         </div>`;
     }
@@ -298,9 +305,96 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
             <span>Site map</span>
             <span class="rt-dungeon-map-label-actions">
                 <small class="rt-dungeon-alpha-tag">ALPHA</small>
+                <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Open site details" aria-label="Open site details"><i class="fa-solid fa-list"></i></button>
                 <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Open map in a separate window" aria-label="Open map in a separate window">⧉</button>
             </span>
         </div>
         <div class="rt-dungeon-graph-scroll">${renderDungeonMapGraphSvg(graph, { compact: true, siteRoot: siteRoot || graph.site })}</div>
     </div>`;
+}
+
+function isPlayerVisibleArea(area) {
+    return area?.knowledge === 'VISITED' || area?.knowledge === 'DISCOVERED';
+}
+
+function isPlayerVisibleAsset(asset) {
+    const knowledge = String(asset?.knowledge || '').toUpperCase();
+    return knowledge && knowledge !== 'UNREVEALED';
+}
+
+function areaDisplayName(id, revealAll, visibleIds, areasById) {
+    if (revealAll || visibleIds.has(id)) {
+        return areasById.get(id)?.name || id;
+    }
+    return 'Unexplored';
+}
+
+/**
+ * Readable area/asset inspector HTML. When revealAll is false, UNREVEALED
+ * rooms and assets are omitted; routes into the fog become "Unexplored".
+ * @param {object} mapDocument
+ * @param {{ revealAll?: boolean }} [options]
+ */
+export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } = {}) {
+    const areas = Array.isArray(mapDocument?.areas) ? mapDocument.areas : [];
+    const assets = Array.isArray(mapDocument?.assets) ? mapDocument.assets : [];
+    const visibleAreas = revealAll ? areas : areas.filter(isPlayerVisibleArea);
+    const visibleIds = new Set(visibleAreas.map(area => area.id));
+    const areasById = new Map(areas.map(area => [area.id, area]));
+    const visibleAssets = revealAll ? assets : assets.filter(asset => {
+        if (!isPlayerVisibleAsset(asset)) return false;
+        if (!asset.location) return true;
+        return visibleIds.has(asset.location);
+    });
+    const renderTag = (value, className = '') => `<span class="rt-dungeon-map-tag ${className}">${escapeHtml(value)}</span>`;
+    const renderAsset = (asset) => {
+        const metadata = [];
+        if (asset.behavior) metadata.push(`<b>Behavior:</b> ${escapeHtml(asset.behavior)}`);
+        if (asset.route?.length) {
+            metadata.push(`<b>Route:</b> ${asset.route.map(id => escapeHtml(areaDisplayName(id, revealAll, visibleIds, areasById))).join(' &rarr; ')}`);
+        }
+        if (asset.faction) metadata.push(`<b>Faction:</b> ${escapeHtml(asset.faction)}`);
+        if (asset.owner) metadata.push(`<b>Owner:</b> ${escapeHtml(asset.owner)}`);
+        if (asset.duration) metadata.push(`<b>Duration:</b> ${escapeHtml(asset.duration)}`);
+        if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origin:</b> ${escapeHtml(asset.origin)}`);
+        if (asset.last_location) {
+            metadata.push(`<b>Last location:</b> ${escapeHtml(areaDisplayName(asset.last_location, revealAll, visibleIds, areasById))}`);
+        }
+        return `<div class="rt-dungeon-map-asset">
+                    <div class="rt-dungeon-map-asset-head"><i class="fa-solid fa-diamond"></i><strong>${escapeHtml(asset.name)}</strong>${renderTag(asset.kind)}${renderTag(asset.state, 'rt-dungeon-map-state')}${renderTag(asset.knowledge, 'rt-dungeon-map-knowledge')}</div>
+                    ${asset.detail ? `<div class="rt-dungeon-map-asset-detail">${escapeHtml(asset.detail)}</div>` : ''}
+                    ${metadata.length ? `<div class="rt-dungeon-map-asset-meta">${metadata.join('<span class="rt-dungeon-map-meta-sep">&bull;</span>')}</div>` : ''}
+                </div>`;
+    };
+    const renderArea = (area) => {
+        const areaAssets = visibleAssets.filter(asset => asset.location === area.id);
+        const showGeometry = revealAll || area.knowledge === 'VISITED';
+        const geometry = showGeometry && area.geometry?.length
+            ? `<ul class="rt-dungeon-map-geometry">${area.geometry.map(fact => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>`
+            : `<div class="rt-dungeon-map-empty">${showGeometry ? 'No structural notes.' : 'Not yet entered.'}</div>`;
+        const connections = (area.connections || []).length
+            ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Routes</span>${area.connections.map(connection => {
+                const name = areaDisplayName(connection.to, revealAll, visibleIds, areasById);
+                const detail = connection.detail || '';
+                return `<span class="rt-dungeon-map-route"><i class="fa-solid fa-arrow-right"></i>${escapeHtml(name)}${renderTag(connection.state)}${detail ? `<span class="rt-dungeon-map-route-detail">${escapeHtml(detail)}</span>` : ''}</span>`;
+            }).join('')}</div>`
+            : '';
+        return `<section class="rt-dungeon-map-area">
+                    <div class="rt-dungeon-map-area-head"><i class="fa-solid fa-location-dot"></i><strong>${escapeHtml(area.name)}</strong>${renderTag(area.knowledge, 'rt-dungeon-map-knowledge')}</div>
+                    <div class="rt-dungeon-map-section-label">Geometry &amp; prose</div>
+                    ${geometry}
+                    ${connections}
+                    ${areaAssets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Assets (${areaAssets.length})</span>${areaAssets.map(renderAsset).join('')}</div>` : ''}
+                </section>`;
+    };
+    const unplaced = visibleAssets.filter(asset => !asset.location || !areasById.has(asset.location));
+    if (!visibleAreas.length && !unplaced.length) {
+        return '<div class="rt-dungeon-map-empty">No revealed rooms yet.</div>';
+    }
+    return `<div class="rt-dungeon-map-summary">
+                    <span>${renderTag(`${visibleAreas.length} areas`)}</span>
+                    <span>${renderTag(`${visibleAssets.length} assets`)}</span>
+                </div>
+                <div class="rt-dungeon-map-area-list">${visibleAreas.map(renderArea).join('')}</div>
+                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Removed / unplaced assets</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
 }

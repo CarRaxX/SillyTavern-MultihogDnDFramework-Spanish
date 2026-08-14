@@ -4,6 +4,7 @@ import {
     layoutDungeonMapGraph,
     renderDungeonMapEmbedHtml,
     renderDungeonMapGraphSvg,
+    renderDungeonMapReadableHtml,
     resolveDungeonGraphCurrentArea,
 } from '../dungeon-map-graph.js';
 import { getLocationLeaf, resolveDungeonMapForLocation } from '../dungeon-reality.js';
@@ -71,7 +72,38 @@ const midExplorationMap = {
             ],
         },
     ],
-    assets: [],
+    assets: [
+        {
+            id: 'lantern',
+            kind: 'OBJECT',
+            name: 'Rusted lantern',
+            location: 'cellar-landing',
+            state: 'PRESENT',
+            knowledge: 'KNOWN',
+            detail: 'Still warm.',
+            origin: 'INITIAL_MAP',
+        },
+        {
+            id: 'ossuary-wight',
+            kind: 'CREATURE',
+            name: 'Ossuary wight',
+            location: 'ossuary',
+            state: 'ACTIVE',
+            knowledge: 'UNREVEALED',
+            detail: 'Bone dust in the air.',
+            origin: 'INITIAL_MAP',
+        },
+        {
+            id: 'casket-needle',
+            kind: 'HAZARD',
+            name: 'Casket needle',
+            location: 'reliquary',
+            state: 'ACTIVE',
+            knowledge: 'UNREVEALED',
+            detail: 'A poison pin.',
+            origin: 'INITIAL_MAP',
+        },
+    ],
 };
 
 describe('dungeon map graph', () => {
@@ -191,6 +223,43 @@ describe('dungeon map graph', () => {
         const html = renderDungeonMapEmbedHtml(graph, { detached: true });
         expect(html).toContain('separate window');
         expect(html).toContain('rt-dungeon-map-reattach');
+        expect(html).toContain('rt-dungeon-map-details');
         expect(html).not.toContain('rt-dungeon-graph-svg');
+    });
+
+    it('offers a site-details button on the compact Visuals/Map embed', () => {
+        const graph = buildDungeonMapGraph(midExplorationMap, { playerFacing: true });
+        const html = renderDungeonMapEmbedHtml(graph, { detached: false });
+        expect(html).toContain('rt-dungeon-map-details');
+        expect(html).toContain('rt-dungeon-graph-scroll');
+    });
+
+    it('hides unrevealed rooms, interiors, and assets in the player-facing inspector', () => {
+        const html = renderDungeonMapReadableHtml(midExplorationMap, { revealAll: false });
+        expect(html).toContain('Cellar Landing');
+        expect(html).toContain('Flooded Vault');
+        expect(html).toContain('Rusted lantern');
+        expect(html).toContain('Unexplored');
+        expect(html).toContain('Rotten tapestry');
+        expect(html).toContain('Not yet entered.');
+        expect(html).not.toContain('Ossuary');
+        expect(html).not.toContain('Reliquary');
+        expect(html).not.toContain('Inner Sanctum');
+        expect(html).not.toContain('Stacked bones');
+        expect(html).not.toContain('Black water');
+        expect(html).not.toContain('Ossuary wight');
+        expect(html).not.toContain('Casket needle');
+        expect(html).not.toContain('forbidden altar');
+    });
+
+    it('shows the full GM inspector when revealAll is on', () => {
+        const html = renderDungeonMapReadableHtml(midExplorationMap, { revealAll: true });
+        expect(html).toContain('Ossuary');
+        expect(html).toContain('Reliquary');
+        expect(html).toContain('Inner Sanctum');
+        expect(html).toContain('Stacked bones');
+        expect(html).toContain('Black water');
+        expect(html).toContain('Ossuary wight');
+        expect(html).toContain('Casket needle');
     });
 });
