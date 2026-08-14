@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.6] - 2026-08-14
+
+### Fixed
+- **Branch Campaign keeps relationship stats**: Friendship/affection values and their change logs are now saved with the chat, copied onto the branch, and remapped to the cloned lorebook names. A branch no longer resets every NPC to 0.
+
 ## [7.50.5] - 2026-08-14
 
 ### Changed

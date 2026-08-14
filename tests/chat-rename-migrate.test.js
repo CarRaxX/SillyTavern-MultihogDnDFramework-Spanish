@@ -109,6 +109,8 @@ describe('chat rename migration helpers', () => {
         ['location image', { customLocationImages: { Camp: 'camp.png' } }],
         ['dungeon reality', { dungeonReality: { sites: { crypt: { mapChunks: ['Area: Gate'] } } } }],
         ['companion history', { adventureCompanion: { lookback: 5, history: [{ role: 'user', content: 'Plan' }] } }],
+        ['relationship values', { npcRelationshipValues: { 'Eldoria_NPCs::1': { friendship: 12, affection: 4 } } }],
+        ['relationship log', { npcRelationshipLog: { 'Eldoria_NPCs::1': [{ field: 'friendship', delta: 2 }] } }],
         ['world progression timer', { worldProgressionLastFiredAtMinutes: 60 }],
         ['future schema field', { futureCampaignPayload: {} }],
     ])('treats %s data as campaign substance', (_label, partition) => {

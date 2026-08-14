@@ -11,4 +11,12 @@ describe('chat state loader', () => {
         const source = readFileSync(new URL('../src/features/chat/chat-state-loader.js', import.meta.url), 'utf8');
         expect(source).toContain('runtimeState.refreshImmersionView');
     });
+
+    it('restores per-chat relationship maps when the partition has them', () => {
+        const source = readFileSync(new URL('../src/features/chat/chat-state-loader.js', import.meta.url), 'utf8');
+        expect(source).toContain('s.npcRelationshipValues = JSON.parse(JSON.stringify(saved.npcRelationshipValues || {}))');
+        expect(source).toContain('s.npcRelationshipLog = JSON.parse(JSON.stringify(saved.npcRelationshipLog || {}))');
+        expect(source).toContain("hasOwnProperty.call(saved, 'npcRelationshipValues')");
+        expect(source).toContain("hasOwnProperty.call(saved, 'npcRelationshipLog')");
+    });
 });

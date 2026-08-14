@@ -93,7 +93,8 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionSkeletonLorebookFilter', 'worldProgressionSkeletonLorebookOnly',
     'worldProgressionConsolidateEnabled', 'worldProgressionConsolidateInterval',
     'worldProgressionExclusionList', 'use24hTime', 'useDdMmYyFormat',
-    'initialDate', 'initialTime', 'npcRelationshipMax', 'setup', 'campaignBooks',
+    'initialDate', 'initialTime', 'npcRelationshipMax', 'npcRelationshipValues',
+    'npcRelationshipLog', 'setup', 'campaignBooks',
     'lastImmersionSceneArtPath', 'lastImmersionSceneArtChatLen',
     'playerCharacter', 'dungeonReality', 'adventureCompanion',
 ]);
@@ -120,7 +121,9 @@ export function partitionHasCampaignSubstance(p) {
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
         .some((key) => hasItems(p[key]))) return true;
     if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)
-        || hasMapEntries(p.dungeonReality?.sites)) return true;
+        || hasMapEntries(p.dungeonReality?.sites)
+        || hasMapEntries(p.npcRelationshipValues)
+        || hasMapEntries(p.npcRelationshipLog)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)
         || (Number(p.routerLastRunChatLength) || 0) > 0

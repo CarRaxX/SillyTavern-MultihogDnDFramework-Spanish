@@ -380,6 +380,8 @@ export function saveChatState(chatId, opts = {}) {
         initialDate: s.initialDate || 'Day 1',
         initialTime: s.initialTime || '08:00 AM',
         npcRelationshipMax: getNpcRelationshipMax(s),
+        npcRelationshipValues: JSON.parse(JSON.stringify(s.npcRelationshipValues || {})),
+        npcRelationshipLog: JSON.parse(JSON.stringify(s.npcRelationshipLog || {})),
 
         // Optional full configuration lock. State-only Chat Link behavior remains
         // unchanged unless the user explicitly enables this setting.

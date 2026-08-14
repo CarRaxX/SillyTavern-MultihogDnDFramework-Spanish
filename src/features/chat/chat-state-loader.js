@@ -109,6 +109,15 @@ export function createChatStateLoader({
     applyChatTimeFormatSettings(saved);
     applyChatNpcRelMaxSettings(saved);
 
+    // Legacy partitions predate per-chat relationship maps. Leave live values
+    // alone so the next saveChatState can adopt them instead of wiping to 0.
+    if (Object.prototype.hasOwnProperty.call(saved, 'npcRelationshipValues')) {
+        s.npcRelationshipValues = JSON.parse(JSON.stringify(saved.npcRelationshipValues || {}));
+    }
+    if (Object.prototype.hasOwnProperty.call(saved, 'npcRelationshipLog')) {
+        s.npcRelationshipLog = JSON.parse(JSON.stringify(saved.npcRelationshipLog || {}));
+    }
+
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
     $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);

@@ -1505,6 +1505,8 @@ function resetUnseenChatState(s) {
     resetImmersionSceneArtTracking();
     applyChatTimeFormatSettings(null);
     applyChatNpcRelMaxSettings(null);
+    s.npcRelationshipValues = {};
+    s.npcRelationshipLog = {};
     runtimeState.historyViewIndex = -1;
     if (typeof globalThis._rpgApplyAdventureCompanionSnapshot === 'function') {
         globalThis._rpgApplyAdventureCompanionSnapshot(null, { resetIfMissing: true });

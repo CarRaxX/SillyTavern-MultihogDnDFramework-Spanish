@@ -47,6 +47,27 @@ describe('saveChatState', () => {
         expect(migrated.chatStates['fresh-chat'].customFields).toBeUndefined();
     });
 
+    it('snapshots NPC relationship values and logs into the chat partition', () => {
+        const s = getSettings();
+        s.npcRelationshipValues = {
+            'Eldoria_NPCs::7': { friendship: 18, affection: -4 },
+        };
+        s.npcRelationshipLog = {
+            'Eldoria_NPCs::7': [{ timestamp: 1, field: 'friendship', delta: 3, newValue: 18, source: 'agent' }],
+        };
+
+        saveChatState('rel-chat', { skipDiskWrite: true });
+
+        const part = s.chatStates['rel-chat'];
+        expect(part.npcRelationshipValues).toEqual(s.npcRelationshipValues);
+        expect(part.npcRelationshipValues).not.toBe(s.npcRelationshipValues);
+        expect(part.npcRelationshipLog).toEqual(s.npcRelationshipLog);
+        expect(part.npcRelationshipLog).not.toBe(s.npcRelationshipLog);
+
+        s.npcRelationshipValues['Eldoria_NPCs::7'].friendship = 99;
+        expect(part.npcRelationshipValues['Eldoria_NPCs::7'].friendship).toBe(18);
+    });
+
     it('preserves dungeon reality authored directly in the chat partition', () => {
         const s = getSettings();
         s.chatStates['vitest-chat'] = {

@@ -12,6 +12,19 @@ import {
     MEMO_RECOVERY_KEY,
     copyLocalChatMapEntry,
 } from './local-chat-map.js';
+import {
+    copyChatStatePartition,
+    remapBookKeyedKey,
+    remapBookKeyedList,
+    remapBookKeyedMap,
+} from './branch-campaign-utils.js';
+
+export {
+    copyChatStatePartition,
+    remapBookKeyedKey,
+    remapBookKeyedList,
+    remapBookKeyedMap,
+};
 
 /** @type {Set<string>} */
 const _pendingBranchSeeds = new Set();
@@ -30,74 +43,6 @@ export function isBranchSeedInProgress(chatId) {
  */
 export function clearBranchSeedGuard(chatId) {
     if (chatId) _pendingBranchSeeds.delete(String(chatId));
-}
-
-/**
- * Remap `book::uid` style keys using a book rename map.
- * @param {string[]} list
- * @param {Record<string, string>} bookRenameMap
- */
-export function remapBookKeyedList(list, bookRenameMap) {
-    if (!Array.isArray(list) || !bookRenameMap || !Object.keys(bookRenameMap).length) {
-        return Array.isArray(list) ? [...list] : [];
-    }
-    return list.map((k) => {
-        const key = String(k || '');
-        const idx = key.indexOf('::');
-        if (idx < 0) return bookRenameMap[key] || key;
-        const book = key.slice(0, idx);
-        const rest = key.slice(idx);
-        const newBook = bookRenameMap[book];
-        return newBook ? newBook + rest : key;
-    });
-}
-
-/**
- * @param {any[]} log
- * @param {Record<string, string>} bookRenameMap
- */
-function remapRouterLog(log, bookRenameMap) {
-    if (!Array.isArray(log) || !bookRenameMap || !Object.keys(bookRenameMap).length) {
-        return Array.isArray(log) ? JSON.parse(JSON.stringify(log)) : [];
-    }
-    const keyFields = ['activate', 'deactivate', 'record', 'delete', 'rewrite', 'consolidate', 'rename'];
-    return log.map((entry) => {
-        const copy = { ...entry };
-        for (const f of keyFields) {
-            if (Array.isArray(copy[f])) copy[f] = remapBookKeyedList(copy[f], bookRenameMap);
-        }
-        return copy;
-    });
-}
-
-/**
- * Deep-copy Multihog chatStates[oldId] → chatStates[newId], remapping lorebook names.
- * Never mutates the source partition.
- * @param {object} s
- * @param {string} oldId
- * @param {string} newId
- * @param {string} newPrefix
- * @param {Record<string, string>} bookRenameMap
- */
-export function copyChatStatePartition(s, oldId, newId, newPrefix, bookRenameMap = {}) {
-    if (!s.chatStates) s.chatStates = {};
-    const source = s.chatStates[oldId];
-    if (!source) {
-        throw new Error(`No Multihog chat state found for "${oldId}".`);
-    }
-    const copy = JSON.parse(JSON.stringify(source));
-    if (newPrefix) copy.routerCampaignPrefix = newPrefix;
-
-    if (Array.isArray(copy.campaignBooks) && Object.keys(bookRenameMap).length) {
-        copy.campaignBooks = copy.campaignBooks.map((n) => bookRenameMap[n] || n);
-    }
-    copy.activeRouterKeys = remapBookKeyedList(copy.activeRouterKeys, bookRenameMap);
-    copy.activeWorldKeys = remapBookKeyedList(copy.activeWorldKeys, bookRenameMap);
-    copy.keywordActivatedKeys = remapBookKeyedList(copy.keywordActivatedKeys, bookRenameMap);
-    copy.routerLog = remapRouterLog(copy.routerLog, bookRenameMap);
-
-    s.chatStates[newId] = copy;
-    return copy;
 }
 
 /**
@@ -146,7 +91,7 @@ export async function branchCampaignChat(deps) {
         <div style="text-align:left;font-size:0.9em;line-height:1.5;">
             <p>This creates a SillyTavern <b>branch chat</b> from the current transcript and copies all Multihog D&amp;D data onto it.</p>
             <ul style="margin:8px 0 0 1.2em;padding:0;">
-                <li>Tracker memo, quests, portraits maps, setup lock, companion history</li>
+                <li>Tracker memo, relationship stats, quests, portraits maps, setup lock, companion history</li>
                 <li>Campaign lorebooks cloned under a new prefix (when a stack exists)</li>
                 <li>Original chat <code>${escapeHtml(oldId)}</code> stays intact</li>
             </ul>
