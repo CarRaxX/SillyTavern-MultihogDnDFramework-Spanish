@@ -13,6 +13,11 @@
  */
 
 import { getSettings } from '../../state-manager.js';
+import {
+    clearSettingsSearch,
+    handleSettingsSearchKeydown,
+    installSettingsSearch,
+} from './settings-search.js';
 
 /** @type {{ id: string, icon: string, label: string, match: RegExp }[]} */
 const TAB_DEFS = [
@@ -129,6 +134,24 @@ function resolveTabId(drawer) {
 }
 
 /**
+ * @param {HTMLElement} tabsHost
+ * @param {string} tabId
+ * @returns {HTMLElement}
+ */
+function ensureTabPane(tabsHost, tabId) {
+    let tab = tabsHost.querySelector(`.rt-settings-tab[data-tab="${tabId}"]`);
+    if (!tab) {
+        tab = document.createElement('div');
+        tab.className = 'rt-settings-tab';
+        tab.dataset.tab = tabId;
+        tabsHost.appendChild(tab);
+    }
+    const def = TAB_DEFS.find(t => t.id === tabId);
+    tab.dataset.tabLabel = def?.label || tabId;
+    return tab;
+}
+
+/**
  * Expand the top-level drawer inside a tab so its content is immediately usable.
  * @param {HTMLElement} tab
  */
@@ -178,23 +201,10 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
         const tabId = resolveTabId(drawer);
         if (!tabId) {
             // Unmatched primary drawers still ship (appended under general).
-            let fallback = tabsHost.querySelector('.rt-settings-tab[data-tab="general"]');
-            if (!fallback) {
-                fallback = document.createElement('div');
-                fallback.className = 'rt-settings-tab';
-                fallback.dataset.tab = 'general';
-                tabsHost.appendChild(fallback);
-            }
-            fallback.appendChild(drawer);
+            ensureTabPane(tabsHost, 'general').appendChild(drawer);
             continue;
         }
-        let tab = tabsHost.querySelector(`.rt-settings-tab[data-tab="${tabId}"]`);
-        if (!tab) {
-            tab = document.createElement('div');
-            tab.className = 'rt-settings-tab';
-            tab.dataset.tab = tabId;
-            tabsHost.appendChild(tab);
-        }
+        const tab = ensureTabPane(tabsHost, tabId);
         tab.appendChild(drawer);
         expandPrimaryDrawer(tab);
     }
@@ -202,14 +212,7 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
     // Preserve any non-drawer nodes (comments / whitespace ignored).
     for (const node of [...frameworkContent.childNodes]) {
         if (node.nodeType === Node.ELEMENT_NODE && !(/** @type {Element} */ (node)).classList?.contains('inline-drawer')) {
-            let general = tabsHost.querySelector('.rt-settings-tab[data-tab="general"]');
-            if (!general) {
-                general = document.createElement('div');
-                general.className = 'rt-settings-tab';
-                general.dataset.tab = 'general';
-                tabsHost.appendChild(general);
-            }
-            general.appendChild(node);
+            ensureTabPane(tabsHost, 'general').appendChild(node);
         }
     }
 
@@ -223,11 +226,18 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
             <div class="rt-so-bg">${backgroundSvg()}</div>
             <div class="rt-so-header">
                 <div class="rt-so-title"><i class="fa-solid fa-dungeon"></i> Multihog D&amp;D Framework — Settings</div>
+                <div class="rt-so-search">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="search" id="rt-so-search-input" placeholder="Search settings…" autocomplete="off" spellcheck="false" aria-label="Search settings" />
+                    <button type="button" id="rt-so-search-clear" class="rt-so-search-clear" hidden title="Clear search" aria-label="Clear search">&times;</button>
+                </div>
                 <button type="button" id="rt-so-close" class="menu_button interactable" title="Close (Esc)">✕</button>
             </div>
             <div class="rt-so-body">
                 <nav class="rt-so-tabs" aria-label="Settings sections"></nav>
-                <div class="rt-so-content"></div>
+                <div class="rt-so-content">
+                    <div class="rt-so-search-empty" hidden role="status" aria-live="polite"></div>
+                </div>
             </div>
         </div>`;
 
@@ -239,7 +249,7 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
         btn.type = 'button';
         btn.className = 'rt-so-tab-btn';
         btn.dataset.tab = t.id;
-        btn.innerHTML = `<i class="fa-solid ${t.icon}"></i><span>${t.label}</span>`;
+        btn.innerHTML = `<i class="fa-solid ${t.icon}"></i><span>${t.label}</span><span class="rt-so-tab-count" hidden></span>`;
         nav.appendChild(btn);
     }
 
@@ -247,6 +257,7 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
     installAppearanceToggle(tabsHost);
     document.body.appendChild(overlay);
     applySettingsOverlayAppearance(getSettingsOverlayAppearance());
+    installSettingsSearch(overlay, { onCleared: () => switchSettingsOverlayTab(_lastTab) });
 
     overlay.querySelectorAll('.rt-so-tab-btn').forEach((btn) => {
         btn.addEventListener('click', () => switchSettingsOverlayTab(btn.dataset.tab));
@@ -257,9 +268,11 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
     if (!globalThis.__rtSettingsOverlayEscBound) {
         globalThis.__rtSettingsOverlayEscBound = true;
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && document.getElementById('rt-settings-overlay')?.classList.contains('rt-so-open')) {
-                closeSettingsOverlay();
-            }
+            const open = document.getElementById('rt-settings-overlay');
+            handleSettingsSearchKeydown(e, open, {
+                close: closeSettingsOverlay,
+                restoreTab: () => switchSettingsOverlayTab(_lastTab),
+            });
         });
     }
 
@@ -305,7 +318,7 @@ function installPanelDrag(overlay) {
 
     header.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button, input, textarea, .rt-so-search')) return;
         if (isCompactSettingsViewport()) return;
         const rect = panel.getBoundingClientRect();
         dragging = true;
@@ -361,6 +374,11 @@ export function switchSettingsOverlayTab(tabId) {
     overlay.querySelectorAll('.rt-so-tab-btn').forEach((b) => {
         b.classList.toggle('rt-so-tab-active', b.dataset.tab === tabId);
     });
+    if (overlay.classList.contains('rt-so-searching')) {
+        overlay.querySelector(`.rt-settings-tab[data-tab="${tabId}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
     overlay.querySelectorAll('.rt-settings-tab').forEach((s) => {
         const show = s.dataset.tab === tabId;
         s.style.display = show ? 'block' : 'none';
@@ -382,6 +400,8 @@ export function openSettingsOverlay(tabId) {
 export function closeSettingsOverlay() {
     const overlay = document.getElementById('rt-settings-overlay');
     if (!overlay) return;
+    clearSettingsSearch(overlay);
+    switchSettingsOverlayTab(_lastTab);
     overlay.classList.remove('rt-so-open');
     overlay.setAttribute('aria-hidden', 'true');
 }

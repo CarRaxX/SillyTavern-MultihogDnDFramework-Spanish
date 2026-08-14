@@ -549,7 +549,7 @@ Repeated `CreateDungeonMap` calls do not replace an already attached map.
 - **Areas** (rooms/passages): geometry, routes, and knowledge `UNREVEALED` | `DISCOVERED` | `VISITED`.
 - **Assets** (creatures, traps, loot, hazards, corpses): one site-level identity with a current `location`, plus knowledge `UNREVEALED` | `SUSPECTED` | `KNOWN`.
 
-Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain).
+Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain). Asset `detail` is a lasting occupancy note (who remains, who was destroyed), not the current combat beat — mid-round targeting, poses, HP, and temporary conditions stay in the combat tracker. The State Tracker `[ LIVE ]` arrows roll that occupancy back with the memo snapshot.
 
 ### When the map is active
 

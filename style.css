@@ -8425,9 +8425,10 @@ textarea.rt-cr-input {
 }
 
 .rt-settings-overlay .rt-so-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(160px, 1fr) auto;
+    grid-template-areas: "title search close";
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
     padding: 10px 12px;
     border-bottom: 1px solid var(--rt-so-border);
@@ -8442,13 +8443,18 @@ textarea.rt-cr-input {
 }
 
 .rt-settings-overlay .rt-so-title {
+    grid-area: title;
     font-weight: 650;
     font-size: 0.95em;
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    max-width: 100%;
     color: var(--rt-so-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .rt-settings-overlay .rt-so-title i {
@@ -8456,7 +8462,127 @@ textarea.rt-cr-input {
     color: var(--rt-so-accent);
 }
 
+.rt-settings-overlay .rt-so-search {
+    grid-area: search;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--rt-so-input-border);
+    border-radius: 8px;
+    background: var(--rt-so-input-bg);
+    cursor: text;
+}
+
+.rt-settings-overlay .rt-so-search:focus-within {
+    border-color: var(--rt-so-accent);
+}
+
+.rt-settings-overlay .rt-so-search > i {
+    flex-shrink: 0;
+    opacity: 0.65;
+    color: var(--rt-so-fg-muted);
+    font-size: 0.82em;
+}
+
+.rt-settings-overlay .rt-so-search input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--rt-so-fg) !important;
+    box-shadow: none !important;
+    outline: none;
+    font-size: 0.86em;
+    padding: 2px 0;
+}
+
+.rt-settings-overlay .rt-so-search input[type="search"]::-webkit-search-cancel-button,
+.rt-settings-overlay .rt-so-search input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.rt-settings-overlay .rt-so-search-clear {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--rt-so-btn-bg);
+    color: var(--rt-so-fg);
+    cursor: pointer;
+    line-height: 1;
+    font-size: 14px;
+}
+
+.rt-settings-overlay .rt-so-search-clear:hover {
+    background: var(--rt-so-btn-hover);
+}
+
+.rt-settings-overlay .rt-so-search-empty {
+    padding: 28px 12px;
+    text-align: center;
+    color: var(--rt-so-fg-muted);
+    font-size: 0.9em;
+}
+
+.rt-settings-overlay .rt-so-search-hidden {
+    display: none !important;
+}
+
+.rt-settings-overlay.rt-so-searching .rt-so-search-hit {
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--rt-so-accent) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rt-so-accent) 45%, transparent);
+}
+
+.rt-settings-overlay.rt-so-searching .rt-settings-tab.rt-so-tab-has-match {
+    display: block !important;
+}
+
+.rt-settings-overlay.rt-so-searching .rt-settings-tab:not(.rt-so-tab-has-match) {
+    display: none !important;
+}
+
+.rt-settings-overlay.rt-so-searching .rt-settings-tab.rt-so-tab-has-match::before {
+    content: attr(data-tab-label);
+    display: block;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--rt-so-fg-muted);
+    margin: 0 0 8px;
+}
+
+.rt-settings-overlay.rt-so-searching .rt-settings-tab.rt-so-tab-has-match ~ .rt-settings-tab.rt-so-tab-has-match::before {
+    margin-top: 16px;
+}
+
+.rt-settings-overlay .rt-so-tab-count {
+    margin-left: auto;
+    min-width: 1.4em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--rt-so-accent);
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.4;
+}
+
+.rt-settings-overlay.rt-so-searching .rt-so-tab-btn:not(.rt-so-tab-has-match) {
+    opacity: 0.38;
+}
+
 .rt-settings-overlay #rt-so-close {
+    grid-area: close;
     flex-shrink: 0;
     min-width: 34px;
     margin: 0;
@@ -8737,6 +8863,14 @@ textarea.rt-cr-input {
 
     .rt-settings-overlay .rt-so-header {
         cursor: default;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "title close"
+            "search search";
+    }
+
+    .rt-settings-overlay .rt-so-search {
+        max-width: none;
     }
 
     .rt-settings-overlay .rt-so-body {
@@ -8756,6 +8890,10 @@ textarea.rt-cr-input {
     .rt-settings-overlay .rt-so-tab-btn {
         justify-content: center;
         padding: 10px 6px;
+    }
+
+    .rt-settings-overlay .rt-so-tab-count {
+        display: none;
     }
 
     .rt-so-appearance-bar {

@@ -1,5 +1,6 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { applyChatSetup, resetChatSetupToStock } from '../../state/chat-setup.js';
+import { ensureDungeonMapHistory } from '../../state/dungeon-map-history.js';
 
 /** Restores one chat-linked tracker snapshot and synchronizes dependent UI. */
 export function createChatStateLoader({
@@ -44,6 +45,8 @@ export function createChatStateLoader({
         s.combatDefeatedUi = [];
     }
     s.memoHistory = saved.memoHistory ?? [];
+    s.dungeonMapHistory = saved.dungeonMapHistory ?? [];
+    ensureDungeonMapHistory(s);
     s.lastDelta = saved.lastDelta ?? '';
     // Legacy Chat Link keeps these presentation fields at the partition root.
     // Under setup lock the dedicated setup snapshot is authoritative, including

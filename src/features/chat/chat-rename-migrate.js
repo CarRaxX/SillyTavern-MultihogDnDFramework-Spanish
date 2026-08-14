@@ -67,7 +67,7 @@ export function stripChatFileExtension(name) {
 // data so a newer schema can never be silently overwritten by this migrator.
 const KNOWN_PARTITION_KEYS = new Set([
     'currentMemo', 'combatDefeatedUi', 'memoPersistedAt', 'memoPersistedBy',
-    'memoHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
+    'memoHistory', 'dungeonMapHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
     'modules', 'blockOrder', 'stockPrompts', 'quests', 'historyIndex',
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
@@ -117,7 +117,7 @@ export function partitionHasCampaignSubstance(p) {
     if (['currentMemo', 'lastDelta', 'worldProgressionLastFiredPeriodLabel',
         'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath']
         .some((key) => hasText(p[key]))) return true;
-    if (['combatDefeatedUi', 'memoHistory', 'quests', 'activeRouterKeys',
+    if (['combatDefeatedUi', 'memoHistory', 'dungeonMapHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
         .some((key) => hasItems(p[key]))) return true;
     if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)

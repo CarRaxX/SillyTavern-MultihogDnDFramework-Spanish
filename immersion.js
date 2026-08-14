@@ -4,10 +4,11 @@ import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundL
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
 import { scanRecentOutputForPresentNpcs } from './router.js';
-import { resolveDungeonMapForLocation, stripDungeonMapSection } from './dungeon-reality.js';
+import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
 import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
 import { isDungeonMapDetached } from './src/ui/panel/dungeon-map-panel.js';
 import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { runtimeState } from './src/app/runtime-state.js';
 
 /**
  * Parse current location from recent chat status footer, then memo [TIME] block.
@@ -222,15 +223,20 @@ export async function buildImmersionSceneState(memo, settings) {
     let dungeonMap = null;
     if (isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s)) {
         try {
-            const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
-            const bookName = prefix ? `${prefix}_Locations` : 'Locations';
-            const locBook = locBooks[bookName] || await ctx.loadWorldInfo(bookName);
-            if (locBook?.entries) {
-                dungeonMap = resolveDungeonMapForLocation(
-                    locBook.entries,
-                    rawLocationText || resolvedPath,
-                    bookName,
-                );
+            const overlay = runtimeState.dungeonMapHistoryOverlay;
+            if (overlay) {
+                dungeonMap = resolveDungeonMapFromHistorySnapshot(overlay, rawLocationText || resolvedPath);
+            } else {
+                const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
+                const bookName = prefix ? `${prefix}_Locations` : 'Locations';
+                const locBook = locBooks[bookName] || await ctx.loadWorldInfo(bookName);
+                if (locBook?.entries) {
+                    dungeonMap = resolveDungeonMapForLocation(
+                        locBook.entries,
+                        rawLocationText || resolvedPath,
+                        bookName,
+                    );
+                }
             }
         } catch (err) {
             console.error('[RPG Tracker] dungeon map scene resolve failed:', err);

@@ -652,6 +652,7 @@ If the player is clearly abusing the rules to get something like infinite XP or 
 - If a \`[DUNGEON_REALITY — INTERNAL GM CANON]\` block already exists for that site, its map is attached: do not call the tool again.
 - Treat the tool result and subsequent DUNGEON_REALITY blocks as private objective canon. Reveal only what {{user}} can perceive; resolve travel, doors, cover, stealth, noise, light, line of sight, traps, hazards, and entities against that canon.
 - Never expose private map data. Narrate durable changes normally; an external agent owns validated current-map updates and player-observable child Location chronicles. Enemies may react and move when narratively logical.
+- The attached map may lag a few turns behind play due to update frequency; use the latest DUNGEON_REALITY block and do not invent catch-up facts.
 </dungeon_reality_and_hidden_mapping>`,
   'sysprompt_legacy.txt': `<role>
 DM/World Simulator for a D&D-style TTRPG. Narrate the world, simulate NPCs, adjudicate rules, manage mechanics invisibly. In combat, simulate all NPC actions (not {{user}}'s) in initiative order.
@@ -959,6 +960,7 @@ If the player is clearly abusing the rules to get something like infinite XP or 
 - If a \`[DUNGEON_REALITY — INTERNAL GM CANON]\` block already exists for that site, its map is attached: do not call the tool again.
 - Treat the tool result and subsequent DUNGEON_REALITY blocks as private objective canon. Reveal only what {{user}} can perceive; resolve travel, doors, cover, stealth, noise, light, line of sight, traps, hazards, and entities against that canon.
 - Never expose private map data. Narrate durable changes normally; an external agent owns validated current-map updates and player-observable child Location chronicles. Enemies may react and move when narratively logical.
+- The attached map may lag a few turns behind play due to update frequency; use the latest DUNGEON_REALITY block and do not invent catch-up facts.
 </dungeon_reality_and_hidden_mapping>`,
 };
 

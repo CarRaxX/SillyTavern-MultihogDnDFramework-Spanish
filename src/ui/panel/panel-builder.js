@@ -9,6 +9,7 @@ import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompan
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
 import { renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
 
@@ -60,6 +61,7 @@ export function createPanel(dependencies) {
         buildNpcInstruction,
         canResizePanels,
         captureRouterLoreState,
+        restoreActiveDungeonMapHistory,
         checkAndTriggerAutoGenerations,
         clampFloatingPanelToViewport,
         resolveViewportClampedGeometry,
@@ -5518,6 +5520,7 @@ ${namingRule}`;
         if (runtimeState.historyViewIndex === -1) return;
         const snapshot = s.memoHistory[runtimeState.historyViewIndex];
         if (snapshot === undefined) return;
+        const mapSnapshot = getDungeonMapHistoryEntry(s, runtimeState.historyViewIndex);
 
         // Simply move the live pointer to this snapshot.
         // The history already contains all states — no need to archive currentMemo here.
@@ -5525,9 +5528,16 @@ ${namingRule}`;
         s.currentMemo = snapshot;
         s.historyIndex = runtimeState.historyViewIndex;
         runtimeState.historyViewIndex = -1;
+        runtimeState.dungeonMapHistoryOverlay = null;
+        runtimeState.liveDungeonMapBackup = null;
         saveSettings();
         if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
         syncMemoView();
+        if (mapSnapshot && typeof restoreActiveDungeonMapHistory === 'function') {
+            void restoreActiveDungeonMapHistory(mapSnapshot).then(ok => {
+                if (!ok) console.warn('[RPG Tracker] Could not restore dungeon map occupancy for this snapshot.');
+            });
+        }
         toastr['success']('Historical state restored as LIVE.', 'RPG Tracker');
     });
 
@@ -5537,7 +5547,7 @@ ${namingRule}`;
             settings.currentMemo = "";
             settings.prevMemo1 = "";
             settings.prevMemo2 = "";
-            settings.memoHistory = [];
+            clearMemoAndMapHistory(settings);
             settings.historyIndex = -1;
             settings.lastDelta = "";
             runtimeState.historyViewIndex = -1;

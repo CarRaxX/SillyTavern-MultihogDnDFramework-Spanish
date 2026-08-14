@@ -1338,6 +1338,11 @@ export function applyDungeonMapTransaction(document, transaction) {
     };
 }
 
+const ASSET_DETAIL_SCHEMA = {
+    type: 'string',
+    description: 'Durable occupancy or lasting condition only (remaining count, destroyed remains, what is guarded). Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
+};
+
 /** Strict JSON Schema fragment added to commit only while a mapped site is active. */
 export function buildDungeonMapCommitSchema() {
     const evidence = { type: 'string', enum: MAP_EVIDENCE };
@@ -1354,22 +1359,22 @@ export function buildDungeonMapCommitSchema() {
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: { type: 'string' }, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, distinct_from: { type: 'array', items: { type: 'string' } } },
+            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, distinct_from: { type: 'array', items: { type: 'string' } } },
             required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: { type: 'string' } },
+            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
             required: ['op', 'evidence', 'asset_id', 'to'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' } },
+            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' } },
             required: ['op', 'evidence', 'asset_id'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: { type: 'string' } },
+            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
             required: ['op', 'evidence', 'asset_id'],
         },
         {
@@ -1381,16 +1386,19 @@ export function buildDungeonMapCommitSchema() {
     return {
         type: 'object',
         additionalProperties: false,
-        description: 'Atomic current-map mutation for the active mapped site. Include only when the narrative established a durable map change. The map and player-observable child Location chronicles save together.',
+        description: 'Atomic current-map mutation for the active mapped site. Include only when the narrative established a durable map change (occupancy, destruction, area movement, traps, routes, lasting damage). Do not include transient combat poses, targeting, HP, or temporary statuses. The map and player-observable child Location chronicles save together.',
         properties: {
             operation_id: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$', description: 'Stable idempotency key for this narrative change, e.g. day1-0833-crypt-ghoul-destroyed. Reuse it on a correction retry.' },
             operations: { type: 'array', minItems: 1, maxItems: 24, items: { oneOf: operationVariants } },
             chronicles: {
                 type: 'array',
-                description: 'Player-observable history only. Omit for hidden/off-screen changes.',
+                description: 'Player-observable lasting history only. Omit for hidden/off-screen changes. Not turn-by-turn combat choreography, HP, targeting, or temporary statuses.',
                 items: {
                     type: 'object', additionalProperties: false,
-                    properties: { area_id: { type: 'string' }, text: { type: 'string' } },
+                    properties: {
+                        area_id: { type: 'string' },
+                        text: { type: 'string', description: 'Lasting observable history. Not mid-round poses, targeting, HP, or temporary combat statuses.' },
+                    },
                     required: ['area_id', 'text'],
                 },
             },
@@ -1694,6 +1702,59 @@ export function resolveActiveDungeonSite(state, currentLocation) {
         if (found) return found.site;
     }
     return null;
+}
+
+/** Compact [MAP] occupancy for State Tracker memoHistory stones. */
+export function collectDungeonMapHistorySnapshot(entries, bookName = '') {
+    const maps = [];
+    for (const [uid, entry] of Object.entries(entries || {})) {
+        const map = extractDungeonMapSection(entry?.content);
+        if (!map) continue;
+        maps.push({
+            uid: String(uid),
+            comment: String(entry?.comment || ''),
+            map,
+            operationIds: Array.isArray(entry?.extensions?.[DUNGEON_MAP_OPERATION_IDS_KEY])
+                ? clone(entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY])
+                : [],
+        });
+    }
+    return maps.length ? { bookName, maps } : null;
+}
+
+/** Write a history snapshot back onto Location entries without touching [CORE]. */
+export function applyDungeonMapHistorySnapshotToBook(book, snapshot) {
+    if (!book?.entries || !snapshot?.maps?.length) return false;
+    let changed = false;
+    for (const item of snapshot.maps) {
+        const entry = book.entries[item.uid];
+        if (!entry) continue;
+        const next = replaceDungeonMapSection(entry.content, item.map);
+        if (next !== entry.content) {
+            entry.content = next;
+            changed = true;
+        }
+        entry.extensions = entry.extensions || {};
+        const nextIds = Array.isArray(item.operationIds) ? clone(item.operationIds) : [];
+        if (JSON.stringify(entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY] || []) !== JSON.stringify(nextIds)) {
+            entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY] = nextIds;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/** Resolve the active site from a memo-history map snapshot (view overlay). */
+export function resolveDungeonMapFromHistorySnapshot(snapshot, locationText) {
+    if (!snapshot?.maps?.length) return null;
+    const entries = {};
+    for (const item of snapshot.maps) {
+        entries[item.uid] = {
+            comment: item.comment,
+            content: `[MAP]\n${item.map}\n[/MAP]`,
+        };
+    }
+    return resolveDungeonMapForLocation(entries, locationText, snapshot.bookName || '');
 }
 
 /** Parse the active site's current map document for a footer/lore location. */

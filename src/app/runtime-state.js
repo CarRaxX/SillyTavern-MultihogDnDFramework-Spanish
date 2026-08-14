@@ -9,6 +9,8 @@ export const runtimeState = {
     currentChatId: null,
     pendingUnseenChatReset: null,
     historyViewIndex: -1,
+    dungeonMapHistoryOverlay: null,
+    liveDungeonMapBackup: null,
     renderedViewActive: false,
     loreRedoStack: [],
     renderRouterUI: null,

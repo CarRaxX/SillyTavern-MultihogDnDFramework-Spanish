@@ -36,5 +36,9 @@ The altar is visibly scorched.`,
         expect(immersionSource).toContain("isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s)");
         expect(defaultsSource).toContain('private \\`[MAP]...[/MAP]\\`');
         expect(defaultsSource).toContain('identify exactly which mapped creature, trap, object, or area');
+        expect(routerSource).toContain('DUNGEON_MAP_TRANSIENT_COMBAT_RULE');
+        expect(routerSource).toContain('Never write transient combat into asset.detail or chronicles');
+        expect(routerSource).toContain('objective CURRENT occupancy snapshot');
+        expect(routerSource).toContain('If only poses/status changed this round, omit the map transaction.');
     });
 });

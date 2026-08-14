@@ -10,7 +10,7 @@ import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemo
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
-import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
+import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -31,6 +31,14 @@ import { createDetachedPanel } from './src/ui/panel/detached-panel.js';
 import { scalePanelBackgroundImage, getPanelBgConfig, applyPanelBackgroundToDom, applyTrackerThemeToDom, PANEL_BG_TRACKER_KEYS, PANEL_BG_AGENT_KEYS } from './src/ui/panel/panel-appearance.js';
 import { createMemoRecoveryManager } from './src/features/recovery/memo-recovery.js';
 import { runtimeState } from './src/app/runtime-state.js';
+import {
+    clearMemoAndMapHistory,
+    ensureDungeonMapHistory,
+    getDungeonMapHistoryEntry,
+    shiftMemoAndMapHistory,
+    sliceMemoAndMapHistory,
+    unshiftMemoAndMapHistory,
+} from './src/state/dungeon-map-history.js';
 import { createPanel as buildPanel } from './src/ui/panel/panel-builder.js';
 import { createChatStateLoader } from './src/features/chat/chat-state-loader.js';
 import { stripDungeonMapSection } from './dungeon-reality.js';
@@ -1488,6 +1496,7 @@ function resetUnseenChatState(s) {
     s.prevMemo1 = '';
     s.prevMemo2 = '';
     s.memoHistory = [];
+    s.dungeonMapHistory = [];
     s.lastDelta = '';
     s.historyIndex = -1;
     s.quests = [];
@@ -2176,21 +2185,25 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
         // ── Per-chunk commit helper ──
         // Treats each chunk result as a full "turn": commits to settings, archives history,
         // updates UI, and saves — so the next chunk sees the committed state.
-        function commitChunkResult(merged, previousMemoSnapshot) {
+        function commitChunkResult(merged, previousMemoSnapshot, mapSnapshot = null) {
             const delta = computeDelta(previousMemoSnapshot, merged);
 
             // Linear Stone History Logic
             if (settings.historyIndex !== undefined && settings.historyIndex !== -1) {
                 if (settings.debugMode) console.log(`[RPG Tracker] Splicing history at index ${settings.historyIndex} due to new update.`);
-                settings.memoHistory = settings.memoHistory.slice(settings.historyIndex);
+                sliceMemoAndMapHistory(settings, settings.historyIndex);
             }
+            ensureDungeonMapHistory(settings);
             if (settings.memoHistory[0] !== previousMemoSnapshot) {
-                settings.memoHistory.unshift(previousMemoSnapshot);
+                const previousMap = settings.historyIndex === 0
+                    ? (settings.dungeonMapHistory[0] ?? mapSnapshot)
+                    : mapSnapshot;
+                unshiftMemoAndMapHistory(settings, previousMemoSnapshot, previousMap);
             }
-            settings.memoHistory.unshift(merged);
-            if (settings.memoHistory.length > 1000) settings.memoHistory.length = 1000;
+            unshiftMemoAndMapHistory(settings, merged, mapSnapshot);
             settings.historyIndex = 0;
             runtimeState.historyViewIndex = -1;
+            runtimeState.dungeonMapHistoryOverlay = null;
 
             // Persist delta and update panel
             settings.lastDelta = delta;
@@ -2275,7 +2288,8 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                 }
 
                 // ── FULL COMMIT: treat this chunk as a completed turn ──
-                lastDelta = commitChunkResult(merged, memoBeforeThisChunk);
+                const mapSnapshot = await captureActiveDungeonMapHistory();
+                lastDelta = commitChunkResult(merged, memoBeforeThisChunk, mapSnapshot);
                 if (relationshipCommands.length) {
                     await applyStateTrackerRelationshipCommands(relationshipCommands);
                 }
@@ -2515,15 +2529,20 @@ export async function sendDirectPrompt(message, options = {}) {
 
                 // Linear Stone History Logic
                 if (settings.historyIndex !== undefined && settings.historyIndex !== -1) {
-                    settings.memoHistory = settings.memoHistory.slice(settings.historyIndex);
+                    sliceMemoAndMapHistory(settings, settings.historyIndex);
                 }
+                const mapSnapshot = await captureActiveDungeonMapHistory();
+                ensureDungeonMapHistory(settings);
                 if (settings.memoHistory[0] !== sanitizedCurrentFull) {
-                    settings.memoHistory.unshift(sanitizedCurrentFull);
+                    const previousMap = settings.historyIndex === 0
+                        ? (settings.dungeonMapHistory[0] ?? mapSnapshot)
+                        : mapSnapshot;
+                    unshiftMemoAndMapHistory(settings, sanitizedCurrentFull, previousMap);
                 }
-                settings.memoHistory.unshift(merged);
-                if (settings.memoHistory.length > 1000) settings.memoHistory.length = 1000;
+                unshiftMemoAndMapHistory(settings, merged, mapSnapshot);
                 settings.historyIndex = 0;
                 runtimeState.historyViewIndex = -1;
+                runtimeState.dungeonMapHistoryOverlay = null;
 
                 const dp = document.getElementById('rpg-tracker-delta-content');
                 if (dp) dp.innerHTML = delta;
@@ -2572,6 +2591,8 @@ function loadProfile(name) {
     if (!p) return;
     s.currentMemo = p.currentMemo ?? '';
     s.memoHistory = p.memoHistory ?? [];
+    s.dungeonMapHistory = p.dungeonMapHistory ?? [];
+    ensureDungeonMapHistory(s);
     s.modules = p.modules ? JSON.parse(JSON.stringify(p.modules)) : s.modules;
     s.blockOrder = p.blockOrder ? JSON.parse(JSON.stringify(p.blockOrder)) : s.blockOrder;
     s.stockPrompts = loadStockPromptsFromProfile(p.stockPrompts);
@@ -3971,6 +3992,7 @@ function createPanel() {
         buildNpcInstruction,
         canResizePanels,
         captureRouterLoreState,
+        restoreActiveDungeonMapHistory,
         checkAndTriggerAutoGenerations,
         clampFloatingPanelToViewport,
         resolveViewportClampedGeometry,
@@ -4072,6 +4094,36 @@ function navigateSnapshot(direction) {
         : (pos === L ? -1 : pos);
 
     syncMemoView();
+    void applyDungeonMapForHistoryView();
+}
+
+async function applyDungeonMapForHistoryView() {
+    const s = getSettings();
+    if (runtimeState.historyViewIndex === -1) {
+        runtimeState.dungeonMapHistoryOverlay = null;
+        const liveMap = runtimeState.liveDungeonMapBackup;
+        runtimeState.liveDungeonMapBackup = null;
+        if (liveMap) {
+            try { await restoreActiveDungeonMapHistory(liveMap); } catch (error) {
+                console.warn('[RPG Tracker] Could not restore live dungeon map occupancy:', error);
+            }
+        }
+        return;
+    }
+    if (!runtimeState.liveDungeonMapBackup) {
+        try {
+            runtimeState.liveDungeonMapBackup = await captureActiveDungeonMapHistory();
+        } catch (error) {
+            console.warn('[RPG Tracker] Could not snapshot live dungeon map occupancy:', error);
+        }
+    }
+    const overlay = getDungeonMapHistoryEntry(s, runtimeState.historyViewIndex);
+    runtimeState.dungeonMapHistoryOverlay = overlay;
+    if (overlay) {
+        try { await restoreActiveDungeonMapHistory(overlay); } catch (error) {
+            console.warn('[RPG Tracker] Could not roll dungeon map occupancy back to this snapshot:', error);
+        }
+    }
 }
 
 /** CSS class suffixes for each day/night phase (paired with rt-phase-* on panels). */
@@ -4153,6 +4205,7 @@ export function syncMemoView() {
         textarea.readOnly = false;
         navLabel.classList.remove('clickable');
         navLabel.title = 'Current Live State';
+        runtimeState.dungeonMapHistoryOverlay = null;
     } else {
         // Snapshot stone
         const snapshot = s.memoHistory[runtimeState.historyViewIndex];
@@ -4160,6 +4213,7 @@ export function syncMemoView() {
         textarea.readOnly = true;
         navLabel.classList.add('clickable');
         navLabel.title = 'Click to RESTORE this state as LIVE';
+        runtimeState.dungeonMapHistoryOverlay = getDungeonMapHistoryEntry(s, runtimeState.historyViewIndex);
     }
 
     const distance = currentPos - livePos;
@@ -4210,6 +4264,9 @@ export function syncMemoView() {
     applyPanelBackgroundToDom();
 
     refreshRenderedView();
+    if (typeof runtimeState.refreshImmersionView === 'function') {
+        void runtimeState.refreshImmersionView();
+    }
 }
 
 function updateUIMemo(text) {
@@ -10668,6 +10725,7 @@ RULES:
                 settings.prevMemo1 = "";
                 settings.prevMemo2 = "";
                 settings.memoHistory = [];
+                settings.dungeonMapHistory = [];
                 settings.lastDelta = "";
                 settings.quests = [];
                 settings.historyIndex = -1;

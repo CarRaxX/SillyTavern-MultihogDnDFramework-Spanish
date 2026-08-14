@@ -50,6 +50,8 @@ describe('panel builder', () => {
         expect(source).toContain('void Promise.resolve(refreshManifest()).then(() => {');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         expect(indexSource).toContain('Still probe the mapped site so Visuals/Map is ready on first open.');
+        expect(indexSource).toContain('applyDungeonMapForHistoryView');
+        expect(indexSource).toContain('captureActiveDungeonMapHistory');
     });
 
     it('opens a knowledge-filtered site inspector from Visuals/Map', () => {

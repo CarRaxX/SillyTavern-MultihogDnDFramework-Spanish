@@ -315,6 +315,7 @@ export function saveChatState(chatId, opts = {}) {
         memoPersistedAt,
         memoPersistedBy: s.memoPersistedBy || null,
         memoHistory:  JSON.parse(JSON.stringify(s.memoHistory)),
+        dungeonMapHistory: JSON.parse(JSON.stringify(s.dungeonMapHistory || [])),
         lastDelta:    s.lastDelta || '',
         customPortraits: JSON.parse(JSON.stringify(s.customPortraits || {})),
         customLocationImages: JSON.parse(JSON.stringify(s.customLocationImages || {})),

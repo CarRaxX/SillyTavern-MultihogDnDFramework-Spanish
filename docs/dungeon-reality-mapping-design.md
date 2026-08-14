@@ -14,7 +14,7 @@ An immutable initial map plus append-only room updates creates two competing fac
 
 ## Authority model
 
-- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site.
+- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site. Occupancy on the attached map may lag a few turns behind play because Lorebook Agent updates it on its own cadence; the narrator should use the latest DUNGEON_REALITY block and not invent catch-up facts.
 - Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
 - Lorebook Agent interprets established consequences and maintains current map state.
 - Player attempts become map facts only after narrator resolution.
@@ -83,6 +83,10 @@ Assets describe things that can move or materially change:
 - loot, keys, objects, barriers, and corpses.
 
 An enemy exists once at site level and has one `location`. Movement updates that field instead of copying enemy prose between rooms. Optional `behavior` and `route` fields bound Lorebook Agent's autonomous reactions.
+
+Asset `detail` and child chronicles store lasting occupancy, not the current combat beat. Remaining count, DESTROYED/DEAD/FLED, area-to-area movement, sprung traps, and lasting damage belong on the map. Mid-round targeting, advancing toward a character, poses, HP, and temporary conditions (frightened, held, prone) belong to the combat tracker and must not be written into `[MAP]`.
+
+State Tracker `[ LIVE ]` snapshot navigation stores that occupancy beside each memo stone and writes it back when the player steps to a previous stone or restores it as LIVE.
 
 Knowledge is separate from objective state:
 

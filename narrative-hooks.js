@@ -16,6 +16,7 @@ import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgress
 import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
+import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
@@ -1621,7 +1622,7 @@ function applyMemoSwipeRollback(lastAiMsg, settings) {
                 const baseMemo = lastAiMsg.extra.rpgMemoRollback?.[prevSwipeId] || lastAiMsg.extra.rpgMemoRollback?.[swipeId];
                 if (targetMemo === baseMemo) {
                     if (settings.memoHistory[0] !== baseMemo) {
-                        settings.memoHistory.shift();
+                        shiftMemoAndMapHistory(settings);
                         if (settings.historyIndex !== undefined && settings.historyIndex > 0) settings.historyIndex--;
                     }
                 } else {

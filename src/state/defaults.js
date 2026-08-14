@@ -80,6 +80,7 @@ export function buildDefaultSettings() {
         prevMemo2: "",
 
         memoHistory: [],
+        dungeonMapHistory: [],
 
         lastDelta: "",
 

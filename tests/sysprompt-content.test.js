@@ -73,6 +73,7 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).not.toContain('<div hidden data-dungeon-map>');
             expect(source).not.toContain('one valid JSON object');
             expect(source).toContain('an external agent owns validated current-map updates');
+            expect(source).toContain('The attached map may lag a few turns behind play due to update frequency');
             expect(source).not.toContain('Lorebook Agent');
         }
     });

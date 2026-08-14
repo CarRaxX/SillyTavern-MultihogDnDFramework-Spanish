@@ -387,6 +387,10 @@ Area: Ossuary Behind Rotten Tapestry
         expect(schema.required).toEqual(['operation_id', 'operations']);
         expect(schema.properties.operations.items.oneOf).toHaveLength(7);
         expect(schema.properties.operations.items.oneOf.every(item => item.additionalProperties === false)).toBe(true);
+        expect(schema.description).toContain('Do not include transient combat poses');
+        const setAsset = schema.properties.operations.items.oneOf.find(item => item.properties.op.enum.includes('SET_ASSET'));
+        expect(setAsset.properties.detail.description).toContain('Never HP, targeting, mid-round poses');
+        expect(schema.properties.chronicles.description).toContain('Not turn-by-turn combat choreography');
     });
 
     it('assembles an attached root map with descendant Lorebook Agent location state', () => {

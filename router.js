@@ -41,8 +41,11 @@ import {
     resolveActiveDungeonSite,
     serializeDungeonMapDocument,
     stripDungeonMapSection,
+    collectDungeonMapHistorySnapshot,
+    applyDungeonMapHistorySnapshotToBook,
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
+import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -541,6 +544,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
 
     if (changed) {
         await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map persistence');
+        recordLiveDungeonMapSnapshot(getSettings(), collectDungeonMapHistorySnapshot(bookData.entries, bookName));
         if (typeof ctx.updateWorldInfoList === 'function') {
             try { await ctx.updateWorldInfoList(); } catch (_) {}
         }
@@ -636,6 +640,7 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
     }
     rootEntry.disable = true;
     await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Map Architect persistence');
+    recordLiveDungeonMapSnapshot(settings, collectDungeonMapHistorySnapshot(bookData.entries, bookName));
 
     const chatId = ctx.chatId || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : '');
     if (chatId) {
@@ -679,6 +684,29 @@ export async function captureRouterLoreState() {
         bookSnapshots[name] = book;
     }
     return buildRouterLoreState(settings, { prefix, chatId, bookSnapshots });
+}
+
+/** Snapshot every attached [MAP] in the campaign Locations book. */
+export async function captureActiveDungeonMapHistory(ctx = SillyTavern.getContext()) {
+    const prefix = getLivePrefix();
+    if (!prefix) return null;
+    const bookName = `${prefix}_Locations`;
+    const book = await loadWorldInfoFresh(bookName, ctx);
+    if (!book?.entries) return null;
+    return collectDungeonMapHistorySnapshot(book.entries, bookName);
+}
+
+/** Persist a memo-history map snapshot onto the live Locations lorebook. */
+export async function restoreActiveDungeonMapHistory(snapshot, ctx = SillyTavern.getContext()) {
+    if (!snapshot?.maps?.length || !snapshot.bookName) return false;
+    const book = await loadWorldInfoFresh(snapshot.bookName, ctx);
+    if (!book?.entries) return false;
+    if (!applyDungeonMapHistorySnapshotToBook(book, snapshot)) return false;
+    await evictWorldInfoCache(snapshot.bookName);
+    await saveWorldInfoSnapshot(snapshot.bookName, book, ctx, 'Dungeon map history restore');
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(snapshot.bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated', { detail: { source: 'map-history-restore' } }));
+    return true;
 }
 
 async function finalizeRouterHistorySnapshot(runId) {
@@ -755,12 +783,15 @@ function stripStaticDungeonAgentGuidance(prompt) {
         .trim();
 }
 
+const DUNGEON_MAP_TRANSIENT_COMBAT_RULE = 'Durable map facts only: remaining occupancy/count, DESTROYED/DEAD/FLED/CAPTURED/TAKEN, MOVE_ASSET between areas, sprung/disarmed traps, opened/blocked routes, lasting damage/cleansing. asset.detail is a lasting occupancy note (e.g. "Two of four remain; two destroyed"), never a play-by-play. Never write transient combat into asset.detail or chronicles: current targeting, advancing toward someone, mid-round poses, HP, or temporary conditions (frightened, held, prone). Those belong to the combat tracker. If only poses/status changed this round, omit the map transaction.';
+
 function buildActiveDungeonAgentGuidance(context) {
     if (!context) return '';
     return `## ACTIVE MAP CAPABILITY — ${context.siteRoot}
-The current location hierarchy activates exactly one private v3 [MAP]. It is the objective CURRENT snapshot; child Location entries are the player-observable historical chronicle.
+The current location hierarchy activates exactly one private v3 [MAP]. It is the objective CURRENT occupancy snapshot (who/what remains, where, and lasting room state), not the current combat beat; child Location entries are the player-observable historical chronicle.
 - Geometry is structural. Mutable/movable enemies, groups, traps, alarms, loot, barriers, objects, hazards, corpses, and effects are assets.
 - When the narrative establishes a durable change, include one atomic \`map\` transaction in your final \`commit\`. Use stable area/asset IDs from [MAP]. Never rewrite [MAP] through update/rewrite.
+- ${DUNGEON_MAP_TRANSIENT_COMBAT_RULE}
 - Operations apply in array order. Establish a newly opened connection before moving an asset through it; newly added areas may be referenced later in the same transaction by their exact name.
 - The mapped root is location-owned and outside the normal activation budget. Never activate or deactivate that root yourself.
 - Existing but newly encountered entity: SET_ASSET/MOVE_ASSET, not ADD_ASSET. Genuinely new narrator-established or narrator-resolved player-created entity: ADD_ASSET; the extension generates its ID. If duplicate validation names candidates, retry with that asset or list every genuinely distinct candidate in \`distinct_from\`.
@@ -774,7 +805,7 @@ The current location hierarchy activates exactly one private v3 [MAP]. It is the
 
 function buildActiveDungeonBasicGuidance(context) {
     if (!context) return '';
-    return `\n\n**ACTIVE MAP CAPABILITY — ${context.siteRoot}:** The private v3 [MAP] is the objective current snapshot; ordinary LOC text is player-observable history. If the narrative durably changed a mapped area/asset, emit exactly one \`[MAP_COMMIT]{valid JSON}[/MAP_COMMIT]\` block in addition to normal Lorebook tags. JSON shape: {"operation_id":"stable-id","operations":[{"op":"SET_ASSET|MOVE_ASSET|ADD_ASSET|REMOVE_ASSET|SET_AREA|ADD_AREA|SET_CONNECTION","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-area-id","text":"observable history"}]}. A chronicle makes its area VISITED; if it reports an asset, set that asset's knowledge to KNOWN. Omit chronicles for hidden/off-screen changes and do not duplicate a map chronicle through ordinary LOC tags. Existing entities use SET/MOVE, genuinely new narrator-established entities use ADD_ASSET, and AUTONOMOUS movement requires the asset's explicit behavior/route. Never output this block when no durable map fact changed.`;
+    return `\n\n**ACTIVE MAP CAPABILITY — ${context.siteRoot}:** The private v3 [MAP] is the objective current occupancy snapshot, not the current combat beat; ordinary LOC text is player-observable history. If the narrative durably changed a mapped area/asset, emit exactly one \`[MAP_COMMIT]{valid JSON}[/MAP_COMMIT]\` block in addition to normal Lorebook tags. JSON shape: {"operation_id":"stable-id","operations":[{"op":"SET_ASSET|MOVE_ASSET|ADD_ASSET|REMOVE_ASSET|SET_AREA|ADD_AREA|SET_CONNECTION","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-area-id","text":"observable history"}]}. A chronicle makes its area VISITED; if it reports an asset, set that asset's knowledge to KNOWN. Omit chronicles for hidden/off-screen changes and do not duplicate a map chronicle through ordinary LOC tags. Existing entities use SET/MOVE, genuinely new narrator-established entities use ADD_ASSET, and AUTONOMOUS movement requires the asset's explicit behavior/route. Never output this block when no durable map fact changed. ${DUNGEON_MAP_TRANSIENT_COMBAT_RULE}`;
 }
 
 function extractBasicMapTransaction(text) {
@@ -912,6 +943,7 @@ async function applyActiveDungeonMapCommit(transaction, expectedContext, allBook
     rootEntry.disable = true;
     await saveWorldInfoSnapshot(expectedContext.bookName, freshBook, ctx, 'Dungeon map transaction');
     allBooks[expectedContext.bookName] = freshBook;
+    recordLiveDungeonMapSnapshot(getSettings(), collectDungeonMapHistorySnapshot(freshBook.entries, expectedContext.bookName));
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(expectedContext.bookName);
     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
     return { ...applied, document: undefined };
@@ -1979,7 +2011,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 ? `\ncommit rel items: {"id": "Book::UID or NPC Name", "field": "friendship"|"affection", "delta": ±N} — set INITIAL relationship values for newly recorded NPCs only (signed integer delta)`
                 : ``;
             const mapTextActions = activeDungeonContext
-                ? `\n- inspect_map({"area":"optional area id"}) — inspect the active current map or one area\n- list_map_assets({"area":"optional area id","state":"optional","knowledge":"optional"}) — list current stable asset IDs\ncommit map: {"operation_id":"stable-id","operations":[{"op":"...","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-id","text":"player-observable history"}]} — atomic current-map update; omit chronicles for hidden/off-screen changes`
+                ? `\n- inspect_map({"area":"optional area id"}) — inspect the active current map or one area\n- list_map_assets({"area":"optional area id","state":"optional","knowledge":"optional"}) — list current stable asset IDs\ncommit map: {"operation_id":"stable-id","operations":[{"op":"...","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-id","text":"player-observable lasting history"}]} — atomic current-map update for durable occupancy only; omit chronicles for hidden/off-screen changes; omit entirely for transient combat poses/status`
                 : '';
 
             const adjustedSharedContext = `${stripStaticDungeonAgentGuidance(sharedContext)}${activeDungeonContext ? `\n\n${buildActiveDungeonAgentGuidance(activeDungeonContext)}` : ''}`;
@@ -3159,6 +3191,7 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
 
         // -- Step 2: Restore pre-pass lorebooks to their snapshotted state -----
         for (const [bookName, bookData] of Object.entries(snapshot.bookSnapshots || {})) {
+            await evictWorldInfoCache(bookName);
             await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Rollback');
         }
 
@@ -3178,6 +3211,7 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
             void saveSettings();
         }
 
+        recordLiveDungeonMapSnapshot(settings, await captureActiveDungeonMapHistory(ctx));
         document.dispatchEvent(new CustomEvent('rt_lore_agent_updated', { detail: { source: 'rollback' } }));
         return true;
     } catch (e) {
@@ -3237,6 +3271,7 @@ export async function reapplyRouterPass(prePassSnapshot, postPassState) {
 
         // Step 2: Restore lorebooks to the post-pass state
         for (const [bookName, bookData] of Object.entries(postPassState.bookSnapshots || {})) {
+            await evictWorldInfoCache(bookName);
             await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Redo');
         }
 
@@ -3253,6 +3288,7 @@ export async function reapplyRouterPass(prePassSnapshot, postPassState) {
             void saveSettings();
         }
 
+        recordLiveDungeonMapSnapshot(settings, await captureActiveDungeonMapHistory(ctx));
         document.dispatchEvent(new CustomEvent('rt_lore_agent_updated', { detail: { source: 'redo' } }));
         return true;
     } catch (e) {

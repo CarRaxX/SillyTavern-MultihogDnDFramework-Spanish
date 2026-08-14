@@ -2,6 +2,24 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.9] - 2026-08-14
+
+### Added
+- **Settings search**: The floating settings window has a keyword search that filters nested drawers across tabs.
+
+### Changed
+- **Dungeon map lag note**: The narrator `<dungeon_reality_and_hidden_mapping>` prompt now says the attached map may lag a few turns behind play due to update frequency.
+
+## [7.50.8] - 2026-08-14
+
+### Fixed
+- **Tracker snapshot map rollback**: The State Tracker `[ LIVE ]` arrows now roll dungeon-map occupancy back with the memo. Each tracker snapshot stores the current `[MAP]`; viewing or restoring a previous stone writes that occupancy back, and returning to LIVE restores the map that was live when you started browsing.
+
+## [7.50.7] - 2026-08-14
+
+### Changed
+- **Dungeon map combat granularity**: Lorebook Agent map commits now treat `[MAP]` as lasting occupancy, not the current combat beat. Transient targeting, poses, HP, and conditions such as frightened stay in the combat tracker.
+
 ## [7.50.6] - 2026-08-14
 
 ### Fixed
