@@ -18,6 +18,9 @@ I know it says "D&D Framework," but in addition to fantasy, the system works jus
 
 ---
 
+### New: Persistent maps. The framework now generates persistent maps that are automatically updated. Explore a dungeon or a town, leave, come back later, and it's still there as it was. Dungeons are no longer hallucinated but skill checks actually matter.
+
+---
 
 ### The Core Components:
 
