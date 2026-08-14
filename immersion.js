@@ -7,7 +7,7 @@ import { scanRecentOutputForPresentNpcs } from './router.js';
 import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
 import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
 import { isDungeonMapDetached } from './src/ui/panel/dungeon-map-panel.js';
-import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { runtimeState } from './src/app/runtime-state.js';
 
 /**
@@ -221,7 +221,7 @@ export async function buildImmersionSceneState(memo, settings) {
     npcs = prependPlayerCharacterToSceneNpcs(npcs, s, ctx);
 
     let dungeonMap = null;
-    if (isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s)) {
+    if (isLocationMappingEnabled(s)) {
         try {
             const overlay = runtimeState.dungeonMapHistoryOverlay;
             if (overlay) {

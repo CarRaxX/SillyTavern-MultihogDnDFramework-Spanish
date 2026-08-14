@@ -3,6 +3,7 @@ import {
     findLoreHistoryIndexForChat,
     isLoreRedoEntryForChat,
 } from '../../state/lorebook-history.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 
 function getActiveLoreHistoryScope(settings = {}) {
     const chatId = runtimeState.currentChatId
@@ -24,6 +25,7 @@ export function wireAgentActivity({
     agentPanel,
     captureRouterLoreState,
     getRouterTick,
+    getMapUpdaterTick,
     getSettings,
     reapplyRouterPass,
     refreshManifest,
@@ -165,6 +167,16 @@ export function wireAgentActivity({
         if (runEvery > 1) {
             const nextIn = Math.max(0, runEvery - tick);
             parts.push(`Next in: ${nextIn} msg${nextIn !== 1 ? 's' : ''}`);
+        }
+        if (s.mapUpdaterEnabled !== false && isLocationMappingEnabled(s)) {
+            const mapEvery = Math.max(1, Number(s.mapUpdaterRunEvery) || 1);
+            const mapTick = typeof getMapUpdaterTick === 'function' ? getMapUpdaterTick() : 0;
+            if (mapEvery > 1) {
+                const mapNext = Math.max(0, mapEvery - mapTick);
+                parts.push(`Map in: ${mapNext} msg${mapNext !== 1 ? 's' : ''}`);
+            } else {
+                parts.push('Map: every turn');
+            }
         }
         lastRunEl.textContent = parts.join(' · ');
     }

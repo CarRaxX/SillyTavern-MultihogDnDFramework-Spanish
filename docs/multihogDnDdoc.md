@@ -97,7 +97,7 @@ For the narrator, I'd recommend trying at least the following:
 
 2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Dungeon Reality Mapping** also needs function calling: without it, `CreateDungeonMap` cannot run and new site maps cannot be created.
+3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Location Mapping** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
 
 It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
@@ -464,7 +464,7 @@ If the State Tracker is the mechanical accountant, the Lorebook Agent (LA) is th
 Native SillyTavern lorebooks are used as the database. Entries default inactive. LA’s attention model:
 
 - **Active** entries: full content visible to the agent.
-- **Inactive** entries: title + keywords only (the **keyring** / archive summary) until activated.
+- **Inactive** entries: Book::UID, title, and keywords only (the **keyring** / archive summary) until activated. That index is exhaustive — if a name is not in active memory or the keyring, the entry does not exist. `grep_lore` is for searching entry *bodies* for a fact, not for checking whether a name exists.
 - **Max Active** can FIFO-prune to control tokens.
 
 LA is aware of keyword activations inside one container (extension scanner and/or native ST keyword activation, depending on settings).
@@ -509,7 +509,7 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 
 - Portraits via SillyTavern Image Generation **or** Pollinations.ai.
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
-- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped dungeon — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Dungeon Reality Mapping** below.
+- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Location Mapping** below.
 - Real-time scene-art triggers: on location enter/change and/or every N outputs.
 
 ### Slash command
@@ -525,24 +525,26 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ---
 
-## Dungeon Reality Mapping (Alpha)
+## Location Mapping (Alpha)
 
-Dungeon Reality Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Dungeon Reality Mapping (Alpha)** — function calling **must** be enabled or `CreateDungeonMap` cannot run.
+Location Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Location Mapping (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect and Map Updater API calls.
 
-It exists so dangerous sites (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies. The map is current truth. Child Location entries are player-observable history, not a second competing map.
+It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
 The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are.
 
 ### How a map is created
 
-1. The narrator calls `CreateDungeonMap` **once**, before narrating entry into an unmapped high-risk site.
+1. The narrator calls `CreateAreaMap` **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`).
 2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map.
-3. A validator checks site/entrance identity, scale, stable IDs, asset references, reciprocal passages, and that every room is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
+3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 
-New maps need function calling. After a map exists, Lorebook Agent can keep it current with `commit.map` (Advanced) or `[MAP_COMMIT]` (Basic Mode) **without** further tool calls.
+New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Architect connection. Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
 
-Repeated `CreateDungeonMap` calls do not replace an already attached map.
+Repeated `CreateAreaMap` calls do not replace an already attached map.
+
+Dungeon maps are **room-scale**. Settlement maps are **district-scale**: gates, plazas, wards, and a few major landmarks — not every shop or interior. The GM may invent granular locations (a specific inn, alley, house) against that skeleton.
 
 ### What the map stores
 
@@ -572,7 +574,7 @@ The Visuals/Map tab does **not** require Real-Time Visualization or location sce
 
 ### Map Architect settings
 
-Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, and the architect prompt. Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateDungeonMap` contract is.
+Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, architect prompt, and **Map Updater** (run every N messages, occupancy prompt). Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent** or **Map Updater**.
 
 ---
 
@@ -667,7 +669,7 @@ Configurable narrator-side behaviors include:
 - **Narrative Pacing** modes: Normal (no length instructions), Shorter Outputs (modest length), High-Agency, and Downtime
 - **Benched Party** handling (ties into WP eligibility)
 - **Relationship Tracking** sections in the GM prompt
-- **Dungeon Reality Mapping** (alpha): hidden site maps for dungeons/ruins; requires function calling for `CreateDungeonMap`
+- **Location Mapping** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); requires function calling for `CreateAreaMap`
 - **CYOA** choice presentation
 - End-of-output footer reminders so the GM closes turns in the format ST expects
 
@@ -709,14 +711,14 @@ The framework’s backbone is still **time + memo + optional lore/world layers**
 | Wrong campaign data or setup in a new chat | Check that Chat-Linked Mode and **Lock Control Room & Modules to each chat** are enabled. GLOBAL items intentionally share activation; CHAT-BOUND items restore that chat's saved setup. Lock-off mode is a temporary carry-over bypass. |
 | Tracker formatting broken after paste | Use 💬 Direct Prompt: “Reformat this sheet to stock module layout.” |
 | Modules disappear / drift on a local or small tracker model | Enable **Full Review Mode** (State Tracker & Modules, below Enable State Tracker). Delta-only updates are hard for weaker models; Full Review dumps every enabled module each pass. Also raise response length. |
-| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Dungeon Reality Mapping** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
-| CreateDungeonMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry; Map Architect failures are real errors and must not be retried in the same turn. |
+| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Location Mapping** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
+| CreateAreaMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry (`DUNGEON` or `SETTLEMENT`); Map Architect failures are real errors and must not be retried in the same turn. |
 
 ---
 
 ## Mental Model (one paragraph)
 
-The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Dungeon Reality Mapping** (alpha) stores an objective hidden map for dangerous sites and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
+The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Location Mapping** (alpha) stores an objective hidden map for dangerous interiors and settlements, and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
 
 These are recommendations, not rules — experiment. Different models shine for different styles of play.
 

@@ -2,7 +2,7 @@
 
 **Status:** Alpha — structured current-state and dedicated Map Architect are in play, but the feature is still early.
 
-**Related:** `<dungeon_reality_and_hidden_mapping>` narrator module and Lorebook Agent
+**Related:** `<dungeon_reality_and_hidden_mapping>` narrator module, Map Architect, Map Updater, and Lorebook Agent
 
 **Updated:** 2026-08-14
 
@@ -14,16 +14,18 @@ An immutable initial map plus append-only room updates creates two competing fac
 
 ## Authority model
 
-- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site. Occupancy on the attached map may lag a few turns behind play because Lorebook Agent updates it on its own cadence; established story events override stale map states (a killed enemy stays dead even if still listed ACTIVE). The narrator must not rewind play or revive entities to match the lagging map.
+- The narrator establishes immediate fiction and calls `CreateAreaMap` once before narrating entry into an unmapped high-risk interior (kind DUNGEON) or an unmapped town/city/village (kind SETTLEMENT). Occupancy on the attached map is maintained by the Map Updater on its own cadence (default: every turn); established story events override stale map states (a killed enemy stays dead even if still listed ACTIVE). The narrator must not rewind play or revive entities to match the lagging map. Settlement maps are district-scale: the narrator may invent granular interiors that do not contradict those districts.
 - Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
-- Lorebook Agent interprets established consequences and maintains current map state.
+- Map Updater interprets established consequences and maintains current map state. Lorebook Agent records NPCs, readable location lore, relationships, quests, and events on a separate cadence.
 - Player attempts become map facts only after narrator resolution.
-- Lorebook Agent may make a constrained off-screen reaction only after an established trigger and only for an asset with an explicit behavior or route.
+- Map Updater may make a constrained off-screen reaction only after an established trigger and only for an asset with an explicit behavior or route.
 - Speculation never mutates the map.
 
 ## Map Architect generation
 
-Map Architect receives the exact site root, entrance label, scale, premise, and a configurable recent-story lookback. It emits one version 3 JSON object internally. Before persistence, a strict validator checks the site and entrance, scale-appropriate area count, stable IDs, enum values, all references, reciprocal passages, and reachability of every area from the entrance. A locked or blocked destination remains part of the physical graph through a `LOCKED` or `BLOCKED` connection; inaccessible space is never represented by omitting its route.
+Map Architect receives the exact site root, entrance label, kind (`DUNGEON` or `SETTLEMENT`), scale, premise, and a configurable recent-story lookback. It emits one version 3 JSON object internally. Before persistence, a strict validator checks the site and entrance, kind, scale-appropriate area count for that kind, stable IDs, enum values, all references, reciprocal passages, and reachability of every area from the entrance. A locked or blocked destination remains part of the physical graph through a `LOCKED` or `BLOCKED` connection; inaccessible space is never represented by omitting its route.
+
+Dungeon maps are room-scale interiors. Settlement maps are macroscopic district graphs (gates, plazas, wards, landmarks) rather than every street and shop; the narrator fills granular interiors during play.
 
 Invalid JSON or semantic errors are returned to Map Architect for up to two complete correction passes. A rejected map writes nothing. On success, JSON is stored directly in Lorebook Agent and only compact human-readable private canon is returned to the narrator. Repeated or concurrent calls preserve an already attached map instead of replacing it.
 
@@ -82,7 +84,9 @@ Assets describe things that can move or materially change:
 - traps, hazards, alarms, and effects;
 - loot, keys, objects, barriers, and corpses.
 
-An enemy exists once at site level and has one `location`. Movement updates that field instead of copying enemy prose between rooms. Optional `behavior` and `route` fields bound Lorebook Agent's autonomous reactions.
+Settlement interiors the party can enter (a chapel, inn, shop) stay assets occupying a district. They are not graph areas. The location footer may name that interior; Visuals/Map highlights the host district and treats the interior as occupancy of that node. Promoting every shop into an area would explode the town graph. A nested dungeon under such a building is a new mapped site, not a satellite node on the settlement map.
+
+An enemy exists once at site level and has one `location`. Movement updates that field instead of copying enemy prose between rooms. Optional `behavior` and `route` fields bound Map Updater's autonomous reactions.
 
 Asset `detail` and child chronicles store lasting occupancy, not the current combat beat. Remaining count, DESTROYED/DEAD/FLED, area-to-area movement, sprung traps, and lasting damage belong on the map. Mid-round targeting, advancing toward a character, poses, HP, and temporary conditions (frightened, held, prone) belong to the combat tracker and must not be written into `[MAP]`.
 
@@ -109,37 +113,32 @@ Abbey Undercroft is a mapped site. Its private map stores current objective real
 [/MAP]
 ```
 
-The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Lorebook Agent map transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
+The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Map Updater transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
 
 The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing. Visuals/Map in the Lorebook Agent shows the player-facing node graph (visited/discovered rooms plus unlabeled fog stubs) and can be popped out into its own window.
 
-## Conditional Lorebook Agent capability
+## Conditional Map Updater capability
 
-Map data, instructions, schemas, and inspection actions are exposed only while the latest authoritative status-footer hierarchy is inside that mapped root.
+Map data, instructions, and occupancy updates are exposed only while the latest authoritative status-footer hierarchy is inside that mapped root.
 
 | Current footer location | Attached root | Capability |
 |---|---|---|
-| `Abbey Undercroft, Cellar Landing` | `Abbey Undercroft` | Map and commands active |
-| `Abbey Undercroft :: Flooded Vault` | `Abbey Undercroft` | Map and commands active |
-| `Whispering Woods, Forgotten Tomb` | `Forgotten Tomb` | Map and commands active |
-| `Forest Near the Hall of the Ember-Ancestors` | `Hall of the Ember-Ancestors` | Map and commands absent |
-| `Varnholde Village, Elder's House` | `Abbey Undercroft` | Map and commands absent |
-| `Abbey Undercroft, Entrance` after returning | `Abbey Undercroft` | Map and commands resume |
+| `Abbey Undercroft, Cellar Landing` | `Abbey Undercroft` | Map Updater active |
+| `Abbey Undercroft :: Flooded Vault` | `Abbey Undercroft` | Map Updater active |
+| `Whispering Woods, Forgotten Tomb` | `Forgotten Tomb` | Map Updater active |
+| `Forest Near the Hall of the Ember-Ancestors` | `Hall of the Ember-Ancestors` | Map and updater absent |
+| `Varnholde Village, Elder's House` | `Abbey Undercroft` | Map and updater absent |
+| `Abbey Undercroft, Entrance` after returning | `Abbey Undercroft` | Map Updater resumes |
 
-Pinned mapped roots may keep their visible `[CORE]` text active outside the site, but their `[MAP]` payload is stripped. Incidental keywords and prose mentions do not activate map capability. While a site is current, its location-owned mapped root is also excluded from the Lorebook Agent's ordinary activation budget; the agent is told not to activate or deactivate it itself.
+Pinned mapped roots may keep their visible `[CORE]` text active outside the site, but their `[MAP]` payload is stripped from Lorebook Agent context. Incidental keywords and prose mentions do not activate map capability. While a site is current, its location-owned mapped root is also excluded from the Lorebook Agent's ordinary activation budget.
 
-Agent Mode conditionally adds:
+Map Updater is a dedicated one-shot JSON pass (same connection as Map Architect). It emits either `{"noop":true}` or an occupancy transaction. Lorebook Agent no longer receives `inspect_map`, `list_map_assets`, `commit.map`, or `[MAP_COMMIT]`.
 
-- `inspect_map`
-- `list_map_assets`
-- the `commit.map` schema
-- active-map ownership and evidence rules
-
-Basic Mode conditionally adds `[MAP_COMMIT]{...}[/MAP_COMMIT]`. No map-related instructions or schema are sent during ordinary non-map passes.
+The two cadences are independent: Map Updater defaults to every turn; Lorebook Agent defaults to every 3 messages. The Lorebook Agent header play button expands into a manual choice between the two.
 
 ## Atomic map transaction
 
-Lorebook Agent submits current-state operations through its final commit:
+Map Updater submits current-state operations as one JSON object:
 
 ```json
 {
@@ -220,7 +219,7 @@ While the party is inside the site, the deterministic Dungeon Reality block cont
 - a compact prose conversion of the current `[MAP]` snapshot, never the raw JSON; and
 - root/descendant Location entries as player-observable history.
 
-JSON remains the storage and Lorebook Agent transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost.
+JSON remains the storage and Map Updater transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost.
 
 The map is current truth, so the narrator does not need to infer that a later chronicle overrides a stale original enemy description. Leaving the site stops injection without deleting anything; returning resumes it.
 
@@ -239,4 +238,4 @@ Ordinary exploration, perception checks, room combat, movement, traps, opened ro
 
 ## Verification
 
-Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, and the Lorebook Agent map indicator.
+Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, Map Updater occupancy updates, and Lorebook Agent map stripping.

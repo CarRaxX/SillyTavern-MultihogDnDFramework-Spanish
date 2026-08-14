@@ -33,7 +33,13 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     </div>
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENT PAUSED' : ''}</div>
                     <div class="rpg-tracker-header-right">
-                        <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Run Research Now" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                        <div id="rt-research-menu-wrap" style="position:relative; display:inline-flex;">
+                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Run Research Now — Lorebook Agent or Map Updater" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                            <div id="rt-research-dropdown" class="rt-update-menu rt-research-dropdown" style="display:none;">
+                                <div class="rt-menu-item" id="rt-research-lorebook"><b>Lorebook Agent</b><small>NPCs, locations, relationships</small></div>
+                                <div class="rt-menu-item" id="rt-research-map-updater"><b>Map Updater</b><small>Dungeon and town occupancy</small></div>
+                            </div>
+                        </div>
                         <button class="rpg-tracker-stop-btn" id="rt-agent-stop-btn" title="Stop Agent" style="display:none;">■</button>
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-full-audit-panel" title="Run Full Audit (Chunked)" style="color: #ff5555;"><i class="fa-solid fa-book-journal-whills"></i></button>
                          <div id="rt-cleanup-menu-wrap" style="position:relative; display:inline-flex;">
@@ -132,6 +138,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Run every N messages: 1 = fires every turn (always current, but may create excessive entry granularity). 3+ = fires less often but sees more narrative context, producing more coherent updates. Keyword hits still fire immediately regardless.">
                                 <span style="font-size: 0.769em; opacity: 0.7;">Run every:</span>
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-run-every" value="${settings.routerRunEvery || 3}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
+                                <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Map Updater cadence while inside a mapped dungeon or settlement. Independent of Lorebook Agent. 1 = occupancy updates every turn.">
+                                <span style="font-size: 0.769em; opacity: 0.7;">Map every:</span>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-updater-run-every" value="${settings.mapUpdaterRunEvery ?? 1}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
                                 <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                             </div>
                         </div>

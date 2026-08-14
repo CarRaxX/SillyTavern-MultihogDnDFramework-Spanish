@@ -7,7 +7,7 @@ import {
     renderDungeonMapReadableHtml,
     resolveDungeonGraphCurrentArea,
 } from '../dungeon-map-graph.js';
-import { getLocationLeaf, resolveDungeonMapForLocation } from '../dungeon-reality.js';
+import { getLocationLeaf, resolveCurrentMapPlacement, resolveDungeonMapForLocation } from '../dungeon-reality.js';
 
 const midExplorationMap = {
     version: 3,
@@ -102,6 +102,50 @@ const midExplorationMap = {
             knowledge: 'UNREVEALED',
             detail: 'A poison pin.',
             origin: 'INITIAL_MAP',
+        },
+    ],
+};
+
+const morrowfenMap = {
+    version: 3,
+    site: 'Morrowfen',
+    kind: 'SETTLEMENT',
+    areas: [
+        {
+            id: 'lantern-gate',
+            name: 'Lantern Gate',
+            knowledge: 'VISITED',
+            geometry: ['A fortified double-arch granite bridge.'],
+            connections: [{ to: 'plank-market', state: 'OPEN', detail: 'A wooden rampway.' }],
+        },
+        {
+            id: 'plank-market',
+            name: 'Plank Market',
+            knowledge: 'VISITED',
+            geometry: ['Boardwalks over marsh water.'],
+            connections: [
+                { to: 'lantern-gate', state: 'OPEN', detail: 'A wooden rampway.' },
+                { to: 'shrine-quarter', state: 'OPEN', detail: 'A stone-paved ramp.' },
+            ],
+        },
+        {
+            id: 'shrine-quarter',
+            name: 'Shrine Quarter',
+            knowledge: 'VISITED',
+            geometry: ['An elevated terrace of chapels.'],
+            connections: [{ to: 'plank-market', state: 'OPEN', detail: 'A stone-paved ramp.' }],
+        },
+    ],
+    assets: [
+        {
+            id: 'chapel-of-the-drowned-stone',
+            kind: 'OBJECT',
+            name: 'Chapel of the Drowned Stone',
+            location: 'shrine-quarter',
+            state: 'PRESENT',
+            knowledge: 'KNOWN',
+            detail: 'A low stone chapel.',
+            origin: 'PLAY',
         },
     ],
 };
@@ -206,6 +250,32 @@ describe('dungeon map graph', () => {
     it('marks the current area from a footer location', () => {
         expect(resolveDungeonGraphCurrentArea(midExplorationMap, 'Abbey Undercroft, Flooded Vault'))
             .toBe('flooded-vault');
+    });
+
+    it('highlights the host district when the footer leaf is an occupying interior, not the entrance', () => {
+        const location = 'Morrowfen, Shrine Quarter, Chapel of the Drowned Stone';
+        expect(resolveDungeonGraphCurrentArea(morrowfenMap, location)).toBe('shrine-quarter');
+        expect(resolveDungeonGraphCurrentArea(morrowfenMap, 'Chapel of the Drowned Stone')).toBe('shrine-quarter');
+        const placement = resolveCurrentMapPlacement(morrowfenMap, location);
+        expect(placement.area?.id).toBe('shrine-quarter');
+        expect(placement.interiorAsset?.name).toBe('Chapel of the Drowned Stone');
+        const graph = buildDungeonMapGraph(morrowfenMap, { playerFacing: true, currentLocation: location });
+        const byId = Object.fromEntries(graph.nodes.map(node => [node.id, node]));
+        expect(byId['shrine-quarter'].current).toBe(true);
+        expect(byId['lantern-gate'].current).toBe(false);
+        expect(graph.currentInteriorName).toBe('Chapel of the Drowned Stone');
+        const svg = renderDungeonMapGraphSvg(graph, { compact: true, siteRoot: 'Morrowfen' });
+        expect(svg).toContain('in Chapel of the Drowned Stone');
+    });
+
+    it('still highlights the parent district when the interior is not yet an asset', () => {
+        const withoutChapel = { ...morrowfenMap, assets: [] };
+        expect(resolveDungeonGraphCurrentArea(
+            withoutChapel,
+            'Morrowfen, Shrine Quarter, Chapel of the Drowned Stone',
+        )).toBe('shrine-quarter');
+        expect(resolveDungeonGraphCurrentArea(morrowfenMap, 'Morrowfen')).toBe('');
+        expect(resolveDungeonGraphCurrentArea(morrowfenMap, '')).toBe('');
     });
 
     it('resolves a lorebook map attachment for the active footer site', () => {

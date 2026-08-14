@@ -1342,6 +1342,14 @@
     width: 180px;
 }
 
+.rt-research-dropdown {
+    width: 230px;
+}
+
+.rpg-tracker-panel.rt-research-menu-open {
+    overflow: visible !important;
+}
+
 .rt-menu-item {
     padding: 8px 12px;
     border-radius: 6px;

@@ -534,9 +534,9 @@ function getSettingsInternal(extensionSettings) {
         );
     }
 
-    // Dungeon persistence ownership: keep ordinary room exploration and local
-    // mutations in Location entries instead of duplicating them as Events.
-    const dungeonOwnershipRule = '**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private `[MAP]...[/MAP]` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. While the current scene is inside a mapped dungeon/site, persistent room state belongs in the exact LOC entry for that room or area. Record destroyed occupants, sprung/disarmed traps, opened/blocked routes, removed objects, damage, cleansing/corruption, and newly established sublocations as LOC updates or child LOC entries. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or these local mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).';
+    // Dungeon persistence ownership: map occupancy belongs to the Map Updater;
+    // Lorebook Agent still records NPCs and readable location lore.
+    const dungeonOwnershipRule = '**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private `[MAP]...[/MAP]` section. Never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit `[MAP_COMMIT]`, `commit.map`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or local map mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).';
     if (s.routerModularPromptTemplate && !s.routerModularPromptTemplate.includes('DUNGEON LOCATION OWNERSHIP')) {
         s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
             'Example: [[FAC: Iron Syndicate',
@@ -549,19 +549,38 @@ function getSettingsInternal(extensionSettings) {
             `## DUNGEON LOCATION OWNERSHIP\n${dungeonOwnershipRule.replace(/^\*\*DUNGEON LOCATION OWNERSHIP:\*\*\s*/, '')}\n\n## WORLD SKELETON (OFF-LIMITS)`,
         );
     }
-    const mapAwarenessRule = 'A mapped root Location may contain a private `[MAP]...[/MAP]` section with the full objective site, including undiscovered areas and their specific occupants/features. Read it to identify exactly which mapped creature, trap, object, or area the visible narrative changed; never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. ';
+    const mapAwarenessRule = 'A mapped root Location may contain a private `[MAP]...[/MAP]` section. Never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit `[MAP_COMMIT]`, `commit.map`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. ';
     if (s.routerModularPromptTemplate?.includes('DUNGEON LOCATION OWNERSHIP')
-        && !s.routerModularPromptTemplate.includes('private `[MAP]...[/MAP]`')) {
+        && !s.routerModularPromptTemplate.includes('Map Updater')) {
         s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
-            '**DUNGEON LOCATION OWNERSHIP:** ',
-            `**DUNGEON LOCATION OWNERSHIP:** ${mapAwarenessRule}`,
+            /(?:\*\*DUNGEON LOCATION OWNERSHIP:\*\*\s*)[\s\S]*?(?=\n\nExample: \[\[FAC:)/,
+            `${dungeonOwnershipRule}\n\n`,
         );
+        if (!s.routerModularPromptTemplate.includes('Map Updater')) {
+            s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+                '**DUNGEON LOCATION OWNERSHIP:** ',
+                `**DUNGEON LOCATION OWNERSHIP:** ${mapAwarenessRule}`,
+            );
+        }
     }
     if (s.routerAgentSharedContextTemplate?.includes('## DUNGEON LOCATION OWNERSHIP')
-        && !s.routerAgentSharedContextTemplate.includes('private `[MAP]...[/MAP]`')) {
+        && !s.routerAgentSharedContextTemplate.includes('Map Updater')) {
         s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
-            '## DUNGEON LOCATION OWNERSHIP\n',
-            `## DUNGEON LOCATION OWNERSHIP\n${mapAwarenessRule}`,
+            /## DUNGEON LOCATION OWNERSHIP\n[\s\S]*?(?=\n## WORLD SKELETON)/,
+            `## DUNGEON LOCATION OWNERSHIP\n${mapAwarenessRule}\n`,
+        );
+    }
+
+    if (s.routerAgentSharedContextTemplate?.includes('use `read_entry` or `grep_lore`, or `activate` it.')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            '  - To see its full content first: use `read_entry` or `grep_lore`, or `activate` it.\n- Only use `record` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.',
+            '  - To see its full content first: use `read_entry` with the Book::UID from that ARCHIVE INDEX line, or `activate` it. Never grep_lore or inspect_book to check whether a name exists.\n- Only use `record` for entities that are BRAND NEW — names absent from ACTIVE MEMORY, NEWLY ACTIVATED, and ARCHIVE INDEX. Absence means the entry does not exist.',
+        );
+    }
+    if (s.routerBasicSystemPromptTemplate?.includes('Inactive entries — labels and keywords only.')) {
+        s.routerBasicSystemPromptTemplate = s.routerBasicSystemPromptTemplate.replace(
+            '3. **ARCHIVE INDEX**: Inactive entries — labels and keywords only. You CANNOT see their full biography.',
+            '3. **ARCHIVE INDEX**: Complete catalog of inactive entries — Book::UID, labels, and keywords only. You CANNOT see their full biography. If a name is not in ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX, it does not exist.',
         );
     }
 
@@ -993,6 +1012,10 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapArchitectOpenaiUrl',
     'mapArchitectOpenaiKey',
     'mapArchitectOpenaiModel',
+    'mapUpdaterEnabled',
+    'mapUpdaterRunEvery',
+    'mapUpdaterMaxTokens',
+    'mapUpdaterSystemPrompt',
     'worldConnectionSource',
     'worldConnectionProfileId',
     'worldCompletionPresetId',

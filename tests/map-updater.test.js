@@ -1,0 +1,166 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { formatDungeonMapForUpdater } from '../dungeon-reality.js';
+import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
+
+describe('Map Updater', () => {
+    it('treats noop and empty operations as a skip', () => {
+        const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
+        expect(updater).toContain('if (value.noop === true) return true');
+        expect(updater).toContain('return Array.isArray(value.operations) && value.operations.length === 0');
+    });
+
+    it('formats a compact ID snapshot without dumping every room geometry', () => {
+        const snapshot = formatDungeonMapForUpdater({
+            version: 3,
+            site: 'Morrowfen',
+            kind: 'SETTLEMENT',
+            areas: [
+                {
+                    id: 'shrine-quarter',
+                    name: 'Shrine Quarter',
+                    knowledge: 'VISITED',
+                    geometry: ['Narrow lanes of salt-stained stone.'],
+                    connections: [{ to: 'docks', state: 'OPEN' }],
+                },
+                {
+                    id: 'docks',
+                    name: 'Docks',
+                    knowledge: 'DISCOVERED',
+                    geometry: ['A long hidden pier description that should not appear unless current.'],
+                    connections: [{ to: 'shrine-quarter', state: 'OPEN' }],
+                },
+            ],
+            assets: [
+                {
+                    id: 'odran',
+                    kind: 'CREATURE',
+                    name: 'Odran',
+                    location: 'shrine-quarter',
+                    state: 'ACTIVE',
+                    knowledge: 'KNOWN',
+                    detail: 'Tends the chapel.',
+                },
+            ],
+        }, 'Morrowfen, Shrine Quarter');
+
+        expect(snapshot).toContain('KIND: SETTLEMENT');
+        expect(snapshot).toContain('shrine-quarter | Shrine Quarter | VISITED | docks:OPEN');
+        expect(snapshot).toContain('odran | CREATURE | Odran | loc=shrine-quarter');
+        expect(snapshot).toContain('Narrow lanes of salt-stained stone.');
+        expect(snapshot).not.toContain('long hidden pier description');
+    });
+
+    it('flags a settlement interior in CURRENT LOCATION that is not yet an OBJECT asset', () => {
+        const snapshot = formatDungeonMapForUpdater({
+            version: 3,
+            site: 'Morrowfen',
+            kind: 'SETTLEMENT',
+            areas: [{
+                id: 'shrine-quarter',
+                name: 'Shrine Quarter',
+                knowledge: 'VISITED',
+                geometry: ['Narrow lanes of salt-stained stone.'],
+                connections: [],
+            }],
+            assets: [],
+        }, 'Morrowfen, Shrine Quarter, Chapel of the Drowned Stone');
+
+        expect(snapshot).toContain('shrine-quarter (Shrine Quarter)');
+        expect(snapshot).toContain('Narrow lanes of salt-stained stone.');
+        expect(snapshot).toContain('SETTLEMENT INTERIOR NOT ON MAP');
+        expect(snapshot).toContain('Chapel of the Drowned Stone');
+        expect(snapshot).toContain('Do not output {"noop":true} for this.');
+        expect(snapshot).not.toContain('(Current location did not match an area id/name.)');
+    });
+
+    it('treats a known chapel OBJECT as occupancy of its host district', () => {
+        const snapshot = formatDungeonMapForUpdater({
+            version: 3,
+            site: 'Morrowfen',
+            kind: 'SETTLEMENT',
+            areas: [{
+                id: 'shrine-quarter',
+                name: 'Shrine Quarter',
+                knowledge: 'VISITED',
+                geometry: ['Narrow lanes of salt-stained stone.'],
+                connections: [],
+            }],
+            assets: [{
+                id: 'chapel-of-the-drowned-stone',
+                kind: 'OBJECT',
+                name: 'Chapel of the Drowned Stone',
+                location: 'shrine-quarter',
+                state: 'PRESENT',
+                knowledge: 'KNOWN',
+            }],
+        }, 'Morrowfen, Shrine Quarter, Chapel of the Drowned Stone');
+
+        expect(snapshot).toContain('shrine-quarter (Shrine Quarter)');
+        expect(snapshot).toContain('chapel-of-the-drowned-stone | OBJECT | Chapel of the Drowned Stone');
+        expect(snapshot).not.toContain('SETTLEMENT INTERIOR NOT ON MAP');
+    });
+
+    it('ships a focused occupancy prompt and independent scheduler wiring', () => {
+        const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
+        const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('You do not write NPC biographies');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('KIND: SETTLEMENT');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ADD_ASSET kind OBJECT');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('the footer is sufficient even when RECENT STORY is empty');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"op":"ADD_ASSET"');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"area_id":"shrine-quarter"');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
+        expect(updater).toContain('mapArchitectConnectionSource');
+        expect(updater).toContain('mapUpdaterMaxTokens');
+        expect(updater).toContain('export async function runMapUpdaterPass({ isManual = false, lookback = null } = {})');
+        expect(updater).toContain('if (settings.mapUpdaterEnabled === false && !isManual)');
+        expect(updater).toContain('export function resolveMapUpdaterStoryWindow');
+        expect(updater).toContain('if (isManual)');
+        expect(updater).toContain('recentStoryContext(ctx, settings, { isManual, lookback })');
+        expect(hooks).toContain('runMapUpdaterPass');
+        expect(hooks).toContain('mapUpdaterRunEvery');
+        expect(hooks).toContain('maybeRollbackMapUpdaterForSwipe');
+        expect(settingsMarkup).toContain('id="rpg_map_updater_run_every"');
+        expect(settingsMarkup).toContain('id="rpg_map_updater_enabled"');
+        expect(settingsMarkup).toContain('<b>Map Updater</b>');
+    });
+
+    it('summarizes occupancy ops compactly for the Lorebook Terminal', () => {
+        const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
+        expect(updater).toContain('export function summarizeMapUpdaterOperations(transaction)');
+        expect(updater).toContain("op === 'SET_CONNECTION'");
+        expect(updater).toContain('kind ? ` (${kind})`');
+        expect(updater).toContain("broadcastStep('result', summarizeMapUpdaterOperations(parsed.value) || 'Transaction accepted.')");
+    });
+
+    it('wires abort, terminal steps, and delayed busy so skip paths stay silent', () => {
+        const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
+        expect(updater).toContain('export function stopMapUpdaterPass()');
+        expect(updater).toContain('new AbortController()');
+        expect(updater).toContain('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
+        expect(updater).toContain("source: 'map_updater'");
+        expect(updater).toContain("broadcastStep('start', 'Initializing Map Updater...')");
+        expect(updater).toContain("broadcastStep('thought', 'Requesting occupancy update...')");
+        expect(updater).toContain('Correction pass ${attempt}');
+        expect(updater).toContain("broadcastStep('error', 'Stopped by user.')");
+        expect(updater).toContain("return { skipped: 'stopped' }");
+        expect(updater).toContain("broadcastStep('finish', 'Already applied.')");
+        expect(updater).toContain('Applied ${n} operation');
+        expect(updater).not.toContain('checkAndTriggerAutoGenerations');
+        const loadIdx = updater.indexOf('const loaded = await loadActiveDungeonMapContext()');
+        const runningIdx = updater.indexOf('_mapUpdaterRunning = true');
+        const startIdx = updater.indexOf("broadcastStep('start', 'Initializing Map Updater...')");
+        expect(loadIdx).toBeGreaterThan(-1);
+        expect(runningIdx).toBeGreaterThan(loadIdx);
+        expect(startIdx).toBeGreaterThan(runningIdx);
+        expect(updater.indexOf("skipped: 'no_active_map'")).toBeLessThan(startIdx);
+        expect(updater.indexOf("skipped: 'disabled'")).toBeLessThan(startIdx);
+        expect(updater.indexOf("skipped: 'location_mapping_off'")).toBeLessThan(startIdx);
+        const loopRecheckIdx = updater.indexOf('if (!isLocationMappingEnabled(getSettings()))');
+        const sendIdx = updater.indexOf('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
+        expect(loopRecheckIdx).toBeGreaterThan(startIdx);
+        expect(sendIdx).toBeGreaterThan(loopRecheckIdx);
+    });
+});

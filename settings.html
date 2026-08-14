@@ -657,7 +657,7 @@
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Events</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Resting</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Benched Party</span></label>
-                                <label class="checkbox_label" title="Alpha: builds a full hidden location map before dungeon/ruin exploration and resolves traps, stealth, and enemies against that map. Function calling MUST be enabled or CreateDungeonMap cannot run. Expect sharp edges."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Dungeon Reality Mapping (Alpha) — function calling MUST be enabled</span></label>
+                                <label class="checkbox_label" title="Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Location Mapping (Alpha) — function calling MUST be enabled</span></label>
                                 <div style="display:flex;align-items:center;gap:4px;">
                                 <label class="checkbox_label" style="flex:1;" title="Injects CYOA choice instructions (and active pacing tags) into the user-message context every turn, just above the RNG queue — not into Main system prompt. Prior CYOA/pacing copies are stripped first."><input type="checkbox" id="rpg_sysprompt_mod_cyoa_mode" /><span>🧭 CYOA Mode</span></label>
                                 <button id="rpg_cyoa_settings_btn" class="menu_button interactable" style="padding:1px 7px;font-size:11px;flex-shrink:0;" title="CYOA Settings"><i class="fa-solid fa-gear"></i></button>
@@ -1305,7 +1305,7 @@
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
                         <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4; margin-bottom: 8px;">
-                            When the narrator first enters an unmapped dangerous site, it calls this dedicated agent once. The architect creates a complete hidden map, validates every passage and entity reference, stores it in the root Location entry, and returns a compact private version to the narrator. The normal GM prompt only carries the short tool contract.
+                            When the narrator first enters an unmapped dungeon or settlement, it calls this dedicated agent once. Dungeons get a complete room-scale map; towns and cities get a district-scale map. The architect validates every passage and entity reference, stores it in the root Location entry, and returns a compact private version to the narrator.
                         </div>
                         <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                             <label style="flex:1; min-width:140px;">Story Lookback
@@ -1323,7 +1323,7 @@
                             </div>
                             <div class="inline-drawer-content">
                                 <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
-                                    <span style="font-size:0.78em; opacity:0.65; flex:1;">Used only during CreateDungeonMap calls.</span>
+                                    <span style="font-size:0.78em; opacity:0.65; flex:1;">Used only during CreateAreaMap calls.</span>
                                     <button id="rpg_map_architect_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to the shipped Map Architect prompt"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
                                 </div>
                                 <textarea id="rpg_map_architect_system_prompt" class="text_pole" rows="14" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Dedicated Map Architect system prompt"></textarea>
@@ -1365,6 +1365,37 @@
                                     </div>
                                     <label>Preset</label>
                                     <select id="rpg_map_architect_completion_preset" class="text_pole"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Map Updater</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
+                                        After a map exists, this dedicated pass keeps occupancy current. It does not record NPC biographies or relationships — those stay on the Lorebook Agent. Uses the Map Architect connection above. Default is every turn, so Lorebook Agent can stay on a slower cadence.
+                                    </div>
+                                    <label class="checkbox_label">
+                                        <input id="rpg_map_updater_enabled" type="checkbox" checked />
+                                        <span>Update maps automatically while the party is inside a mapped site</span>
+                                    </label>
+                                    <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                        <label style="flex:1; min-width:140px;">Run Every N Messages
+                                            <input id="rpg_map_updater_run_every" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="50" class="text_pole" title="How often the Map Updater auto-fires while inside a mapped site. 1 = every turn." />
+                                        </label>
+                                        <label style="flex:1; min-width:140px;">Max Output Tokens
+                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="400" max="16000" class="text_pole" title="Maximum generation length for a map occupancy update." />
+                                        </label>
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Used only for occupancy updates after a map exists.</span>
+                                        <button id="rpg_map_updater_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to the shipped Map Updater prompt"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
+                                    </div>
+                                    <textarea id="rpg_map_updater_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Dedicated Map Updater system prompt"></textarea>
                                 </div>
                             </div>
                         </div>

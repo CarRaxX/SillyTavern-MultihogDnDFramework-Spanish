@@ -5,9 +5,8 @@
  */
 
 import {
-    dungeonLabelsMatch,
-    getLocationLeaf,
     normalizeDungeonMapDocument,
+    resolveCurrentMapPlacement,
 } from './dungeon-reality.js';
 
 function escapeXml(value) {
@@ -51,15 +50,10 @@ function uniqueConnectionEdges(areas) {
     return edges;
 }
 
-/** Match a footer/lore location to an area ID. */
+/** Match a footer/lore location to an area ID. Interiors that are assets resolve to their host area. */
 export function resolveDungeonGraphCurrentArea(document, currentLocation = '') {
     const map = normalizeDungeonMapDocument(document, document?.site);
-    const leaf = getLocationLeaf(currentLocation);
-    if (!leaf) return map.areas[0]?.id || '';
-    const exact = map.areas.find(area => dungeonLabelsMatch(area.name, leaf));
-    if (exact) return exact.id;
-    if (map.areas[0] && dungeonLabelsMatch(map.areas[0].name, leaf)) return map.areas[0].id;
-    return map.areas[0]?.id || '';
+    return resolveCurrentMapPlacement(map, currentLocation).area?.id || '';
 }
 
 /**
@@ -69,7 +63,8 @@ export function resolveDungeonGraphCurrentArea(document, currentLocation = '') {
  */
 export function buildDungeonMapGraph(document, { playerFacing = true, currentLocation = '' } = {}) {
     const map = normalizeDungeonMapDocument(document, document?.site);
-    const currentAreaId = resolveDungeonGraphCurrentArea(map, currentLocation);
+    const currentPlacement = resolveCurrentMapPlacement(map, currentLocation);
+    const currentAreaId = currentPlacement.area?.id || '';
     const areasById = new Map(map.areas.map(area => [area.id, area]));
     const known = new Set();
     for (const area of map.areas) {
@@ -105,6 +100,7 @@ export function buildDungeonMapGraph(document, { playerFacing = true, currentLoc
     return {
         site: map.site,
         currentAreaId,
+        currentInteriorName: currentPlacement.interiorAsset?.name || currentPlacement.unmatchedInterior || '',
         nodes,
         edges,
     };
@@ -271,7 +267,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
         ].join(' ');
         const title = node.fog
             ? 'Unexplored'
-            : escapeXml(`${node.name}${node.current ? ' (you are here)' : ''}`);
+            : escapeXml(`${node.name}${node.current ? (graph.currentInteriorName ? ` (in ${graph.currentInteriorName})` : ' (you are here)') : ''}`);
         const shape = node.fog
             ? `<circle cx="${node.cx}" cy="${node.cy}" r="${node.width / 2}"></circle>`
             : `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="6"></rect>`;

@@ -5,7 +5,7 @@
  */
 export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
     name: 'dungeon_map_v3',
-    description: 'A complete private objective map for one dangerous site.',
+    description: 'A complete private objective map for one dungeon interior or settlement.',
     strict: false,
     returnInvalid: true,
     value: {
@@ -14,6 +14,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
         properties: {
             version: { type: 'integer', enum: [3] },
             site: { type: 'string', minLength: 1 },
+            kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
             areas: {
                 type: 'array',
                 minItems: 2,

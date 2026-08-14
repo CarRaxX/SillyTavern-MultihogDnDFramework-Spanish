@@ -71,6 +71,30 @@ export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
     }
 }
 
+/** Persist the Map Updater "since last run" chat-length watermark. */
+export function persistMapUpdaterLastRunWatermark(length) {
+    const s = getSettings();
+    s.mapUpdaterLastRunChatLength = length;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
+/** Persist the Map Updater "last ran at" timestamp (display only). */
+export function persistMapUpdaterLastRunTimestamp(epochMs = Date.now()) {
+    const s = getSettings();
+    s.mapUpdaterLastRunAt = epochMs;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
 /**
  * Sync localStorage write-ahead log for module schema (customFields / blockOrder / modules).
  * Survives F5 when the async /api/settings/save fetch is cancelled mid-reload (common when
@@ -332,6 +356,8 @@ export function saveChatState(chatId, opts = {}) {
         routerLookback: s.routerLookback || 4,
         routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
         routerLastRunAt: s.routerLastRunAt ?? 0,
+        mapUpdaterLastRunChatLength: s.mapUpdaterLastRunChatLength ?? 0,
+        mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,

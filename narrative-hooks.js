@@ -16,13 +16,15 @@ import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgress
 import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
+import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
+import { runtimeState } from './src/app/runtime-state.js';
 import { isPercentFormula, resolveDiceCompare } from './src/state/dice-compare.js';
 import { buildCyoaModeBlock, STATE_MEMO_INJECT_PREAMBLE } from './constants.js';
-import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isEffectiveSectionEnabled, isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/state/narrative-pacing.js';
 import {
     buildDungeonRealityInjection,
@@ -144,7 +146,8 @@ function resolveEndOfOutputFooterSection(settings) {
     let inner = `ALWAYS end every output (even after tool chains) with:
 *(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
 *Level [X] | [HH:MM AM/PM], Day [X]*
-Footer shows ONLY {{user}}'s HP/XP/level/location — never party/NPC status or names.`;
+Footer shows ONLY {{user}}'s HP/XP/level/location — never party/NPC status or names.
+Location is coarse-to-fine (city, district, then the specific building/interior). If {{user}} is inside a named chapel, inn, shop, house, or similar, that interior MUST be the last segment.`;
     if (settings.use24hTime) {
         inner = inner.replace(/\[HH:MM AM\/PM\]/g, '[HH:MM] (24-hour clock, NO AM/PM)');
     }
@@ -507,22 +510,24 @@ export function registerMapArchitectTool() {
         const { registerFunctionTool, unregisterFunctionTool } = ctx;
         if (!registerFunctionTool || !unregisterFunctionTool) return;
         unregisterFunctionTool('CreateDungeonMap');
+        unregisterFunctionTool('CreateAreaMap');
 
         const settings = getSettings();
-        if (!settings.enabled || !isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings)) return;
+        if (!isLocationMappingEnabled(settings)) return;
         registerFunctionTool({
-            name: 'CreateDungeonMap',
+            name: 'CreateAreaMap',
             displayName: 'Map Architect',
-            description: 'Creates and saves the complete private objective map for a dangerous site before its first exploration. Call exactly once when the player enters an unmapped dungeon, ruin, lair, stronghold, trapped complex, or similarly high-risk location. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
+            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village (kind SETTLEMENT, district-scale). Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'Exact root Location label used in the location footer and external campaign archive, e.g. "Abbey Undercroft".' },
-                    entrance: { type: 'string', description: 'Short natural label for the area the player is entering now. This becomes the first VISITED map area.' },
-                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate site scope: SMALL 4-7 areas, MEDIUM 7-12, LARGE 12-20.' },
+                    site: { type: 'string', description: 'Exact root Location label used in the location footer and external campaign archive, e.g. "Abbey Undercroft" or "Riverford".' },
+                    entrance: { type: 'string', description: 'Short natural label for the area the player is entering now (dungeon room, city gate, market square, docks, etc.). This becomes the first VISITED map area.' },
+                    kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'], description: 'DUNGEON = room-scale interior (ruins, lairs, strongholds). SETTLEMENT = district-scale town/city/village. Required.' },
+                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate scope. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
                     premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },
                 },
-                required: ['site', 'entrance', 'scale', 'premise'],
+                required: ['site', 'entrance', 'kind', 'scale', 'premise'],
             },
             action: async args => runMapArchitect(args),
             formatMessage: args => {
@@ -534,6 +539,18 @@ export function registerMapArchitectTool() {
         });
     } catch (error) {
         console.warn('[RPG Tracker] Could not register Map Architect tool:', error);
+    }
+}
+
+/** Unregister CreateAreaMap and abort Map Updater when Location Mapping is off. */
+export function syncLocationMappingRuntime() {
+    registerMapArchitectTool();
+    if (isLocationMappingEnabled(getSettings())) return;
+    stopMapUpdaterPass();
+    if (runtimeState.hasActiveDungeonMap) {
+        runtimeState.hasActiveDungeonMap = false;
+        globalThis._rpgSyncAgentImmersionUi?.();
+        void globalThis._rpgRefreshImmersionView?.();
     }
 }
 
@@ -1005,7 +1022,7 @@ export function installInterceptor() {
         // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
         const _rbCtx = SillyTavern.getContext();
         const _rbChat = _rbCtx?.chat;
-        const dungeonEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings);
+        const dungeonEnabled = isLocationMappingEnabled(settings);
         const dungeonChatId = getActiveChatId();
         const replacingLatestNarratorMessage = ['swipe', 'regenerate']
             .includes(String(type || '').toLowerCase());
@@ -1053,9 +1070,7 @@ export function installInterceptor() {
                 const _relRb = applyRelationshipSwipeRollback(_rbLastAi, settings);
                 if (_relRb.anyChanged) refreshRelationshipBarsDOM(settings);
             }
-            if (settings.routerEnabled) {
-                await maybeRollbackRouterPassForSwipe(_rbLastAi);
-            }
+            await maybeRollbackAgentsForSwipe(_rbLastAi, { lorebook: !!settings.routerEnabled });
         }
 
         if (settings.debugMode) {
@@ -1794,6 +1809,15 @@ async function maybeRollbackRouterPassForSwipe(msg) {
     }
 }
 
+async function maybeRollbackAgentsForSwipe(msg, { lorebook = true } = {}) {
+    const mapRolled = await maybeRollbackMapUpdaterForSwipe(msg);
+    if (mapRolled) {
+        const primeTo = Math.max(0, (getSettings().mapUpdaterRunEvery || 1) - 1);
+        setMapUpdaterAutoTick(primeTo, 'swipe_map_updater_rollback_prime');
+    }
+    if (lorebook) await maybeRollbackRouterPassForSwipe(msg);
+}
+
 function clearRouterSwipeMarkers(msg) {
     if (!msg?.extra) return;
     delete msg.extra.rpgRouterRanForSwipe;
@@ -1834,7 +1858,7 @@ export async function handleRelationshipSwipeChange() {
 
     if (getRelationshipUpdateMode(settings) === RELATIONSHIP_UPDATE_MODES.REGEX) {
         await applyNarrativeRelationshipRegex(lastAiMsg, settings, ctx);
-        await maybeRollbackRouterPassForSwipe(lastAiMsg);
+        await maybeRollbackAgentsForSwipe(lastAiMsg);
         return;
     }
     
@@ -1843,7 +1867,7 @@ export async function handleRelationshipSwipeChange() {
     const relSwipeResult = settings.npcRelationshipBars
         ? applyRelationshipSwipeRollback(lastAiMsg, settings)
         : { anyChanged: false };
-    await maybeRollbackRouterPassForSwipe(lastAiMsg);
+    await maybeRollbackAgentsForSwipe(lastAiMsg);
     if (relSwipeResult.anyChanged) persistRelationshipCommandChanges(ctx, settings);
     return;
 
@@ -1876,7 +1900,7 @@ export async function handleRelationshipSwipeChange() {
     // If Relationship Bars are disabled, we only handle State Tracker swipe updates
     console.log('[RPG Tracker] Relationship swipe handler: bars enabled:', !!settings.npcRelationshipBars);
     if (!settings.npcRelationshipBars) {
-        await maybeRollbackRouterPassForSwipe(lastAiMsg);
+        await maybeRollbackAgentsForSwipe(lastAiMsg);
         if (anyStateChanged) {
             triggerStateOnlyUIUpdate();
         }
@@ -1893,13 +1917,13 @@ export async function handleRelationshipSwipeChange() {
     const relSwipeResult = applyRelationshipSwipeRollback(lastAiMsg, settings);
     anyChanged = relSwipeResult.anyChanged;
     if (relSwipeResult.bailEarly) {
-        await maybeRollbackRouterPassForSwipe(lastAiMsg);
+        await maybeRollbackAgentsForSwipe(lastAiMsg);
         if (anyChanged || anyStateChanged) triggerUIUpdate();
         return;
     }
 
     // --- 2b. LOREBOOK AGENT "RUN EVERY" SWIPE ROLLBACK ---
-    await maybeRollbackRouterPassForSwipe(lastAiMsg);
+    await maybeRollbackAgentsForSwipe(lastAiMsg);
 
     // Relationship deltas are now received from the State Tracker as structured
     // commands. Never inspect narrator prose here.
@@ -2350,11 +2374,14 @@ let _lastTickDecision = null;
 
 /** In-memory counter: how many generations have fired since the agent last ran. Resets on chat change. */
 let _routerAutoTick = 0;
+/** Independent cadence counter for the Map Updater. */
+let _mapUpdaterAutoTick = 0;
 
 /** @returns {object} Live scheduler internals for debug snapshot. */
 export function getRouterSchedulerInternals() {
     return {
         routerAutoTick: _routerAutoTick,
+        mapUpdaterAutoTick: _mapUpdaterAutoTick,
         stateTrackerAutoTick: _stateTrackerAutoTick,
         lastGenerationType: _lastGenerationType,
         isGenerating: _rpgIsGenerating,
@@ -2376,6 +2403,12 @@ function incrementRouterAutoTick(reason, meta = {}) {
     document.dispatchEvent(new CustomEvent('rt_generation_tick'));
 }
 
+function setMapUpdaterAutoTick(value, reason, meta = {}) {
+    const tickBefore = _mapUpdaterAutoTick;
+    _mapUpdaterAutoTick = value;
+    recordSchedulerEvent('map_updater_tick_set', { tickBefore, tickAfter: value, reason, ...meta });
+}
+
 /** In-memory counter: how many generations have fired since the state tracker last ran. */
 let _stateTrackerAutoTick = 0;
 
@@ -2392,6 +2425,7 @@ let _pendingKeywordTriggered = [];
 export function resetRouterTick(clearKeywordPool = false) {
     const prevTick = _routerAutoTick;
     _routerAutoTick = 0;
+    _mapUpdaterAutoTick = 0;
     _stateTrackerAutoTick = 0;
     _pendingKeywordTriggered = [];
     _lastTickDecision = null;
@@ -2411,11 +2445,15 @@ export function resetRouterTick(clearKeywordPool = false) {
         // Reset the "since last run" watermark so the next auto-pass on the new chat
         // doesn't incorrectly skip content using the old chat's position.
         s.routerLastRunChatLength = 0;
+        s.mapUpdaterLastRunChatLength = 0;
     }
 }
 
 /** Returns how many auto-generations have fired since the Lorebook Agent last ran. */
 export function getRouterTick() { return _routerAutoTick; }
+
+/** Returns how many auto-generations have fired since the Map Updater last ran. */
+export function getMapUpdaterTick() { return _mapUpdaterAutoTick; }
 
 /** Reset the auto-run throttle counter (e.g. after a manual agent pass). */
 export function resetRouterAutoTick(reason = 'manual') {
@@ -2493,7 +2531,7 @@ export async function onGenerationEnded() {
     // Persist a newly generated initial map immediately, before the Lorebook
     // Agent pass. Swipe/regenerate outputs are provisional and are captured
     // only after the replacement becomes the selected response.
-    if (isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings)
+    if (isLocationMappingEnabled(settings)
         && !['swipe', 'regenerate'].includes(String(currentType || '').toLowerCase())) {
         try {
             const capture = await syncDungeonMapsToLocationLorebook(chat, { capture: true });
@@ -2600,13 +2638,43 @@ export async function onGenerationEnded() {
     // currentMemo, so the [TIME] block reflects the current in-world clock.
     await maybeRunWorldProgression();
 
+    // Map Updater cadence is independent of Lorebook Agent. It can run every turn
+    // while LA stays on a slower record/relationship schedule.
+    const countsTowardRunEvery = currentType !== 'swipe' && currentType !== 'regenerate';
+    const mapEvery = Math.max(1, Number(settings.mapUpdaterRunEvery) || 1);
+    if (countsTowardRunEvery) {
+        const mapTickBefore = _mapUpdaterAutoTick;
+        _mapUpdaterAutoTick++;
+        recordSchedulerEvent('map_updater_tick_inc', {
+            tickBefore: mapTickBefore,
+            tickAfter: _mapUpdaterAutoTick,
+            generationType: currentType ?? null,
+        });
+        document.dispatchEvent(new CustomEvent('rt_generation_tick'));
+    }
+    const shouldTryMapUpdater = countsTowardRunEvery
+        && settings.mapUpdaterEnabled !== false
+        && isLocationMappingEnabled(settings)
+        && _mapUpdaterAutoTick >= mapEvery;
+    if (shouldTryMapUpdater) {
+        const mapResult = await runMapUpdaterPass();
+        const skipped = mapResult?.skipped;
+        if (!skipped || !['no_active_map', 'dungeon_reality_off', 'location_mapping_off', 'disabled', 'busy'].includes(skipped)) {
+            setMapUpdaterAutoTick(0, 'map_updater_fire_threshold', { generationType: currentType ?? null, runEvery: mapEvery });
+        }
+        recordSchedulerEvent('map_updater_pass', {
+            skipped: skipped || null,
+            ok: mapResult?.ok === true,
+            noop: mapResult?.noop === true,
+        });
+    }
+
     // Step 4: Run-every throttle — only fire the Lorebook Agent every N new turns.
     // Swipe/regenerate generations reuse an existing message slot and must not advance the
     // counter (otherwise swiping through alternatives walks the cycle forward normally).
     // Use a denylist rather than an allowlist: a fresh send may report its type as 'normal',
     // '', or undefined depending on the entry path, but swipes/regens are always explicit.
     // (impersonate/quiet already returned earlier and never reach here.)
-    const countsTowardRunEvery = currentType !== 'swipe' && currentType !== 'regenerate';
     const runEvery = settings.routerRunEvery || 1;
     const tickBefore = _routerAutoTick;
 

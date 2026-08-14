@@ -72,6 +72,8 @@ export function createChatStateLoader({
     s.routerLookback = saved.routerLookback || 4;
     s.routerLastRunChatLength = saved.routerLastRunChatLength ?? 0;
     s.routerLastRunAt = saved.routerLastRunAt ?? 0;
+    s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
+    s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;

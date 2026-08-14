@@ -11,7 +11,7 @@ import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
 import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
 import { renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
-import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -78,8 +78,10 @@ export function createPanel(dependencies) {
         getNpcRelationshipMaxDefault,
         getRequestHeaders,
         getRouterTick,
+        getMapUpdaterTick,
         getSettings,
         handleTrackerEnabledChange,
+        isMapUpdaterRunning,
         isRouterRunning,
         loadChatState,
         loadDeltaHeight,
@@ -114,6 +116,7 @@ export function createPanel(dependencies) {
         resolvePortraitSrcForPlayerCharacter,
         rollbackRouterPass,
         runRealtimeSceneArtCheck,
+        runMapUpdaterPass,
         runRouterPass,
         runStateModelPass,
         sanitizeLorebookRecordContent,
@@ -131,6 +134,7 @@ export function createPanel(dependencies) {
         showLorebookAgentDocumentation,
         showPortraitSettingsMenu,
         stopRouterPass,
+        stopMapUpdaterPass,
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
@@ -532,7 +536,7 @@ export function createPanel(dependencies) {
         const _openEntries = new Set();
 
         const openDungeonMapPopup = async (item) => {
-            if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) return;
+            if (!isLocationMappingEnabled(getSettings())) return;
             const map = extractDungeonMapSection(item?.content);
             if (!map) return;
             const mapDocument = parseDungeonMapDocument(map, item.label || '').document;
@@ -895,7 +899,7 @@ export function createPanel(dependencies) {
 
         refreshManifest = async (source = 'auto') => {
             const s = getSettings();
-            const dungeonRealityEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s);
+            const dungeonRealityEnabled = isLocationMappingEnabled(s);
             if (!_manifestBypassImmersion && (dungeonRealityEnabled || !s.locationImages || s.agentImmersionMode)) {
                 await runtimeState.refreshImmersionView();
             }
@@ -4599,6 +4603,15 @@ ${namingRule}`;
                 saveSettings();
             });
         }
+        const mapRunEveryInput = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-map-updater-run-every'));
+        if (mapRunEveryInput) {
+            mapRunEveryInput.addEventListener('input', (e) => {
+                const s = getSettings();
+                s.mapUpdaterRunEvery = Math.max(1, parseInt((/** @type {HTMLInputElement} */ (e.target)).value) || 1);
+                $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery);
+                saveSettings();
+            });
+        }
 
         // ── Agent pause button ──
         const agentPauseBtn = queryAgentUi('#rt-agent-router-pause-btn');
@@ -4621,14 +4634,83 @@ ${namingRule}`;
 
 
         const manualRunBtn = queryAgentUi('#rt-agent-router-manual-run');
-        if (manualRunBtn) {
-            manualRunBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
+        const researchDropdown = queryAgentUi('#rt-research-dropdown');
+        const researchMenuWrap = queryAgentUi('#rt-research-menu-wrap');
+        const researchLorebookBtn = queryAgentUi('#rt-research-lorebook');
+        const researchMapUpdaterBtn = queryAgentUi('#rt-research-map-updater');
+        if (manualRunBtn && researchDropdown) {
+            const closeResearchDropdown = () => {
+                researchDropdown.style.display = 'none';
+                researchDropdown.closest('.rpg-tracker-panel')?.classList.remove('rt-research-menu-open');
+            };
+            const positionResearchDropdown = () => {
+                const hostPanel = manualRunBtn.closest('.rpg-tracker-panel');
+                if (!(hostPanel instanceof HTMLElement)) return;
+                if (researchDropdown.parentElement !== hostPanel) {
+                    hostPanel.appendChild(researchDropdown);
+                }
+                const rect = manualRunBtn.getBoundingClientRect();
+                const panelRect = hostPanel.getBoundingClientRect();
+                researchDropdown.style.top = `${rect.bottom - panelRect.top + 5}px`;
+                researchDropdown.style.right = `${panelRect.right - rect.right}px`;
+                researchDropdown.style.left = 'auto';
+                researchDropdown.style.display = 'flex';
+                hostPanel.classList.add('rt-research-menu-open');
+            };
+            const agentsBusy = () => isRouterRunning() || isMapUpdaterRunning();
+            const runManualLorebook = async () => {
+                if (agentsBusy()) {
+                    toastr.warning('An agent is already running.', 'Lorebook Agent');
+                    return;
+                }
                 const s = getSettings();
                 const { chat } = SillyTavern.getContext();
                 const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
-                toastr['info']("Starting manual research pass...");
+                toastr['info']('Starting Lorebook Agent pass...');
                 await runRouterPass(combinedNarrative, null, s.routerLookback || 4, true);
+            };
+            const runManualMapUpdater = async () => {
+                if (agentsBusy()) {
+                    toastr.warning('An agent is already running.', 'Map Updater');
+                    return;
+                }
+                const s = getSettings();
+                toastr['info']('Starting Map Updater pass...');
+                updateAgentStatusIndicator(isRouterRunning());
+                const result = await runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 });
+                updateAgentStatusIndicator(isRouterRunning());
+                const skipped = result?.skipped;
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Updater');
+                else if (skipped === 'no_active_map') toastr.warning('No active dungeon or settlement map.', 'Map Updater');
+                else if (skipped === 'disabled') toastr.warning('Map Updater is disabled.', 'Map Updater');
+                else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Updater');
+                else if (skipped === 'stopped') toastr['info']('Stopped.', 'Map Updater');
+                else if (result?.ok && result?.noop) toastr['info']('Nothing durable changed.', 'Map Updater');
+                else if (result?.ok) toastr['success']('Occupancy update applied.', 'Map Updater');
+                else toastr.error('Could not apply a valid occupancy update.', 'Map Updater');
+            };
+
+            manualRunBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = researchDropdown.style.display !== 'none';
+                if (isOpen) closeResearchDropdown();
+                else positionResearchDropdown();
+            });
+            researchDropdown.addEventListener('click', (e) => e.stopPropagation());
+            document.addEventListener('click', (e) => {
+                const target = /** @type {Node} */ (e.target);
+                if (researchMenuWrap?.contains(target) || researchDropdown.contains(target)) return;
+                closeResearchDropdown();
+            });
+            researchLorebookBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                closeResearchDropdown();
+                await runManualLorebook();
+            });
+            researchMapUpdaterBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                closeResearchDropdown();
+                await runManualMapUpdater();
             });
         }
 
@@ -4637,6 +4719,7 @@ ${namingRule}`;
             agentStopBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 stopRouterPass();
+                stopMapUpdaterPass();
             });
         }
 
@@ -4975,6 +5058,7 @@ ${namingRule}`;
         agentPanel,
         captureRouterLoreState,
         getRouterTick,
+        getMapUpdaterTick,
         getSettings,
         reapplyRouterPass,
         refreshManifest,
@@ -4987,6 +5071,10 @@ ${namingRule}`;
     const terminal = agentPanel.querySelector('#rt-agent-router-terminal');
     const terminalClear = agentPanel.querySelector('#rt-agent-router-terminal-clear');
     const logClear = agentPanel.querySelector('#rt-agent-router-log-clear');
+
+    document.addEventListener('rt_map_updater_status', () => {
+        updateAgentStatusIndicator(isRouterRunning());
+    });
 
     document.addEventListener('rt_lore_agent_step', (e) => {
         const step = (/** @type {CustomEvent} */ (e)).detail;
@@ -5013,7 +5101,7 @@ ${namingRule}`;
             console.log(`[RPG Tracker] Lorebook Agent step "${step.type}" matched. Refreshing manifest...`);
             refreshManifest();
             updateAgentStatusIndicator(false);
-            if (step.type === 'finish') {
+            if (step.type === 'finish' && step.metadata?.source !== 'map_updater') {
                 console.log('[RPG Tracker] Lorebook Agent pass finished. Invoking checkAndTriggerAutoGenerations...');
                 checkAndTriggerAutoGenerations(refreshAll);
             }

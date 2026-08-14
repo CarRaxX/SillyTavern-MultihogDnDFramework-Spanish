@@ -1,5 +1,5 @@
 import { runtimeState } from '../../app/runtime-state.js';
-import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import {
     bindDungeonMapEmbedEvents,
     isDungeonMapDetached,
@@ -167,7 +167,7 @@ export function createSceneViewController({
         globalThis._rpgCheckRealtimeSceneArt = runRealtimeSceneArtCheck;
 
         if (isDungeonMapDetached()) {
-            const enabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings());
+            const enabled = isLocationMappingEnabled(getSettings());
             if (enabled) {
                 updateDetachedDungeonMapPanel(null, mapHandlers());
             } else {

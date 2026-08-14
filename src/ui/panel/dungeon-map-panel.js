@@ -1,6 +1,6 @@
 import { getSettings } from '../../../state-manager.js';
 import { runtimeState } from '../../app/runtime-state.js';
-import { isEffectiveSectionEnabled } from '../../state/section-enabled.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 
@@ -265,7 +265,7 @@ export function ensureDetachedDungeonMapPanel(handlers = {}) {
 }
 
 export function updateDetachedDungeonMapPanel(scene, handlers = {}) {
-    if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) {
+    if (!isLocationMappingEnabled(getSettings())) {
         reattachDungeonMapPanel();
         return;
     }
@@ -295,7 +295,7 @@ export function updateDetachedDungeonMapPanel(scene, handlers = {}) {
 }
 
 export function detachDungeonMapPanel(scene, handlers = {}) {
-    if (!isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', getSettings())) return;
+    if (!isLocationMappingEnabled(getSettings())) return;
     setDungeonMapDetached(true);
     runtimeState.hasActiveDungeonMap = !!scene?.dungeonMap;
     updateDetachedDungeonMapPanel(scene, handlers);

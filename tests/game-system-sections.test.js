@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { isEffectiveSectionEnabled } from '../src/state/section-enabled.js';
+import { isEffectiveSectionEnabled, isLocationMappingEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../src/state/section-enabled.js';
 
 describe('effective system-prompt section state', () => {
     it('keeps an enabled unlocked CYOA override active when the base toggle is off', () => {
@@ -36,5 +36,48 @@ describe('effective system-prompt section state', () => {
         expect(editorSource).toContain('Open Manage Game Systems to make the bundle GLOBAL or CHAT-BOUND.');
         expect(editorSource).toContain('scopeControl.onclick = showWizardScopeRedirect');
         expect(editorSource).toMatch(/event\.key !== 'Enter' && event\.key !== ' '/);
+    });
+
+    it('treats Location Mapping as a kill switch even when the unlocked override disagrees', () => {
+        const settings = {
+            enabled: true,
+            syspromptModules: { [LOCATION_MAPPING_SECTION_TAG]: false },
+            customSyspromptLibrary: [{
+                origin: 'unlocked_base',
+                baseTag: LOCATION_MAPPING_SECTION_TAG,
+                enabled: true,
+            }],
+        };
+
+        expect(isEffectiveSectionEnabled(LOCATION_MAPPING_SECTION_TAG, settings)).toBe(true);
+        expect(isLocationMappingEnabled({ ...settings, enabled: false })).toBe(false);
+
+        setLocationMappingEnabled(false, settings);
+        expect(settings.syspromptModules[LOCATION_MAPPING_SECTION_TAG]).toBe(false);
+        expect(settings.customSyspromptLibrary[0].enabled).toBe(false);
+        expect(isLocationMappingEnabled(settings)).toBe(false);
+
+        setLocationMappingEnabled(true, settings);
+        expect(settings.syspromptModules[LOCATION_MAPPING_SECTION_TAG]).toBe(true);
+        expect(settings.customSyspromptLibrary[0].enabled).toBe(true);
+        expect(isLocationMappingEnabled(settings)).toBe(true);
+    });
+
+    it('keeps the Components Location Mapping checkbox as a live kill switch', () => {
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        const gameSystemsSource = readFileSync(new URL('../game-systems.js', import.meta.url), 'utf8');
+        const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+        const onboarding = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
+
+        expect(settingsMarkup).toContain('Location Mapping (Alpha) — function calling MUST be enabled');
+        expect(settingsMarkup).not.toContain('Dungeon Reality Mapping (Alpha)');
+        expect(onboarding).toContain('Location Mapping (Alpha)');
+        expect(indexSource).toContain('setLocationMappingEnabled(checked, fresh)');
+        expect(indexSource).toContain('syncLocationMappingRuntime()');
+        expect(indexSource).toMatch(/function scheduleAutoApply\(\) \{\s*syncLocationMappingRuntime\(\);/s);
+        expect(indexSource).toContain('// Keep CreateAreaMap / Map Updater in sync even when Custom Sysprompt Mode');
+        expect(gameSystemsSource).toContain('if (tag === LOCATION_MAPPING_SECTION_TAG)');
+        expect(gameSystemsSource).toContain('el.disabled = false');
+        expect(gameSystemsSource).toContain('setLocationMappingEnabled(checked, settings)');
     });
 });

@@ -4,7 +4,7 @@ import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
-import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { buildSkeletonLorebookSourceContext } from './src/features/world-progression/skeleton-lorebooks.js';
 import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 import {
@@ -20,10 +20,10 @@ import {
     isLoreRedoEntryForChat,
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
+import { buildKeyringText, grepLoreInBooks, isSkeletonBookName } from './src/state/lorebook-keyring.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
-    buildDungeonMapCommitSchema,
     buildDungeonSitesFromLocationEntries,
     collectDungeonMapCandidates,
     dungeonLabelsMatch,
@@ -32,8 +32,6 @@ import {
     extractFooterLocation,
     findLatestDungeonLocation,
     getDungeonMapAttachment,
-    inspectDungeonMap,
-    listDungeonMapAssets,
     migrateDungeonMapAttachmentToContent,
     parseDungeonMapDocument,
     reconcileDungeonMapAreaKnowledge,
@@ -72,11 +70,6 @@ export function stopRouterPass() {
 function getLivePrefix() {
     const ctx = SillyTavern.getContext();
     return getEffectiveRouterCampaignPrefix(ctx.chatId || '');
-}
-
-/** World Skeleton lorebooks are only visible to World Progression / skeleton generation. */
-function isSkeletonBookName(bookName) {
-    return (bookName || '').toLowerCase().endsWith('_skeleton');
 }
 
 function isSkeletonEntryId(entryId) {
@@ -210,23 +203,6 @@ async function fetchRouterArchiveBooks(prefix, ctx) {
         if (row) books[row[0]] = row[1];
     }
     return books;
-}
-
-/**
- * grep_lore / inspect_book helper — never surface skeleton entries to the agent.
- */
-function grepLoreInBooks(allBooks, query) {
-    const q = (query || '').toLowerCase();
-    const hits = [];
-    for (const [name, book] of Object.entries(allBooks)) {
-        if (isSkeletonBookName(name)) continue;
-        for (const [uid, entry] of Object.entries(book.entries || {})) {
-            if ((entry.content || '').toLowerCase().includes(q) || (entry.comment || '').toLowerCase().includes(q)) {
-                hits.push(`[${name}::${uid}] "${entry.comment || uid}": ${(entry.content || '').substring(0, 120)}...`);
-            }
-        }
-    }
-    return hits;
 }
 
 /**
@@ -709,6 +685,45 @@ export async function restoreActiveDungeonMapHistory(snapshot, ctx = SillyTavern
     return true;
 }
 
+/** Load the Locations book plus the active mapped-site context, if any. */
+export async function loadActiveDungeonMapContext() {
+    const ctx = SillyTavern.getContext();
+    const prefix = getLivePrefix();
+    if (!prefix) return null;
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
+    if (!synced.bookName) return { prefix, books: {}, context: null, currentLocation };
+    const book = await loadWorldInfoFresh(synced.bookName, ctx);
+    if (!book?.entries) return { prefix, books: {}, context: null, currentLocation };
+    const books = { [synced.bookName]: book };
+    return {
+        prefix,
+        books,
+        context: resolveActiveDungeonContext(books, prefix, currentLocation),
+        currentLocation,
+    };
+}
+
+/** Deep-clone the campaign Locations book for Map Updater swipe restore. */
+export async function snapshotCampaignLocationsBook(ctx = SillyTavern.getContext()) {
+    const prefix = getLivePrefix();
+    if (!prefix) return null;
+    const bookName = `${prefix}_Locations`;
+    const book = await loadWorldInfoFresh(bookName, ctx);
+    if (!book) return null;
+    return { bookName, book: JSON.parse(JSON.stringify(book)) };
+}
+
+/** Replace the live Locations book with a prior snapshot. */
+export async function restoreCampaignLocationsBook(snapshot, ctx = SillyTavern.getContext()) {
+    if (!snapshot?.bookName || !snapshot?.book) return false;
+    await evictWorldInfoCache(snapshot.bookName);
+    await saveWorldInfoSnapshot(snapshot.bookName, snapshot.book, ctx, 'Map Updater swipe restore');
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(snapshot.bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated', { detail: { source: 'map-updater-swipe-restore' } }));
+    return true;
+}
+
 async function finalizeRouterHistorySnapshot(runId) {
     if (!runId) return;
     const settings = getSettings();
@@ -729,28 +744,7 @@ async function finalizeRouterHistorySnapshot(runId) {
     void saveSettings();
 }
 
-/**
- * Builds the summary "Keyring" text for archive (inactive) entries only.
- * Active entries are excluded to avoid double-listing them in the agent context.
- * @param {object} allBooks
- * @param {string[]} activeKeys - IDs currently in activeRouterKeys (Book::uid format).
- */
-function buildKeyringText(allBooks, activeKeys = []) {
-    const activeSet = new Set(activeKeys);
-    let lines = [];
-    for (const [bookName, bookData] of Object.entries(allBooks)) {
-        if (isSkeletonBookName(bookName)) continue;
-        if (!bookData || !bookData.entries) continue;
-        for (const [uid, entry] of Object.entries(bookData.entries)) {
-            if (activeSet.has(`${bookName}::${uid}`)) continue; // shown in ACTIVE MEMORY
-            const keys = (entry.key || []).join(', ');
-            lines.push(`[ARCHIVE] Label: ${entry.comment || entry.key?.[0] || 'Unnamed'} | Keys: [${keys}]`);
-        }
-    }
-    return lines.join('\n');
-}
-
-function resolveActiveDungeonContext(allBooks, prefix, currentLocation) {
+export function resolveActiveDungeonContext(allBooks, prefix, currentLocation) {
     if (!prefix || !currentLocation) return null;
     const wantedBookName = `${prefix}_Locations`;
     const bookName = Object.keys(allBooks || {}).find(name => name.toLowerCase() === wantedBookName.toLowerCase());
@@ -783,40 +777,21 @@ function stripStaticDungeonAgentGuidance(prompt) {
         .trim();
 }
 
-const DUNGEON_MAP_TRANSIENT_COMBAT_RULE = 'Durable map facts only: remaining occupancy/count, DESTROYED/DEAD/FLED/CAPTURED/TAKEN, MOVE_ASSET between areas, sprung/disarmed traps, opened/blocked routes, lasting damage/cleansing. asset.detail is a lasting occupancy note (e.g. "Two of four remain; two destroyed"), never a play-by-play. Never write transient combat into asset.detail or chronicles: current targeting, advancing toward someone, mid-round poses, HP, or temporary conditions (frightened, held, prone). Those belong to the combat tracker. If only poses/status changed this round, omit the map transaction.';
+const LOCATION_FOOTER_LAG_NOTE = 'Parsed from the narrator status footer and may lag. If the latest narration clearly entered a named interior (chapel, inn, shop, house, alley) that this line omitted, treat the narration as authoritative — do not wait for the footer.';
 
-function buildActiveDungeonAgentGuidance(context) {
-    if (!context) return '';
-    return `## ACTIVE MAP CAPABILITY — ${context.siteRoot}
-The current location hierarchy activates exactly one private v3 [MAP]. It is the objective CURRENT occupancy snapshot (who/what remains, where, and lasting room state), not the current combat beat; child Location entries are the player-observable historical chronicle.
-- Geometry is structural. Mutable/movable enemies, groups, traps, alarms, loot, barriers, objects, hazards, corpses, and effects are assets.
-- When the narrative establishes a durable change, include one atomic \`map\` transaction in your final \`commit\`. Use stable area/asset IDs from [MAP]. Never rewrite [MAP] through update/rewrite.
-- ${DUNGEON_MAP_TRANSIENT_COMBAT_RULE}
-- Operations apply in array order. Establish a newly opened connection before moving an asset through it; newly added areas may be referenced later in the same transaction by their exact name.
-- The mapped root is location-owned and outside the normal activation budget. Never activate or deactivate that root yourself.
-- Existing but newly encountered entity: SET_ASSET/MOVE_ASSET, not ADD_ASSET. Genuinely new narrator-established or narrator-resolved player-created entity: ADD_ASSET; the extension generates its ID. If duplicate validation names candidates, retry with that asset or list every genuinely distinct candidate in \`distinct_from\`.
-- Narrator facts are CONFIRMED; strongly entailed consequences are IMPLIED. AUTONOMOUS is allowed only for a logical reaction to an established trigger and only when the existing asset has an explicit behavior/route. Never mutate from speculation or from an unresolved player attempt.
-- Enemies may move off-screen. Update objective [MAP], but add a child chronicle only for facts the player observed. A chronicle makes its area VISITED. Ordinary room changes never become EVENT entries.
-- When a chronicle reports an asset, set that asset's knowledge to KNOWN in the corresponding operation. Objective off-screen changes do not reveal assets.
-- Put an observed mapped change in map.chronicles and do not duplicate the same fact through commit.update/record; the atomic map transaction creates the child Location when needed.
-- Use inspect_map/list_map_assets when IDs or current positions are uncertain. Validation is atomic: on an error, make no other changes, read the structured error, and retry the corrected commit with the SAME operation_id.
-- If no durable map fact changed, omit \`map\` entirely.`;
+function formatCurrentLocationSection(hierarchy) {
+    return `## CURRENT LOCATION\n${hierarchy || 'Unknown'}\n${LOCATION_FOOTER_LAG_NOTE}`;
 }
 
-function buildActiveDungeonBasicGuidance(context) {
-    if (!context) return '';
-    return `\n\n**ACTIVE MAP CAPABILITY — ${context.siteRoot}:** The private v3 [MAP] is the objective current occupancy snapshot, not the current combat beat; ordinary LOC text is player-observable history. If the narrative durably changed a mapped area/asset, emit exactly one \`[MAP_COMMIT]{valid JSON}[/MAP_COMMIT]\` block in addition to normal Lorebook tags. JSON shape: {"operation_id":"stable-id","operations":[{"op":"SET_ASSET|MOVE_ASSET|ADD_ASSET|REMOVE_ASSET|SET_AREA|ADD_AREA|SET_CONNECTION","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-area-id","text":"observable history"}]}. A chronicle makes its area VISITED; if it reports an asset, set that asset's knowledge to KNOWN. Omit chronicles for hidden/off-screen changes and do not duplicate a map chronicle through ordinary LOC tags. Existing entities use SET/MOVE, genuinely new narrator-established entities use ADD_ASSET, and AUTONOMOUS movement requires the asset's explicit behavior/route. Never output this block when no durable map fact changed. ${DUNGEON_MAP_TRANSIENT_COMBAT_RULE}`;
+function formatArchiveIndexSection(keyringText) {
+    return `## ARCHIVE INDEX\nComplete catalog of inactive entries (Book::UID, label, keywords). If a name is not here, in ACTIVE MEMORY, or in NEWLY ACTIVATED, it does not exist — do not grep to confirm.\n${keyringText || 'Empty.'}`;
 }
 
-function extractBasicMapTransaction(text) {
-    const match = String(text || '').match(/\[MAP_COMMIT\]([\s\S]*?)\[\/MAP_COMMIT\]/i);
-    if (!match) return { present: false, transaction: null, error: null };
-    try {
-        const transaction = JSON.parse(match[1].trim());
-        return { present: true, transaction, error: null };
-    } catch (error) {
-        return { present: true, transaction: null, error: String(error?.message || error) };
-    }
+const LORE_EXISTENCE_RULE = 'ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and ARCHIVE INDEX together are the complete catalog of existing entries. ARCHIVE INDEX lists Book::UID, label, and keywords for every inactive entry. If a name is not in that catalog, it does not exist — record it. Do not call grep_lore, inspect_book, or read_entry to check whether an entry exists. Use read_entry only when you need the full body of an archived entry already identified on ARCHIVE INDEX. Use grep_lore only to search entry bodies for a fact that labels/keywords do not answer, with one short query per call.';
+
+function formatMappedSiteAgentNote(context) {
+    if (!context) return '';
+    return `\n\n## MAPPED SITE\nThe party is inside mapped site "${context.siteRoot}". Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater. Do not emit [MAP_COMMIT], commit.map, inspect_map, or rewrite [MAP]. Record NPCs, factions, quests, events, and readable location lore as usual.`;
 }
 
 function createMappedChildLocationEntry(uid, rootLabel, areaName, chronicle, settings) {
@@ -855,16 +830,6 @@ function findMappedChildEntry(entries, rootLabel, areaName) {
     }) || null;
 }
 
-function formatMapTransactionFailure(result) {
-    return JSON.stringify({
-        ok: false,
-        retryable: result?.retryable !== false,
-        code: result?.errors?.[0]?.code || 'INVALID_MAP_TRANSACTION',
-        errors: result?.errors || [],
-        hint: 'Correct only the rejected fields and retry commit with the same operation_id. Nothing from the rejected commit was written.',
-    }, null, 2);
-}
-
 function mapTransactionSignature(value) {
     const canonicalize = item => {
         if (Array.isArray(item)) return item.map(canonicalize);
@@ -883,7 +848,7 @@ function mapTransactionSignature(value) {
 }
 
 /** Save current [MAP] plus observable child chronicles in one Locations-book write. */
-async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
+export async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
     if (!expectedContext) {
         return { ok: false, retryable: false, errors: [{ code: 'MAP_NOT_ACTIVE', path: 'map', received: transaction, hint: 'Map commands are unavailable because no mapped site is currently active.' }] };
     }
@@ -954,7 +919,7 @@ async function applyActiveDungeonMapCommit(transaction, expectedContext, allBook
  */
 export async function runRouterPass(narrativeOutput, manualPrompt = null, customLookback = null, isManual = false, newlyTriggeredIds = [], overrideChatLog = null) {
     const settings = getSettings();
-    const dungeonRealityEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', settings);
+    const dungeonRealityEnabled = isLocationMappingEnabled(settings);
     if (!settings.routerEnabled || _routerRunning) return;
     // routerPaused blocks auto-runs only; manual UI runs always go through
     if (settings.routerPaused && !isManual) return;
@@ -1033,7 +998,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
                     const fullId = `${name}::${uid}`;
                     if (settings.activeRouterKeys?.includes(fullId)) {
                         const label = entry.comment || entry.key?.[0] || fullId;
-                        const entryContent = getDungeonMapAttachment(entry) && fullId !== activeDungeonEntryId
+                        const entryContent = getDungeonMapAttachment(entry)
                             ? stripDungeonMapSection(entry.content)
                             : entry.content;
                         let block = `### [ACTIVE] ${label}\nID: ${fullId}\nContent: ${entryContent}`;
@@ -1662,65 +1627,32 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 settings
             );
 
-            const finalBasicSystemPrompt = `${stripStaticDungeonAgentGuidance(basicSystemPrompt)}${buildActiveDungeonBasicGuidance(activeDungeonContext)}`;
+            const finalBasicSystemPrompt = `${stripStaticDungeonAgentGuidance(basicSystemPrompt)}${formatMappedSiteAgentNote(activeDungeonContext)}`;
 
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
-            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
+            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
-            let basicResp = '';
-            let basicMapTransaction = null;
-            let basicRetryPrompt = basicUserPrompt;
-            const MAX_BASIC_MAP_RETRIES = 2;
-            for (let attempt = 0; attempt <= MAX_BASIC_MAP_RETRIES; attempt++) {
-                basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicRetryPrompt, _routerSignal);
-                const extracted = activeDungeonContext ? extractBasicMapTransaction(basicResp) : { present: false };
-                if (!extracted.present) break;
-                const validation = extracted.error
-                    ? { ok: false, retryable: true, errors: [{ code: 'MALFORMED_JSON', path: 'MAP_COMMIT', received: extracted.error, hint: 'Return strict JSON with double-quoted keys/strings and no trailing commas.' }] }
-                    : applyDungeonMapTransaction(activeDungeonContext.document, extracted.transaction);
-                if (validation.ok) {
-                    basicMapTransaction = extracted.transaction;
-                    break;
-                }
-                if (attempt >= MAX_BASIC_MAP_RETRIES) {
-                    basicResp = '';
-                    break;
-                }
-                broadcastStep('thought', `Invalid map JSON, nudging model (retry ${attempt + 1}/${MAX_BASIC_MAP_RETRIES})...`);
-                basicRetryPrompt = `${basicUserPrompt}\n\n## REJECTED RESPONSE\n${basicResp}\n\n## CORRECTION REQUIRED\nYour previous response was rejected before any writes.\n${formatMapTransactionFailure(validation)}\nReturn the complete corrected response, including all ordinary Lorebook tags, and reuse the same operation_id.`;
-            }
+            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal);
 
-            if (!basicResp) {
-                throw new Error('Map update rejected after correction attempts. No Lorebook changes were written.');
+            const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
+            if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
+            broadcastStep('thought', 'Parsing tags...');
+            const basicAction = parseBasicTags(basicResp, archiveBooks);
+
+            const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
+            if (hasOrdinaryActions) {
+                const summaries = [];
+                if (basicAction.record.length) summaries.push(`New: ${basicAction.record.length}`);
+                if (basicAction.update.length) summaries.push(`Updates: ${basicAction.update.length}`);
+                if (basicAction.activate.length) summaries.push(`Activations: ${basicAction.activate.length}`);
+                if (basicAction.core?.length || basicAction.appearance?.length || basicAction.equipment?.length) summaries.push(`Core: ${(basicAction.core?.length || 0) + (basicAction.appearance?.length || 0) + (basicAction.equipment?.length || 0)}`);
+                basicAction.reason = (thoughtMatchB ? thoughtMatchB[1].trim() : 'Tag-based update.') + ` (${summaries.join(', ')})`;
+                await applyAction(basicAction, archiveBooks, currentTime, breadcrumb, isManual);
+                basicSummaryText = summaries.join(', ');
             } else {
-
-                const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
-                if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
-                broadcastStep('thought', 'Parsing tags...');
-                const basicAction = parseBasicTags(basicResp, archiveBooks);
-
-                const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
-                if (basicMapTransaction) {
-                    const mapResult = await applyActiveDungeonMapCommit(basicMapTransaction, activeDungeonContext, archiveBooks, currentTime);
-                    if (!mapResult.ok) throw new Error(`Validated map transaction failed during persistence: ${formatMapTransactionFailure(mapResult)}`);
-                }
-                if (hasOrdinaryActions) {
-                    const summaries = [];
-                    if (basicAction.record.length) summaries.push(`New: ${basicAction.record.length}`);
-                    if (basicAction.update.length) summaries.push(`Updates: ${basicAction.update.length}`);
-                    if (basicAction.activate.length) summaries.push(`Activations: ${basicAction.activate.length}`);
-                    if (basicAction.core?.length || basicAction.appearance?.length || basicAction.equipment?.length) summaries.push(`Core: ${(basicAction.core?.length || 0) + (basicAction.appearance?.length || 0) + (basicAction.equipment?.length || 0)}`);
-                    if (basicMapTransaction) summaries.push('Map updated');
-                    basicAction.reason = (thoughtMatchB ? thoughtMatchB[1].trim() : 'Tag-based update.') + ` (${summaries.join(', ')})`;
-                    await applyAction(basicAction, archiveBooks, currentTime, breadcrumb, isManual);
-                    basicSummaryText = summaries.join(', ');
-                } else if (basicMapTransaction) {
-                    basicSummaryText = 'Map updated';
-                } else {
-                    broadcastStep('finish', 'Basic Mode: No tags found.');
-                }
+                broadcastStep('finish', 'Basic Mode: No tags found.');
             }
 
         } else {
@@ -1865,22 +1797,16 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 }
             };
 
-            // The heavy map schema exists only while the authoritative footer is
-            // inside a mapped site. Ordinary Lorebook Agent passes pay no prompt cost.
-            if (activeDungeonContext) {
-                commitProperties.map = buildDungeonMapCommitSchema();
-            }
-
             /** @type {Array<object>} */
             const agentTools = [
                 {
                     type: 'function',
                     function: {
                         name: 'grep_lore',
-                        description: `Search all lorebooks in scope ("${prefix || 'All'}") for entries whose content or label contains the query.`,
+                        description: `Search entry bodies in scope ("${prefix || 'All'}") for one keyword or phrase. Do not use this to check whether a named entity exists — scan ARCHIVE INDEX instead.`,
                         parameters: {
                             type: 'object',
-                            properties: { query: { type: 'string', description: 'Keyword or phrase to search for.' } },
+                            properties: { query: { type: 'string', description: 'One keyword or short phrase. Not a list of names.' } },
                             required: ['query']
                         }
                     }
@@ -1889,7 +1815,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                     type: 'function',
                     function: {
                         name: 'inspect_book',
-                        description: 'List all entry labels and UIDs in a specific lorebook.',
+                        description: 'List UIDs in one lorebook. Usually unnecessary: ARCHIVE INDEX already lists every inactive entry as Book::UID.',
                         parameters: {
                             type: 'object',
                             properties: { book_name: { type: 'string', description: 'Exact lorebook name (e.g. "Eldoria_Factions").' } },
@@ -1901,10 +1827,10 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                     type: 'function',
                     function: {
                         name: 'read_entry',
-                        description: 'Read the full content of a lorebook entry.',
+                        description: 'Read the full body of an archived entry using Book::UID from ARCHIVE INDEX. Not for existence checks.',
                         parameters: {
                             type: 'object',
-                            properties: { uid: { type: 'string', description: 'Entry UID in "BookName::0" format.' } },
+                            properties: { uid: { type: 'string', description: 'Entry UID in "BookName::0" format from ARCHIVE INDEX.' } },
                             required: ['uid']
                         }
                     }
@@ -1921,39 +1847,6 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                     }
                 }
             ];
-
-            if (activeDungeonContext) {
-                agentTools.splice(agentTools.length - 1, 0,
-                    {
-                        type: 'function',
-                        function: {
-                            name: 'inspect_map',
-                            description: 'Inspect the active objective map, or one area plus the assets currently located there. Available only while this mapped site is active.',
-                            parameters: {
-                                type: 'object',
-                                additionalProperties: false,
-                                properties: { area: { type: 'string', description: 'Optional exact area ID or label. Omit for the full current map.' } },
-                            },
-                        },
-                    },
-                    {
-                        type: 'function',
-                        function: {
-                            name: 'list_map_assets',
-                            description: 'List stable asset IDs and current states in the active map. Available only while this mapped site is active.',
-                            parameters: {
-                                type: 'object',
-                                additionalProperties: false,
-                                properties: {
-                                    area: { type: 'string', description: 'Optional exact area ID or label.' },
-                                    state: { type: 'string', description: 'Optional exact current state.' },
-                                    knowledge: { type: 'string', description: 'Optional exact knowledge state.' },
-                                },
-                            },
-                        },
-                    },
-                );
-            }
 
             // Native tool calling is only reliable for direct openai/ollama connections.
             // For profile/default the ConnectionManagerRequestService may not forward tools
@@ -2004,17 +1897,13 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 '"deactivate": [...]', '"delete_ids": [...]',
                 ...(settings.npcRelationshipBars ? ['"rel": [...]'] : []),
                 '"appearance": [...]', '"equipment": [...]', '"core": [...]',
-                ...(activeDungeonContext ? ['"map": {"operation_id":"...","operations":[...],"chronicles":[...]}'] : []),
             ].join(', ');
 
             const commitRelDescription = settings.npcRelationshipBars
                 ? `\ncommit rel items: {"id": "Book::UID or NPC Name", "field": "friendship"|"affection", "delta": ±N} — set INITIAL relationship values for newly recorded NPCs only (signed integer delta)`
                 : ``;
-            const mapTextActions = activeDungeonContext
-                ? `\n- inspect_map({"area":"optional area id"}) — inspect the active current map or one area\n- list_map_assets({"area":"optional area id","state":"optional","knowledge":"optional"}) — list current stable asset IDs\ncommit map: {"operation_id":"stable-id","operations":[{"op":"...","evidence":"CONFIRMED|IMPLIED|AUTONOMOUS",...}],"chronicles":[{"area_id":"exact-id","text":"player-observable lasting history"}]} — atomic current-map update for durable occupancy only; omit chronicles for hidden/off-screen changes; omit entirely for transient combat poses/status`
-                : '';
 
-            const adjustedSharedContext = `${stripStaticDungeonAgentGuidance(sharedContext)}${activeDungeonContext ? `\n\n${buildActiveDungeonAgentGuidance(activeDungeonContext)}` : ''}`;
+            const adjustedSharedContext = `${stripStaticDungeonAgentGuidance(sharedContext)}${formatMappedSiteAgentNote(activeDungeonContext)}`;
 
             const agentSystemPrompt = usesNativeTools
                 // Clean prompt for native tool calling ? model gets schemas via the API
@@ -2022,7 +1911,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 
 ## YOUR ROLE
 You are a lorebook research agent. Maintain the campaign lorebook using the provided tools.
-Use grep_lore / inspect_book / read_entry to look up existing data before recording.
+${LORE_EXISTENCE_RULE}
 When research is complete, call commit once to write all changes. Stop immediately after.
 ${adjustedSharedContext}`
                 // Text-format prompt for profile/default ? model outputs Action:/Observation: text
@@ -2030,7 +1919,7 @@ ${adjustedSharedContext}`
 
 ## YOUR ROLE
 You are a lorebook research agent. Maintain the campaign lorebook using the actions below.
-Use grep_lore / inspect_book / read_entry to look up existing data before recording.
+${LORE_EXISTENCE_RULE}
 When research is complete, output commit once to write all changes, then stop.
 
 ## ACTIONS
@@ -2038,10 +1927,10 @@ Output exactly ONE action per turn in this format (do NOT use markdown bold/ital
   Action: toolname({"arg": "value"})
 
 Available actions:
-- grep_lore({"query": "..."}) ? search lorebooks for entries matching a keyword
-- inspect_book({"book_name": "..."}) ? list UIDs in a lorebook
-- read_entry({"uid": "Book::0"}) ? read full content of an entry
-- commit({${commitFieldNames}}) ? write all changes and finish${mapTextActions}
+- grep_lore({"query": "..."}) — search entry bodies for one keyword/phrase; not an existence check
+- inspect_book({"book_name": "..."}) — list UIDs in a lorebook (usually unnecessary; ARCHIVE INDEX has Book::UID)
+- read_entry({"uid": "Book::0"}) — read full body of an archived entry already on ARCHIVE INDEX
+- commit({${commitFieldNames}}) ? write all changes and finish
 
 commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"} — category is REQUIRED on every record (NPC people → "NPC", places with optional " :: " paths → "LOC"). Omitting category skips the record.
 commit update items: {"id": "Book::UID", "content": "new text to append"}
@@ -2051,13 +1940,13 @@ commit equipment items: {"id": "Book::UID or NPC Name or {{user}}", "content": "
 commit core items: {"id": "Book::UID or NPC Name", "field": "${eligibleCoreFields.join('|')}", "content": "new field content"} — surgically updates an eligible [CORE] field on NPC entries only (Body/Equipment use commit.appearance/commit.equipment; automatic passes = Combat Profile only)
 
 ## EXAMPLE
-Thought: I see a new NPC Lissa and a tavern location. I will record both with explicit categories.
+Thought: Lissa and The Handler's Rest are not in ACTIVE MEMORY or ARCHIVE INDEX, so they do not exist yet. I will record both with explicit categories.
 Action: commit({"record": [{"label": "Lissa", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: Human\\n[/CORE]", "category": "NPC"}, {"label": "Kalvermoor :: The Handler's Rest", "keys": ["The Handler's Rest", "Kalvermoor", "tavern"], "content": "[CORE]\\nA weathered tavern.\\n[/CORE]", "category": "LOC"}]})
 ${adjustedSharedContext}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockA = questMatchA ? `[QUESTS]${questMatchA[1].trim()}[/QUESTS]` : 'None';
-            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
+            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
 
             /** @type {Array<{role:string, content:string|null, tool_calls?:any[], tool_call_id?:string}>} */
             const messages = [
@@ -2157,36 +2046,17 @@ ${adjustedSharedContext}`;
                     }, null, 2);
                     retryRejectedJson = jsonCorrectionRetries <= MAX_JSON_CORRECTION_RETRIES;
                 } else if (toolName === 'commit') {
-                    let mapResult = null;
-                    if (args.map !== undefined) {
-                        mapResult = await applyActiveDungeonMapCommit(args.map, activeDungeonContext, archiveBooks, currentTime);
-                        if (!mapResult.ok) {
-                            jsonCorrectionRetries++;
-                            observation = formatMapTransactionFailure({
-                                ...mapResult,
-                                retryable: mapResult.retryable !== false && jsonCorrectionRetries <= MAX_JSON_CORRECTION_RETRIES,
-                            });
-                            retryRejectedJson = mapResult.retryable !== false && jsonCorrectionRetries <= MAX_JSON_CORRECTION_RETRIES;
-                        }
-                    }
-                    if (!observation) {
-                        const ordinaryAction = { ...args };
-                        delete ordinaryAction.map;
-                        const commitResult = await applyAction(ordinaryAction, archiveBooks, currentTime, breadcrumb, isManual);
-                        commitAccepted = true;
-                        jsonCorrectionRetries = 0;
-                        const details = [];
-                        if (mapResult?.alreadyApplied) details.push(`Map operation ${mapResult.operationId} was already applied`);
-                        else if (mapResult?.ok) {
-                            details.push(`Map updated (${mapResult.operationId})`);
-                            if (mapResult.createdAssets?.length) details.push(`New assets: ${mapResult.createdAssets.map(item => `${item.name} [${item.id}]`).join(', ')}`);
-                        }
-                        if (commitResult.recordedIds?.length > 0) details.push(`Recorded/Updated: ${commitResult.recordedIds.join(', ')}`);
-                        if (args.activate?.length > 0) details.push(`Activated: ${args.activate.join(', ')}`);
-                        observation = commitResult.errors.length > 0
-                            ? `Committed with warnings: ${commitResult.errors.join(', ')}${details.length ? ` | ${details.join(' | ')}` : ''}`
-                            : `Committed successfully. ${details.join(' | ')}`;
-                    }
+                    const ordinaryAction = { ...args };
+                    delete ordinaryAction.map;
+                    const commitResult = await applyAction(ordinaryAction, archiveBooks, currentTime, breadcrumb, isManual);
+                    commitAccepted = true;
+                    jsonCorrectionRetries = 0;
+                    const details = [];
+                    if (commitResult.recordedIds?.length > 0) details.push(`Recorded/Updated: ${commitResult.recordedIds.join(', ')}`);
+                    if (args.activate?.length > 0) details.push(`Activated: ${args.activate.join(', ')}`);
+                    observation = commitResult.errors.length > 0
+                        ? `Committed with warnings: ${commitResult.errors.join(', ')}${details.length ? ` | ${details.join(' | ')}` : ''}`
+                        : `Committed successfully. ${details.join(' | ')}`;
                     archiveBooks = await fetchArchiveBooks();
                     keyringText = buildKeyringText(archiveBooks, settings.activeRouterKeys);
                     activeDungeonContext = dungeonRealityEnabled
@@ -2217,24 +2087,6 @@ ${adjustedSharedContext}`;
                         const book = await ctx.loadWorldInfo(bookName);
                         observation = book?.entries?.[id] ? book.entries[id].content : `Entry "${uid}" not found.`;
                     }
-                } else if (toolName === 'inspect_map') {
-                    if (!activeDungeonContext) {
-                        observation = JSON.stringify({ ok: false, retryable: false, code: 'MAP_NOT_ACTIVE', hint: 'No mapped site is currently active.' });
-                    } else {
-                        const inspected = inspectDungeonMap(activeDungeonContext.document, args.area || '');
-                        observation = inspected
-                            ? JSON.stringify({ ok: true, map: inspected }, null, 2)
-                            : JSON.stringify({ ok: false, retryable: true, code: 'AREA_NOT_FOUND', received: args.area, allowed: activeDungeonContext.document.areas.map(area => area.id), hint: 'Retry with an exact area ID.' }, null, 2);
-                    }
-                } else if (toolName === 'list_map_assets') {
-                    if (!activeDungeonContext) {
-                        observation = JSON.stringify({ ok: false, retryable: false, code: 'MAP_NOT_ACTIVE', hint: 'No mapped site is currently active.' });
-                    } else {
-                        const assets = listDungeonMapAssets(activeDungeonContext.document, args || {});
-                        observation = assets
-                            ? JSON.stringify({ ok: true, assets }, null, 2)
-                            : JSON.stringify({ ok: false, retryable: true, code: 'AREA_NOT_FOUND', received: args.area, allowed: activeDungeonContext.document.areas.map(area => area.id), hint: 'Retry with an exact area ID.' }, null, 2);
-                    }
                 } else {
                     observation = `Unknown tool: ${toolName}`;
                 }
@@ -2250,10 +2102,10 @@ ${adjustedSharedContext}`;
 
                 if (effectiveArgumentError || (toolName === 'commit' && !commitAccepted)) {
                     if (retryRejectedJson) {
-                        broadcastStep('thought', `Invalid JSON/map operation, nudging model (retry ${jsonCorrectionRetries}/${MAX_JSON_CORRECTION_RETRIES})...`);
+                        broadcastStep('thought', `Invalid JSON, nudging model (retry ${jsonCorrectionRetries}/${MAX_JSON_CORRECTION_RETRIES})...`);
                         continue;
                     }
-                    terminalCommitRejection = 'Lorebook Agent correction limit reached or the map context changed. The rejected action wrote nothing.';
+                    terminalCommitRejection = 'Lorebook Agent correction limit reached. The rejected action wrote nothing.';
                     break;
                 }
                 // A validated commit ends the research pass. Rejected commits do not.

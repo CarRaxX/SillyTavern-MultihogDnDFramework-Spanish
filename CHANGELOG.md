@@ -2,6 +2,98 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.30] - 2026-08-14
+
+### Changed
+- **Location Mapping (Alpha)**: the Components toggle is renamed from Dungeon Reality Mapping. It covers dungeons, ruins, towns, and cities. The internal `<dungeon_reality_and_hidden_mapping>` tag is unchanged.
+
+### Fixed
+- **Location Mapping disable**: turning the Components checkbox off now actually stops the stack — CreateAreaMap unregisters, in-flight Map Updater requests abort, and occupancy API calls are not sent. Unlocking the sysprompt section no longer greys out this kill switch.
+
+## [7.50.29] - 2026-08-14
+
+### Fixed
+- **Map Architect "Use Current Settings"**: profile requests with an empty completion-preset override no longer send a bare Custom OpenAI payload (HTTP 404). The live SillyTavern completion preset is used when the connection profile has none, and the live endpoint URL is filled in as a fallback.
+
+## [7.50.28] - 2026-08-14
+
+### Changed
+- **Lorebook Agent existence checks**: ARCHIVE INDEX is treated as the complete catalog (now includes Book::UID). The agent is told not to `grep_lore` / `inspect_book` to verify whether a name exists; absence means record it. Concatenated name-dump greps are rejected with that hint.
+
+## [7.50.27] - 2026-08-14
+
+### Fixed
+- **Site map current-area highlight**: a footer interior that is an occupying asset (chapel, inn) or a breadcrumb tail above a matching district now highlights the host district. The graph no longer falls back to the entrance when the leaf is not itself an area.
+
+## [7.50.26] - 2026-08-14
+
+### Changed
+- **Map Architect prompt examples**: the shipped architect prompt now includes truncated valid DUNGEON and SETTLEMENT JSON (reciprocal routes, LOCKED passages, INITIAL_MAP assets, chapel as a district OBJECT not an area). Reset the Map Architect prompt in settings if you still have an older copy.
+
+## [7.50.25] - 2026-08-14
+
+### Changed
+- **Map Updater prompt examples**: the shipped occupancy prompt now includes compact valid JSON for noop, ADD_ASSET (chapel + occupant), and SET_ASSET, plus a note not to use `{type, asset:{...}}`. Reset the Map Updater prompt in settings if you still have an older copy.
+
+## [7.50.24] - 2026-08-14
+
+### Fixed
+- **Wrapped ADD_ASSET operations**: Map Updater accepts `{type:"ADD_ASSET", asset:{...}}` and flattens it to `{op, name, kind, ...}` instead of burning correction retries on `type` vs `op` and a nested `asset` object.
+
+## [7.50.23] - 2026-08-14
+
+### Fixed
+- **Chronicle `area` alias**: Map Updater chronicles that send `area` instead of `area_id` are accepted instead of forcing a correction retry.
+
+## [7.50.22] - 2026-08-14
+
+### Fixed
+- **Manual Map Updater lookback**: Play-button Map Updater runs now use the Lorebook Agent lookback (last N user turns) instead of the since-last-run watermark. After an auto-run on the same turn, a manual pass no longer sends empty RECENT STORY. A settlement footer interior that is not yet an OBJECT asset is called out so the model cannot noop it away.
+
+## [7.50.21] - 2026-08-14
+
+### Changed
+- **Map Architect max output tokens** now default to **25000** (UI still clamps 1000–32000). Existing saved values are kept; only new installs and reset-to-default pick up 25000, so long maps are not truncated after the generation cost is already paid.
+
+### Fixed
+- **Map Updater Stop + Lorebook Terminal**: occupancy updates now share the Lorebook Agent terminal and Stop button. Stop appears only after an active map is confirmed (auto-ticks outside a mapped site no longer flash it). Cancel aborts the in-flight request. Occupancy finishes still refresh Campaign Records but do not trigger NPC portrait auto-generation.
+
+## [7.50.20] - 2026-08-14
+
+### Changed
+- **Run Research Now** on the Lorebook Agent header expands into a choice: **Lorebook Agent** (NPC/location/relationship records) or **Map Updater** (dungeon and town occupancy). Map Updater can be run by hand even when its auto cadence is off.
+
+## [7.50.19] - 2026-08-14
+
+### Changed
+- **Map Updater is separate from Lorebook Agent**: Dungeon and settlement occupancy updates no longer ride on the Lorebook Agent pass. A dedicated Map Updater (Map Architect connection, compact JSON, default every turn) maintains `[MAP]`. Lorebook Agent keeps NPC/location/relationship records on its own cadence and no longer receives `inspect_map`, `commit.map`, or `[MAP_COMMIT]`. The agent panel has **Map every:** next to **Run every:**.
+
+## [7.50.18] - 2026-08-14
+
+### Fixed
+- **Map commit bounce on omitted evidence**: ADD_ASSET without `evidence` no longer rejects the whole Lorebook Agent commit. Missing evidence defaults to CONFIRMED. `kind: NPC` (and PERSON/CHARACTER) is stored as CREATURE, so a chapel+priest settlement commit can land instead of retrying until the model hangs.
+
+## [7.50.17] - 2026-08-14
+
+### Changed
+- **Settlement interiors in the footer**: When the party enters a chapel, inn, shop, or similar invented interior, the GM Location footer must append that building (city, district, interior) instead of stopping at the district.
+- **Lorebook Agent settlement interiors**: On SETTLEMENT maps, an interior the party actually enters is recorded as a KNOWN OBJECT asset in that district. The agent uses the latest narration, not only the status footer, so a missing third footer segment no longer skips the chapel.
+
+## [7.50.16] - 2026-08-14
+
+### Fixed
+- **Map Architect on Connection Profiles**: CreateAreaMap no longer sends a provider-level JSON schema through Connection Profile / Ollama / OpenAI-compatible connections. Those schemas 404 on many chat-completion backends. Main API already skipped them; the architect still parses and validates the raw JSON itself.
+
+## [7.50.15] - 2026-08-14
+
+### Changed
+- **Dungeon map GM leeway**: Room-scale dungeon maps are preferred canon, not a hard ban. The narrator may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.
+
+## [7.50.14] - 2026-08-14
+
+### Changed
+- **CreateAreaMap**: The Map Architect tool is now `CreateAreaMap` (was `CreateDungeonMap`). It accepts `kind: DUNGEON` for room-scale interiors or `kind: SETTLEMENT` for district-scale towns and cities. Settlement maps stay macroscopic; the GM may invent granular interiors that do not contradict those districts.
+
 ## [7.50.13] - 2026-08-14
 
 ### Changed

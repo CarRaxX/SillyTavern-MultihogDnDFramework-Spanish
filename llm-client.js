@@ -55,15 +55,103 @@ export async function getConnectionProfiles() {
 }
 
 export async function getCurrentCompletionPreset() {
-    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
-    const result = await executeSlashCommandsWithOptions(`/preset`);
-    return result?.pipe?.trim() || null;
+    try {
+        const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+        if (typeof executeSlashCommandsWithOptions !== 'function') return null;
+        const result = await executeSlashCommandsWithOptions('/preset');
+        return result?.pipe?.trim() || null;
+    } catch {
+        return null;
+    }
 }
 
 export async function setCompletionPreset(name) {
     if (!name) return;
     const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
     await executeSlashCommandsWithOptions(`/preset "${name}"`);
+}
+
+const LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS = [
+    'custom_url',
+    'vertexai_region',
+    'zai_endpoint',
+    'siliconflow_endpoint',
+    'minimax_endpoint',
+    'reverse_proxy',
+    'proxy_password',
+];
+
+function completionPresetExists(context, name) {
+    const wanted = String(name || '').trim();
+    if (!wanted) return false;
+    if (typeof context.getPresetManager !== 'function') return true;
+    for (const type of [undefined, 'openai', 'textgenerationwebui']) {
+        const manager = type ? context.getPresetManager(type) : context.getPresetManager();
+        if (manager?.getCompletionPresetByName?.(wanted)) return true;
+    }
+    return false;
+}
+
+function applyLiveChatCompletionOverrides(context, overridePayload = {}) {
+    const live = context.chatCompletionSettings || {};
+    for (const field of LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS) {
+        if (overridePayload[field] == null || overridePayload[field] === '') {
+            const value = live[field];
+            if (value != null && value !== '') overridePayload[field] = value;
+        }
+    }
+    return overridePayload;
+}
+
+/** Prefer an explicit override, then the profile's preset, then the live ST preset. */
+async function resolveProfilePresetName(context, requestedPreset, profile) {
+    const candidates = [
+        String(requestedPreset || '').trim(),
+        String(profile?.preset || '').trim(),
+        String(await getCurrentCompletionPreset() || '').trim(),
+    ];
+    for (const name of candidates) {
+        if (name && completionPresetExists(context, name)) return name;
+    }
+    return '';
+}
+
+/**
+ * Profile requests without a CC preset omit custom_url and 404 on Custom OpenAI.
+ * "Use Current Settings" must still attach a real preset or the live endpoint URL.
+ */
+async function sendViaConnectionProfile(context, settings, messages, { signal = null, extraOverride = {} } = {}) {
+    const service = context.ConnectionManagerRequestService;
+    const maxTokens = settings.maxTokens && settings.maxTokens > 0 ? settings.maxTokens : undefined;
+    const profile = typeof service.getProfile === 'function'
+        ? service.getProfile(settings.connectionProfileId)
+        : null;
+    const effectivePreset = await resolveProfilePresetName(context, settings.completionPresetId, profile);
+    const overridePayload = applyLiveChatCompletionOverrides(context, { ...extraOverride });
+    let profileOriginalPreset = null;
+    try {
+        if (effectivePreset && profile && profile.preset !== effectivePreset) {
+            profileOriginalPreset = profile.preset;
+            profile.preset = effectivePreset;
+        }
+        return await service.sendRequest(
+            settings.connectionProfileId,
+            messages,
+            maxTokens,
+            {
+                stream: false,
+                extractData: true,
+                includePreset: !!effectivePreset,
+                includeInstruct: true,
+                signal,
+            },
+            overridePayload,
+        );
+    } finally {
+        if (profile && profileOriginalPreset !== null) {
+            profile.preset = profileOriginalPreset;
+        }
+    }
 }
 
 // ── Combat Main-Profile Auto-Switch ────────────────────────────────────────────
@@ -609,57 +697,12 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 { role: 'user',   content: userPrompt   },
             ];
 
-            const maxTokens = settings.maxTokens && settings.maxTokens > 0 ? settings.maxTokens : undefined;
-            const requestedPreset = String(settings.completionPresetId || '').trim();
-            const profile = (typeof service.getProfile === 'function')
-                ? service.getProfile(settings.connectionProfileId)
-                : null;
-            const profilePreset = String(profile?.preset || '').trim();
-            const shouldOverrideProfilePreset = !!requestedPreset && !!profile;
-            const overridePayload = jsonSchema ? { json_schema: jsonSchema } : {};
-
-            // Use the canonical ST service path. This correctly handles secret_id
-            // lookup, prompt formatting for text-completion backends (instruct
-            // template), and preset loading for all API types.
-            let raw;
-            let profileOriginalPreset = null;
-            try {
-                if (shouldOverrideProfilePreset) {
-                    profileOriginalPreset = profilePreset;
-                    profile.preset = requestedPreset;
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        {
-                            stream: false,
-                            extractData: true,
-                            includePreset: true,
-                            includeInstruct: true,
-                            signal,
-                        },
-                        overridePayload,
-                    );
-                } else {
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        {
-                            stream: false,
-                            extractData: true,
-                            includePreset: true,
-                            includeInstruct: true,
-                            signal,
-                        },
-                        overridePayload,
-                    );
-                }
-            } finally {
-                if (shouldOverrideProfilePreset && profile && profileOriginalPreset !== null && profile.preset !== profileOriginalPreset) {
-                    profile.preset = profileOriginalPreset;
-                }
-            }
+            // Never send provider-level json_schema here. Many Chat Completion
+            // profiles (custom OpenAI-compatible, OpenRouter, Claude, local
+            // proxies) 404/400 on structured-output endpoints. Map Architect
+            // already parses and validates the text itself; jsonSchema on this
+            // function is only a signal for the Main API generateRawData path.
+            const raw = await sendViaConnectionProfile(context, settings, messages, { signal });
 
             if (typeof raw === 'string') {
                 let parsed = null;
@@ -722,13 +765,13 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── Ollama Mode ──
     if (settings.connectionSource === 'ollama') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via Ollama: ${settings.ollamaModel}`);
-        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, jsonSchema));
+        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null));
     }
 
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, jsonSchema));
+        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null));
     }
 
     // ── Default mode: generateRaw through the active connection ──
@@ -950,41 +993,10 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
         const service = context.ConnectionManagerRequestService;
         if (service && typeof service.sendRequest === 'function') {
-            const maxTokens = settings.maxTokens > 0 ? settings.maxTokens : undefined;
-            const requestedPreset = String(settings.completionPresetId || '').trim();
-            const profile = (typeof service.getProfile === 'function')
-                ? service.getProfile(settings.connectionProfileId)
-                : null;
-            const profilePreset = String(profile?.preset || '').trim();
-            const shouldOverrideProfilePreset = !!requestedPreset && !!profile;
             // Do NOT pass tools to the profile service — ConnectionManagerRequestService
             // does not reliably forward them to all API backends, causing MALFORMED_FUNCTION_CALL
             // errors. The router uses a text-format fallback for profile connections.
-            let raw;
-            let profileOriginalPreset = null;
-            try {
-                if (shouldOverrideProfilePreset) {
-                    profileOriginalPreset = profilePreset;
-                    profile.preset = requestedPreset;
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        { stream: false, extractData: true, includePreset: true, includeInstruct: true, signal }
-                    );
-                } else {
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        { stream: false, extractData: true, includePreset: true, includeInstruct: true, signal }
-                    );
-                }
-            } finally {
-                if (shouldOverrideProfilePreset && profile && profileOriginalPreset !== null && profile.preset !== profileOriginalPreset) {
-                    profile.preset = profileOriginalPreset;
-                }
-            }
+            const raw = await sendViaConnectionProfile(context, settings, messages, { signal });
             if (typeof raw === 'string') return { content: raw, toolCall: null };
             const r = /** @type {any} */ (raw);
             // Check for native tool_calls first

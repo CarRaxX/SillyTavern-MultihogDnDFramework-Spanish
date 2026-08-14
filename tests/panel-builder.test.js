@@ -63,4 +63,27 @@ describe('panel builder', () => {
         expect(source).toContain('dataset.didPan');
         expect(source).toContain('rt-dungeon-map-details');
     });
+
+    it('expands Run Research Now into Lorebook Agent and Map Updater', () => {
+        const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
+        expect(source).toContain('runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 })');
+        expect(source).toContain('rt-research-lorebook');
+        expect(source).toContain('rt-research-map-updater');
+        expect(source).toContain("toastr['info']('Starting Lorebook Agent pass...')");
+        expect(source).toContain("toastr['info']('Starting Map Updater pass...')");
+    });
+
+    it('shares Stop and Lorebook Terminal with Map Updater without NPC auto-portraits', () => {
+        const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        expect(source).toContain('stopRouterPass()');
+        expect(source).toContain('stopMapUpdaterPass()');
+        expect(source).toContain("skipped === 'stopped'");
+        expect(source).toContain("toastr['info']('Stopped.', 'Map Updater')");
+        expect(source).toContain("step.metadata?.source !== 'map_updater'");
+        expect(source).toContain('checkAndTriggerAutoGenerations(refreshAll)');
+        expect(indexSource).toContain("stopBtn.style.display = busy ? 'flex' : 'none'");
+        expect(indexSource).toContain('const busy = !!running || isMapUpdaterRunning()');
+        expect(indexSource).toContain('stopMapUpdaterPass');
+    });
 });

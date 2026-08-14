@@ -13,6 +13,7 @@ import {
     extractHiddenDungeonMapBlocks,
     findLatestDungeonLocation,
     formatDungeonMapForNarrator,
+    formatDungeonMapForUpdater,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
     migrateDungeonMapAttachmentToContent,
@@ -89,6 +90,86 @@ describe('Map Architect validation', () => {
         const result = validateDungeonMapArchitecture(broken, { site: 'Abbey Undercroft', entrance: 'Cellar Landing' });
         expect(result.valid).toBe(false);
         expect(result.errors.some(error => error.code === 'UNKNOWN_ASSET_LOCATION')).toBe(true);
+    });
+
+    it('uses district-scale area counts for SETTLEMENT maps and stamps kind', () => {
+        const names = ['Gate', 'Market', 'Docks', 'Temple Ward', 'Old Town', 'Keep'];
+        const areas = names.map((name, index) => {
+            const id = name.toLowerCase().replace(/\s+/g, '-');
+            const other = names.filter((_, otherIndex) => otherIndex !== index).map(label => ({
+                to: label.toLowerCase().replace(/\s+/g, '-'),
+                state: 'OPEN',
+                detail: 'Street',
+            }));
+            return {
+                id,
+                name,
+                knowledge: index === 0 ? 'VISITED' : 'UNREVEALED',
+                geometry: [`The ${name} district.`],
+                connections: other.slice(0, 1),
+            };
+        });
+        areas.forEach((area, index) => {
+            const target = areas[(index + 1) % areas.length];
+            area.connections = [{ to: target.id, state: 'OPEN', detail: 'Main road' }];
+        });
+        areas.forEach((area, index) => {
+            const source = areas[(index + areas.length - 1) % areas.length];
+            if (!area.connections.some(connection => connection.to === source.id)) {
+                area.connections.push({ to: source.id, state: 'OPEN', detail: 'Main road' });
+            }
+        });
+        const settlement = {
+            version: 3,
+            site: 'Riverford',
+            kind: 'SETTLEMENT',
+            areas,
+            assets: [],
+        };
+        const result = validateDungeonMapArchitecture(settlement, {
+            site: 'Riverford',
+            entrance: 'Gate',
+            scale: 'MEDIUM',
+            kind: 'SETTLEMENT',
+        });
+        expect(result.valid).toBe(true);
+        expect(result.document.kind).toBe('SETTLEMENT');
+        expect(result.document.areas).toHaveLength(6);
+
+        const tooSmall = structuredClone(settlement);
+        tooSmall.areas = settlement.areas.slice(0, 4);
+        tooSmall.areas.forEach((area) => {
+            area.connections = area.connections.filter(connection => tooSmall.areas.some(candidate => candidate.id === connection.to));
+        });
+        expect(validateDungeonMapArchitecture(tooSmall, {
+            site: 'Riverford',
+            entrance: 'Gate',
+            scale: 'MEDIUM',
+            kind: 'SETTLEMENT',
+        }).errors.some(error => error.code === 'SCALE_AREA_COUNT')).toBe(true);
+    });
+
+    it('tells the narrator that settlement maps are district-scale', () => {
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Riverford',
+            mapChunks: [JSON.stringify({
+                version: 3,
+                site: 'Riverford',
+                kind: 'SETTLEMENT',
+                areas: [
+                    { id: 'gate', name: 'Gate', knowledge: 'VISITED', geometry: ['A timber palisade gate.'], connections: [{ to: 'market', state: 'OPEN', detail: 'Cobbled road' }] },
+                    { id: 'market', name: 'Market', knowledge: 'DISCOVERED', geometry: ['Open stalls around a well.'], connections: [{ to: 'gate', state: 'OPEN', detail: 'Cobbled road' }] },
+                ],
+                assets: [],
+            })],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Riverford, Gate');
+        expect(injection).toContain('district-scale settlement canon');
+        expect(injection).toContain('invent granular interiors');
+        expect(injection).toContain('name it in the Location footer');
+        expect(injection).toContain('Map kind: SETTLEMENT (district-scale)');
+        expect(injection).not.toContain('room-scale interior canon');
     });
 });
 
@@ -381,6 +462,111 @@ Area: Ossuary Behind Rotten Tapestry
         });
     });
 
+    it('defaults omitted map evidence to CONFIRMED and coerces NPC kind to CREATURE', () => {
+        const map = {
+            version: 3,
+            site: 'Morrowfen',
+            kind: 'SETTLEMENT',
+            areas: [{ id: 'shrine-quarter', name: 'Shrine Quarter', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{ id: 'shrine-ossuary-keepers', kind: 'GROUP', name: 'Keepers of the Drowned Stone', location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'UNREVEALED', detail: '', origin: 'INITIAL_MAP' }],
+        };
+        const added = applyDungeonMapTransaction(map, {
+            operation_id: 'morrowfen-shrine-chapel-entry',
+            operations: [
+                {
+                    op: 'ADD_ASSET', name: 'Chapel of the Drowned Stone', kind: 'OBJECT',
+                    location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
+                    detail: 'Dry stone chapel with reed mats.',
+                },
+                {
+                    op: 'ADD_ASSET', name: 'Odran', kind: 'NPC',
+                    location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
+                    detail: 'Elderly gray-hooded priest in the chapel.',
+                    distinct_from: [],
+                },
+            ],
+            chronicles: [{ area_id: 'shrine-quarter', text: 'Entered the Chapel of the Drowned Stone.' }],
+        });
+        expect(added.ok).toBe(true);
+        expect(added.createdAssets).toEqual([
+            { id: 'chapel-of-the-drowned-stone', name: 'Chapel of the Drowned Stone' },
+            { id: 'odran', name: 'Odran' },
+        ]);
+        expect(added.document.assets.find(asset => asset.id === 'chapel-of-the-drowned-stone')).toMatchObject({
+            kind: 'OBJECT', knowledge: 'KNOWN', origin: 'NARRATOR_ESTABLISHED',
+        });
+        expect(added.document.assets.find(asset => asset.id === 'odran')).toMatchObject({
+            kind: 'CREATURE', knowledge: 'KNOWN', origin: 'NARRATOR_ESTABLISHED',
+        });
+    });
+
+    it('accepts type/asset-wrapped ADD_ASSET operations', () => {
+        const map = {
+            version: 3,
+            site: 'Morrowfen',
+            areas: [{ id: 'shrine-quarter', name: 'Shrine Quarter', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [],
+        };
+        const applied = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-1557-chapel-drowned-stone',
+            operations: [
+                {
+                    type: 'ADD_ASSET',
+                    asset: {
+                        kind: 'OBJECT',
+                        name: 'Chapel of the Drowned Stone',
+                        location: 'shrine-quarter',
+                        state: 'ACTIVE',
+                        knowledge: 'KNOWN',
+                        detail: 'Narrow stone sanctuary tucked behind iron votive screens.',
+                    },
+                },
+                {
+                    type: 'ADD_ASSET',
+                    asset: {
+                        kind: 'CREATURE',
+                        name: 'Priest Odran',
+                        location: 'shrine-quarter',
+                        state: 'ACTIVE',
+                        knowledge: 'KNOWN',
+                        detail: 'Elderly gray-hooded priest tending the chapel.',
+                    },
+                },
+            ],
+            chronicles: [{ area_id: 'shrine-quarter', text: 'Entered the Chapel of the Drowned Stone and met Priest Odran.' }],
+        });
+        expect(applied.ok).toBe(true);
+        expect(applied.document.assets.map(asset => asset.name)).toEqual([
+            'Chapel of the Drowned Stone',
+            'Priest Odran',
+        ]);
+        expect(applied.document.assets[0]).toMatchObject({ kind: 'OBJECT', location: 'shrine-quarter', knowledge: 'KNOWN' });
+        expect(applied.document.assets[1]).toMatchObject({ kind: 'CREATURE', location: 'shrine-quarter' });
+    });
+
+    it('accepts chronicle.area as an alias for area_id', () => {
+        const map = {
+            version: 3,
+            site: 'Morrowfen',
+            areas: [{ id: 'shrine-quarter', name: 'Shrine Quarter', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [],
+        };
+        const applied = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-1557-chapel-drowned-stone',
+            operations: [{
+                op: 'ADD_ASSET', kind: 'OBJECT', name: 'Chapel of the Drowned Stone',
+                location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
+            }],
+            chronicles: [{ area: 'shrine-quarter', text: 'Entered the Chapel of the Drowned Stone and received shelter from Odran.' }],
+        });
+        expect(applied.ok).toBe(true);
+        expect(applied.chronicles).toEqual([{
+            areaId: 'shrine-quarter',
+            areaName: 'Shrine Quarter',
+            text: 'Entered the Chapel of the Drowned Stone and received shelter from Odran.',
+        }]);
+    });
+
     it('ships a strict conditional map commit schema', () => {
         const schema = buildDungeonMapCommitSchema();
         expect(schema.additionalProperties).toBe(false);
@@ -391,6 +577,33 @@ Area: Ossuary Behind Rotten Tapestry
         const setAsset = schema.properties.operations.items.oneOf.find(item => item.properties.op.enum.includes('SET_ASSET'));
         expect(setAsset.properties.detail.description).toContain('Never HP, targeting, mid-round poses');
         expect(schema.properties.chronicles.description).toContain('Not turn-by-turn combat choreography');
+    });
+
+    it('formats a compact occupancy snapshot for the Map Updater', () => {
+        const snapshot = formatDungeonMapForUpdater({
+            version: 3,
+            site: 'Abbey Undercroft',
+            kind: 'DUNGEON',
+            areas: [{
+                id: 'cellar-landing',
+                name: 'Cellar Landing',
+                knowledge: 'VISITED',
+                geometry: ['A damp stair landing.'],
+                connections: [{ to: 'crypt-passage-east', state: 'OPEN' }],
+            }],
+            assets: [{
+                id: 'crypt-ghoul',
+                kind: 'CREATURE',
+                name: 'Crypt Ghoul',
+                location: 'cellar-landing',
+                state: 'ACTIVE',
+                knowledge: 'UNREVEALED',
+            }],
+        }, 'Abbey Undercroft, Cellar Landing');
+        expect(snapshot).toContain('KIND: DUNGEON');
+        expect(snapshot).toContain('cellar-landing | Cellar Landing | VISITED');
+        expect(snapshot).toContain('crypt-ghoul | CREATURE | Crypt Ghoul');
+        expect(snapshot).toContain('A damp stair landing.');
     });
 
     it('assembles an attached root map with descendant Lorebook Agent location state', () => {
@@ -595,6 +808,9 @@ The last guard falls and a loose stone reveals a niche.
         expect(injection).toContain('MUTATION — Lift: disabled');
         expect(injection).toContain('Do not treat it as a menu of allowed actions');
         expect(injection).toContain('resolved story events override stale positions/states');
+        expect(injection).toContain('room-scale interior canon');
+        expect(injection).toContain('you may add a room or incidental feature');
+        expect(injection).not.toContain('do not invent missing rooms');
         expect(injection).not.toContain('current operational snapshot');
     });
 
