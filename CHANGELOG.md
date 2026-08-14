@@ -2,6 +2,10 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.80.0] - 2026-08-14
+
+Public release of Location Mapping: dedicated Map Updater, settlement maps, ARCHIVE INDEX existence checks, and a Components kill switch that actually stops architect/updater API calls. See 7.50.14–7.50.30 for the stepwise notes.
+
 ## [7.50.30] - 2026-08-14
 
 ### Changed
