@@ -27,6 +27,7 @@ import {
     buildDungeonSitesFromLocationEntries,
     collectDungeonMapCandidates,
     dungeonLabelsMatch,
+    dungeonSiteRootsMatch,
     extractDungeonMapSection,
     extractFooterLocation,
     findLatestDungeonLocation,
@@ -493,7 +494,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     for (const map of collected.maps) {
         let rootEntry = Object.values(bookData.entries || {}).find(entry => {
             const label = String(entry?.comment || '').trim();
-            return label && !label.includes('::') && dungeonLabelsMatch(label, map.siteRoot);
+            return label && !label.includes('::') && dungeonSiteRootsMatch(label, map.siteRoot);
         });
 
         if (!rootEntry) {
@@ -587,7 +588,7 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
 
     let rootEntry = Object.values(bookData.entries || {}).find(entry => {
         const label = String(entry?.comment || '').trim();
-        return label && !label.includes('::') && dungeonLabelsMatch(label, site);
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
     });
     const existing = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
     if (existing) {
@@ -815,10 +816,11 @@ function findMappedChildEntry(entries, rootLabel, areaName) {
         const label = String(entry?.comment || '').trim();
         const segments = label.split(/\s*::\s*/).filter(Boolean);
         if (segments.length > 1) {
-            return dungeonLabelsMatch(segments[0], rootLabel) && dungeonLabelsMatch(segments.at(-1), areaName);
+            return segments.some(segment => dungeonSiteRootsMatch(segment, rootLabel))
+                && dungeonLabelsMatch(segments.at(-1), areaName);
         }
         const keys = Array.isArray(entry?.key) ? entry.key : [];
-        return dungeonLabelsMatch(label, areaName) && keys.some(key => dungeonLabelsMatch(key, rootLabel));
+        return dungeonLabelsMatch(label, areaName) && keys.some(key => dungeonSiteRootsMatch(key, rootLabel));
     }) || null;
 }
 

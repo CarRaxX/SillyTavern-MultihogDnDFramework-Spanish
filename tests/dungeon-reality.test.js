@@ -543,6 +543,31 @@ The last guard falls and a loose stone reveals a niche.
         expect(resolveActiveDungeonSite(result.state, 'Crypt of Whisper, Lower Halls')?.siteRoot)
             .toBe('The Crypt of Whispers');
         expect(resolveActiveDungeonSite(result.state, 'Oakbridge, Market Square')).toBeNull();
+        expect(resolveActiveDungeonSite(result.state, 'Forest Near the Crypt of Whispers')).toBeNull();
+        expect(resolveActiveDungeonSite(result.state, 'The Crypt of Whispers')).toBeTruthy();
+        expect(dungeonLabelsMatch('Forest Near the Crypt of Whispers', 'The Crypt of Whispers')).toBe(false);
+        expect(resolveActiveDungeonSite(result.state, 'Whispering Woods, Crypt of Whispers')?.siteRoot)
+            .toBe('The Crypt of Whispers');
+        expect(resolveActiveDungeonSite(result.state, 'Whispering Woods, Crypt of Whispers, Antechamber')?.siteRoot)
+            .toBe('The Crypt of Whispers');
+        expect(looksLikeDungeonSite('Whispering Woods, Forgotten Tomb')).toBe(true);
+    });
+
+    it('prefers a nested mapped dungeon over a mapped outer region', () => {
+        const entries = {
+            0: {
+                comment: 'Whispering Woods',
+                content: '[CORE]A mapped forest.[/CORE]\n[MAP]\nDungeon Site: Whispering Woods\nArea: Trailhead\nA deer path.\n[/MAP]',
+            },
+            1: {
+                comment: 'Forgotten Tomb',
+                content: '[CORE]A mapped tomb.[/CORE]\n[MAP]\nDungeon Site: Forgotten Tomb\nArea: Antechamber\nA sealed door.\n[/MAP]',
+            },
+        };
+        const state = { version: 3, sites: buildDungeonSitesFromLocationEntries(entries, 'Campaign_Locations') };
+        expect(resolveActiveDungeonSite(state, 'Whispering Woods, Trailhead')?.siteRoot).toBe('Whispering Woods');
+        expect(resolveActiveDungeonSite(state, 'Whispering Woods, Forgotten Tomb')?.siteRoot).toBe('Forgotten Tomb');
+        expect(resolveActiveDungeonSite(state, 'Forest Near the Forgotten Tomb')).toBeNull();
     });
 
     it('strips only captured map blocks and builds an internal canon injection', () => {

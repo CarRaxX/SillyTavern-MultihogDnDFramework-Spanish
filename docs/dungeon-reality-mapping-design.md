@@ -117,6 +117,8 @@ Map data, instructions, schemas, and inspection actions are exposed only while t
 |---|---|---|
 | `Abbey Undercroft, Cellar Landing` | `Abbey Undercroft` | Map and commands active |
 | `Abbey Undercroft :: Flooded Vault` | `Abbey Undercroft` | Map and commands active |
+| `Whispering Woods, Forgotten Tomb` | `Forgotten Tomb` | Map and commands active |
+| `Forest Near the Hall of the Ember-Ancestors` | `Hall of the Ember-Ancestors` | Map and commands absent |
 | `Varnholde Village, Elder's House` | `Abbey Undercroft` | Map and commands absent |
 | `Abbey Undercroft, Entrance` after returning | `Abbey Undercroft` | Map and commands resume |
 

@@ -784,15 +784,40 @@ function editDistance(a, b) {
     return row[b.length];
 }
 
+function dungeonLabelEditDistanceMatch(left, right) {
+    const a = normalizeDungeonLabel(left);
+    const b = normalizeDungeonLabel(right);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const allowance = Math.max(1, Math.floor(Math.max(a.length, b.length) * 0.12));
+    return editDistance(a, b) <= allowance;
+}
+
+/**
+ * Site-root identity for map activation. Nearby places that mention a mapped
+ * site ("Forest Near the Hall of the Ember-Ancestors") must not count as inside it.
+ */
+export function dungeonSiteRootsMatch(left, right) {
+    return dungeonLabelEditDistanceMatch(left, right);
+}
+
+/** True when a footer/lore path has a whole segment that is this mapped site. */
+export function locationContainsSiteRoot(location, siteRoot) {
+    if (!normalizeDungeonLabel(siteRoot)) return false;
+    return splitLocationSegments(location).some(segment => dungeonSiteRootsMatch(segment, siteRoot));
+}
+
 /** Conservative fuzzy equality for punctuation/article drift and small typos. */
 export function dungeonLabelsMatch(left, right) {
     const a = normalizeDungeonLabel(left);
     const b = normalizeDungeonLabel(right);
     if (!a || !b) return false;
-    if (a === b) return true;
-    if (Math.min(a.length, b.length) >= 8 && (a.includes(b) || b.includes(a))) return true;
-    const allowance = Math.max(1, Math.floor(Math.max(a.length, b.length) * 0.12));
-    return editDistance(a, b) <= allowance;
+    if (dungeonLabelEditDistanceMatch(a, b)) return true;
+    const shorter = a.length <= b.length ? a : b;
+    const longer = a.length <= b.length ? b : a;
+    if (shorter.length < 8 || !longer.startsWith(shorter)) return false;
+    const next = longer[shorter.length];
+    return next === ' ' || (next === 's' && longer.length === shorter.length + 1);
 }
 
 /** Upgrade a prose/older JSON [MAP] section to the v3 geometry/assets model. */
@@ -816,8 +841,8 @@ export function reconcileDungeonMapAreaKnowledge(entry, allEntries) {
         .filter(candidate => candidate && candidate !== entry)
         .filter(candidate => {
             const label = String(candidate.comment || '').trim();
-            const segments = label.split(/\s*::\s*/).filter(Boolean);
-            return segments.length > 1 && dungeonLabelsMatch(segments[0], rootLabel);
+            const segments = splitLocationSegments(label);
+            return segments.length > 1 && segments.some(segment => dungeonSiteRootsMatch(segment, rootLabel));
         });
     let changed = wasMigrated;
     const legacyCoreSentence = `${rootLabel} is a mapped site. Persistent room and area changes are recorded in its child Location entries.`;
@@ -1429,7 +1454,7 @@ function findSiteRecord(state, siteRoot) {
     const exactKey = normalizeDungeonLabel(siteRoot);
     if (state?.sites?.[exactKey]) return { key: exactKey, site: state.sites[exactKey] };
     for (const [key, site] of Object.entries(state?.sites || {})) {
-        if (dungeonLabelsMatch(site.siteRoot || key, siteRoot)) return { key, site };
+        if (dungeonSiteRootsMatch(site.siteRoot || key, siteRoot)) return { key, site };
     }
     return null;
 }
@@ -1479,14 +1504,13 @@ export function collectDungeonMapCandidates(chat) {
         if (!isAssistantMessage(message)) continue;
         const text = getDungeonMessageText(message);
         const footerSnapshot = extractFooterLocation(text);
-        const footerRoot = getSiteRootFromLocation(footerSnapshot);
         for (const content of extractHiddenDungeonMapBlocks(text)) {
             const markedRoot = siteRootFromMapBlock(content);
-            if (footerRoot && markedRoot && !dungeonLabelsMatch(footerRoot, markedRoot)) {
-                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerRoot}"`);
+            if (footerSnapshot && markedRoot && !locationContainsSiteRoot(footerSnapshot, markedRoot)) {
+                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerSnapshot}"`);
                 continue;
             }
-            const siteRoot = footerRoot || markedRoot;
+            const siteRoot = markedRoot || getSiteRootFromLocation(footerSnapshot);
             if (!siteRoot) {
                 errors.push(`message ${messageIndex} contains a hidden map but no footer location or Dungeon Site marker`);
                 continue;
@@ -1518,8 +1542,7 @@ export function buildDungeonSitesFromLocationEntries(entries, bookName = '') {
             .filter(([, candidate]) => {
                 const label = String(candidate?.comment || '').trim();
                 if (!label) return false;
-                const first = label.split(/\s*::\s*/)[0];
-                return dungeonLabelsMatch(first, rootLabel);
+                return splitLocationSegments(label).some(segment => dungeonSiteRootsMatch(segment, rootLabel));
             })
             .map(([childUid, candidate]) => ({
                 id: bookName ? `${bookName}::${childUid}` : String(childUid),
@@ -1557,14 +1580,13 @@ export function syncDungeonRealityState(existingState, chat) {
         if (!mapBlocks.length && !deltaBlocks.length) continue;
 
         const footerSnapshot = extractFooterLocation(text);
-        const footerRoot = getSiteRootFromLocation(footerSnapshot);
         for (const block of mapBlocks) {
             const markedRoot = siteRootFromMapBlock(block);
-            if (footerRoot && markedRoot && !dungeonLabelsMatch(footerRoot, markedRoot)) {
-                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerRoot}"`);
+            if (footerSnapshot && markedRoot && !locationContainsSiteRoot(footerSnapshot, markedRoot)) {
+                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerSnapshot}"`);
                 continue;
             }
-            const siteRoot = footerRoot || markedRoot;
+            const siteRoot = markedRoot || getSiteRootFromLocation(footerSnapshot);
             if (!siteRoot) {
                 errors.push(`message ${messageIndex} contains a hidden map but no footer location or Dungeon Site marker`);
                 continue;
@@ -1605,12 +1627,12 @@ export function syncDungeonRealityState(existingState, chat) {
             }
             if (!parsed.entries.length) continue;
 
-            if (footerRoot && parsed.siteRoot && !dungeonLabelsMatch(footerRoot, parsed.siteRoot)) {
-                errors.push(`message ${messageIndex} delta marker "${parsed.siteRoot}" conflicts with footer site "${footerRoot}"`);
+            if (footerSnapshot && parsed.siteRoot && !locationContainsSiteRoot(footerSnapshot, parsed.siteRoot)) {
+                errors.push(`message ${messageIndex} delta marker "${parsed.siteRoot}" conflicts with footer site "${footerSnapshot}"`);
                 continue;
             }
 
-            const siteRoot = footerRoot || parsed.siteRoot;
+            const siteRoot = parsed.siteRoot || getSiteRootFromLocation(footerSnapshot);
             if (!siteRoot) {
                 errors.push(`message ${messageIndex} contains a dungeon delta but no footer location or Dungeon Site marker`);
                 continue;
@@ -1663,11 +1685,15 @@ export function findLatestDungeonLocation(chat) {
     return '';
 }
 
-/** Resolve the stored site active under the current footer root. */
+/** Resolve the stored site active under the current footer hierarchy. */
 export function resolveActiveDungeonSite(state, currentLocation) {
-    const root = getSiteRootFromLocation(currentLocation);
-    if (!root || !state?.sites) return null;
-    return findSiteRecord(state, root)?.site || null;
+    const segments = splitLocationSegments(currentLocation);
+    if (!segments.length || !state?.sites) return null;
+    for (let index = segments.length - 1; index >= 0; index--) {
+        const found = findSiteRecord(state, segments[index]);
+        if (found) return found.site;
+    }
+    return null;
 }
 
 /** Parse the active site's current map document for a footer/lore location. */
@@ -1691,7 +1717,7 @@ export function stripCapturedDungeonMapBlocks(text, state) {
     }
     const source = String(text || '');
     if (!storedMaps.size) return source;
-    const footerRoot = getSiteRootFromLocation(extractFooterLocation(source));
+    const footerSnapshot = extractFooterLocation(source);
     DIV_RE.lastIndex = 0;
     return source.replace(DIV_RE, (full, attributes, rawBody) => {
         if (!hasHiddenAttribute(attributes)) return full;
@@ -1702,8 +1728,8 @@ export function stripCapturedDungeonMapBlocks(text, state) {
 
         const parsed = parseDungeonDeltaBlock(body);
         if (parsed.errors.length || !parsed.entries.length) return full;
-        if (footerRoot && parsed.siteRoot && !dungeonLabelsMatch(footerRoot, parsed.siteRoot)) return full;
-        const record = findSiteRecord(state, footerRoot || parsed.siteRoot);
+        if (footerSnapshot && parsed.siteRoot && !locationContainsSiteRoot(footerSnapshot, parsed.siteRoot)) return full;
+        const record = findSiteRecord(state, parsed.siteRoot || getSiteRootFromLocation(footerSnapshot));
         if (!record) return full;
         const storedDeltas = new Set((record.site.statusLog || []).map(statusEntryContentSignature));
         return parsed.entries.every(entry => storedDeltas.has(statusEntryContentSignature(entry))) ? '' : full;
@@ -1803,6 +1829,6 @@ export function buildDungeonRealityInjection(site, currentLocation) {
 
 /** Heuristic used only to emit a loud missing-map diagnostic. */
 export function looksLikeDungeonSite(location) {
-    const root = normalizeDungeonLabel(getSiteRootFromLocation(location));
-    return /\b(?:dungeons?|crypts?|catacombs?|tombs?|ruins?|strongholds?|lairs?|caverns?|caves?|vaults?|fortresses|keeps?|hideouts?|sewers?|mines?|temples?)\b/.test(root);
+    const dungeonWord = /\b(?:dungeons?|crypts?|catacombs?|tombs?|ruins?|strongholds?|lairs?|caverns?|caves?|vaults?|fortresses|keeps?|hideouts?|sewers?|mines?|temples?)\b/;
+    return splitLocationSegments(location).some(segment => dungeonWord.test(normalizeDungeonLabel(segment)));
 }

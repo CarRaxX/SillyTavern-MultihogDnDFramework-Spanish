@@ -2,7 +2,7 @@
 import { getSettings } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import {
-    dungeonLabelsMatch,
+    dungeonSiteRootsMatch,
     formatDungeonMapForNarrator,
     getDungeonMessageText,
     parseDungeonMapDocument,
@@ -130,7 +130,7 @@ async function runMapArchitectOnce(rawArgs) {
     if ((current.errors || []).some(error => /no campaign prefix/i.test(String(error)))) {
         throw mapArchitectFailure('No campaign prefix is available, so there is no safe Locations lorebook target. Nothing was generated or saved.');
     }
-    const existing = Object.values(current.sites || {}).find(record => dungeonLabelsMatch(record?.siteRoot, args.site));
+    const existing = Object.values(current.sites || {}).find(record => dungeonSiteRootsMatch(record?.siteRoot, args.site));
     if (existing?.mapChunks?.length) return existingResult(existing);
 
     const configuredLookback = Number(settings.mapArchitectLookback);
