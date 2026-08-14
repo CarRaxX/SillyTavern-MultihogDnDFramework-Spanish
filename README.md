@@ -1,7 +1,7 @@
 ### New: Persistent maps. The framework now generates persistent maps that are automatically updated. Explore a dungeon or a town, leave, come back later, and it's still there as it was. Dungeons are no longer hallucinated but skill checks actually matter.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/9f5e6fec-9ea6-45fb-b514-9a89ee882d4c" width="60%" alt="Combat in progress" />
+  <img src="https://github.com/user-attachments/assets/9f5e6fec-9ea6-45fb-b514-9a89ee882d4c" width="100%" alt="Combat in progress" />
   <br>
   <em>Dungeon Area Map</em>
 </p>
