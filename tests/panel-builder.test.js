@@ -33,7 +33,7 @@ describe('panel builder', () => {
         const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
         expect(source).toContain('node.item.has_dungeon_map');
         expect(source).toContain('rt-dungeon-map-badge');
-        expect(source).toContain('View private dungeon map attached to this root Location');
+        expect(source).toContain('View private dungeon map (alpha) attached to this root Location');
         expect(source).toContain('openDungeonMapPopup');
         expect(source).toContain('renderDungeonMapReadableHtml');
         expect(source).toContain('data-map-view="readable"');

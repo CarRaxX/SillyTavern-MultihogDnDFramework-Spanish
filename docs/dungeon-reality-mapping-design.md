@@ -1,6 +1,6 @@
 # Dungeon Reality Mapping — Persistence Design
 
-**Status:** Structured current-state and dedicated Map Architect implementation complete
+**Status:** Alpha — structured current-state and dedicated Map Architect are in play, but the feature is still early.
 
 **Related:** `<dungeon_reality_and_hidden_mapping>` narrator module and Lorebook Agent
 

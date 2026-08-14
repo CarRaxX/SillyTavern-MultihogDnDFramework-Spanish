@@ -584,8 +584,8 @@ export function createPanel(dependencies) {
             const popupDom = document.createElement('div');
             popupDom.className = 'rt-dungeon-map-popup';
             popupDom.innerHTML = `
-                <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(mapDocument.site || item.label || 'Dungeon Map')}</div>
-                <div class="rt-dungeon-map-subtitle">Private objective current state. Lorebook Agent reads the structured version while this site is active.</div>
+                <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(mapDocument.site || item.label || 'Dungeon Map')} <small class="rt-dungeon-alpha-tag">ALPHA</small></div>
+                <div class="rt-dungeon-map-subtitle">Alpha private current state. Lorebook Agent reads the structured version while this site is active.</div>
                 <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Dungeon map view">
                     <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Readable</button>
                     <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false"><i class="fa-solid fa-code"></i> Raw JSON</button>
@@ -2891,7 +2891,7 @@ export function createPanel(dependencies) {
                                         const entryTokens = Math.round((node.item.content || '').length / 4);
                                         tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
                                         if (dungeonRealityEnabled && node.item.has_dungeon_map) {
-                                            dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
+                                            dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map (alpha) attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
                                         }
                                         if (isNpcBook) {
                                             viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;

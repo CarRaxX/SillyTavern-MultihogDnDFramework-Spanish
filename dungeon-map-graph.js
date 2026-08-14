@@ -286,7 +286,7 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
     const site = escapeXml(graph.site || 'Mapped site');
     if (detached) {
         return `<div class="rt-immersion-map rt-immersion-map-popped">
-            <div class="rt-immersion-section-label"><span>Site map</span></div>
+            <div class="rt-immersion-section-label"><span>Site map</span><small class="rt-dungeon-alpha-tag">ALPHA</small></div>
             <div class="rt-immersion-map-popped-body">
                 <span>${site} is open in a separate window.</span>
                 <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reattach site map">Reattach</button>
@@ -296,7 +296,10 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
     return `<div class="rt-immersion-map">
         <div class="rt-immersion-section-label">
             <span>Site map</span>
-            <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Open map in a separate window" aria-label="Open map in a separate window">⧉</button>
+            <span class="rt-dungeon-map-label-actions">
+                <small class="rt-dungeon-alpha-tag">ALPHA</small>
+                <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Open map in a separate window" aria-label="Open map in a separate window">⧉</button>
+            </span>
         </div>
         <div class="rt-dungeon-graph-scroll">${renderDungeonMapGraphSvg(graph, { compact: true, siteRoot: siteRoot || graph.site })}</div>
     </div>`;

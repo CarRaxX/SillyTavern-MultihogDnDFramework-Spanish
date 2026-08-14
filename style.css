@@ -7018,6 +7018,24 @@ textarea.rt-cr-input {
     opacity: 0.55;
     padding: 0 2px;
 }
+.rt-dungeon-alpha-tag {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #ffc45c;
+    border: 1px solid rgba(255, 196, 92, 0.4);
+    border-radius: 3px;
+    padding: 1px 4px;
+    vertical-align: 1px;
+    text-transform: uppercase;
+    opacity: 0.95;
+}
+.rt-dungeon-map-label-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
 .rt-immersion-npc-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
@@ -7097,6 +7115,9 @@ textarea.rt-cr-input {
     gap: 6px;
 }
 .rt-immersion-map .rt-immersion-section-label {
+    opacity: 1;
+}
+.rt-immersion-map .rt-immersion-section-label > span:first-child {
     opacity: 0.7;
 }
 .rt-dungeon-map-detach,

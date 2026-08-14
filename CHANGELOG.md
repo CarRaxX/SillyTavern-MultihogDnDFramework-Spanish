@@ -4,6 +4,8 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [7.50.0] - 2026-08-14
 
+Dungeon Reality Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats.
+
 ### Added
 - **Dedicated Map Architect**: The narrator can call a one-shot private agent with its own prompt, connection profile, model, preset, lookback, and output budget to create dangerous-site maps.
 - **Initial-map validation and correction**: New maps are checked for valid JSON, exact site/entrance identity, scale, stable IDs, asset references, reciprocal passage details, and a fully connected physical graph. Invalid output receives up to two correction passes and is never partially saved.

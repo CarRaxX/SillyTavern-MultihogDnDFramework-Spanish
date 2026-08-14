@@ -2907,8 +2907,8 @@ async function showComponentsExplanation() {
                 ${card('⛺', 'Benched Party',
         `Tracks party members who are temporarily away from you — hospitalized, scouting ahead, captured, sent on a side task, etc. — in a separate [BENCHED PARTY] roster while reunion remains plausible. The GM is told what this means so it won't narrate them back at your side until the story brings them back on-screen. Benched members become eligible for off-screen simulation updates via World Reports (🌍), allowing the simulator to advance their individual subplots in the background. Turn off if you don't want temporary separations tracked separately from your active party.`
     )}
-                ${card('🗺️', 'Dungeon Reality Mapping (Experimental)',
-        `When you enter a dungeon, ruin, stronghold, lair, or similar high-risk site, the narrator builds a full hidden map of the location before exploration, then resolves traps, stealth, sight lines, and enemies against that map — revealing only what you could actually perceive.`
+                ${card('🗺️', 'Dungeon Reality Mapping (Alpha)',
+        `When you enter a dungeon, ruin, stronghold, lair, or similar high-risk site, a dedicated Map Architect builds a hidden current-state map, then traps, stealth, sight lines, and enemies are resolved against it — revealing only what you could actually perceive. Alpha: expect sharp edges.`
     )}
                 ${card('🧭', 'CYOA Mode',
         `Choose-your-own-adventure style: the narrator ends outputs with numbered courses of action and fitting emojis so you can pick what to do next.`
