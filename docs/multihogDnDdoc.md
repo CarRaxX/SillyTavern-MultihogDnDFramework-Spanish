@@ -572,7 +572,7 @@ The Visuals/Map tab does **not** require Real-Time Visualization or location sce
 
 ### Map Architect settings
 
-Under the Map Architect drawer: connection profile, model, preset, lookback, and output budget. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateDungeonMap` contract is.
+Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, and the architect prompt. Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateDungeonMap` contract is.
 
 ---
 

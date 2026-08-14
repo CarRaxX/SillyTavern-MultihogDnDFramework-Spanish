@@ -14,7 +14,7 @@ An immutable initial map plus append-only room updates creates two competing fac
 
 ## Authority model
 
-- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site. Occupancy on the attached map may lag a few turns behind play because Lorebook Agent updates it on its own cadence; the narrator should use the latest DUNGEON_REALITY block and not invent catch-up facts.
+- The narrator establishes immediate fiction and calls `CreateDungeonMap` once before narrating entry into an unmapped high-risk site. Occupancy on the attached map may lag a few turns behind play because Lorebook Agent updates it on its own cadence; established story events override stale map states (a killed enemy stays dead even if still listed ACTIVE). The narrator must not rewind play or revive entities to match the lagging map.
 - Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
 - Lorebook Agent interprets established consequences and maintains current map state.
 - Player attempts become map facts only after narrator resolution.

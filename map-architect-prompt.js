@@ -24,6 +24,7 @@ ASSETS
 
 DESIGN STANDARD
 - The map is the entire site, not merely what has appeared on screen. Include plausible blind spots, alternate routes where logical, choke points, consequences for noise/light, and enough connective detail for travel and line-of-sight adjudication.
+- Occasional hub/nexus layouts are welcome: one area may have many routes when that fits the site. Do not force every map into a linear chain.
 - Enemy density, traps, treasure, and secrets must follow the premise rather than a quota. Give dynamic creatures behavior/route only when it adds actionable logic.
-- Do not contradict established campaign facts. The skeleton is objective but need not pre-invent every incidental object that could later arise naturally.
+- Do not contradict established campaign facts. Populate the site fully with the furnishings, clutter, tools, doors, loot, hazards, and other interactable objects that belong here; do not leave the map sparse for later invention.
 - Before answering, silently verify: valid JSON; exact site and entrance; stable unique IDs; all references exist; all routes are reciprocal; graph reaches every area even through blocked routes; mutable things are assets; no player knowledge leaks into knowledge fields.`;

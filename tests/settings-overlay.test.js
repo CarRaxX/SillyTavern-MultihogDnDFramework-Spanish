@@ -47,9 +47,16 @@ describe('settings overlay', () => {
             "id: 'gamesystems'",
             "id: 'statetracker'",
             "id: 'agent'",
+            "id: 'maparchitect'",
             "id: 'worldprog'",
             "id: 'companion'",
         ].forEach((fragment) => expect(overlaySource).toContain(fragment));
+
+        const agentIdx = overlaySource.indexOf("id: 'agent'");
+        const mapIdx = overlaySource.indexOf("id: 'maparchitect'");
+        const worldIdx = overlaySource.indexOf("id: 'worldprog'");
+        expect(mapIdx).toBeGreaterThan(agentIdx);
+        expect(worldIdx).toBeGreaterThan(mapIdx);
 
         expect(indexSource).toContain('initSettingsOverlay(settingsHtml');
         expect(indexSource).toContain("settings-stub");

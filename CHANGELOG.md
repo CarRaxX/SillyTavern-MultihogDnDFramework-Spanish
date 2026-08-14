@@ -2,6 +2,26 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.13] - 2026-08-14
+
+### Changed
+- **Map Architect hubs**: The architect prompt now says occasional hub/nexus layouts are welcome — one area may have many routes instead of forcing a linear chain.
+
+## [7.50.12] - 2026-08-14
+
+### Changed
+- **Map Architect density**: The architect prompt no longer says to skip incidental objects. It now tells the model to populate furnishings, clutter, tools, loot, and hazards on the initial map instead of leaving it sparse for later invention.
+
+## [7.50.11] - 2026-08-14
+
+### Changed
+- **Dungeon map lag note**: The narrator now treats established story events as overriding a lagging map (a killed enemy stays dead even if still listed ACTIVE), instead of treating the latest DUNGEON_REALITY occupancy as catch-up truth.
+
+## [7.50.10] - 2026-08-14
+
+### Changed
+- **Map Architect settings tab**: Map Architect now has its own left-rail settings section, directly below Lorebook Agent, matching World Progression and Adventure Companion.
+
 ## [7.50.9] - 2026-08-14
 
 ### Added

@@ -1885,7 +1885,7 @@ export function buildDungeonRealityInjection(site, currentLocation) {
     const legacyDeltas = (site.statusLog || []).map(renderStatusEntry).filter(Boolean);
     const persistedState = locationState
         || (legacyDeltas.length ? legacyDeltas.join('\n') : '- No persisted Location updates yet.');
-    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. The structured map is the current operational snapshot: geometry is structural, while assets carry mutable positions/states and player-knowledge flags. Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
+    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. Geometry is structural. Asset occupancy may lag a few turns behind established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
 }
 
 /** Heuristic used only to emit a loud missing-map diagnostic. */

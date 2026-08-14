@@ -129,6 +129,16 @@ describe('General & Visuals settings', () => {
         ].forEach((id) => expect(companionMarkup).toContain(`id="${id}"`));
     });
 
+    it('places Map Architect directly below Lorebook Agent', () => {
+        const agentStart = settingsMarkup.indexOf('<b>Lorebook Agent</b>');
+        const mapStart = settingsMarkup.indexOf('<b>Map Architect</b>');
+        const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
+
+        expect(agentStart).toBeGreaterThanOrEqual(0);
+        expect(mapStart).toBeGreaterThan(agentStart);
+        expect(worldStart).toBeGreaterThan(mapStart);
+    });
+
     it('places Adventure Companion directly below World Progression', () => {
         const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
         const companionStart = settingsMarkup.indexOf('<b>Adventure Companion</b>');

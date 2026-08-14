@@ -594,6 +594,8 @@ The last guard falls and a loose stone reveals a niche.
         expect(injection).toContain('The cable is frayed.');
         expect(injection).toContain('MUTATION — Lift: disabled');
         expect(injection).toContain('Do not treat it as a menu of allowed actions');
+        expect(injection).toContain('resolved story events override stale positions/states');
+        expect(injection).not.toContain('current operational snapshot');
     });
 
     it('never sends stored structured JSON to the narrator', () => {
