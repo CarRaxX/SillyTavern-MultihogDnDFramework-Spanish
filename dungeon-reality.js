@@ -666,6 +666,80 @@ export function formatDungeonMapForNarrator(documentOrContent, siteFallback = ''
     return lines.join('\n').trim();
 }
 
+/**
+ * Player-facing map prose for Adventure Companion.
+ * Matches Visuals/Map with Reveal all off: visited rooms in full, discovered
+ * names only, unrevealed neighbors as Unexplored, and no hidden assets.
+ */
+export function formatDungeonMapForPlayer(documentOrContent, currentLocation = '') {
+    const document = typeof documentOrContent === 'string'
+        ? parseDungeonMapDocument(documentOrContent, '').document
+        : normalizeDungeonMapDocument(documentOrContent, documentOrContent?.site);
+    const areasById = new Map(document.areas.map(area => [area.id, area]));
+    const revealedAreas = document.areas.filter(area =>
+        area.knowledge === 'VISITED' || area.knowledge === 'DISCOVERED');
+    const revealedIds = new Set(revealedAreas.map(area => area.id));
+    const placement = resolveCurrentMapPlacement(document, currentLocation);
+    const areaLabel = (id) => (revealedIds.has(id) ? (areasById.get(id)?.name || id) : 'Unexplored');
+    const isPlayerVisibleAsset = (asset) => {
+        const knowledge = String(asset?.knowledge || '').toUpperCase();
+        return knowledge === 'KNOWN' || knowledge === 'SUSPECTED';
+    };
+
+    const lines = [`Site: ${document.site}`];
+    const mapKind = normalizeMapSiteKind(document.kind);
+    lines.push(mapKind === 'SETTLEMENT'
+        ? 'Kind: SETTLEMENT (district-scale)'
+        : 'Kind: DUNGEON (room-scale)');
+    if (placement.area && revealedIds.has(placement.area.id)) {
+        const interior = placement.interiorAsset && isPlayerVisibleAsset(placement.interiorAsset)
+            ? placement.interiorAsset.name
+            : (placement.unmatchedInterior || '');
+        lines.push(interior
+            ? `You are here: ${placement.area.name} (in ${interior})`
+            : `You are here: ${placement.area.name}`);
+    } else if (currentLocation) {
+        lines.push(`Current location: ${currentLocation}`);
+    }
+
+    const routes = [];
+    const seen = new Set();
+    for (const area of revealedAreas) {
+        for (const connection of area.connections || []) {
+            const target = areasById.get(connection.to);
+            if (!target) continue;
+            const pairKey = [area.id, target.id].sort().join('|');
+            const key = `${pairKey}:${connection.state}:${connection.detail || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const targetRevealed = revealedIds.has(connection.to);
+            const detail = targetRevealed && connection.detail ? ` — ${connection.detail}` : '';
+            routes.push(`- ${area.name} -> ${areaLabel(connection.to)} [${connection.state}]${detail}`);
+        }
+    }
+    if (routes.length) lines.push('', 'Known routes:', ...routes);
+
+    for (const area of revealedAreas) {
+        const here = placement.area?.id === area.id ? ' (you are here)' : '';
+        lines.push('', `Area: ${area.name} [${area.knowledge}]${here}`);
+        if (area.knowledge !== 'VISITED') {
+            lines.push('- Seen from outside; interior not yet revealed.');
+            continue;
+        }
+        for (const fact of area.geometry) lines.push(`- ${fact}`);
+        const assets = document.assets.filter(asset =>
+            asset.location === area.id && isPlayerVisibleAsset(asset));
+        if (assets.length) {
+            lines.push('Known occupants / objects:');
+            for (const asset of assets) lines.push(...formatMapAsset(asset, areasById));
+        }
+    }
+    if (!revealedAreas.length) {
+        lines.push('', 'No revealed rooms or districts yet.');
+    }
+    return lines.join('\n').trim();
+}
+
 /** Replace only the private map section, retaining [CORE] and visible chronicles. */
 export function replaceDungeonMapSection(content, mapBody) {
     const body = String(mapBody || '').trim();

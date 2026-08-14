@@ -10,7 +10,7 @@ When **Tutorial Mode** is enabled, this document is injected into every Adventur
 
 The Adventure Companion's CHAT view can be detached into a draggable, resizable floating panel with the **⧉** control on desktop. On mobile it always uses the full-height floating presentation, with no detach or reattach control. Its header keeps the same collapse/expand arrow used by the main tracker, so the player can minimize CHAT without leaving it. Reattaching moves the same live conversation back into the State Tracker panel, and closing CHAT reattaches it automatically.
 
-Adventure Companion has its own **Connection Settings** drawer and can use Main API, a Connection **Profile**, or dedicated Ollama/OpenAI endpoints independently from State Tracker. The same drawer mirrors all CHAT options: Tutorial Mode, story lookback count / All, Lorebook Agent lore injection, and State Tracker memo injection.
+Adventure Companion has its own **Connection Settings** drawer and can use Main API, a Connection **Profile**, or dedicated Ollama/OpenAI endpoints independently from State Tracker. The same drawer mirrors all CHAT options: Tutorial Mode, story lookback count / All, Lorebook Agent lore injection, State Tracker memo injection, and current site map injection.
 
 The **Adventure Companion can perform exactly three actions** when ordinary conversational language shows clear intent — and nothing else:
 
@@ -531,7 +531,7 @@ Location Mapping is **alpha**. The mapped-site loop works in play, but expect sh
 
 It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
-The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are.
+The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are. If they enable **Inject current site map** in CHAT options, the Companion receives the same knowledge as Visuals/Map with Reveal all off: visited interiors, discovered names, and unexplored neighbors as unknown. It must not invent hidden rooms, traps, or occupants.
 
 ### How a map is created
 

@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.82.0] - 2026-08-14
+
+### Added
+- **Adventure Companion site map**: CHAT options and the Adventure Companion settings drawer can inject the currently active player-facing site map (same knowledge fog as Visuals/Map with Reveal all off) so the Companion can discuss exploration. Visited rooms include known contents; discovered names are outside-only; unrevealed rooms, traps, and occupants stay hidden. Injected lore also strips private `[MAP]` JSON.
+
 ## [7.80.0] - 2026-08-14
 
 Public release of Location Mapping: dedicated Map Updater, settlement maps, ARCHIVE INDEX existence checks, and a Components kill switch that actually stops architect/updater API calls. See 7.50.14–7.50.30 for the stepwise notes.

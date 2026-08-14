@@ -9,6 +9,7 @@ import { cleanToolCallMessage, memoForGmContext } from './memo-processor.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { isRouterRunning, runRouterPass, sendDirectPrompt } from './src/app/runtime-bridge.js';
 import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { formatDungeonMapForPlayer, stripDungeonMapSection } from './dungeon-reality.js';
 import { clampFloatingPanelToViewport, isMobileLayout, makeDraggable, makeResizableBL, makeResizableBR, resolveViewportClampedGeometry } from './ui-geometry.js';
 
 const FOLDER_NAME = (function () {
@@ -31,7 +32,7 @@ const COMPANION_BY_CHAT_KEY = 'rpg_tracker_companion_by_chat_v1';
 const LEGACY_HISTORY_KEY = 'rpg_tracker_tutorial_chat';
 const LEGACY_LOOKBACK_KEY = 'rpg_tracker_tutorial_lookback';
 
-const SHELL_VERSION = '8';
+const SHELL_VERSION = '9';
 const DETACHED_CHAT_KEY = 'rpg_tracker_adventure_companion_detached';
 const DETACHED_CHAT_GEO_KEY = 'rpg_tracker_geometry_adventure_companion';
 const CHAT_OPEN_KEY = 'rpg_tracker_adventure_companion_open';
@@ -43,7 +44,7 @@ export const COMPANION_PERSONA = `You are the Adventure Companion — a witty, i
 Rules:
 - Help with entertainment, brainstorming, theories, roleplay ideas, jokes, and discussing what just happened in the story.
 - Answer questions about the Multihog D&D Framework. When a DOCUMENTATION block is present, treat it as the source of truth and prefer it over guesswork.
-- Use CURRENT STORY CONTEXT, STATE MEMO, and ACTIVE LORE when provided. Stay consistent with those facts; do not contradict them.
+- Use CURRENT STORY CONTEXT, STATE MEMO, ACTIVE LORE, and ACTIVE SITE MAP when provided. Stay consistent with those facts; do not contradict them. The site map is player-facing knowledge (same as Visuals/Map): discuss exploration from what is already revealed, and treat Unexplored neighbors as unknown rather than inventing hidden rooms, traps, or occupants.
 - Do not invent major plot outcomes as if you were the Game Master running the live game — suggest possibilities and riff, rather than declaring canon.
 - For framework and settings questions, be brief and practical. If the supplied documentation does not cover something, say you are unsure rather than inventing settings, IDs, or behavior.
 - Keep replies engaging but not endless. Match the player's energy.
@@ -149,7 +150,7 @@ const MAX_COMPANION_AGENT_TURNS = 6;
 
 /**
  * @typedef {{ lookback: number, lookbackAll: boolean, history: Array<{role:'user'|'assistant', content:string}> }} ModePrefs
- * @typedef {{ tutorialMode: boolean, injectLore: boolean, injectMemo: boolean, companion: ModePrefs }} ChatPrefs
+ * @typedef {{ tutorialMode: boolean, injectLore: boolean, injectMemo: boolean, injectMap: boolean, companion: ModePrefs }} ChatPrefs
  */
 
 /** @returns {ModePrefs} */
@@ -163,6 +164,7 @@ function defaultPrefs() {
         tutorialMode: false,
         injectLore: false,
         injectMemo: false,
+        injectMap: false,
         companion: defaultCompanionPrefs(),
     };
 }
@@ -224,6 +226,7 @@ function mergePrefs(base, parsed) {
             : parsed.mode === 'tutorial',
         injectLore: !!parsed.injectLore,
         injectMemo: !!parsed.injectMemo,
+        injectMap: !!parsed.injectMap,
         companion,
     };
 }
@@ -511,12 +514,13 @@ export function getAdventureCompanionRequestSettings(baseSettings = getSettings(
     };
 }
 
-/** @returns {{tutorialMode:boolean, injectLore:boolean, injectMemo:boolean, lookback:number, lookbackAll:boolean}} */
+/** @returns {{tutorialMode:boolean, injectLore:boolean, injectMemo:boolean, injectMap:boolean, lookback:number, lookbackAll:boolean}} */
 export function getAdventureCompanionPreferences() {
     return {
         tutorialMode: !!_prefs.tutorialMode,
         injectLore: !!_prefs.injectLore,
         injectMemo: !!_prefs.injectMemo,
+        injectMap: !!_prefs.injectMap,
         lookback: _prefs.companion.lookback,
         lookbackAll: !!_prefs.companion.lookbackAll,
     };
@@ -532,6 +536,7 @@ export function updateAdventureCompanionPreferences(patch = {}) {
     if (typeof patch.tutorialMode === 'boolean') _prefs.tutorialMode = patch.tutorialMode;
     if (typeof patch.injectLore === 'boolean') _prefs.injectLore = patch.injectLore;
     if (typeof patch.injectMemo === 'boolean') _prefs.injectMemo = patch.injectMemo;
+    if (typeof patch.injectMap === 'boolean') _prefs.injectMap = patch.injectMap;
     if (typeof patch.lookbackAll === 'boolean') _prefs.companion.lookbackAll = patch.lookbackAll;
     if (patch.lookback !== undefined) {
         let lookback = parseInt(String(patch.lookback), 10);
@@ -549,11 +554,13 @@ function syncCompanionSettingsDrawerUi(prefs = _prefs) {
     const tutorial = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_tutorial_mode'));
     const lore = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_inject_lore'));
     const memo = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_inject_memo'));
+    const map = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_inject_map'));
     const lookback = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_lookback'));
     const lookbackAll = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_lookback_all'));
     if (tutorial) tutorial.checked = !!prefs.tutorialMode;
     if (lore) lore.checked = !!prefs.injectLore;
     if (memo) memo.checked = !!prefs.injectMemo;
+    if (map) map.checked = !!prefs.injectMap;
     if (lookbackAll) lookbackAll.checked = !!prefs.companion.lookbackAll;
     if (lookback) {
         lookback.value = String(prefs.companion.lookback);
@@ -573,6 +580,7 @@ export function bindAdventureCompanionSettingsDrawer() {
     bindCheckbox('rpg_adventure_companion_tutorial_mode', 'tutorialMode');
     bindCheckbox('rpg_adventure_companion_inject_lore', 'injectLore');
     bindCheckbox('rpg_adventure_companion_inject_memo', 'injectMemo');
+    bindCheckbox('rpg_adventure_companion_inject_map', 'injectMap');
     bindCheckbox('rpg_adventure_companion_lookback_all', 'lookbackAll');
 
     const lookback = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_adventure_companion_lookback'));
@@ -785,10 +793,36 @@ async function buildLoreContext() {
         const entry = bookCache[bookName]?.entries?.[uid];
         if (!entry?.content) continue;
         const title = (entry.comment || '').replace(/^\[.*?\]\s*/i, '').trim() || uid;
-        blocks.push(`### ${title}\n${String(entry.content).trim()}`);
+        const visible = stripDungeonMapSection(String(entry.content).trim());
+        if (!visible) continue;
+        blocks.push(`### ${title}\n${visible}`);
     }
     if (!blocks.length) return '';
     return `## ACTIVE LORE (Lorebook Agent)\n${blocks.join('\n\n')}`;
+}
+
+/**
+ * Player-facing current site map (same knowledge fog as Visuals/Map).
+ * @returns {Promise<string>}
+ */
+async function buildMapContext() {
+    try {
+        const { loadActiveDungeonMapContext } = await import('./router.js');
+        const loaded = await loadActiveDungeonMapContext();
+        const document = loaded?.context?.document;
+        if (!document) {
+            return '## ACTIVE SITE MAP\nThe party is not inside a mapped site right now.';
+        }
+        const currentLocation = loaded.currentLocation || loaded.context.currentLocation || '';
+        const body = formatDungeonMapForPlayer(document, currentLocation);
+        return `## ACTIVE SITE MAP (player-facing, same knowledge as Visuals/Map with Reveal all off)
+Use this to discuss exploration and possible actions. You only know visited interiors and discovered names. Unexplored neighbors are unknown — do not invent hidden rooms, traps, or occupants.
+
+${body}`;
+    } catch (err) {
+        console.warn('[CHAT] Failed to load active map:', err);
+        return '## ACTIVE SITE MAP\nThe active map could not be loaded.';
+    }
 }
 
 /**
@@ -845,9 +879,10 @@ ${choices.map((choice) => `${choice.index}. ${choice.text}`).join('\n')}`;
  * @param {string} [opts.narrative]
  * @param {string} [opts.memo]
  * @param {string} [opts.lore]
+ * @param {string} [opts.map]
  * @param {string} [opts.playerAction]
  */
-function buildSystemPrompt({ doc = '', narrative = '', memo = '', lore = '', playerAction = '' } = {}) {
+function buildSystemPrompt({ doc = '', narrative = '', memo = '', lore = '', map = '', playerAction = '' } = {}) {
     let prompt = COMPANION_PERSONA;
 
     if (doc) {
@@ -861,6 +896,9 @@ function buildSystemPrompt({ doc = '', narrative = '', memo = '', lore = '', pla
     }
     if (lore) {
         prompt += `\n\n--- LOREBOOK ---\n${lore}\n--- END LOREBOOK ---`;
+    }
+    if (map) {
+        prompt += `\n\n--- ACTIVE SITE MAP ---\n${map}\n--- END ACTIVE SITE MAP ---`;
     }
     if (playerAction) {
         prompt += `\n\n--- PLAYER ACTION CAPABILITY ---\n${playerAction}\n--- END PLAYER ACTION CAPABILITY ---`;
@@ -1332,9 +1370,11 @@ function syncGearUi() {
     const root = chatUiRoot();
     const lore = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-lore'));
     const memo = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-memo'));
+    const map = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-map'));
     const tutorial = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-tutorial-mode'));
     if (lore) lore.checked = !!_prefs.injectLore;
     if (memo) memo.checked = !!_prefs.injectMemo;
+    if (map) map.checked = !!_prefs.injectMap;
     if (tutorial) tutorial.checked = !!_prefs.tutorialMode;
 }
 
@@ -1389,6 +1429,10 @@ function ensureChatShell(panel) {
                     <label class="rt-chat-gear-item" role="menuitemcheckbox">
                         <input type="checkbox" id="rt-chat-inject-memo" ${_prefs.injectMemo ? 'checked' : ''}>
                         <span>Inject State Tracker</span>
+                    </label>
+                    <label class="rt-chat-gear-item" role="menuitemcheckbox" title="Attach the player-facing current site map (Visuals/Map knowledge).">
+                        <input type="checkbox" id="rt-chat-inject-map" ${_prefs.injectMap ? 'checked' : ''}>
+                        <span>Inject current site map</span>
                     </label>
                 </div>
             </div>
@@ -1888,8 +1932,10 @@ async function sendMessage() {
         readLookbackFromUi();
         const loreChk = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-lore'));
         const memoChk = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-memo'));
+        const mapChk = /** @type {HTMLInputElement|null} */ (root?.querySelector('#rt-chat-inject-map'));
         _prefs.injectLore = !!loreChk?.checked;
         _prefs.injectMemo = !!memoChk?.checked;
+        _prefs.injectMap = !!mapChk?.checked;
         savePrefs(_prefs);
 
         const narrative = (mp.lookbackAll || mp.lookback > 0)
@@ -1897,10 +1943,11 @@ async function sendMessage() {
             : '';
         const memo = _prefs.injectMemo ? buildMemoContext() : '';
         const lore = _prefs.injectLore ? await buildLoreContext() : '';
+        const map = _prefs.injectMap ? await buildMapContext() : '';
         const doc = _prefs.tutorialMode ? await loadDocumentation() : '';
         const playerAction = buildActForUserContext();
 
-        const systemPrompt = buildSystemPrompt({ doc, narrative, memo, lore, playerAction });
+        const systemPrompt = buildSystemPrompt({ doc, narrative, memo, lore, map, playerAction });
         const messages = [
             { role: 'system', content: systemPrompt },
             ...mp.history.map((m) => ({ role: m.role, content: m.content })),
@@ -2124,6 +2171,14 @@ function bindAdventureCompanionControls(panel) {
         memoChk.dataset.rtTutorialBound = '1';
         memoChk.addEventListener('change', () => {
             updateAdventureCompanionPreferences({ injectMemo: memoChk.checked });
+        });
+    }
+
+    const mapChk = panel.querySelector('#rt-chat-inject-map');
+    if (mapChk instanceof HTMLInputElement && !mapChk.dataset.rtTutorialBound) {
+        mapChk.dataset.rtTutorialBound = '1';
+        mapChk.addEventListener('change', () => {
+            updateAdventureCompanionPreferences({ injectMap: mapChk.checked });
         });
     }
 
