@@ -10,7 +10,9 @@ import {
     resolvePlayerBubble,
     selectMappedSitesForWorldReport,
     siteEvolutionDue,
+    stampEvolutionLastFired,
     summarizeEvolutionDigest,
+    summarizeMapEvolutionSchedule,
 } from '../map-evolution-lib.js';
 
 const tomb = {
@@ -60,6 +62,9 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Do not invent raids');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('own factions');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('WP is primary');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Never write MOVE_ASSET with "location"');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('MOVE_ASSET uses to (required)');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('World Report');
@@ -122,6 +127,24 @@ describe('Map Evolution', () => {
         expect(siteEvolutionDue(null, 8 * 60, 4)).toEqual({ due: false, baseline: true });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 3 * 60, 4)).toEqual({ due: false, baseline: false });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 4 * 60, 4)).toEqual({ due: true, baseline: false });
+    });
+
+    it('summarizes last/next Evolution times like World Progression', () => {
+        expect(summarizeMapEvolutionSchedule({}, { intervalHours: 4, currentMinutes: 8 * 60 })).toEqual({
+            lastMins: -1,
+            nextMins: 12 * 60,
+        });
+        expect(summarizeMapEvolutionSchedule({
+            hall: 'Day 1, 08:00',
+            docks: 'Day 1, 12:00',
+        }, { intervalHours: 4, currentMinutes: 16 * 60 })).toEqual({
+            lastMins: 12 * 60,
+            nextMins: 12 * 60,
+        });
+        const stamped = stampEvolutionLastFired({}, ['Hall of the Ember-Ancestors', 'Morrowfen'], 'Day 2, 04:00');
+        expect(stamped['hall of the ember ancestors']).toBe('Day 2, 04:00');
+        expect(stamped.morrowfen).toBe('Day 2, 04:00');
+        expect(Object.keys(stamped)).toHaveLength(2);
     });
 
     it('filters mapped sites by selected roots', () => {
@@ -238,7 +261,7 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('listMappedEvolutionSites');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
-        expect(evolution).toContain('PRIOR EVOLUTION THIS PERIOD');
+        expect(evolution).toContain('Field reminder: MOVE_ASSET uses "to"');
         expect(evolution).toContain('export async function groundMapsAfterWorldProgression');
         expect(evolution).toContain('export async function maybeRunMapEvolution');
         expect(evolution).toContain("from './map-evolution-lib.js'");
@@ -263,6 +286,14 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_randomize"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_selected_list"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_evolve_now"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_last_fired"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_next_report_val"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_btn_override_next"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_reset_timeline"');
+        expect(settingsMarkup).toContain('<b style="font-size:0.9em; flex:1;">Run now</b>');
+        expect(settingsMarkup).toContain('does not require Selected maps');
+        expect(indexSource).not.toContain("$('#rpg_map_evolution_selected_row').toggle(scope === 'selected')");
+        expect(indexSource).toContain("$('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected')");
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
         expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
         expect(evolution).toContain('mapRuntimeConnectionSource');

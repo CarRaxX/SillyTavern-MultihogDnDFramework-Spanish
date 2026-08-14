@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.86.0] - 2026-08-15
+
+### Changed
+- **Map Evolution Run now**: the checklist and **Evolve checked maps now** live in their own always-visible section. Interval **Selected maps** still uses those checks for automatic ticks, but you no longer have to pick that option to run evolution manually.
+- **Map Evolution MOVE_ASSET schema**: the shipped prompt now shows `to`/`from` (never `location`) and a move example. Correction retries also repeat that field reminder. Reset the Evolution prompt in settings if you still have an older copy.
+- **Map Evolution schedule**: Last Evolved / Next Scheduled, Override, and Reset Timeline match World Progression. Next is the soonest per-site interval due; Override stamps every mapped site so the next tick fires at the chosen in-world time.
+
 ## [7.85.0] - 2026-08-15
 
 ### Changed

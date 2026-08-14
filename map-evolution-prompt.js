@@ -32,6 +32,9 @@ KIND
 OPERATIONS
 - Flat objects with op, not type. Do not nest fields under asset.
 - People are CREATURE or GROUP, never kind NPC.
+- ADD_ASSET uses location (the destination area ID).
+- MOVE_ASSET uses to (required) and from (optional, the asset's current area). Never location — that field is rejected on MOVE_ASSET.
+- SET_AREA geometry_append is an array of strings, never a bare string.
 - Leaving this site: SET_ASSET state FLEEING or REMOVE_ASSET, with detail naming the destination in prose. You cannot MOVE_ASSET to another map.
 - Arriving from another site (see PRIOR EVOLUTION digest): ADD_ASSET here.
 
@@ -42,7 +45,12 @@ No change:
 Ground a named departure:
 {"operation_id":"evo-day2-0800-odran-fled","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"FLEEING","knowledge":"KNOWN","detail":"Departed for the Hall of the Ember-Ancestors."}]}
 
+Move an existing occupant along an OPEN route (to/from, not location):
+{"operation_id":"evo-day3-scavengers-forge","operations":[{"op":"MOVE_ASSET","evidence":"EVOLVED","asset_id":"ember-scavengers","from":"the-ashen-ossuary","to":"the-forge-of-dormant-embers","detail":"Picked the ossuary clean and moved into the forge."}]}
+
 Rival delvers occupying a vacated unrevealed room (destroyed original stays dead):
 {"operation_id":"evo-day2-0800-ossuary-looters","operations":[{"op":"ADD_ASSET","evidence":"EVOLVED","name":"Salt-Road Delvers","kind":"GROUP","location":"the-ashen-ossuary","state":"ACTIVE","knowledge":"UNREVEALED","origin":"MAP_EVOLUTION","faction":"Independent","detail":"A small rival party picking through the ossuary after the previous occupants fell.","distinct_from":["crawling-dead-pack"]}]}
 
-Before answering, silently verify: valid JSON; evidence EVOLVED; exact existing IDs unless ADD_ASSET; player bubble untouched; no revivals; prefer a real change over noop when time has passed; that change still makes logical and narrative sense for this site.`;
+Never write MOVE_ASSET with "location". Never write SET_AREA geometry_append as a string.
+
+Before answering, silently verify: valid JSON; evidence EVOLVED; exact existing IDs unless ADD_ASSET; MOVE_ASSET uses to/from not location; SET_AREA geometry_append is an array; player bubble untouched; no revivals; prefer a real change over noop when time has passed; that change still makes logical and narrative sense for this site.`;

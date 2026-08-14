@@ -1453,12 +1453,34 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
-                                        Separate from occupancy. Advances mapped sites off-screen on in-world time, and grounds World Progression reports onto matching maps one site at a time. Interval ticks can cover the current map, N maps, every mapped site, or a checklist. Play-menu Map Evolution lets you pick any maps and run them now. Never mixed into the Map Updater request. Uses the Map Updater &amp; Evolution connection.
+                                        Separate from occupancy. Advances mapped sites off-screen on in-world time, and grounds World Progression reports onto matching maps one site at a time. Interval ticks can cover the current map, N maps, every mapped site, or the checklist below. Run now and the play-menu picker are always available, independent of the interval setting. Never mixed into the Map Updater request. Uses the Map Updater &amp; Evolution connection.
                                     </div>
                                     <label class="checkbox_label">
                                         <input id="rpg_map_evolution_enabled" type="checkbox" checked />
                                         <span>Evolve mapped sites automatically (interval restlessness + World Progression grounding)</span>
                                     </label>
+                                    <div class="rpg-wp-status-card" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; margin-bottom: 4px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82em; opacity: 0.85; margin-bottom: 10px;">
+                                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Last Evolved</span>
+                                                <span id="rpg_map_evolution_last_fired" style="font-family: monospace; font-weight: bold;">—</span>
+                                            </div>
+                                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Last Evolved In-World</span>
+                                                <span id="rpg_map_evolution_last_report_val" style="font-family: monospace; font-weight: bold;">—</span>
+                                            </div>
+                                            <div style="display: flex; flex-direction: column; gap: 2px; grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; margin-top: 4px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Next Scheduled Evolution</span>
+                                                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                                    <span id="rpg_map_evolution_next_report_val" style="font-family: monospace; font-weight: bold;">—</span>
+                                                    <button id="rpg_map_evolution_btn_override_next" class="menu_button interactable" style="margin: 0; padding: 2px 8px; font-size: 0.85em; width: auto;" title="Override the in-world time when the next interval tick should fire">Override</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button id="rpg_map_evolution_reset_timeline" class="menu_button interactable" title="Clears per-site last-evolved timestamps so Map Evolution starts fresh from the current time" style="margin: 0; background: rgba(234, 67, 53, 0.08); border-color: rgba(234, 67, 53, 0.3); color: rgba(234,67,53,0.8); font-size: 0.8em; font-weight: bold; width: 100%;">
+                                            <i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> Reset Timeline
+                                        </button>
+                                    </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                                         <label style="flex:1; min-width:140px;">Interval (in-world hours)
                                             <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" class="text_pole" title="How often a mapped site in the interval pool may restlessly evolve. World Progression grounding always runs after a report, independent of this timer." />
@@ -1484,11 +1506,15 @@
                                             <span>Randomize which due maps are picked</span>
                                         </label>
                                     </div>
-                                    <div id="rpg_map_evolution_selected_row" class="flex-container flexFlowColumn gap-1">
+                                    <div id="rpg_map_evolution_interval_selected_hint" style="display:none; font-size:0.78em; opacity:0.65; line-height:1.35;">
+                                        Interval ticks use the maps checked in Run now below.
+                                    </div>
+                                    <div id="rpg_map_evolution_selected_row" class="flex-container flexFlowColumn gap-1" style="margin-top:4px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
                                         <div class="flex-container gap-1" style="align-items:center; flex-wrap:wrap;">
-                                            <span style="font-size:0.78em; opacity:0.65; flex:1;">Interval ticks only consider checked maps. Play-menu Map Evolution can still pick any map on demand.</span>
+                                            <b style="font-size:0.9em; flex:1;">Run now</b>
                                             <button id="rpg_map_evolution_selected_refresh" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reload mapped sites from this chat">Refresh</button>
                                         </div>
+                                        <span style="font-size:0.78em; opacity:0.65; line-height:1.35;">Check maps and evolve them immediately. This does not wait for the interval, and does not require Selected maps above. Interval ticks only use these checks when Maps per interval tick is Selected maps.</span>
                                         <div class="flex-container gap-1" style="flex-wrap:wrap;">
                                             <button id="rpg_map_evolution_selected_all" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;">All</button>
                                             <button id="rpg_map_evolution_selected_none" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;">None</button>

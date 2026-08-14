@@ -1,6 +1,7 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { applyChatSetup, resetChatSetupToStock } from '../../state/chat-setup.js';
 import { ensureDungeonMapHistory } from '../../state/dungeon-map-history.js';
+import { summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
 
 /** Restores one chat-linked tracker snapshot and synchronizes dependent UI. */
 export function createChatStateLoader({
@@ -268,6 +269,19 @@ export function createChatStateLoader({
             if (tMins >= 0) nextMins = tMins + intervalMinutes;
         }
         $('#rpg_world_progression_next_report_val').text(nextMins >= 0 ? _fmtWpMins(nextMins) : '—');
+
+        const evoSchedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+            intervalHours: s.mapEvolutionIntervalHours,
+            currentMinutes: (() => {
+                const tMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+                const tStr = tMatch ? extractCurrentTimeStr(tMatch[1]) : '';
+                return tStr ? (parseInWorldTime(tStr) ?? -1) : -1;
+            })(),
+        });
+        const evoLast = evoSchedule.lastMins >= 0 ? formatInWorldTime(evoSchedule.lastMins) : 'Never';
+        $('#rpg_map_evolution_last_fired').text(evoLast);
+        $('#rpg_map_evolution_last_report_val').text(evoLast);
+        $('#rpg_map_evolution_next_report_val').text(evoSchedule.nextMins >= 0 ? formatInWorldTime(evoSchedule.nextMins) : '—');
 
         // Sync consolidation fields
         $('#rpg_world_progression_consolidate_enabled').prop('checked', !!s.worldProgressionConsolidateEnabled);

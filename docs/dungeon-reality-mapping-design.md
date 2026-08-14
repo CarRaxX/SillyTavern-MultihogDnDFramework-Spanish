@@ -144,7 +144,7 @@ Map Evolution is a dedicated module (`map-evolution.js`, own prompt) — never m
 |---|---|---|
 | Interval restlessness | In-world hours (default 4) for the configured tick pool (current map, N due maps, all due maps, or a selected checklist). Runs even when the party is not inside a mapped site unless the scope is current-map-only. | Sparse local movement, restock, decay |
 | World Progression grounding | After every successful World Report | Match named entities onto prefiltered maps |
-| On-demand | Play-menu picker or settings **Evolve checked maps now** | Same Evolution writer; skips the interval due-check |
+| On-demand | Play-menu picker or settings **Run now** (always visible, independent of interval tick scope) | Same Evolution writer; skips the interval due-check |
 
 JavaScript prefilters sites (site-name hit, asset-name hit, faction hit) and calls Evolution **sequentially**, one site per request. Hosts (matched living assets) run first; destination sites follow. Cross-site continuity is a short **PRIOR EVOLUTION THIS PERIOD** digest (leave = FLEEING/REMOVE_ASSET; arrive = ADD_ASSET). All maps in the campaign stack are writable; occupancy stays active-site-only.
 

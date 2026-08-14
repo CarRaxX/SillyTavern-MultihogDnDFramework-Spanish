@@ -4,10 +4,8 @@
  * Separate module from Map Updater occupancy: own prompt, own cadence, same
  * transaction API. Never mixed into the occupancy request.
  */
-import {
-    getSettings,
-    persistMapEvolutionState,
-} from './state-manager.js';
+import { getSettings, persistMapEvolutionState } from './state-manager.js';
+import { runtimeState } from './src/app/runtime-state.js';
 import { sendStateRequest, isCombatActive } from './llm-client.js';
 import { extractCurrentTimeStr } from './memo-processor.js';
 import {
@@ -174,6 +172,8 @@ Requested site: ${site.siteRoot}
 
 VALIDATION ERRORS
 ${formatFailure(errors)}
+
+Field reminder: MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
 
 PREVIOUS OUTPUT
 ${priorOutput}
@@ -455,6 +455,9 @@ export async function runMapEvolutionPass({
         }
 
         persistMapEvolutionState();
+        if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
+            runtimeState.updateMapEvolutionScheduleDisplayRef();
+        }
         const applied = results.filter(row => row?.ok && !row.noop).length;
         const noops = results.filter(row => row?.noop).length;
         const failed = results.filter(row => row && row.ok === false).length;

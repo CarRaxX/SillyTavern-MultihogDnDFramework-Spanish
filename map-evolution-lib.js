@@ -7,6 +7,7 @@ import {
     normalizeDungeonLabel,
     resolveCurrentMapPlacement,
 } from './dungeon-reality.js';
+import { parseInWorldTime } from './memo-processor.js';
 
 const MIN_MENTION_LENGTH = 4;
 
@@ -97,6 +98,40 @@ export function siteEvolutionDue(lastMinutes, currentMinutes, intervalHours) {
     if (!Number.isFinite(lastMinutes) || lastMinutes < 0) return { due: false, baseline: true };
     if (!Number.isFinite(currentMinutes) || currentMinutes < 0) return { due: false, baseline: false };
     return { due: (currentMinutes - lastMinutes) >= interval, baseline: false };
+}
+
+function parseFiredMinutes(label) {
+    const mins = parseInWorldTime(label);
+    return mins != null && Number.isFinite(mins) && mins >= 0 ? mins : -1;
+}
+
+/**
+ * WP-style last/next readout for Map Evolution's per-site interval clocks.
+ * Last = most recent site stamp. Next = soonest last+interval, or current+interval if none.
+ */
+export function summarizeMapEvolutionSchedule(lastFiredBySite, {
+    intervalHours = 4,
+    currentMinutes = -1,
+} = {}) {
+    const interval = Math.max(1, Number(intervalHours) || 4) * 60;
+    const times = Object.values(lastFiredBySite && typeof lastFiredBySite === 'object' ? lastFiredBySite : {})
+        .map(parseFiredMinutes)
+        .filter(mins => mins >= 0);
+    const lastMins = times.length ? Math.max(...times) : -1;
+    let nextMins = -1;
+    if (times.length) nextMins = Math.min(...times.map(mins => mins + interval));
+    else if (Number.isFinite(currentMinutes) && currentMinutes >= 0) nextMins = currentMinutes + interval;
+    return { lastMins, nextMins };
+}
+
+/** Stamp one last-fired in-world label onto every listed site root. */
+export function stampEvolutionLastFired(lastFiredBySite, roots, timeLabel) {
+    const next = { ...(lastFiredBySite && typeof lastFiredBySite === 'object' ? lastFiredBySite : {}) };
+    const label = String(timeLabel || '').trim();
+    for (const root of normalizeEvolutionRootList(roots)) {
+        next[normalizeDungeonLabel(root)] = label;
+    }
+    return next;
 }
 
 export const MAP_EVOLUTION_TICK_SCOPES = ['active', 'count', 'all', 'selected'];

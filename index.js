@@ -13,6 +13,7 @@ import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { groundMapsAfterWorldProgression, isMapEvolutionRunning, listMappedEvolutionSites, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
+import { summarizeMapEvolutionSchedule, stampEvolutionLastFired } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -215,7 +216,7 @@ function persistMapEvolutionSelectedRootsFromUi() {
 function syncMapEvolutionTickRows(settings) {
     const scope = settings?.mapEvolutionTickScope || 'active';
     $('#rpg_map_evolution_n_row').toggle(scope === 'count' || scope === 'selected');
-    $('#rpg_map_evolution_selected_row').toggle(scope === 'selected');
+    $('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected');
 }
 
 async function refreshMapEvolutionSelectedList() {
@@ -245,14 +246,36 @@ async function refreshMapEvolutionSelectedList() {
     }
 }
 
+function currentMemoMinutes() {
+    const s = getSettings();
+    const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
+    return timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
+}
+
+function updateMapEvolutionScheduleDisplay() {
+    const s = getSettings();
+    const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+        intervalHours: s.mapEvolutionIntervalHours,
+        currentMinutes: currentMemoMinutes(),
+    });
+    const lastText = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Never';
+    $('#rpg_map_evolution_last_fired').text(lastText);
+    $('#rpg_map_evolution_last_report_val').text(lastText);
+    $('#rpg_map_evolution_next_report_val').text(schedule.nextMins >= 0 ? formatInWorldTime(schedule.nextMins) : '—');
+}
+
 function applyMapEvolutionTickSettingsToUi(settings) {
     const s = settings || getSettings();
     $('#rpg_map_evolution_tick_scope').val(s.mapEvolutionTickScope || 'active');
     $('#rpg_map_evolution_tick_count').val(s.mapEvolutionTickCount ?? 1);
     $('#rpg_map_evolution_tick_randomize').prop('checked', s.mapEvolutionTickRandomize !== false);
     syncMapEvolutionTickRows(s);
-    if ((s.mapEvolutionTickScope || 'active') === 'selected') void refreshMapEvolutionSelectedList();
+    void refreshMapEvolutionSelectedList();
+    updateMapEvolutionScheduleDisplay();
 }
+
+runtimeState.updateMapEvolutionScheduleDisplayRef = updateMapEvolutionScheduleDisplay;
 
 function applyMapRuntimeConnectionSettingsToUi(settings) {
     const s = settings || getSettings();
@@ -2775,6 +2798,8 @@ function loadProfile(name) {
     s.mapEvolutionTickRandomize = p.mapEvolutionTickRandomize !== false;
     s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(p.mapEvolutionSelectedRoots || []));
     s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+    s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(p.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionLastSiteRoot = p.mapEvolutionLastSiteRoot || '';
 
     s.worldConnectionSource = p.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = p.worldConnectionProfileId || "";
@@ -5257,6 +5282,7 @@ function organizeConnectionSettingsUI() {
             settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 4));
             $(this).val(settings.mapEvolutionIntervalHours);
             saveSettings();
+            updateMapEvolutionScheduleDisplay();
         });
         $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
             settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
@@ -5267,7 +5293,7 @@ function organizeConnectionSettingsUI() {
         $('#rpg_map_evolution_tick_scope').on('change', function () {
             settings.mapEvolutionTickScope = String($(this).val() || 'active');
             syncMapEvolutionTickRows(settings);
-            if (settings.mapEvolutionTickScope === 'selected') void refreshMapEvolutionSelectedList();
+            void refreshMapEvolutionSelectedList();
             saveSettings();
         });
         $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 1).on('change', function () {
@@ -5316,6 +5342,68 @@ function organizeConnectionSettingsUI() {
             toastr['info']('Starting Map Evolution pass...');
             const result = await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots: roots });
             notifyMapEvolutionPassResult(result);
+            updateMapEvolutionScheduleDisplay();
+        });
+        $('#rpg_map_evolution_btn_override_next').on('click', async function () {
+            const s = getSettings();
+            const intervalHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 4);
+            const intervalMinutes = intervalHours * 60;
+            const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+                intervalHours,
+                currentMinutes: currentMemoMinutes(),
+            });
+            const currentNextMins = schedule.nextMins >= 0 ? schedule.nextMins : intervalMinutes;
+
+            function fmtHint(totalMins) {
+                if (totalMins < 0) return s.useDdMmYyFormat ? '01/01/2026, 08:00 AM' : (s.use24hTime ? 'Day 1, 00:00' : 'Day 1, 12:00 AM');
+                return formatInWorldTime(totalMins);
+            }
+
+            const acceptedFormats = s.useDdMmYyFormat
+                ? 'Accepted formats: "06/01/2026, 08:00 AM", "06/01/2026, 08:00", "06/01/2026"'
+                : 'Accepted formats: "Day 6, 08:00 AM", "Day 6, 08:00", "Day 6"';
+
+            const userInput = window.prompt(
+                'Enter the in-world time for the NEXT Map Evolution interval tick.\n' + acceptedFormats,
+                fmtHint(currentNextMins)
+            );
+            if (userInput === null) return;
+
+            const parsedNextMins = parseInWorldTime(userInput.trim());
+            if (parsedNextMins == null || parsedNextMins <= 0) {
+                const errorFormat = s.useDdMmYyFormat
+                    ? 'Could not parse the entered time. Please use a format like "06/01/26, 08:00 AM".'
+                    : 'Could not parse the entered time. Please use a format like "Day 6, 08:00 AM".';
+                toastr['warning'](errorFormat, 'Map Evolution');
+                return;
+            }
+
+            const lastFiredMins = parsedNextMins - intervalMinutes;
+            const lastLabel = formatInWorldTime(lastFiredMins);
+            let roots = Object.keys(s.mapEvolutionLastFiredBySite || {});
+            try {
+                const listed = await listMappedEvolutionSites();
+                roots = [...roots, ...listed.map(site => site.siteRoot)];
+            } catch (error) {
+                console.warn('[RPG Tracker] Failed to list mapped sites for Evolution override:', error);
+            }
+            if (!roots.length) {
+                toastr.warning('No mapped sites to schedule.', 'Map Evolution');
+                return;
+            }
+            s.mapEvolutionLastFiredBySite = stampEvolutionLastFired({}, roots, lastLabel);
+            saveSettings();
+            if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+            updateMapEvolutionScheduleDisplay();
+            toastr['success'](`Next interval tick set to ${fmtHint(parsedNextMins)}.`, 'Map Evolution');
+        });
+        $('#rpg_map_evolution_reset_timeline').on('click', function () {
+            const s = getSettings();
+            s.mapEvolutionLastFiredBySite = {};
+            saveSettings();
+            if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+            updateMapEvolutionScheduleDisplay();
+            toastr['info']('Map Evolution timeline reset. Next interval starts from the current time.', 'Map Evolution');
         });
         $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).on('input', function () {
             settings.mapEvolutionSystemPrompt = String($(this).val() || '');
