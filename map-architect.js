@@ -132,7 +132,7 @@ async function runMapArchitectOnce(rawArgs) {
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
     if (!isLocationMappingEnabled(settings)) {
-        throw mapArchitectFailure('Location Mapping is disabled in Components. No map was generated or saved.');
+        throw mapArchitectFailure('Persistent Maps is disabled in Components. No map was generated or saved.');
     }
     const current = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if ((current.errors || []).some(error => /no campaign prefix/i.test(String(error)))) {
@@ -162,7 +162,7 @@ async function runMapArchitectOnce(rawArgs) {
             : { valid: false, errors: [] };
         if (validation.valid) {
             if (!isLocationMappingEnabled(getSettings())) {
-                throw mapArchitectFailure('Location Mapping was disabled while the map was being generated. Nothing was saved.');
+                throw mapArchitectFailure('Persistent Maps was disabled while the map was being generated. Nothing was saved.');
             }
             const saved = await persistArchitectDungeonMap(args.site, validation.document);
             const status = saved.existing ? 'A concurrent map already existed and was preserved.' : `Map saved to ${saved.entryId}.`;

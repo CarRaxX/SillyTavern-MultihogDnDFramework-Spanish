@@ -4680,7 +4680,7 @@ ${namingRule}`;
                 const result = await runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 });
                 updateAgentStatusIndicator(isRouterRunning());
                 const skipped = result?.skipped;
-                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Updater');
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Updater');
                 else if (skipped === 'no_active_map') toastr.warning('No active dungeon or settlement map.', 'Map Updater');
                 else if (skipped === 'disabled') toastr.warning('Map Updater is disabled.', 'Map Updater');
                 else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Updater');

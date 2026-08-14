@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.82.1] - 2026-08-15
+
+### Changed
+- **Persistent Maps (Alpha)**: the Components toggle is renamed from Location Mapping (Alpha). The internal `<dungeon_reality_and_hidden_mapping>` tag is unchanged.
+- **World Progression**: settings and the Lorebook Agent drawer now warn that using WP together with Persistent Maps is not recommended until compatibility is added.
+
 ## [7.82.0] - 2026-08-14
 
 ### Added

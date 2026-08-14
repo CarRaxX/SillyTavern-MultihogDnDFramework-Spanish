@@ -245,6 +245,9 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-interval" value="${settings.worldProgressionIntervalHours || 24}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;">
                             <span style="font-size:0.769em; opacity:0.5;">in-world hours</span>
                         </div>
+                        <div style="font-size:0.692em; line-height:1.35; margin-bottom:8px; padding:6px 8px; border-radius:4px; border:1px solid rgba(234,179,8,0.35); background:rgba(234,179,8,0.08); color:#f5d76e;">
+                            Not recommended together with Persistent Maps until compatibility is added (soon).
+                        </div>
                         <button id="rt-agent-world-fire-now" style="width:100%; background:rgba(52,168,83,0.15); border:1px solid rgba(52,168,83,0.3); color:#34a853; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
                             <i class="fa-solid fa-globe"></i> Fire Now
                         </button>

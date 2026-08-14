@@ -377,7 +377,7 @@ const NARRATOR_TOGGLE_IDS = {
     dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
-const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges.';
+const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges. Not recommended together with World Progression until compatibility is added.';
 
 export function isSectionUnlocked(settings, tag) {
     return (settings.customSyspromptLibrary || []).some(p =>
@@ -405,7 +405,7 @@ function syncNarratorToggleUi(tag, settings) {
     const unlocked = isSectionUnlocked(settings, tag);
     el.checked = isEffectiveSectionEnabled(tag, settings);
     const label = el.closest('label');
-    // Location Mapping stays a live kill switch even when the sysprompt section is unlocked.
+    // Persistent Maps stays a live kill switch even when the sysprompt section is unlocked.
     if (tag === LOCATION_MAPPING_SECTION_TAG) {
         el.disabled = false;
         if (label) label.title = LOCATION_MAPPING_TOGGLE_TITLE;
