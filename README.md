@@ -144,7 +144,7 @@ These are recommendations, not rules — experiment. Different models shine for 
 
 ---
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/a2c8a500-dbdf-4949-b2ee-bad025fd44e5" width="60%" alt="Combat in progress" />
+  <img rc="https://github.com/user-attachments/assets/1de1d4cf-229f-447a-adc0-ab4aaaced139" width="60%" alt="Combat in progress" />
   <br>
   <em>Visualization Mode</em>
 </p>
