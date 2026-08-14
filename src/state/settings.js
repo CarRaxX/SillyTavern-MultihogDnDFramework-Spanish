@@ -815,6 +815,17 @@ function getSettingsInternal(extensionSettings) {
 
     enforceRealtimeVisualizationDisabled(s);
 
+    // Old shipped default (2500) is too small for a JSON map pass — the output
+    // stream is killed. Treat it as unset so existing chats pick up 25000.
+    if (Number(s.mapUpdaterMaxTokens) === 2500) s.mapUpdaterMaxTokens = 25000;
+    if (Number(s.mapEvolutionMaxTokens) === 2500) s.mapEvolutionMaxTokens = 25000;
+    const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
+    s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'active';
+    const tickCount = Number(s.mapEvolutionTickCount);
+    s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
+    s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
+    if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
+
     return extensionSettings[MODULE_NAME];
 }
 
@@ -1016,6 +1027,14 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapUpdaterRunEvery',
     'mapUpdaterMaxTokens',
     'mapUpdaterSystemPrompt',
+    'mapEvolutionEnabled',
+    'mapEvolutionIntervalHours',
+    'mapEvolutionMaxTokens',
+    'mapEvolutionTickScope',
+    'mapEvolutionTickCount',
+    'mapEvolutionTickRandomize',
+    'mapEvolutionSelectedRoots',
+    'mapEvolutionSystemPrompt',
     'worldConnectionSource',
     'worldConnectionProfileId',
     'worldCompletionPresetId',

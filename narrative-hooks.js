@@ -17,6 +17,7 @@ import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
 import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { groundMapsAfterWorldProgression, maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
@@ -542,11 +543,12 @@ export function registerMapArchitectTool() {
     }
 }
 
-/** Unregister CreateAreaMap and abort Map Updater when Location Mapping is off. */
+/** Unregister CreateAreaMap and abort Map Updater / Map Evolution when Location Mapping is off. */
 export function syncLocationMappingRuntime() {
     registerMapArchitectTool();
     if (isLocationMappingEnabled(getSettings())) return;
     stopMapUpdaterPass();
+    stopMapEvolutionPass();
     if (runtimeState.hasActiveDungeonMap) {
         runtimeState.hasActiveDungeonMap = false;
         globalThis._rpgSyncAgentImmersionUi?.();
@@ -1814,6 +1816,10 @@ async function maybeRollbackAgentsForSwipe(msg, { lorebook = true } = {}) {
     if (mapRolled) {
         const primeTo = Math.max(0, (getSettings().mapUpdaterRunEvery || 1) - 1);
         setMapUpdaterAutoTick(primeTo, 'swipe_map_updater_rollback_prime');
+    } else {
+        // Occupancy snapshots earlier in the same turn; restoring evolution after
+        // occupancy rollback would undo that occupancy restore.
+        await maybeRollbackMapEvolutionForSwipe(msg);
     }
     if (lorebook) await maybeRollbackRouterPassForSwipe(msg);
 }
@@ -2634,12 +2640,9 @@ export async function onGenerationEnded() {
         }
     }
 
-    // Step 3: World Progression deterministic check — runs AFTER the State Tracker has updated
-    // currentMemo, so the [TIME] block reflects the current in-world clock.
-    await maybeRunWorldProgression();
-
     // Map Updater cadence is independent of Lorebook Agent. It can run every turn
-    // while LA stays on a slower record/relationship schedule.
+    // while LA stays on a slower record/relationship schedule. Occupancy runs before
+    // World Progression / Map Evolution so Evolution cannot move something play just destroyed.
     const countsTowardRunEvery = currentType !== 'swipe' && currentType !== 'regenerate';
     const mapEvery = Math.max(1, Number(settings.mapUpdaterRunEvery) || 1);
     if (countsTowardRunEvery) {
@@ -2668,6 +2671,10 @@ export async function onGenerationEnded() {
             noop: mapResult?.noop === true,
         });
     }
+
+    // World Progression then Map Evolution — TIME is already on the memo; occupancy is current.
+    await maybeRunWorldProgression();
+    await maybeRunMapEvolution();
 
     // Step 4: Run-every throttle — only fire the Lorebook Agent every N new turns.
     // Swipe/regenerate generations reuse an existing message slot and must not advance the
@@ -2779,5 +2786,6 @@ async function maybeRunWorldProgression() {
     // Guard: don't start a World Progression pass while the Lorebook Agent is already running
     if (isRouterRunning()) return;
 
-    await runWorldProgressionPass(timeStr, currentMinutes);
+    const wpResult = await runWorldProgressionPass(timeStr, currentMinutes);
+    await groundMapsAfterWorldProgression(wpResult);
 }

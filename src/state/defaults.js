@@ -9,6 +9,7 @@ import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -1383,13 +1384,35 @@ Rules:
 
         mapUpdaterRunEvery: 1,
 
-        mapUpdaterMaxTokens: 2500,
+        mapUpdaterMaxTokens: 25000,
 
         mapUpdaterSystemPrompt: DEFAULT_MAP_UPDATER_SYSTEM_PROMPT,
 
         mapUpdaterLastRunChatLength: 0,
 
         mapUpdaterLastRunAt: 0,
+
+        mapEvolutionEnabled: true,
+
+        mapEvolutionIntervalHours: 4,
+
+        mapEvolutionMaxTokens: 25000,
+
+        mapEvolutionTickScope: "active",
+
+        mapEvolutionTickCount: 1,
+
+        mapEvolutionTickRandomize: true,
+
+        mapEvolutionSelectedRoots: [],
+
+        mapEvolutionSystemPrompt: DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT,
+
+        mapEvolutionLastFiredBySite: {},
+
+        mapEvolutionLastSiteRoot: "",
+
+        mapEvolutionPendingExitRoot: "",
 
         worldConnectionSource: "default",
 

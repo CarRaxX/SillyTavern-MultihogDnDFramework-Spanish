@@ -39,6 +39,77 @@ export function resolveInitialPanelContentMode(_storedMode) {
     return 'tracker';
 }
 
+async function promptMappedEvolutionSites(sites, escapeHtml) {
+    const rows = Array.isArray(sites) ? sites : [];
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex; flex-direction:column; gap:8px; text-align:left; min-width:320px;';
+    body.innerHTML = `
+        <div style="font-size:13px; line-height:1.4; opacity:0.85;">
+            Choose which mapped sites to evolve now. Interval due-checks are skipped.
+        </div>
+        <div class="flex-container gap-1" style="flex-wrap:wrap;">
+            <button type="button" class="menu_button" data-evo-pick="all">All</button>
+            <button type="button" class="menu_button" data-evo-pick="none">None</button>
+            <button type="button" class="menu_button" data-evo-pick="current">Current</button>
+        </div>
+        <div data-evo-pick-list style="max-height:240px; overflow-y:auto; border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:6px;">
+            ${rows.map(site => {
+                const label = escapeHtml(site.siteRoot || '');
+                const suffix = site.current ? ' <small>(current)</small>' : '';
+                const checked = site.current ? ' checked' : '';
+                return `<label class="checkbox_label" style="font-size:0.92em; display:flex; gap:6px; align-items:center;">
+                    <input type="checkbox" data-site-root="${escapeHtml(site.siteRoot || '')}"${checked}>
+                    <span>${label}${suffix}</span>
+                </label>`;
+            }).join('')}
+        </div>
+    `;
+    const bindPickers = (root) => {
+        const host = root || body;
+        const boxes = () => [...(host.querySelectorAll('input[data-site-root]') || [])];
+        host.querySelector('[data-evo-pick="all"]')?.addEventListener('click', () => {
+            boxes().forEach(box => { box.checked = true; });
+        });
+        host.querySelector('[data-evo-pick="none"]')?.addEventListener('click', () => {
+            boxes().forEach(box => { box.checked = false; });
+        });
+        host.querySelector('[data-evo-pick="current"]')?.addEventListener('click', () => {
+            const current = rows.find(site => site.current);
+            boxes().forEach(box => {
+                box.checked = !!current && box.getAttribute('data-site-root') === current.siteRoot;
+            });
+        });
+    };
+    bindPickers(body);
+
+    const ctx = SillyTavern.getContext();
+    let selected = null;
+    const readSelected = (root) => [...(root?.querySelectorAll('input[data-site-root]:checked') || [])]
+        .map(box => String(box.getAttribute('data-site-root') || '').trim())
+        .filter(Boolean);
+    const popupOpts = {
+        okButton: 'Evolve',
+        cancelButton: 'Cancel',
+        onOpen: (popup) => bindPickers(popup?.dlg || body),
+        onClosing: (popup) => {
+            selected = readSelected(popup?.dlg || body);
+            return true;
+        },
+    };
+    let result;
+    if (ctx.Popup && ctx.POPUP_TYPE) {
+        const popup = new ctx.Popup(body, ctx.POPUP_TYPE.CONFIRM, '', popupOpts);
+        result = await popup.show();
+        if (result !== (ctx.POPUP_RESULT?.AFFIRMATIVE ?? 1)) return null;
+    } else if (ctx.callGenericPopup) {
+        result = await ctx.callGenericPopup(body, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', popupOpts);
+        if (result !== 1) return null;
+    } else {
+        return rows.filter(site => site.current).map(site => site.siteRoot);
+    }
+    return selected || readSelected(body);
+}
+
 /** Builds and wires the tracker panel. Dependencies stay explicit to avoid entry-module cycles. */
 export function createPanel(dependencies) {
     const {
@@ -82,6 +153,7 @@ export function createPanel(dependencies) {
         getSettings,
         handleTrackerEnabledChange,
         isMapUpdaterRunning,
+        isMapEvolutionRunning,
         isRouterRunning,
         loadChatState,
         loadDeltaHeight,
@@ -117,6 +189,8 @@ export function createPanel(dependencies) {
         rollbackRouterPass,
         runRealtimeSceneArtCheck,
         runMapUpdaterPass,
+        runMapEvolutionPass,
+        listMappedEvolutionSites,
         runRouterPass,
         runStateModelPass,
         sanitizeLorebookRecordContent,
@@ -135,6 +209,7 @@ export function createPanel(dependencies) {
         showPortraitSettingsMenu,
         stopRouterPass,
         stopMapUpdaterPass,
+        stopMapEvolutionPass,
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
@@ -4638,6 +4713,7 @@ ${namingRule}`;
         const researchMenuWrap = queryAgentUi('#rt-research-menu-wrap');
         const researchLorebookBtn = queryAgentUi('#rt-research-lorebook');
         const researchMapUpdaterBtn = queryAgentUi('#rt-research-map-updater');
+        const researchMapEvolutionBtn = queryAgentUi('#rt-research-map-evolution');
         if (manualRunBtn && researchDropdown) {
             const closeResearchDropdown = () => {
                 researchDropdown.style.display = 'none';
@@ -4657,7 +4733,7 @@ ${namingRule}`;
                 researchDropdown.style.display = 'flex';
                 hostPanel.classList.add('rt-research-menu-open');
             };
-            const agentsBusy = () => isRouterRunning() || isMapUpdaterRunning();
+            const agentsBusy = () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning();
             const runManualLorebook = async () => {
                 if (agentsBusy()) {
                     toastr.warning('An agent is already running.', 'Lorebook Agent');
@@ -4689,6 +4765,39 @@ ${namingRule}`;
                 else if (result?.ok) toastr['success']('Occupancy update applied.', 'Map Updater');
                 else toastr.error('Could not apply a valid occupancy update.', 'Map Updater');
             };
+            const runManualMapEvolution = async () => {
+                if (agentsBusy()) {
+                    toastr.warning('An agent is already running.', 'Map Evolution');
+                    return;
+                }
+                const sites = typeof listMappedEvolutionSites === 'function'
+                    ? await listMappedEvolutionSites()
+                    : [];
+                if (!sites.length) {
+                    toastr.warning('No mapped site to evolve.', 'Map Evolution');
+                    return;
+                }
+                const siteRoots = await promptMappedEvolutionSites(sites, escapeHtml);
+                if (!siteRoots) return;
+                if (!siteRoots.length) {
+                    toastr.warning('Check at least one mapped site.', 'Map Evolution');
+                    return;
+                }
+                toastr['info']('Starting Map Evolution pass...');
+                updateAgentStatusIndicator(isRouterRunning());
+                const result = await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots });
+                updateAgentStatusIndicator(isRouterRunning());
+                const skipped = result?.skipped;
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Evolution');
+                else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites') toastr.warning('No mapped site to evolve.', 'Map Evolution');
+                else if (skipped === 'disabled') toastr.warning('Map Evolution is disabled.', 'Map Evolution');
+                else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Evolution');
+                else if (skipped === 'stopped') toastr['info']('Stopped.', 'Map Evolution');
+                else if (result?.baseline) toastr['info']('Interval baseline stamped. Evolution will fire after the interval elapses.', 'Map Evolution');
+                else if (result?.ok && result?.applied === 0) toastr['info']('Nothing durable changed.', 'Map Evolution');
+                else if (result?.ok) toastr['success']('Map Evolution applied.', 'Map Evolution');
+                else toastr.error('Could not apply a valid evolution update.', 'Map Evolution');
+            };
 
             manualRunBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -4712,6 +4821,11 @@ ${namingRule}`;
                 closeResearchDropdown();
                 await runManualMapUpdater();
             });
+            researchMapEvolutionBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                closeResearchDropdown();
+                await runManualMapEvolution();
+            });
         }
 
         const agentStopBtn = queryAgentUi('#rt-agent-stop-btn');
@@ -4720,6 +4834,7 @@ ${namingRule}`;
                 e.stopPropagation();
                 stopRouterPass();
                 stopMapUpdaterPass();
+                stopMapEvolutionPass();
             });
         }
 
@@ -5075,6 +5190,9 @@ ${namingRule}`;
     document.addEventListener('rt_map_updater_status', () => {
         updateAgentStatusIndicator(isRouterRunning());
     });
+    document.addEventListener('rt_map_evolution_status', () => {
+        updateAgentStatusIndicator(isRouterRunning());
+    });
 
     document.addEventListener('rt_lore_agent_step', (e) => {
         const step = (/** @type {CustomEvent} */ (e)).detail;
@@ -5101,7 +5219,7 @@ ${namingRule}`;
             console.log(`[RPG Tracker] Lorebook Agent step "${step.type}" matched. Refreshing manifest...`);
             refreshManifest();
             updateAgentStatusIndicator(false);
-            if (step.type === 'finish' && step.metadata?.source !== 'map_updater') {
+            if (step.type === 'finish' && step.metadata?.source !== 'map_updater' && step.metadata?.source !== 'map_evolution') {
                 console.log('[RPG Tracker] Lorebook Agent pass finished. Invoking checkAndTriggerAutoGenerations...');
                 checkAndTriggerAutoGenerations(refreshAll);
             }

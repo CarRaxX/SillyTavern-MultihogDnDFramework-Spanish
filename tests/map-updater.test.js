@@ -114,6 +114,10 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
         expect(updater).toContain('mapArchitectConnectionSource');
         expect(updater).toContain('mapUpdaterMaxTokens');
+        expect(updater).toContain('Number(settings.mapUpdaterMaxTokens) || 25000');
+        const defaults = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
+        expect(defaults).toContain('mapUpdaterMaxTokens: 25000');
+        expect(settingsMarkup).toMatch(/id="rpg_map_updater_max_tokens"[^>]*max="32000"/);
         expect(updater).toContain('export async function runMapUpdaterPass({ isManual = false, lookback = null } = {})');
         expect(updater).toContain('if (settings.mapUpdaterEnabled === false && !isManual)');
         expect(updater).toContain('export function resolveMapUpdaterStoryWindow');
@@ -122,6 +126,9 @@ describe('Map Updater', () => {
         expect(hooks).toContain('runMapUpdaterPass');
         expect(hooks).toContain('mapUpdaterRunEvery');
         expect(hooks).toContain('maybeRollbackMapUpdaterForSwipe');
+        expect(hooks).toContain('maybeRunMapEvolution');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(settingsMarkup).toContain('id="rpg_map_updater_run_every"');
         expect(settingsMarkup).toContain('id="rpg_map_updater_enabled"');
         expect(settingsMarkup).toContain('<b>Map Updater</b>');

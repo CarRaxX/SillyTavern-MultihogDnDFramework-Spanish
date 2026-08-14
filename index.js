@@ -12,6 +12,7 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { groundMapsAfterWorldProgression, isMapEvolutionRunning, listMappedEvolutionSites, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -62,6 +63,7 @@ import { normalizeActivePersonaIdentity } from './src/state/player-identity.js';
 import { replacePromptArray, stripSupersededChoicesFromChatPrompt, stripSupersededChoicesFromTextPromptMessages } from './src/features/cyoa-prompt-history.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 
 export { RENDERING_TAGS_LIBRARY };
 export { bindRenderedCardEvents };
@@ -183,6 +185,73 @@ function scheduleAgentManifestRefresh(force = false) {
 /** Reload CAMPAIGN RECORDS / Scene View — safe from settings UI outside createPanel(). */
 export async function refreshAgentManifestNow() {
     await refreshLorebookAgentViewsNow();
+}
+
+function notifyMapEvolutionPassResult(result) {
+    const skipped = result?.skipped;
+    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Evolution');
+    else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites' || skipped === 'no_selection') toastr.warning('No mapped site to evolve.', 'Map Evolution');
+    else if (skipped === 'disabled') toastr.warning('Map Evolution is disabled.', 'Map Evolution');
+    else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Evolution');
+    else if (skipped === 'stopped') toastr['info']('Stopped.', 'Map Evolution');
+    else if (result?.baseline) toastr['info']('Interval baseline stamped. Evolution will fire after the interval elapses.', 'Map Evolution');
+    else if (result?.ok && result?.applied === 0) toastr['info']('Nothing durable changed.', 'Map Evolution');
+    else if (result?.ok) toastr['success']('Map Evolution applied.', 'Map Evolution');
+    else toastr.error('Could not apply a valid evolution update.', 'Map Evolution');
+}
+
+function persistMapEvolutionSelectedRootsFromUi() {
+    const roots = [];
+    $('#rpg_map_evolution_selected_list input[type="checkbox"]:checked').each(function () {
+        const root = String($(this).attr('data-site-root') || '').trim();
+        if (root) roots.push(root);
+    });
+    const settings = getSettings();
+    settings.mapEvolutionSelectedRoots = roots;
+    saveSettings();
+    return roots;
+}
+
+function syncMapEvolutionTickRows(settings) {
+    const scope = settings?.mapEvolutionTickScope || 'active';
+    $('#rpg_map_evolution_n_row').toggle(scope === 'count' || scope === 'selected');
+    $('#rpg_map_evolution_selected_row').toggle(scope === 'selected');
+}
+
+async function refreshMapEvolutionSelectedList() {
+    const $list = $('#rpg_map_evolution_selected_list');
+    if (!$list.length) return;
+    $list.empty();
+    let sites = [];
+    try {
+        sites = await listMappedEvolutionSites();
+    } catch (error) {
+        console.warn('[RPG Tracker] Failed to list mapped sites for Map Evolution:', error);
+    }
+    if (!sites.length) {
+        $list.append($('<i>').css({ opacity: '0.6', fontSize: '0.85em' }).text('No mapped sites in this chat.'));
+        return;
+    }
+    const selected = new Set((getSettings().mapEvolutionSelectedRoots || []).map(root => String(root || '').trim().toLowerCase()));
+    for (const site of sites) {
+        const $input = $('<input type="checkbox">')
+            .attr('data-site-root', site.siteRoot)
+            .prop('checked', selected.has(String(site.siteRoot || '').trim().toLowerCase()));
+        const label = site.current ? `${site.siteRoot} (current)` : site.siteRoot;
+        const $item = $('<label class="checkbox_label">').css('font-size', '0.9em')
+            .append($input, $('<span>').text(label));
+        $input.on('change', persistMapEvolutionSelectedRootsFromUi);
+        $list.append($item);
+    }
+}
+
+function applyMapEvolutionTickSettingsToUi(settings) {
+    const s = settings || getSettings();
+    $('#rpg_map_evolution_tick_scope').val(s.mapEvolutionTickScope || 'active');
+    $('#rpg_map_evolution_tick_count').val(s.mapEvolutionTickCount ?? 1);
+    $('#rpg_map_evolution_tick_randomize').prop('checked', s.mapEvolutionTickRandomize !== false);
+    syncMapEvolutionTickRows(s);
+    if ((s.mapEvolutionTickScope || 'active') === 'selected') void refreshMapEvolutionSelectedList();
 }
 
 
@@ -2668,8 +2737,19 @@ function loadProfile(name) {
     s.mapArchitectOpenaiModel = p.mapArchitectOpenaiModel || "";
     s.mapUpdaterEnabled = p.mapUpdaterEnabled !== false;
     s.mapUpdaterRunEvery = Math.max(1, Number(p.mapUpdaterRunEvery) || 1);
-    s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 2500;
+    s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 25000;
     s.mapUpdaterSystemPrompt = p.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+    s.mapEvolutionEnabled = p.mapEvolutionEnabled !== false;
+    s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 4);
+    s.mapEvolutionMaxTokens = p.mapEvolutionMaxTokens ?? 25000;
+    s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'active';
+    s.mapEvolutionTickCount = (() => {
+        const n = Number(p.mapEvolutionTickCount);
+        return Number.isFinite(n) ? Math.max(0, Math.min(50, n)) : 1;
+    })();
+    s.mapEvolutionTickRandomize = p.mapEvolutionTickRandomize !== false;
+    s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(p.mapEvolutionSelectedRoots || []));
+    s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
 
     s.worldConnectionSource = p.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = p.worldConnectionProfileId || "";
@@ -2771,8 +2851,13 @@ function loadProfile(name) {
     $('#rpg_map_architect_openai_model_manual').val(s.mapArchitectOpenaiModel || '');
     $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
     $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
-    $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 2500);
+    $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
     $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
+    $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
+    $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 4);
+    $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+    applyMapEvolutionTickSettingsToUi(s);
+    $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
 
     // Sync world progression connection settings UI
     $('#rpg_world_connection_source').val(s.worldConnectionSource || 'default');
@@ -4024,6 +4109,7 @@ function createPanel() {
         getSettings,
         handleTrackerEnabledChange,
         isMapUpdaterRunning,
+        isMapEvolutionRunning,
         isRouterRunning,
         loadChatState,
         loadDeltaHeight,
@@ -4059,6 +4145,8 @@ function createPanel() {
         rollbackRouterPass,
         runRealtimeSceneArtCheck,
         runMapUpdaterPass,
+        runMapEvolutionPass,
+        listMappedEvolutionSites,
         runRouterPass,
         runStateModelPass,
         sanitizeLorebookRecordContent,
@@ -4077,6 +4165,7 @@ function createPanel() {
         showPortraitSettingsMenu,
         stopRouterPass,
         stopMapUpdaterPass,
+        stopMapEvolutionPass,
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
@@ -4295,7 +4384,7 @@ function updateUIMemo(text) {
 function updateAgentStatusIndicator(running) {
     const stopBtn = /** @type {HTMLElement} */ (document.getElementById('rt-agent-stop-btn'));
     const playBtn = /** @type {HTMLElement} */ (document.getElementById('rt-agent-router-manual-run'));
-    const busy = !!running || isMapUpdaterRunning();
+    const busy = !!running || isMapUpdaterRunning() || isMapEvolutionRunning();
     if (stopBtn) stopBtn.style.display = busy ? 'flex' : 'none';
     if (playBtn) playBtn.style.opacity = busy ? '0.3' : '';
 }
@@ -5112,8 +5201,8 @@ function organizeConnectionSettingsUI() {
             $('#rt-agent-map-updater-run-every').val(settings.mapUpdaterRunEvery);
             saveSettings();
         });
-        $('#rpg_map_updater_max_tokens').val(settings.mapUpdaterMaxTokens ?? 2500).on('change', function () {
-            settings.mapUpdaterMaxTokens = Math.max(400, Math.min(16000, parseInt(String($(this).val()), 10) || 2500));
+        $('#rpg_map_updater_max_tokens').val(settings.mapUpdaterMaxTokens ?? 25000).on('change', function () {
+            settings.mapUpdaterMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
             $(this).val(settings.mapUpdaterMaxTokens);
             saveSettings();
         });
@@ -5126,6 +5215,84 @@ function organizeConnectionSettingsUI() {
             $('#rpg_map_updater_system_prompt').val(settings.mapUpdaterSystemPrompt);
             saveSettings();
             toastr['success']('Map Updater prompt reset.');
+        });
+        $('#rpg_map_evolution_enabled').prop('checked', settings.mapEvolutionEnabled !== false).on('change', function () {
+            settings.mapEvolutionEnabled = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 4).on('change', function () {
+            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 4));
+            $(this).val(settings.mapEvolutionIntervalHours);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
+            settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
+            $(this).val(settings.mapEvolutionMaxTokens);
+            saveSettings();
+        });
+        applyMapEvolutionTickSettingsToUi(settings);
+        $('#rpg_map_evolution_tick_scope').on('change', function () {
+            settings.mapEvolutionTickScope = String($(this).val() || 'active');
+            syncMapEvolutionTickRows(settings);
+            if (settings.mapEvolutionTickScope === 'selected') void refreshMapEvolutionSelectedList();
+            saveSettings();
+        });
+        $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 1).on('change', function () {
+            const parsed = parseInt(String($(this).val()), 10);
+            settings.mapEvolutionTickCount = Math.max(0, Math.min(50, Number.isFinite(parsed) ? parsed : 1));
+            $(this).val(settings.mapEvolutionTickCount);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_tick_randomize').prop('checked', settings.mapEvolutionTickRandomize !== false).on('change', function () {
+            settings.mapEvolutionTickRandomize = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_selected_refresh').on('click', function () {
+            void refreshMapEvolutionSelectedList();
+        });
+        $('#rpg_map_evolution_selected_all').on('click', function () {
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').prop('checked', true);
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_selected_none').on('click', function () {
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').prop('checked', false);
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_selected_current').on('click', async function () {
+            const sites = await listMappedEvolutionSites();
+            const current = sites.find(site => site.current);
+            if (!current) {
+                toastr.info('The party is not inside a mapped site.', 'Map Evolution');
+                return;
+            }
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').each(function () {
+                $(this).prop('checked', String($(this).attr('data-site-root') || '') === current.siteRoot);
+            });
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_evolve_now').on('click', async function () {
+            const roots = persistMapEvolutionSelectedRootsFromUi();
+            if (!roots.length) {
+                toastr.warning('Check at least one mapped site.', 'Map Evolution');
+                return;
+            }
+            if (isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning()) {
+                toastr.warning('An agent is already running.', 'Map Evolution');
+                return;
+            }
+            toastr['info']('Starting Map Evolution pass...');
+            const result = await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots: roots });
+            notifyMapEvolutionPassResult(result);
+        });
+        $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).on('input', function () {
+            settings.mapEvolutionSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_reset_prompt').on('click', function () {
+            settings.mapEvolutionSystemPrompt = DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+            $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt);
+            saveSettings();
+            toastr['success']('Map Evolution prompt reset.');
         });
 
 
@@ -5695,6 +5862,7 @@ function organizeConnectionSettingsUI() {
                                     if (extensionSettings[MODULE_NAME]) {
                                         delete extensionSettings[MODULE_NAME].mapArchitectSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].mapUpdaterSystemPrompt;
+                                        delete extensionSettings[MODULE_NAME].mapEvolutionSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
                                     }
@@ -5706,6 +5874,10 @@ function organizeConnectionSettingsUI() {
                                     const $mapUpdaterPromptEl = $('#rpg_map_updater_system_prompt');
                                     if ($mapUpdaterPromptEl.length) {
                                         $mapUpdaterPromptEl.val(sTemp.mapUpdaterSystemPrompt).trigger('input');
+                                    }
+                                    const $mapEvolutionPromptEl = $('#rpg_map_evolution_system_prompt');
+                                    if ($mapEvolutionPromptEl.length) {
+                                        $mapEvolutionPromptEl.val(sTemp.mapEvolutionSystemPrompt).trigger('input');
                                     }
                                     const $wpPromptEl = $('#rpg_world_progression_system_prompt');
                                     if ($wpPromptEl.length) {
@@ -10361,7 +10533,8 @@ RULES:
             s.worldProgressionLastFiredAtMinutes = -1;
             $wpGenerateNow.prop('disabled', true).text('Generating…');
             try {
-                await rwp(timeStr, currentMinutes);
+                const result = await rwp(timeStr, currentMinutes);
+                await groundMapsAfterWorldProgression(result);
                 updateWorldProgressionLastFiredDisplay();
                 toastr['success']('World Progression report generated.', 'World Progression');
             } catch (e) {
@@ -10413,7 +10586,8 @@ RULES:
             s.worldProgressionLastFiredAtMinutes = -1;
             $wpFireWithInstructions.prop('disabled', true).text('Generating…');
             try {
-                await rwp(timeStr, currentMinutes, extraInstructions);
+                const result = await rwp(timeStr, currentMinutes, extraInstructions);
+                await groundMapsAfterWorldProgression(result);
                 updateWorldProgressionLastFiredDisplay();
                 toastr['success']('World Progression report generated.', 'World Progression');
             } catch (e) {
@@ -11021,8 +11195,13 @@ RULES:
             $('#rpg_map_architect_openai_group').toggle(s.mapArchitectConnectionSource === 'openai');
             $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
             $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
-            $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 2500);
+            $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
             $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
+            $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
+            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 4);
+            $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+            applyMapEvolutionTickSettingsToUi(s);
+            $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
 
             // Inventory/Core Prompt
             $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');

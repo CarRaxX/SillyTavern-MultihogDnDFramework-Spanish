@@ -2,7 +2,7 @@
 
 **Status:** Alpha — structured current-state and dedicated Map Architect are in play, but the feature is still early.
 
-**Related:** `<dungeon_reality_and_hidden_mapping>` narrator module, Map Architect, Map Updater, and Lorebook Agent
+**Related:** `<dungeon_reality_and_hidden_mapping>` narrator module, Map Architect, Map Updater, Map Evolution, World Progression, and Lorebook Agent
 
 **Updated:** 2026-08-14
 
@@ -16,7 +16,7 @@ An immutable initial map plus append-only room updates creates two competing fac
 
 - The narrator establishes immediate fiction and calls `CreateAreaMap` once before narrating entry into an unmapped high-risk interior (kind DUNGEON) or an unmapped town/city/village (kind SETTLEMENT). Occupancy on the attached map is maintained by the Map Updater on its own cadence (default: every turn); established story events override stale map states (a killed enemy stays dead even if still listed ACTIVE). The narrator must not rewind play or revive entities to match the lagging map. Settlement maps are district-scale: the narrator may invent granular interiors that do not contradict those districts.
 - Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
-- Map Updater interprets established consequences and maintains current map state. Lorebook Agent records NPCs, readable location lore, relationships, quests, and events on a separate cadence.
+- Map Updater interprets established play and maintains occupancy on the active site. Map Evolution is a sibling pass: it advances mapped sites off-screen on in-world time and grounds World Progression reports onto matching maps, one site at a time. Lorebook Agent records NPCs, readable location lore, relationships, quests, and events on a separate cadence. World Progression stays map-blind (no room IDs); Evolution is the only writer that turns WP sentences into asset IDs.
 - Player attempts become map facts only after narrator resolution.
 - Map Updater may make a constrained off-screen reaction only after an established trigger and only for an asset with an explicit behavior or route.
 - Speculation never mutates the map.
@@ -113,7 +113,7 @@ Abbey Undercroft is a mapped site. Its private map stores current objective real
 [/MAP]
 ```
 
-The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Map Updater transaction path can mutate `[MAP]`. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve it exactly.
+The initial architect map is write-once: repeated tool calls and later legacy narrator outputs cannot replace it. After creation, only the validated Map Updater / Map Evolution transaction path can mutate `[MAP]`. Occupancy (`CONFIRMED`/`IMPLIED`/`AUTONOMOUS`) records play on the active site. Evolution (`EVOLVED`) may write inactive maps as well. Generic lorebook update, rewrite, cleanup, and consolidation operations preserve `[MAP]` exactly.
 
 The section is hidden from ordinary entry rendering, location cards, image prompts, and normal narrator lore activation. The root Location's blue `MAP` button opens a human-readable viewer that groups geometry, routes, and assets by area; a `Raw JSON` toggle remains available for exact inspection and editing. Visuals/Map in the Lorebook Agent shows the player-facing node graph (visited/discovered rooms plus unlabeled fog stubs) and can be popped out into its own window.
 
@@ -134,7 +134,37 @@ Pinned mapped roots may keep their visible `[CORE]` text active outside the site
 
 Map Updater is a dedicated one-shot JSON pass (same connection as Map Architect). It emits either `{"noop":true}` or an occupancy transaction. Lorebook Agent no longer receives `inspect_map`, `list_map_assets`, `commit.map`, or `[MAP_COMMIT]`.
 
-The two cadences are independent: Map Updater defaults to every turn; Lorebook Agent defaults to every 3 messages. The Lorebook Agent header play button expands into a manual choice between the two.
+The two occupancy/lore cadences are independent: Map Updater defaults to every turn; Lorebook Agent defaults to every 3 messages. The Lorebook Agent header play button expands into a manual choice between Lorebook Agent, Map Updater, and Map Evolution.
+
+## Map Evolution
+
+Map Evolution is a dedicated module (`map-evolution.js`, own prompt) — never mixed into the occupancy request. Two triggers, one writer:
+
+| Trigger | When | Job |
+|---|---|---|
+| Interval restlessness | In-world hours (default 4) for the configured tick pool (current map, N due maps, all due maps, or a selected checklist). Runs even when the party is not inside a mapped site unless the scope is current-map-only. | Sparse local movement, restock, decay |
+| World Progression grounding | After every successful World Report | Match named entities onto prefiltered maps |
+| On-demand | Play-menu picker or settings **Evolve checked maps now** | Same Evolution writer; skips the interval due-check |
+
+JavaScript prefilters sites (site-name hit, asset-name hit, faction hit) and calls Evolution **sequentially**, one site per request. Hosts (matched living assets) run first; destination sites follow. Cross-site continuity is a short **PRIOR EVOLUTION THIS PERIOD** digest (leave = FLEEING/REMOVE_ASSET; arrive = ADD_ASSET). All maps in the campaign stack are writable; occupancy stays active-site-only.
+
+Authority: play/occupancy owns the player bubble and established deaths. WP owns off-screen named entities outside that bubble. Interval restlessness must not undo a WP report from the same period. `DESTROYED` stays destroyed; add a new remnant instead of resurrecting. New assets are `UNREVEALED`. Dungeons may restock locally; settlements stay WP-primary (no invented coups).
+
+Pipeline after each narrator reply: State Tracker → Map Updater (occupancy) → World Progression (if due) → Map Evolution (grounding and/or interval) → Lorebook Agent.
+
+## Explicitly out of scope
+
+- Visual coordinate-grid floorplans (a knowledge-filtered node graph lives in Visuals/Map)
+- Enumerating legal player actions
+- Turn-by-turn simulation of every off-screen actor (periodic, bounded Evolution is in scope)
+- Keyword-based map activation
+- GM-authored delta sidecars after initial creation
+- General-purpose whole-map rewrite tools
+- Teaching World Progression room IDs, or letting occupancy invent Evolution, or letting WP write `[MAP]`
+
+## Verification
+
+Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, Map Updater occupancy updates, Map Evolution site selection/grounding/EVOLVED transaction rules, and Lorebook Agent map stripping.
 
 ## Atomic map transaction
 
@@ -219,7 +249,7 @@ While the party is inside the site, the deterministic Dungeon Reality block cont
 - a compact prose conversion of the current `[MAP]` snapshot, never the raw JSON; and
 - root/descendant Location entries as player-observable history.
 
-JSON remains the storage and Map Updater transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost.
+JSON remains the storage and Map Updater / Map Evolution transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost.
 
 The map is current truth, so the narrator does not need to infer that a later chronicle overrides a stale original enemy description. Leaving the site stops injection without deleting anything; returning resumes it.
 
@@ -227,15 +257,3 @@ The map is current truth, so the narrator does not need to infer that a later ch
 
 Ordinary exploration, perception checks, room combat, movement, traps, opened routes, removed objects, damage, and cleansing remain map/Location concerns. Events are reserved for site-scale historical outcomes such as the whole site being destroyed, conquered, cleansed, or changing ownership.
 
-## Explicitly out of scope
-
-- Visual coordinate-grid floorplans (a knowledge-filtered node graph lives in Visuals/Map)
-- Enumerating legal player actions
-- Turn-by-turn simulation of every off-screen actor
-- Keyword-based map activation
-- GM-authored delta sidecars after initial creation
-- General-purpose whole-map rewrite tools
-
-## Verification
-
-Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, Map Updater occupancy updates, and Lorebook Agent map stripping.

@@ -43,6 +43,7 @@ describe('Map Architect component', () => {
         expect(hooks).toContain('isLocationMappingEnabled(settings)');
         expect(hooks).toContain('export function syncLocationMappingRuntime()');
         expect(hooks).toContain('stopMapUpdaterPass()');
+        expect(hooks).toContain('stopMapEvolutionPass()');
         expect(hooks).toContain('runtimeState.hasActiveDungeonMap = false');
         expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
         expect(architect).toContain('persistArchitectDungeonMap');

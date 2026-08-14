@@ -74,6 +74,13 @@ export function createChatStateLoader({
     s.routerLastRunAt = saved.routerLastRunAt ?? 0;
     s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
     s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
+    s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(saved.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionLastSiteRoot = saved.mapEvolutionLastSiteRoot || '';
+    s.mapEvolutionPendingExitRoot = saved.mapEvolutionPendingExitRoot || '';
+    s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'active';
+    s.mapEvolutionTickCount = saved.mapEvolutionTickCount ?? 1;
+    s.mapEvolutionTickRandomize = saved.mapEvolutionTickRandomize !== false;
+    s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(saved.mapEvolutionSelectedRoots || []));
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;

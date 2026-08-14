@@ -95,6 +95,17 @@ export function persistMapUpdaterLastRunTimestamp(epochMs = Date.now()) {
     }
 }
 
+/** Persist Map Evolution per-site timers and last-site watermark. */
+export function persistMapEvolutionState() {
+    const s = getSettings();
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
 /**
  * Sync localStorage write-ahead log for module schema (customFields / blockOrder / modules).
  * Survives F5 when the async /api/settings/save fetch is cancelled mid-reload (common when
@@ -358,6 +369,13 @@ export function saveChatState(chatId, opts = {}) {
         routerLastRunAt: s.routerLastRunAt ?? 0,
         mapUpdaterLastRunChatLength: s.mapUpdaterLastRunChatLength ?? 0,
         mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
+        mapEvolutionLastFiredBySite: JSON.parse(JSON.stringify(s.mapEvolutionLastFiredBySite || {})),
+        mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
+        mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
+        mapEvolutionTickScope: s.mapEvolutionTickScope || 'active',
+        mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
+        mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
+        mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,

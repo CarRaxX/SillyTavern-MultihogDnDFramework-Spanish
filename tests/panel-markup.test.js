@@ -22,7 +22,9 @@ describe('panel markup', () => {
         expect(markup).toContain('id="rt-agent-router-manual-run"');
         expect(markup).toContain('id="rt-research-lorebook"');
         expect(markup).toContain('id="rt-research-map-updater"');
+        expect(markup).toContain('id="rt-research-map-evolution"');
         expect(markup).toContain('<b>Map Updater</b>');
+        expect(markup).toContain('<b>Map Evolution</b>');
         expect(markup).toContain('Visuals/Map');
         expect(markup).not.toContain('>Visualization Mode<');
     });

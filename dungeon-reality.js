@@ -55,9 +55,18 @@ const ASSET_STATES = [
     'DISMISSED', 'REMOVED', 'UNKNOWN',
 ];
 const CONNECTION_STATES = ['OPEN', 'CLOSED', 'LOCKED', 'BLOCKED', 'DESTROYED', 'UNKNOWN'];
-const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS'];
+const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS', 'EVOLVED'];
 const MAP_OPERATIONS = ['ADD_AREA', 'SET_AREA', 'ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION'];
+const EVOLVED_OPERATIONS = ['ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION', 'SET_AREA'];
+/** Outcomes established by play. Map Evolution may not reverse them. */
+export const PLAY_CANON_LOCKED_STATES = [
+    'DEAD', 'DESTROYED', 'DISARMED', 'TAKEN', 'CLEARED', 'REMOVED', 'EXPIRED', 'DISMISSED',
+];
 export const MAP_SITE_KINDS = ['DUNGEON', 'SETTLEMENT'];
+
+export function isPlayCanonLockedState(state) {
+    return PLAY_CANON_LOCKED_STATES.includes(String(state || '').toUpperCase());
+}
 
 function mapSlug(value, fallback = 'item') {
     const slug = String(value || '')
@@ -97,6 +106,30 @@ function coerceAssetKind(value) {
 function coerceMapEvidence(value) {
     if (value == null || value === '') return 'CONFIRMED';
     return value;
+}
+
+function defaultAssetOrigin(evidence) {
+    if (evidence === 'EVOLVED') return 'MAP_EVOLUTION';
+    if (evidence === 'IMPLIED') return 'NARRATOR_IMPLIED';
+    return 'NARRATOR_ESTABLISHED';
+}
+
+function operationTouchesFrozenArea(working, operation, frozenAreaIds) {
+    const frozen = new Set((frozenAreaIds || []).filter(Boolean));
+    if (!frozen.size) return false;
+    const areaFrozen = (ref) => {
+        const area = resolveMapArea(working, ref).area;
+        return !!(area && frozen.has(area.id));
+    };
+    if (operation.location && areaFrozen(operation.location)) return true;
+    if (operation.to && areaFrozen(operation.to)) return true;
+    if (operation.from && areaFrozen(operation.from)) return true;
+    if (operation.area_id && areaFrozen(operation.area_id)) return true;
+    if (operation.asset_id) {
+        const asset = resolveMapAsset(working, operation.asset_id).asset;
+        if (asset?.location && frozen.has(asset.location)) return true;
+    }
+    return false;
 }
 
 function normalizeChronicleFields(chronicle) {
@@ -1238,8 +1271,12 @@ function addOrUpdateConnection(area, to, state, detail) {
 /**
  * Validate and apply a Lorebook Agent map transaction to a cloned document.
  * No caller-owned object is changed when validation fails.
+ * @param {object} document
+ * @param {object} transaction
+ * @param {{ frozenAreaIds?: string[] }} [options]
  */
-export function applyDungeonMapTransaction(document, transaction) {
+export function applyDungeonMapTransaction(document, transaction, options = {}) {
+    const frozenAreaIds = Array.isArray(options?.frozenAreaIds) ? options.frozenAreaIds : [];
     const current = normalizeDungeonMapDocument(clone(document), document?.site);
     const errors = [];
     if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
@@ -1276,6 +1313,14 @@ export function applyDungeonMapTransaction(document, transaction) {
 
         if (evidence === 'AUTONOMOUS' && !['MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET'].includes(op)) {
             errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, `${op} requires narrator-established CONFIRMED or IMPLIED evidence.`));
+            continue;
+        }
+        if (evidence === 'EVOLVED' && !EVOLVED_OPERATIONS.includes(op)) {
+            errors.push(mapError('EVOLUTION_OP_NOT_ALLOWED', `${path}.evidence`, evidence, `${op} is not allowed for Map Evolution. Use ADD_ASSET, MOVE_ASSET, SET_ASSET, REMOVE_ASSET, SET_CONNECTION, or SET_AREA (geometry_append only).`));
+            continue;
+        }
+        if (evidence === 'EVOLVED' && operationTouchesFrozenArea(working, operation, frozenAreaIds)) {
+            errors.push(mapError('PLAYER_BUBBLE_FROZEN', path, operation, 'Map Evolution must not mutate the party\'s current area. Change an unrevealed or vacated room instead.'));
             continue;
         }
 
@@ -1320,6 +1365,10 @@ export function applyDungeonMapTransaction(document, transaction) {
                 errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_AREA must change knowledge or geometry.'));
                 continue;
             }
+            if (evidence === 'EVOLVED' && (operation.knowledge != null || operation.geometry_replace != null)) {
+                errors.push(mapError('EVOLUTION_SET_AREA_LIMITED', path, operation, 'Map Evolution may only append durable geometry (geometry_append). Do not change area knowledge or replace geometry.'));
+                continue;
+            }
             if (operation.knowledge != null) {
                 const knowledge = validateEnumField(operation.knowledge, AREA_KNOWLEDGE, `${path}.knowledge`, errors);
                 if (knowledge) resolved.area.knowledge = knowledge;
@@ -1361,7 +1410,7 @@ export function applyDungeonMapTransaction(document, transaction) {
                 state,
                 knowledge,
                 detail: String(operation.detail || '').trim(),
-                origin: String(operation.origin || (evidence === 'IMPLIED' ? 'NARRATOR_IMPLIED' : 'NARRATOR_ESTABLISHED')).trim(),
+                origin: String(operation.origin || defaultAssetOrigin(evidence)).trim(),
             };
             const behavior = String(operation.behavior || '').trim();
             if (behavior) asset.behavior = behavior;
@@ -1421,8 +1470,8 @@ export function applyDungeonMapTransaction(document, transaction) {
                     errors.push(mapError('CONNECTION_NOT_TRAVERSABLE', `${path}.to`, operation.to, `The mapped connection is ${connection.state}. Apply SET_CONNECTION earlier in the same transaction if the narrative changed it.`));
                     continue;
                 }
-                if (evidence === 'AUTONOMOUS' && (!connection || ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state))) {
-                    errors.push(mapError('DESTINATION_NOT_CONNECTED', `${path}.to`, operation.to, 'Autonomous movement must follow an open mapped connection.', { allowed: (sourceArea?.connections || []).filter(item => ['OPEN', 'UNKNOWN'].includes(item.state)).map(item => item.to) }));
+                if ((evidence === 'AUTONOMOUS' || evidence === 'EVOLVED') && (!connection || ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state))) {
+                    errors.push(mapError('DESTINATION_NOT_CONNECTED', `${path}.to`, operation.to, `${evidence === 'EVOLVED' ? 'Map Evolution' : 'Autonomous'} movement must follow an open mapped connection.`, { allowed: (sourceArea?.connections || []).filter(item => ['OPEN', 'UNKNOWN'].includes(item.state)).map(item => item.to) }));
                     continue;
                 }
                 asset.location = destination.area.id;
@@ -1457,7 +1506,13 @@ export function applyDungeonMapTransaction(document, transaction) {
             if (operation.name != null) asset.name = requireMapString(operation.name, `${path}.name`, errors) || asset.name;
             if (operation.state != null) {
                 const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors);
-                if (state) asset.state = state;
+                if (state) {
+                    if (evidence === 'EVOLVED' && isPlayCanonLockedState(asset.state) && !isPlayCanonLockedState(state)) {
+                        errors.push(mapError('PLAY_CANON_LOCKED', `${path}.state`, state, `Asset state is ${asset.state}. Map Evolution cannot revive play-established outcomes; add a new distinct entity instead.`));
+                        continue;
+                    }
+                    asset.state = state;
+                }
             }
             if (operation.knowledge != null) {
                 const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors);
@@ -1633,8 +1688,13 @@ export function listDungeonMapAssets(document, filters = {}) {
 /**
  * Compact ID-bearing snapshot for the Map Updater. Keeps stable IDs without
  * dumping full geometry for every room on every turn.
+ * @param {object} document
+ * @param {string} [currentLocation]
+ * @param {{ includeCurrentGeometry?: boolean, occupancyHints?: boolean }} [options]
  */
-export function formatDungeonMapForUpdater(document, currentLocation = '') {
+export function formatDungeonMapForUpdater(document, currentLocation = '', options = {}) {
+    const includeCurrentGeometry = options.includeCurrentGeometry !== false;
+    const occupancyHints = options.occupancyHints !== false;
     const map = normalizeDungeonMapDocument(document, document?.site);
     const kind = normalizeMapSiteKind(map.kind);
     const placement = resolveCurrentMapPlacement(map, currentLocation);
@@ -1647,18 +1707,13 @@ export function formatDungeonMapForUpdater(document, currentLocation = '') {
     });
     const assetLines = (map.assets || []).map(asset => {
         const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location}`, asset.state, asset.knowledge];
+        if (asset.faction) bits.push(`faction=${asset.faction}`);
         if (asset.behavior) bits.push(`behavior=${asset.behavior}`);
         if (Array.isArray(asset.route) && asset.route.length) bits.push(`route=${asset.route.join('>')}`);
         if (asset.detail) bits.push(asset.detail);
         return bits.join(' | ');
     });
-    const currentGeometry = currentArea
-        ? `${currentArea.id} (${currentArea.name})\n${(currentArea.geometry || []).map(line => `- ${line}`).join('\n') || '- (no geometry)'}`
-        : '(Current location did not match an area id/name.)';
-    const interiorHint = (kind === 'SETTLEMENT' && unmatchedInterior && !interiorAsset)
-        ? `\n\n## SETTLEMENT INTERIOR NOT ON MAP\n"${unmatchedInterior}" is in CURRENT LOCATION but is not an area and not an OBJECT asset. ADD_ASSET kind OBJECT, knowledge KNOWN, location = ${currentArea?.id || 'the current district'}. Do not output {"noop":true} for this.`
-        : '';
-    return [
+    const sections = [
         `KIND: ${kind}`,
         `SITE: ${map.site}`,
         '',
@@ -1669,10 +1724,25 @@ export function formatDungeonMapForUpdater(document, currentLocation = '') {
         '## ASSETS',
         'id | kind | name | location | state | knowledge | notes',
         assetLines.join('\n') || '(none)',
-        '',
-        '## CURRENT AREA GEOMETRY',
-        currentGeometry,
-    ].join('\n') + interiorHint;
+    ];
+    if (includeCurrentGeometry) {
+        const currentGeometry = currentArea
+            ? `${currentArea.id} (${currentArea.name})\n${(currentArea.geometry || []).map(line => `- ${line}`).join('\n') || '- (no geometry)'}`
+            : '(Current location did not match an area id/name.)';
+        sections.push('', '## CURRENT AREA GEOMETRY', currentGeometry);
+    }
+    const interiorHint = (occupancyHints && kind === 'SETTLEMENT' && unmatchedInterior && !interiorAsset)
+        ? `\n\n## SETTLEMENT INTERIOR NOT ON MAP\n"${unmatchedInterior}" is in CURRENT LOCATION but is not an area and not an OBJECT asset. ADD_ASSET kind OBJECT, knowledge KNOWN, location = ${currentArea?.id || 'the current district'}. Do not output {"noop":true} for this.`
+        : '';
+    return sections.join('\n') + interiorHint;
+}
+
+/** Compact occupancy snapshot for Map Evolution: no occupancy interior hints, no current-room geometry dump. */
+export function formatDungeonMapForEvolution(document, currentLocation = '') {
+    return formatDungeonMapForUpdater(document, currentLocation, {
+        includeCurrentGeometry: false,
+        occupancyHints: false,
+    });
 }
 
 function normalizeChunkForComparison(chunk) {
@@ -1809,6 +1879,29 @@ export function buildDungeonSitesFromLocationEntries(entries, bookName = '') {
         };
     }
     return sites;
+}
+
+/**
+ * Every attached [MAP] in a Locations book, with parsed documents.
+ * Used by Map Evolution to select sites without requiring the party to be inside.
+ */
+export function listMappedSiteDocuments(entries, bookName = '') {
+    const records = [];
+    for (const [uid, entry] of Object.entries(entries || {})) {
+        const body = extractDungeonMapSection(entry?.content);
+        if (!body) continue;
+        const rootLabel = String(entry.comment || '').trim();
+        const parsed = parseDungeonMapDocument(body, rootLabel);
+        if (!parsed?.document) continue;
+        records.push({
+            uid,
+            entryId: bookName ? `${bookName}::${uid}` : String(uid),
+            siteRoot: parsed.document.site || rootLabel,
+            kind: normalizeMapSiteKind(parsed.document.kind),
+            document: parsed.document,
+        });
+    }
+    return records;
 }
 
 /**

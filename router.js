@@ -32,6 +32,7 @@ import {
     extractFooterLocation,
     findLatestDungeonLocation,
     getDungeonMapAttachment,
+    listMappedSiteDocuments,
     migrateDungeonMapAttachmentToContent,
     parseDungeonMapDocument,
     reconcileDungeonMapAreaKnowledge,
@@ -704,6 +705,26 @@ export async function loadActiveDungeonMapContext() {
     };
 }
 
+/** Load every attached [MAP] in the campaign Locations book. */
+export async function loadAllMappedSiteContexts() {
+    const ctx = SillyTavern.getContext();
+    const prefix = getLivePrefix();
+    if (!prefix) return null;
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
+    if (!synced.bookName) return { prefix, books: {}, sites: [], currentLocation };
+    const book = await loadWorldInfoFresh(synced.bookName, ctx);
+    if (!book?.entries) return { prefix, books: {}, sites: [], currentLocation };
+    const books = { [synced.bookName]: book };
+    const sites = listMappedSiteDocuments(book.entries, synced.bookName).map(site => ({
+        ...site,
+        prefix,
+        bookName: synced.bookName,
+        currentLocation,
+    }));
+    return { prefix, books, sites, currentLocation };
+}
+
 /** Deep-clone the campaign Locations book for Map Updater swipe restore. */
 export async function snapshotCampaignLocationsBook(ctx = SillyTavern.getContext()) {
     const prefix = getLivePrefix();
@@ -847,19 +868,46 @@ function mapTransactionSignature(value) {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function resolveDungeonContextByUid(book, expectedContext) {
+    const rootEntry = book?.entries?.[expectedContext?.uid];
+    const mapBody = extractDungeonMapSection(rootEntry?.content);
+    if (!rootEntry || !mapBody) return null;
+    return {
+        prefix: expectedContext.prefix,
+        bookName: expectedContext.bookName,
+        uid: expectedContext.uid,
+        entryId: expectedContext.entryId,
+        siteRoot: expectedContext.siteRoot,
+        currentLocation: expectedContext.currentLocation,
+        document: parseDungeonMapDocument(mapBody, expectedContext.siteRoot).document,
+    };
+}
+
 /** Save current [MAP] plus observable child chronicles in one Locations-book write. */
-export async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
+export async function applyDungeonMapCommit(transaction, expectedContext, allBooks, currentTime, options = {}) {
+    const requireActive = options.requireActive !== false;
+    const frozenAreaIds = Array.isArray(options.frozenAreaIds) ? options.frozenAreaIds : [];
     if (!expectedContext) {
         return { ok: false, retryable: false, errors: [{ code: 'MAP_NOT_ACTIVE', path: 'map', received: transaction, hint: 'Map commands are unavailable because no mapped site is currently active.' }] };
     }
     const ctx = SillyTavern.getContext();
-    const latestLocation = findLatestDungeonLocation(ctx.chat || []) || expectedContext.currentLocation;
     const freshBook = await loadWorldInfoFresh(expectedContext.bookName, ctx);
-    const liveContext = freshBook
-        ? resolveActiveDungeonContext({ [expectedContext.bookName]: freshBook }, expectedContext.prefix, latestLocation)
-        : null;
-    if (!liveContext || liveContext.entryId !== expectedContext.entryId) {
-        return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: latestLocation, hint: 'The active mapped site changed during this pass. Do not retry this map mutation.' }] };
+    if (!freshBook?.entries) {
+        return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: expectedContext.siteRoot, hint: 'The mapped site could not be reloaded. Do not retry this map mutation.' }] };
+    }
+
+    let liveContext;
+    if (requireActive) {
+        const latestLocation = findLatestDungeonLocation(ctx.chat || []) || expectedContext.currentLocation;
+        liveContext = resolveActiveDungeonContext({ [expectedContext.bookName]: freshBook }, expectedContext.prefix, latestLocation);
+        if (!liveContext || liveContext.entryId !== expectedContext.entryId) {
+            return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: latestLocation, hint: 'The active mapped site changed during this pass. Do not retry this map mutation.' }] };
+        }
+    } else {
+        liveContext = resolveDungeonContextByUid(freshBook, expectedContext);
+        if (!liveContext) {
+            return { ok: false, retryable: false, errors: [{ code: 'MAP_ENTRY_MISSING', path: 'map', received: expectedContext.siteRoot, hint: 'The mapped root was removed during this pass. Do not retry this map mutation.' }] };
+        }
     }
 
     const rootEntry = freshBook.entries[liveContext.uid];
@@ -878,7 +926,7 @@ export async function applyActiveDungeonMapCommit(transaction, expectedContext, 
 
     const mapBody = extractDungeonMapSection(rootEntry.content);
     const parsed = parseDungeonMapDocument(mapBody, liveContext.siteRoot);
-    const applied = applyDungeonMapTransaction(parsed.document, transaction);
+    const applied = applyDungeonMapTransaction(parsed.document, transaction, { frozenAreaIds });
     if (!applied.ok) return applied;
 
     const timestampRegex = /(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
@@ -912,6 +960,11 @@ export async function applyActiveDungeonMapCommit(transaction, expectedContext, 
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(expectedContext.bookName);
     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
     return { ...applied, document: undefined };
+}
+
+/** Occupancy commits require the party to still be inside the mapped site. */
+export async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
+    return applyDungeonMapCommit(transaction, expectedContext, allBooks, currentTime, { requireActive: true });
 }
 
 /**
@@ -4376,7 +4429,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
                 broadcastStep('thought', `\uD83C\uDF0D World Progression: "${periodLabel}" already exists - advancing timer.`);
                 settings.worldProgressionLastFiredPeriodLabel = periodLabel;
                 persistWorldProgressionTimer();
-                return;
+                return { skipped: 'duplicate', periodLabel };
             }
         }
     }
@@ -4855,11 +4908,11 @@ ${historicalDump}`;
         reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
     } catch (e) {
         broadcastStep('error', `World Progression generation failed: ${e.message}`);
-        return;
+        return { ok: false, error: e.message };
     }
     if (!reportContent || !reportContent.trim()) {
         broadcastStep('error', 'World Progression: LLM returned empty response.');
-        return;
+        return { ok: false, error: 'empty' };
     }
 
     // 7. Store the entry via applyAction (routes to the _World lorebook).
@@ -4983,6 +5036,7 @@ ${historicalDump}`;
     if (typeof globalThis._rpgRenderRouterUI === 'function') {
         globalThis._rpgRenderRouterUI();
     }
+    return { ok: true, reportContent: reportContent.trim(), periodLabel };
 }
 // -- World Skeleton ------------------------------------------------------------------
 

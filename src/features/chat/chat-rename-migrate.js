@@ -72,6 +72,8 @@ const KNOWN_PARTITION_KEYS = new Set([
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
     'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
+    'mapEvolutionLastFiredBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
+    'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
     'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
     'routerDefaultOrder', 'routerDefaultRole', 'loreInjectionPosition',
@@ -116,7 +118,8 @@ export function partitionHasCampaignSubstance(p) {
 
     if (Object.keys(p).some((key) => !KNOWN_PARTITION_KEYS.has(key))) return true;
     if (['currentMemo', 'lastDelta', 'worldProgressionLastFiredPeriodLabel',
-        'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath']
+        'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath',
+        'mapEvolutionLastSiteRoot']
         .some((key) => hasText(p[key]))) return true;
     if (['combatDefeatedUi', 'memoHistory', 'dungeonMapHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
@@ -124,7 +127,9 @@ export function partitionHasCampaignSubstance(p) {
     if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)
         || hasMapEntries(p.dungeonReality?.sites)
         || hasMapEntries(p.npcRelationshipValues)
-        || hasMapEntries(p.npcRelationshipLog)) return true;
+        || hasMapEntries(p.npcRelationshipLog)
+        || hasMapEntries(p.mapEvolutionLastFiredBySite)
+        || hasItems(p.mapEvolutionSelectedRoots)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)
         || (Number(p.routerLastRunChatLength) || 0) > 0

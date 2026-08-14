@@ -34,10 +34,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENT PAUSED' : ''}</div>
                     <div class="rpg-tracker-header-right">
                         <div id="rt-research-menu-wrap" style="position:relative; display:inline-flex;">
-                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Run Research Now — Lorebook Agent or Map Updater" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Run Research Now — Lorebook Agent, Map Updater, or Map Evolution" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
                             <div id="rt-research-dropdown" class="rt-update-menu rt-research-dropdown" style="display:none;">
                                 <div class="rt-menu-item" id="rt-research-lorebook"><b>Lorebook Agent</b><small>NPCs, locations, relationships</small></div>
                                 <div class="rt-menu-item" id="rt-research-map-updater"><b>Map Updater</b><small>Dungeon and town occupancy</small></div>
+                                <div class="rt-menu-item" id="rt-research-map-evolution"><b>Map Evolution</b><small>Pick maps to evolve now</small></div>
                             </div>
                         </div>
                         <button class="rpg-tracker-stop-btn" id="rt-agent-stop-btn" title="Stop Agent" style="display:none;">■</button>

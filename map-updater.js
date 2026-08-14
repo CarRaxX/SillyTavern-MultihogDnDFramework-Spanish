@@ -25,6 +25,7 @@ import {
     restoreCampaignLocationsBook,
     snapshotCampaignLocationsBook,
 } from './router.js';
+import { isMapEvolutionRunning } from './map-evolution.js';
 
 const MAX_CORRECTION_ATTEMPTS = 2;
 const swipeSnapshots = new Map();
@@ -84,7 +85,7 @@ function requestSettings(settings) {
         openaiUrl: settings.mapArchitectOpenaiUrl || '',
         openaiKey: settings.mapArchitectOpenaiKey || '',
         openaiModel: settings.mapArchitectOpenaiModel || '',
-        maxTokens: Math.max(400, Number(settings.mapUpdaterMaxTokens) || 2500),
+        maxTokens: Math.max(1000, Number(settings.mapUpdaterMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };
 }
@@ -247,14 +248,14 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
     const settings = getSettings();
     if (settings.mapUpdaterEnabled === false && !isManual) return { skipped: 'disabled' };
     if (!isLocationMappingEnabled(settings)) return { skipped: 'location_mapping_off' };
-    if (_mapUpdaterRunning || _mapUpdaterStarting || isRouterRunning()) return { skipped: 'busy' };
+    if (_mapUpdaterRunning || _mapUpdaterStarting || isRouterRunning() || isMapEvolutionRunning()) return { skipped: 'busy' };
 
     const ctx = SillyTavern.getContext();
     _mapUpdaterStarting = true;
     try {
         const loaded = await loadActiveDungeonMapContext();
         if (!loaded?.context) return { skipped: 'no_active_map' };
-        if (_mapUpdaterRunning || isRouterRunning()) return { skipped: 'busy' };
+        if (_mapUpdaterRunning || isRouterRunning() || isMapEvolutionRunning()) return { skipped: 'busy' };
 
         _mapUpdaterRunning = true;
         if (_mapUpdaterController) _mapUpdaterController.abort();

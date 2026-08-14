@@ -171,8 +171,10 @@ On generation end (skipped for quiet/impersonate, while a pass is already runnin
 2. **State Tracker** pass (throttled by “run every N”; default every turn) — parses the new narrative and updates the memo.
 3. **Combat API Override** sync (switch/restore narrator profile if combat started/ended).
 4. Dynamic RNG prompt sync (Hybrid mode combat boundary).
-5. **World Progression** TIME check (deterministic; see that section).
-6. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
+5. **Map Updater** occupancy (if Location Mapping is on and its run-every threshold is met).
+6. **World Progression** TIME check (deterministic; see that section).
+7. **Map Evolution** — grounds a new World Report onto matching maps, and/or interval restlessness for the configured map pool (current map, N maps, all mapped sites, or a selected checklist).
+8. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
 
 Important: the State Tracker runs **after** the reply. The memo injected on the *next* turn is what was updated from the *previous* reply.
 
@@ -527,7 +529,7 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ## Location Mapping (Alpha)
 
-Location Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Location Mapping (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect and Map Updater API calls.
+Location Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Location Mapping (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
 
 It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
@@ -540,7 +542,7 @@ The Adventure Companion cannot flip the Components checkbox or open Visuals/Map 
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 
-New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Architect connection. Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Architect connection. **Map Evolution** is a separate pass: it advances mapped sites off-screen on in-world time and grounds World Progression reports onto matching maps one site at a time (never all maps in one prompt). Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
 
 Repeated `CreateAreaMap` calls do not replace an already attached map.
 
@@ -574,7 +576,7 @@ The Visuals/Map tab does **not** require Real-Time Visualization or location sce
 
 ### Map Architect settings
 
-Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, architect prompt, and **Map Updater** (run every N messages, occupancy prompt). Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent** or **Map Updater**.
+Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, architect prompt, **Map Updater** (run every N messages, occupancy prompt), and **Map Evolution** (in-world interval, maps per tick, optional selected-map checklist, evolution prompt). Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent**, **Map Updater**, or **Map Evolution** (the last opens a picker so any mapped site can be evolved now).
 
 ---
 
@@ -590,6 +592,8 @@ Every X **in-world** hours (default 24), WP injects a World Report into context 
 ### Deterministic trigger
 
 JavaScript checks `[TIME]` in the State Memo after State Tracker updates. The AI writes the report; it does **not** decide whether to generate one. WP requires Lorebook Agent enabled. First successful TIME parse stamps a baseline and does not fire; later elapsed intervals fire reports. Manual **Generate Now** is always available.
+
+WP does not write `[MAP]` and is not taught room IDs. After a report is stored, **Map Evolution** grounds named entities onto matching attached maps sequentially (site, asset, and faction name hits only). Occupancy still records what play already established.
 
 ### Quick Start Guide
 

@@ -921,4 +921,69 @@ The last guard falls and a loose stone reveals a niche.
         expect(looksLikeDungeonSite(findLatestDungeonLocation(chat))).toBe(true);
         expect(looksLikeDungeonSite('Oakbridge, Market')).toBe(false);
     });
+
+    it('defaults EVOLVED ADD_ASSET origin to MAP_EVOLUTION and rejects revival, bubble mutation, and SET_AREA knowledge', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [
+                { id: 'crypt-passage', name: 'Crypt Passage', knowledge: 'VISITED', geometry: ['Damp stone.'], connections: [{ to: 'ossuary', state: 'OPEN', detail: '' }] },
+                { id: 'ossuary', name: 'Ossuary', knowledge: 'UNREVEALED', geometry: [], connections: [{ to: 'crypt-passage', state: 'OPEN', detail: '' }] },
+            ],
+            assets: [
+                { id: 'crypt-ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt-passage', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains.', origin: 'INITIAL_MAP' },
+            ],
+        };
+
+        const added = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-ashen-patrol',
+            operations: [{
+                op: 'ADD_ASSET', evidence: 'EVOLVED', name: 'Ashen Skeleton Patrol', kind: 'GROUP',
+                location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED',
+                distinct_from: ['crypt-ghoul'],
+            }],
+        });
+        expect(added.ok).toBe(true);
+        expect(added.document.assets.find(asset => asset.id === 'ashen-skeleton-patrol')).toMatchObject({
+            origin: 'MAP_EVOLUTION', knowledge: 'UNREVEALED', location: 'ossuary',
+        });
+
+        const revived = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-revive-ghoul',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'crypt-ghoul', state: 'ACTIVE' }],
+        });
+        expect(revived.ok).toBe(false);
+        expect(revived.errors[0]).toMatchObject({ code: 'PLAY_CANON_LOCKED' });
+
+        const autonomousAdd = applyDungeonMapTransaction(map, {
+            operation_id: 'day2-0800-autonomous-add',
+            operations: [{
+                op: 'ADD_ASSET', evidence: 'AUTONOMOUS', name: 'Wandering Shade', kind: 'CREATURE',
+                location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED',
+            }],
+        });
+        expect(autonomousAdd.ok).toBe(false);
+        expect(autonomousAdd.errors[0]).toMatchObject({ code: 'AUTONOMY_NOT_ALLOWED' });
+
+        const frozen = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-bubble',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'crypt-ghoul', detail: 'Should not change in the player bubble.' }],
+        }, { frozenAreaIds: ['crypt-passage'] });
+        expect(frozen.ok).toBe(false);
+        expect(frozen.errors[0]).toMatchObject({ code: 'PLAYER_BUBBLE_FROZEN' });
+
+        const knowledgeChange = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-reveal-ossuary',
+            operations: [{ op: 'SET_AREA', evidence: 'EVOLVED', area_id: 'ossuary', knowledge: 'DISCOVERED' }],
+        });
+        expect(knowledgeChange.ok).toBe(false);
+        expect(knowledgeChange.errors[0]).toMatchObject({ code: 'EVOLUTION_SET_AREA_LIMITED' });
+
+        const geometry = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-barricade',
+            operations: [{ op: 'SET_AREA', evidence: 'EVOLVED', area_id: 'ossuary', geometry_append: ['A collapsed shelf of bone now blocks the alcove.'] }],
+        });
+        expect(geometry.ok).toBe(true);
+        expect(geometry.document.areas.find(area => area.id === 'ossuary').geometry).toContain('A collapsed shelf of bone now blocks the alcove.');
+    });
 });

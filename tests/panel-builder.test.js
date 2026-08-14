@@ -69,8 +69,13 @@ describe('panel builder', () => {
         expect(source).toContain('runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 })');
         expect(source).toContain('rt-research-lorebook');
         expect(source).toContain('rt-research-map-updater');
+        expect(source).toContain('rt-research-map-evolution');
+        expect(source).toContain('promptMappedEvolutionSites');
+        expect(source).toContain('siteRoots');
+        expect(source).toContain('listMappedEvolutionSites');
         expect(source).toContain("toastr['info']('Starting Lorebook Agent pass...')");
         expect(source).toContain("toastr['info']('Starting Map Updater pass...')");
+        expect(source).toContain("toastr['info']('Starting Map Evolution pass...')");
     });
 
     it('shares Stop and Lorebook Terminal with Map Updater without NPC auto-portraits', () => {
@@ -78,12 +83,15 @@ describe('panel builder', () => {
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         expect(source).toContain('stopRouterPass()');
         expect(source).toContain('stopMapUpdaterPass()');
+        expect(source).toContain('stopMapEvolutionPass()');
         expect(source).toContain("skipped === 'stopped'");
         expect(source).toContain("toastr['info']('Stopped.', 'Map Updater')");
         expect(source).toContain("step.metadata?.source !== 'map_updater'");
+        expect(source).toContain("step.metadata?.source !== 'map_evolution'");
         expect(source).toContain('checkAndTriggerAutoGenerations(refreshAll)');
         expect(indexSource).toContain("stopBtn.style.display = busy ? 'flex' : 'none'");
-        expect(indexSource).toContain('const busy = !!running || isMapUpdaterRunning()');
+        expect(indexSource).toContain('const busy = !!running || isMapUpdaterRunning() || isMapEvolutionRunning()');
         expect(indexSource).toContain('stopMapUpdaterPass');
+        expect(indexSource).toContain('stopMapEvolutionPass');
     });
 });

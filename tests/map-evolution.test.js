@@ -1,0 +1,262 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../map-evolution-prompt.js';
+import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
+import {
+    filterSitesByRoots,
+    orderMappedSitesForEvolution,
+    pickSitesForEvolutionTick,
+    reportMentionsLabel,
+    resolvePlayerBubble,
+    selectMappedSitesForWorldReport,
+    siteEvolutionDue,
+    summarizeEvolutionDigest,
+} from '../map-evolution-lib.js';
+
+const tomb = {
+    siteRoot: 'Forgotten Tomb',
+    document: {
+        site: 'Forgotten Tomb',
+        kind: 'DUNGEON',
+        areas: [{ id: 'threshold', name: 'Threshold', knowledge: 'VISITED' }],
+        assets: [
+            { id: 'odran', name: 'Odran', kind: 'CREATURE', state: 'ACTIVE', faction: 'Keepers of the Drowned Stone' },
+            { id: 'ash-wight', name: 'Ash Wight', kind: 'CREATURE', state: 'DESTROYED' },
+        ],
+    },
+};
+const hall = {
+    siteRoot: 'Hall of the Ember-Ancestors',
+    document: {
+        site: 'Hall of the Ember-Ancestors',
+        kind: 'DUNGEON',
+        areas: [{ id: 'nave', name: 'Nave', knowledge: 'UNREVEALED' }],
+        assets: [],
+    },
+};
+const docks = {
+    siteRoot: 'Morrowfen',
+    document: {
+        site: 'Morrowfen',
+        kind: 'SETTLEMENT',
+        areas: [{ id: 'docks', name: 'Docks', knowledge: 'VISITED' }],
+        assets: [{ id: 'harbor-watch', name: 'Harbor Watch', kind: 'GROUP', state: 'ACTIVE', faction: 'Morrowfen Watch' }],
+    },
+};
+
+describe('Map Evolution', () => {
+    it('ships a dedicated prompt that occupancy never sees', () => {
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('You are Map Evolution');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evidence "EVOLVED"');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('PLAYER BUBBLE');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Do not ADD_AREA');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('World Report');
+    });
+
+    it('matches World Reports on site, asset, and faction names but not short area labels', () => {
+        expect(reportMentionsLabel('Odran fled toward the Hall of the Ember-Ancestors.', 'Odran')).toBe(true);
+        expect(reportMentionsLabel('Odran fled toward the Hall of the Ember-Ancestors.', 'Hall of the Ember-Ancestors')).toBe(true);
+        expect(selectMappedSitesForWorldReport([hall], 'The nave is quiet.')).toEqual([]);
+
+        const selected = selectMappedSitesForWorldReport(
+            [tomb, hall, docks],
+            'Odran fled the Forgotten Tomb for the Hall of the Ember-Ancestors. The Keepers of the Drowned Stone scattered.',
+        );
+        expect(selected.map(site => site.siteRoot)).toEqual(['Forgotten Tomb', 'Hall of the Ember-Ancestors']);
+        expect(selected.find(site => site.siteRoot === 'Forgotten Tomb').hostAssets).toEqual(['odran']);
+        expect(selected.find(site => site.siteRoot === 'Hall of the Ember-Ancestors').hostAssets).toEqual([]);
+        expect(selected.some(site => site.siteRoot === 'Morrowfen')).toBe(false);
+    });
+
+    it('orders host sites (matched living assets) before destination-only sites', () => {
+        const selected = selectMappedSitesForWorldReport(
+            [hall, tomb],
+            'Odran fled to the Hall of the Ember-Ancestors.',
+        );
+        expect(orderMappedSitesForEvolution(selected).map(site => site.siteRoot)).toEqual([
+            'Forgotten Tomb',
+            'Hall of the Ember-Ancestors',
+        ]);
+    });
+
+    it('summarizes a sequential digest without dumping operations JSON', () => {
+        const line = summarizeEvolutionDigest('Forgotten Tomb', {
+            operations: [
+                { op: 'SET_ASSET', asset_id: 'odran', state: 'FLEEING' },
+                { op: 'REMOVE_ASSET', asset_id: 'odran' },
+            ],
+        });
+        expect(line).toContain('Forgotten Tomb:');
+        expect(line).toContain('odran FLEEING');
+        expect(line).toContain('odran left the site');
+        expect(line).not.toContain('"op"');
+    });
+
+    it('freezes the current area as the player bubble', () => {
+        const bubble = resolvePlayerBubble({
+            site: 'Forgotten Tomb',
+            areas: [
+                { id: 'threshold', name: 'Threshold' },
+                { id: 'ossuary', name: 'Ossuary' },
+            ],
+            assets: [],
+        }, 'Forgotten Tomb, Threshold', { combatActive: true });
+        expect(bubble.frozenAreaIds).toEqual(['threshold']);
+        expect(bubble.combatActive).toBe(true);
+        expect(bubble.area.id).toBe('threshold');
+    });
+
+    it('stamps a first-visit baseline and later fires on elapsed in-world hours', () => {
+        expect(siteEvolutionDue(null, 8 * 60, 4)).toEqual({ due: false, baseline: true });
+        expect(siteEvolutionDue(8 * 60, 8 * 60 + 3 * 60, 4)).toEqual({ due: false, baseline: false });
+        expect(siteEvolutionDue(8 * 60, 8 * 60 + 4 * 60, 4)).toEqual({ due: true, baseline: false });
+    });
+
+    it('filters mapped sites by selected roots', () => {
+        expect(filterSitesByRoots([tomb, hall, docks], ['Morrowfen']).map(site => site.siteRoot)).toEqual(['Morrowfen']);
+        expect(filterSitesByRoots([tomb, hall], [])).toEqual([]);
+    });
+
+    it('picks the active site only for the active tick scope', () => {
+        const lastFiredMinutesFor = () => 0;
+        const picked = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'active',
+            currentRoot: 'Forgotten Tomb',
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(picked.due.map(site => site.siteRoot)).toEqual(['Forgotten Tomb']);
+        expect(picked.baseline).toEqual([]);
+    });
+
+    it('takes N due maps, or all due when count is 0, without spending slots on baselines', () => {
+        const lastFiredMinutesFor = root => ({
+            'Forgotten Tomb': -1,
+            'Hall of the Ember-Ancestors': 0,
+            Morrowfen: 60,
+        }[root]);
+        const counted = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'count',
+            count: 1,
+            randomize: false,
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(counted.baseline.map(site => site.siteRoot)).toEqual(['Forgotten Tomb']);
+        expect(counted.due.map(site => site.siteRoot)).toEqual(['Hall of the Ember-Ancestors']);
+
+        const allDue = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'count',
+            count: 0,
+            randomize: false,
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(allDue.due.map(site => site.siteRoot)).toEqual(['Hall of the Ember-Ancestors', 'Morrowfen']);
+    });
+
+    it('randomizes due maps when asked, otherwise oldest-due first', () => {
+        const lastFiredMinutesFor = root => ({
+            'Forgotten Tomb': 120,
+            'Hall of the Ember-Ancestors': 0,
+            Morrowfen: 60,
+        }[root]);
+        const oldest = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'count',
+            count: 2,
+            randomize: false,
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(oldest.due.map(site => site.siteRoot)).toEqual(['Hall of the Ember-Ancestors', 'Morrowfen']);
+
+        const randomized = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'count',
+            count: 1,
+            randomize: true,
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+            random: () => 0,
+        });
+        expect(randomized.due).toHaveLength(1);
+        expect(['Forgotten Tomb', 'Hall of the Ember-Ancestors', 'Morrowfen']).toContain(randomized.due[0].siteRoot);
+    });
+
+    it('evolves only the selected checklist, and nothing when the checklist is empty', () => {
+        const lastFiredMinutesFor = () => 0;
+        const selected = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'selected',
+            count: 0,
+            selectedRoots: ['Morrowfen'],
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(selected.due.map(site => site.siteRoot)).toEqual(['Morrowfen']);
+
+        const empty = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'selected',
+            selectedRoots: [],
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(empty.pool).toEqual([]);
+        expect(empty.due).toEqual([]);
+        expect(empty.baseline).toEqual([]);
+    });
+
+    it('keeps Evolution sequential, occupancy-separate, and wired through the pipeline', () => {
+        const evolution = readFileSync(new URL('../map-evolution.js', import.meta.url), 'utf8');
+        const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
+        const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+        const panelMarkup = readFileSync(new URL('../src/ui/panel/panel-markup.js', import.meta.url), 'utf8');
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+
+        expect(evolution).toContain("trigger === 'world_progression'");
+        expect(evolution).toContain('pickSitesForEvolutionTick');
+        expect(evolution).toContain('siteRoots');
+        expect(evolution).toContain('listMappedEvolutionSites');
+        expect(evolution).toContain("scope === 'active'");
+        expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
+        expect(evolution).toContain('PRIOR EVOLUTION THIS PERIOD');
+        expect(evolution).toContain('export async function groundMapsAfterWorldProgression');
+        expect(evolution).toContain('export async function maybeRunMapEvolution');
+        expect(evolution).toContain("from './map-evolution-lib.js'");
+        expect(evolution).not.toContain("from './map-updater.js'");
+
+        expect(updater).toContain('isMapEvolutionRunning()');
+        expect(updater).not.toContain('EVOLVED');
+        expect(updater).not.toContain('groundMapsAfterWorldProgression');
+
+        expect(hooks).toContain('await runMapUpdaterPass()');
+        expect(hooks.indexOf('await runMapUpdaterPass()')).toBeLessThan(hooks.indexOf('await maybeRunWorldProgression()'));
+        expect(hooks.indexOf('await maybeRunWorldProgression()')).toBeLessThan(hooks.indexOf('await maybeRunMapEvolution()'));
+        expect(hooks).toContain('groundMapsAfterWorldProgression(wpResult)');
+        expect(hooks).toContain('maybeRollbackMapEvolutionForSwipe');
+        expect(hooks).toContain('stopMapEvolutionPass()');
+
+        expect(settingsMarkup).toContain('<b>Map Evolution</b>');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_enabled"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_interval_hours"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_scope"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_count"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_randomize"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_selected_list"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_evolve_now"');
+        expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
+        expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
+        expect(panelMarkup).toContain('id="rt-research-map-evolution"');
+        expect(indexSource).toContain('rpg_map_evolution_evolve_now');
+        expect(indexSource).toContain('listMappedEvolutionSites');
+        expect(indexSource).toContain('mapEvolutionTickScope');
+    });
+});

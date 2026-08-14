@@ -2,6 +2,19 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.84.0] - 2026-08-15
+
+### Added
+- **Map Evolution on demand and tick scope**: the play-menu Map Evolution item opens a map picker (All / None / Current) and evolves the chosen sites immediately. Interval ticks can stay on the current map, take **N** due maps (0 = all due), evolve **every** due map, or use a **selected** checklist. Randomize is on by default; turn it off to prefer the oldest-due maps. World Progression grounding is unchanged and still follows report mentions, not the tick count.
+
+## [7.83.0] - 2026-08-14
+
+### Added
+- **Map Evolution**: a dedicated off-screen map pass (own `.js`, own prompt, own in-world interval) that is never mixed into Map Updater occupancy. After World Progression, it grounds named report outcomes onto matching maps **one site at a time**. Interval restlessness can move/restock entities outside the player bubble; play-established deaths stay dead. Settings live under Map Architect → Map Evolution; the Lorebook Agent play menu has a third item.
+
+### Changed
+- **Map Updater / Map Evolution max tokens**: default is now 25000 (same as Map Architect). The old 2500 budget was too small for a JSON map pass and killed the output stream. Saved 2500 values are upgraded automatically; the settings cap is 32000.
+
 ## [7.82.0] - 2026-08-14
 
 ### Added
