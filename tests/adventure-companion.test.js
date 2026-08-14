@@ -166,6 +166,7 @@ describe('Adventure Companion settings', () => {
                 tutorialMode: true,
                 injectLore: true,
                 injectMemo: true,
+                injectMap: true,
                 lookback: 17,
                 lookbackAll: true,
             });
@@ -174,6 +175,7 @@ describe('Adventure Companion settings', () => {
                 tutorialMode: true,
                 injectLore: true,
                 injectMemo: true,
+                injectMap: true,
                 lookback: 17,
                 lookbackAll: true,
             });
@@ -181,10 +183,23 @@ describe('Adventure Companion settings', () => {
                 tutorialMode: true,
                 injectLore: true,
                 injectMemo: true,
+                injectMap: true,
                 companion: { lookback: 17, lookbackAll: true },
             });
         } finally {
             fetchSpy.mockRestore();
         }
+    });
+
+    it('wires current site map injection into CHAT and settings', async () => {
+        const { readFileSync } = await import('node:fs');
+        const source = readFileSync(new URL('../adventure-companion.js', import.meta.url), 'utf8');
+        expect(source).toContain("id=\"rt-chat-inject-map\"");
+        expect(source).toContain('Inject current site map');
+        expect(source).toContain('formatDungeonMapForPlayer');
+        expect(source).toContain("await import('./router.js')");
+        expect(source).toContain('loadActiveDungeonMapContext');
+        expect(source).toContain('--- ACTIVE SITE MAP ---');
+        expect(source).toContain("bindCheckbox('rpg_adventure_companion_inject_map', 'injectMap')");
     });
 });
