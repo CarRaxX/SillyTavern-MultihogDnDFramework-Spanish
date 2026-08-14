@@ -873,12 +873,21 @@ export async function refreshLorebookAgentViewsNow(opts = {}) {
     const s = getSettings();
     syncNpcPortraitDependentUi(s);
     syncLocationImageDependentUi(s);
+    if (!isAgentPanelVisible()) {
+        // Still probe the mapped site so Visuals/Map is ready on first open.
+        if (typeof runtimeState.refreshImmersionView === 'function') {
+            await runtimeState.refreshImmersionView().catch(() => {});
+        }
+        if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+            globalThis._rpgSyncAgentImmersionUi();
+        }
+        return;
+    }
+    const source = opts.forceLayoutRefresh ? 'layout-toggle' : 'auto';
+    await runtimeState.refreshAgentManifest(source);
     if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
         globalThis._rpgSyncAgentImmersionUi();
     }
-    if (!isAgentPanelVisible()) return;
-    const source = opts.forceLayoutRefresh ? 'layout-toggle' : 'auto';
-    await runtimeState.refreshAgentManifest(source);
 }
 
 globalThis._rpgRefreshLorebookAgentViews = refreshLorebookAgentViewsNow;

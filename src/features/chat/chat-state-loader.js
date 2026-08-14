@@ -284,6 +284,9 @@ export function createChatStateLoader({
     }
     scheduleAgentManifestRefresh();
 
+    if (typeof runtimeState.refreshImmersionView === 'function') {
+        void runtimeState.refreshImmersionView().catch(() => {});
+    }
     if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
         globalThis._rpgSyncAgentImmersionUi();
     }

@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.50.5] - 2026-08-14
+
+### Changed
+- **Companion documentation**: Tutorial Mode's framework doc now covers Dungeon Reality Mapping — Map Architect, `[MAP]` storage, Visuals/Map vs the GM MAP badge, knowledge fog, and function-calling requirements.
+
+### Fixed
+- **Visuals/Map on first boot**: The Campaign Records / Visuals/Map switch is probed as soon as the panel is built, so a mapped site can show the tab without turning on location images or Real-Time Visualization.
+
 ## [7.50.1] - 2026-08-14
 
 ### Changed

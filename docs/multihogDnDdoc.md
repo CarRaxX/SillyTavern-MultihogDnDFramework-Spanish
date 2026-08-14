@@ -97,7 +97,7 @@ For the narrator, I'd recommend trying at least the following:
 
 2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work.
+3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Dungeon Reality Mapping** also needs function calling: without it, `CreateDungeonMap` cannot run and new site maps cannot be created.
 
 It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
@@ -205,7 +205,7 @@ The prompt is modular XML-style sections, including among others:
 | Identity & dice | `<role>`, `<rng_system>`, `<rng_queue_instructions>` |
 | Combat | `<combat>`, `<combat_start>`, `<combat_flow>`, `<damage_logic>`, `<positioning_and_movement>`, `<npc_stat_scaling>`, `<critical_hits_and_dying>` |
 | Progression | `<xp_system>`, `<level_up_protocol>`, `<quests>`, `<loot>` |
-| Simulation | `<narrative>`, `<world_progression>`, `<resting>`, `<leaving_vs_benching>`, `<bench_ETA_system>`, `<relationship_tracking>` |
+| Simulation | `<narrative>`, `<world_progression>`, `<dungeon_reality_and_hidden_mapping>`, `<resting>`, `<leaving_vs_benching>`, `<bench_ETA_system>`, `<relationship_tracking>` |
 | Output contract | `<state_memo>`, `<end_of_output_footer>`, `<CYOA_mode>`, various `<constraints>` |
 
 ### Combat rules the GM is taught (summary)
@@ -509,8 +509,8 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 
 - Portraits via SillyTavern Image Generation **or** Pollinations.ai.
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
-- **Visuals/Map**: location hero image, present NPC/PC tiles, and a knowledge-filtered dungeon graph while inside a mapped site.
-- Real-time triggers: on location enter/change and/or every N outputs.
+- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped dungeon — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Dungeon Reality Mapping** below.
+- Real-time scene-art triggers: on location enter/change and/or every N outputs.
 
 ### Slash command
 
@@ -522,6 +522,57 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 - `quiet=true`, `lookback=N`
 
 LA also has its own **💬** Direct Prompt in the agent panel.
+
+---
+
+## Dungeon Reality Mapping (Alpha)
+
+Dungeon Reality Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Dungeon Reality Mapping (Alpha)** — function calling **must** be enabled or `CreateDungeonMap` cannot run.
+
+It exists so dangerous sites (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies. The map is current truth. Child Location entries are player-observable history, not a second competing map.
+
+The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are.
+
+### How a map is created
+
+1. The narrator calls `CreateDungeonMap` **once**, before narrating entry into an unmapped high-risk site.
+2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map.
+3. A validator checks site/entrance identity, scale, stable IDs, asset references, reciprocal passages, and that every room is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
+4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
+
+New maps need function calling. After a map exists, Lorebook Agent can keep it current with `commit.map` (Advanced) or `[MAP_COMMIT]` (Basic Mode) **without** further tool calls.
+
+Repeated `CreateDungeonMap` calls do not replace an already attached map.
+
+### What the map stores
+
+- **Areas** (rooms/passages): geometry, routes, and knowledge `UNREVEALED` | `DISCOVERED` | `VISITED`.
+- **Assets** (creatures, traps, loot, hazards, corpses): one site-level identity with a current `location`, plus knowledge `UNREVEALED` | `SUSPECTED` | `KNOWN`.
+
+Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain).
+
+### When the map is active
+
+Activation uses **whole location segments**, not substring matches and not first-segment-only. Deepest matching mapped segment wins.
+
+| Current location | Map |
+|---|---|
+| `Hall of the Ember-Ancestors, Threshold` | on |
+| `Whispering Woods, Forgotten Tomb` | Forgotten Tomb on (region wrapping) |
+| `Forest Near the Hall of the Ember-Ancestors` | **off** (nearby mention only) |
+
+Leaving the site stops narrator injection without deleting the map; returning resumes it.
+
+### Player vs GM views
+
+- **Visuals/Map** (Lorebook Agent): player-facing node graph — visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled `?` stubs. Drag to pan; click a revealed room to open its location record. The list button opens the readable inspector (rooms, geometry, routes, assets). Unrevealed rooms and assets stay hidden unless **Reveal all** is on. The graph can be popped out into its own window.
+- **MAP badge** on a mapped root in Campaign Records: private GM inspector, including unrevealed facts and Raw JSON.
+
+The Visuals/Map tab does **not** require Real-Time Visualization or location scene art. Those are for generated pictures. The map tab appears when location images are on **or** the party is inside a mapped site.
+
+### Map Architect settings
+
+Under the Map Architect drawer: connection profile, model, preset, lookback, and output budget. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateDungeonMap` contract is.
 
 ---
 
@@ -616,6 +667,7 @@ Configurable narrator-side behaviors include:
 - **Narrative Pacing** modes: Normal (no length instructions), Shorter Outputs (modest length), High-Agency, and Downtime
 - **Benched Party** handling (ties into WP eligibility)
 - **Relationship Tracking** sections in the GM prompt
+- **Dungeon Reality Mapping** (alpha): hidden site maps for dungeons/ruins; requires function calling for `CreateDungeonMap`
 - **CYOA** choice presentation
 - End-of-output footer reminders so the GM closes turns in the format ST expects
 
@@ -657,12 +709,14 @@ The framework’s backbone is still **time + memo + optional lore/world layers**
 | Wrong campaign data or setup in a new chat | Check that Chat-Linked Mode and **Lock Control Room & Modules to each chat** are enabled. GLOBAL items intentionally share activation; CHAT-BOUND items restore that chat's saved setup. Lock-off mode is a temporary carry-over bypass. |
 | Tracker formatting broken after paste | Use 💬 Direct Prompt: “Reformat this sheet to stock module layout.” |
 | Modules disappear / drift on a local or small tracker model | Enable **Full Review Mode** (State Tracker & Modules, below Enable State Tracker). Delta-only updates are hard for weaker models; Full Review dumps every enabled module each pass. Also raise response length. |
+| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Dungeon Reality Mapping** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
+| CreateDungeonMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry; Map Architect failures are real errors and must not be retried in the same turn. |
 
 ---
 
 ## Mental Model (one paragraph)
 
-The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
+The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Dungeon Reality Mapping** (alpha) stores an objective hidden map for dangerous sites and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
 
 These are recommendations, not rules — experiment. Different models shine for different styles of play.
 

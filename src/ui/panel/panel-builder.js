@@ -894,7 +894,7 @@ export function createPanel(dependencies) {
         refreshManifest = async (source = 'auto') => {
             const s = getSettings();
             const dungeonRealityEnabled = isEffectiveSectionEnabled('dungeon_reality_and_hidden_mapping', s);
-            if (!_manifestBypassImmersion && (!s.locationImages || s.agentImmersionMode)) {
+            if (!_manifestBypassImmersion && (dungeonRealityEnabled || !s.locationImages || s.agentImmersionMode)) {
                 await runtimeState.refreshImmersionView();
             }
             const visualsOpen = !!(s.agentImmersionMode && (s.locationImages || runtimeState.hasActiveDungeonMap));
@@ -3050,6 +3050,9 @@ export function createPanel(dependencies) {
 
         runtimeState.refreshAgentManifest = refreshManifest;
         runtimeState.refreshNpcManifest = refreshManifest;
+        // Probe the mapped site even while the tracker tab is showing, so
+        // Visuals/Map can appear on first open without a settings toggle.
+        void runtimeState.refreshImmersionView();
 
         // ════════════════════════════════════════════════════════════════════
         //  NPC Creator Dialog — Card Import, Freeform, Archetype Generator
@@ -5150,11 +5153,12 @@ ${namingRule}`;
 
         if (isAgent) {
             syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
-            if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
-                globalThis._rpgSyncAgentImmersionUi();
-            }
             if (typeof runtimeState.renderRouterUI === 'function') runtimeState.renderRouterUI();
-            void refreshManifest();
+            void Promise.resolve(refreshManifest()).then(() => {
+                if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+                    globalThis._rpgSyncAgentImmersionUi();
+                }
+            });
         } else {
             applyViewState();
         }

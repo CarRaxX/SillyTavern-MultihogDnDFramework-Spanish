@@ -43,6 +43,15 @@ describe('panel builder', () => {
         expect(source).toContain('stripDungeonMapSection(item.content');
     });
 
+    it('probes the mapped site on first panel build so Visuals/Map does not wait for a settings toggle', () => {
+        const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
+        expect(source).toContain('dungeonRealityEnabled || !s.locationImages || s.agentImmersionMode');
+        expect(source).toContain('void runtimeState.refreshImmersionView()');
+        expect(source).toContain('void Promise.resolve(refreshManifest()).then(() => {');
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        expect(indexSource).toContain('Still probe the mapped site so Visuals/Map is ready on first open.');
+    });
+
     it('opens a knowledge-filtered site inspector from Visuals/Map', () => {
         const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
         expect(source).toContain('bindDungeonMapPan');
