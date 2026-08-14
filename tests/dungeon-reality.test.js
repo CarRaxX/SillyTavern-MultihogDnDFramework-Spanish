@@ -13,7 +13,6 @@ import {
     extractHiddenDungeonMapBlocks,
     findLatestDungeonLocation,
     formatDungeonMapForNarrator,
-    formatDungeonMapForPlayer,
     formatDungeonMapForUpdater,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
@@ -297,34 +296,6 @@ Area: Ossuary Behind Rotten Tapestry
         expect(readable).toContain('Crypt Ghoul [CREATURE / DESTROYED / KNOWN] — Smoldering remains beneath the arch.');
         expect(readable).not.toContain('"version"');
         expect(readable.length).toBeLessThan(raw.length * 0.7);
-    });
-
-    it('renders a player-facing map that hides unrevealed rooms and assets', () => {
-        const map = {
-            version: 3,
-            site: 'Abbey Undercroft',
-            kind: 'DUNGEON',
-            areas: [
-                { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['Low oak beams cross the ceiling.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'Iron-banded door' }, { to: 'vault', state: 'LOCKED', detail: 'Sealed glyph door' }] },
-                { id: 'crypt', name: 'Crypt Passage', knowledge: 'DISCOVERED', geometry: ['A collapsed arch provides cover.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'Iron-banded door' }] },
-                { id: 'vault', name: 'Secret Vault', knowledge: 'UNREVEALED', geometry: ['Gold-lined shelves.'], connections: [{ to: 'landing', state: 'LOCKED', detail: 'Sealed glyph door' }] },
-            ],
-            assets: [
-                { id: 'ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains.', origin: 'INITIAL_MAP' },
-                { id: 'trap', kind: 'TRAP', name: 'Glyph Lock', location: 'vault', state: 'ACTIVE', knowledge: 'UNREVEALED', detail: 'Explodes on touch.', origin: 'INITIAL_MAP' },
-            ],
-        };
-        const readable = formatDungeonMapForPlayer(map, 'Abbey Undercroft, Cellar Landing');
-        expect(readable).toContain('You are here: Cellar Landing');
-        expect(readable).toContain('Area: Cellar Landing [VISITED] (you are here)');
-        expect(readable).toContain('Area: Crypt Passage [DISCOVERED]');
-        expect(readable).toContain('- Not yet entered.');
-        expect(readable).toContain('Crypt Ghoul');
-        expect(readable).toContain('-> Unexplored [LOCKED]');
-        expect(readable).not.toContain('Secret Vault');
-        expect(readable).not.toContain('Glyph Lock');
-        expect(readable).not.toContain('Gold-lined shelves');
-        expect(readable).not.toContain('Explodes on touch');
     });
 
     it('uses explicit child chronicles once when establishing current state from a legacy map', () => {

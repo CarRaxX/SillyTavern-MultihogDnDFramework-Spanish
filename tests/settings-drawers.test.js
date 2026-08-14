@@ -117,7 +117,6 @@ describe('General & Visuals settings', () => {
             'rpg_adventure_companion_lookback_all',
             'rpg_adventure_companion_inject_lore',
             'rpg_adventure_companion_inject_memo',
-            'rpg_adventure_companion_inject_map',
             'rpg_adventure_companion_connection_source',
             'rpg_adventure_companion_connection_profile',
             'rpg_adventure_companion_ollama_url',
