@@ -9755,7 +9755,7 @@ RULES:
             $('#rt-agent-router-max-activations').val(settings.routerMaxActivations);
             saveSettings();
         });
-        $('#rpg_tracker_router_max_keyword_overflow').val(settings.routerMaxKeywordOverflow ?? 0).on('input', function () {
+        $('#rpg_tracker_router_max_keyword_overflow').val(settings.routerMaxKeywordOverflow ?? 6).on('input', function () {
             settings.routerMaxKeywordOverflow = parseInt(String($(this).val() || '')) || 0;
             $('#rt-agent-router-kw-overflow-cap').val(settings.routerMaxKeywordOverflow);
             saveSettings();

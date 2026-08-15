@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.82.2] - 2026-08-15
+
+### Changed
+- **Keyword Overflow Cap**: default is now 6 (was 0 / no cap). Existing chats still at 0 are raised once; you can set 0 again afterward for no cap.
+
 ## [7.82.1] - 2026-08-15
 
 ### Changed

@@ -815,6 +815,17 @@ function getSettingsInternal(extensionSettings) {
 
     enforceRealtimeVisualizationDisabled(s);
 
+    // Old shipped default was 0 (no cap). Raise existing 0s once to 6; after the
+    // flag is set, 0 stays a valid "no cap" choice.
+    if (!s.keywordOverflowDefaultedTo6) {
+        if (Number(s.routerMaxKeywordOverflow) === 0) s.routerMaxKeywordOverflow = 6;
+        for (const snapshot of Object.values(s.chatStates || {})) {
+            if (!snapshot || typeof snapshot !== 'object') continue;
+            if (Number(snapshot.routerMaxKeywordOverflow) === 0) snapshot.routerMaxKeywordOverflow = 6;
+        }
+        s.keywordOverflowDefaultedTo6 = true;
+    }
+
     return extensionSettings[MODULE_NAME];
 }
 
@@ -1001,6 +1012,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitOpenaiUrl',
     'portraitOpenaiKey',
     'portraitOpenaiModel',
+    'keywordOverflowDefaultedTo6',
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
     'mapArchitectSystemPrompt',

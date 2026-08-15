@@ -674,7 +674,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         routerMaxActivations: 8,
 
-        routerMaxKeywordOverflow: 0,   // 0 = unlimited; N = max extra keyword-activated entries above routerMaxActivations
+        routerMaxKeywordOverflow: 6,   // 0 = unlimited; N = max extra keyword-activated entries above routerMaxActivations
+        keywordOverflowDefaultedTo6: true,
 
         routerCampaignPrefix: "",
 
