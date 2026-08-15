@@ -19,6 +19,11 @@ import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import {
+    extractPartyMemberNames,
+    formatPartyRosterForMapUpdater,
+    isPartyMemberAssetName,
+} from './map-updater-lib.js';
+import {
     applyActiveDungeonMapCommit,
     isRouterRunning,
     loadActiveDungeonMapContext,
@@ -170,7 +175,33 @@ function kindRule(kind) {
         : 'If the party enters a newly invented room the map lacks, ADD_AREA from the narrative.';
 }
 
-function initialUserPrompt(loaded, recentStory) {
+function partyRosterSection(memo) {
+    const roster = formatPartyRosterForMapUpdater(memo);
+    if (!roster) return '';
+    return `
+## PARTY (do not add as assets)
+These names are the active party. Never ADD_ASSET them.
+${roster}
+`;
+}
+
+function rejectPartyMemberAssets(transaction, memo) {
+    const partyNames = extractPartyMemberNames(memo);
+    if (!partyNames.length || !transaction || typeof transaction !== 'object') return [];
+    const ops = Array.isArray(transaction.operations) ? transaction.operations : [];
+    return ops.flatMap((operation, index) => {
+        if (String(operation?.op || '').toUpperCase() !== 'ADD_ASSET') return [];
+        const name = String(operation?.name || '').trim();
+        if (!isPartyMemberAssetName(name, partyNames)) return [];
+        return [{
+            code: 'PARTY_MEMBER_NOT_AN_ASSET',
+            path: `operations[${index}].name`,
+            hint: `"${name}" is a [PARTY] member. Do not ADD_ASSET the player or party. Omit this operation.`,
+        }];
+    });
+}
+
+function initialUserPrompt(loaded, recentStory, memo) {
     const kind = normalizeMapSiteKind(loaded.context.document?.kind);
     return `UPDATE THE ATTACHED MAP
 Exact site root: ${loaded.context.siteRoot}
@@ -180,7 +211,7 @@ ${kindRule(kind)}
 ## CURRENT LOCATION
 ${loaded.currentLocation || 'Unknown'}
 Parsed from the narrator status footer. A more specific interior on this line is a durable map fact. If RECENT STORY is empty, still apply CURRENT LOCATION.
-
+${partyRosterSection(memo)}
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
 
@@ -190,7 +221,7 @@ ${recentStory || '(No additional recent context.)'}
 Output only the required JSON object. Use {"noop":true} when no durable map fact changed.`;
 }
 
-function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt) {
+function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt, memo) {
     return `CORRECTION PASS ${attempt}
 Your previous map update was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -204,7 +235,7 @@ ${priorOutput}
 
 ## CURRENT LOCATION
 ${loaded.currentLocation || 'Unknown'}
-
+${partyRosterSection(memo)}
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
 
@@ -269,8 +300,9 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
 
         const snapshot = await snapshotCampaignLocationsBook();
         const recentStory = recentStoryContext(ctx, settings, { isManual, lookback });
+        const memo = settings.currentMemo || '';
         const systemPrompt = String(settings.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).trim();
-        let prompt = initialUserPrompt(loaded, recentStory);
+        let prompt = initialUserPrompt(loaded, recentStory, memo);
         let lastIssues = [];
 
         for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -290,7 +322,16 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (!parsed.value) {
                 lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
+                    continue;
+                }
+                break;
+            }
+            const partyIssues = rejectPartyMemberAssets(parsed.value, memo);
+            if (partyIssues.length) {
+                lastIssues = partyIssues;
+                if (attempt < MAX_CORRECTION_ATTEMPTS) {
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
                     continue;
                 }
                 break;
@@ -305,7 +346,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (!validation.ok) {
                 lastIssues = validation.errors || [];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
                     continue;
                 }
                 break;
@@ -316,7 +357,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (!mapResult.ok) {
                 lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
                     continue;
                 }
                 break;

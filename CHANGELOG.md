@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.95.1] - 2026-08-16
+
+### Fixed
+- **Map Updater party filter**: occupancy now receives a names-only `[PARTY]` roster and is told not to `ADD_ASSET` those people. Matching adds are rejected on correction.
+
 ## [7.95.0] - 2026-08-15
 
 ### Added

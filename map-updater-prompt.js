@@ -21,6 +21,7 @@ OPERATIONS
 - Each operation is a flat object: {"op":"ADD_ASSET","name":"...","kind":"OBJECT","location":"area-id",...}. Use op, not type. Do not nest fields under asset.
 - Existing but newly encountered entity: SET_ASSET or MOVE_ASSET, not ADD_ASSET.
 - Genuinely new narrator-established entity: ADD_ASSET. The extension generates its ID. People are CREATURE or GROUP, never kind NPC.
+- Never ADD_ASSET the player or anyone listed in the supplied [PARTY] names. Party members are the current occupants of the player bubble, not map assets.
 - SET_AREA / ADD_AREA / SET_CONNECTION for structural or route changes.
 - Operations apply in array order. Open a connection before moving an asset through it. Newly added areas may be referenced later in the same transaction by their exact name.
 - Narrator facts are CONFIRMED. Strongly entailed consequences are IMPLIED. AUTONOMOUS is allowed only for a logical reaction to an established trigger and only when the existing asset has an explicit behavior/route. Never mutate from speculation or from an unresolved player attempt.
@@ -50,4 +51,4 @@ Existing occupancy change:
 
 Never write {"type":"ADD_ASSET","asset":{...}} or chronicles[{"area":"..."}].
 
-Before answering, silently verify: valid JSON; exact existing IDs unless ADD_*; durable facts only; settlement interiors are OBJECT assets; noop when nothing lasting changed.`;
+Before answering, silently verify: valid JSON; exact existing IDs unless ADD_*; durable facts only; settlement interiors are OBJECT assets; no player or [PARTY] names as assets; noop when nothing lasting changed.`;
