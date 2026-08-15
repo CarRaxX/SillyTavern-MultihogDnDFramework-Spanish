@@ -1303,8 +1303,6 @@ Rules:
 
         mapArchitectMaxTokens: 25000,
 
-        mapArchitectMaxTokensFloored: true,
-
         mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
 
         mapArchitectConnectionSource: "default",

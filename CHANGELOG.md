@@ -4,17 +4,26 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.95.0] - 2026-08-15
+
+### Added
+- **Lorebook Agent Map Evolution drawer**: ON/OFF, last/next evolution, interval, maps-per-tick scope, Evolve Now, and Reset Timeline sit above World Progression and stay synced with Settings.
+- **World Progression locations-per-report**: the agent drawer can set how many location dossiers each report covers.
+- **Persistent Maps + World Progression**: Map Evolution is the compatibility layer. Reports stay location-scale prose; maps realize them lazily. The older “do not use both” warning is retired.
+
 ### Changed
-- **Location-centric World Progression**: WP now rotates through complete readable location dossiers and Wider Currents. It strips `[MAP]`, treats named entities as read-only constraints, and produces directional prose instead of entity timelines or structured deltas. Trend guidance explicitly supports persistence, plateau, transformation, resolution, backlash, and causal reversal rather than automatic escalation.
-- **Lazy report realization**: World Reports no longer trigger an immediate Map Evolution fan-out. Each map reads its relevant unconsumed location section plus Wider Currents during its next normal interval, site-exit, or manual pass. Evolution chooses the concrete manifestation and tracks whether each report was materialized, already realized through play, or merely considered, preventing duplicate realization.
-- **Location Rotation settings**: entity Focus Randomization is replaced in the UI by locations-per-report and equal-cohort randomization. Map Evolution adds a recent-report lookback setting.
-- **Macro-only World Skeleton**: skeleton generation now creates only locations, factions, and conflicts. The NPC count/output category, orphaned NPC generator and promotion path, plus the unused entity-focus randomizer state are removed. Legacy skeleton NPC entries remain on disk but are ignored by WP and append context.
-- **Per-location Evolution backlog**: every successful Map Evolution outcome now enters a bounded site ledger. Material commits retain compact operation summaries; consecutive no-op passes coalesce into one quiet checkpoint with their elapsed time and pass count. Evolution receives that trajectory alongside the latest time gap, so frequent short intervals accumulate instead of repeatedly resetting its judgment to “nothing happened.”
-- **Unified map inspector**: the MAP badge on Location lore and the Visuals/Map details button now open the same knowledge-filtered inspector. Both start with **Reveal All** off, keep raw JSON and material Evolution history private until it is enabled, show the per-site Evolution ledger, and provide **Map Evolution: Run Now** scoped to that exact map.
+- **Map Evolution defaults**: interval is 12 in-world hours; automatic scope is every due mapped site. Map Architect, Map Updater, and Map Evolution output budgets default to 25000 tokens.
+- **Map inspector Run Now**: the site-scoped Map Evolution button sits beside Evolution History as a horizontal control.
+- **CYOA Mode**: shipped choices must not invent map obstacles (locked doors, traps, barricades) that are not already on an attached site map.
+- **Location-centric World Progression**: WP rotates complete readable location dossiers and Wider Currents, strips `[MAP]`, and treats named entities as constraints rather than simulation subjects.
+- **Lazy report realization**: World Reports no longer fan out into an immediate all-map Evolution pass.
+- **Macro-only World Skeleton**: skeleton generation creates locations, factions, and conflicts only. Legacy skeleton NPC entries remain on disk but are ignored.
+- **Per-location Evolution backlog** and **unified map inspector** as previously described in the 7.86 line.
 
 ### Fixed
-- **World Progression map isolation**: hidden `[MAP]` JSON can no longer enter the World Progression prompt through raw Location lore.
-- **Map Evolution time scale**: every site evolution request now receives that map's own Last Evolved timestamp, current in-world time, and computed elapsed duration. Initial and correction prompts scale changes to the actual gap instead of implicitly treating every trigger as one configured interval.
+- **Upgrade migrations**: Keyword Overflow 0→6, Max Active Keys 8→12, and Map Architect token flooring are one-time flags that are *not* seeded in defaults, so existing 7.82 chats actually receive them. After that pass, 0 / 8 / a lower token budget remain valid explicit choices.
+- **World Progression map isolation**: hidden `[MAP]` JSON cannot enter the WP prompt.
+- **Map Evolution time scale**: each site request uses that map's own Last Evolved clock and accumulated backlog.
 
 ## [7.86.2] - 2026-08-15
 

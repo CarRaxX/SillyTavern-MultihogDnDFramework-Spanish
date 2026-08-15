@@ -37,6 +37,9 @@ describe('Map Architect component', () => {
         const settingsSource = readFileSync(new URL('../src/state/settings.js', import.meta.url), 'utf8');
         expect(settingsSource).toContain('mapArchitectMaxTokensFloored');
         expect(settingsSource).toContain('architectTokens < 25000');
+        expect(defaults).not.toContain('mapArchitectMaxTokensFloored');
+        expect(defaults).not.toContain('keywordOverflowMigratedTo6');
+        expect(defaults).not.toContain('maxActiveKeysMigratedTo12');
     });
 
     it('registers a hidden narrator tool and a dedicated connection path', () => {
