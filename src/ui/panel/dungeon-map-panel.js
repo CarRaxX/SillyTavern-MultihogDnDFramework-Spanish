@@ -207,9 +207,7 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '' 
         <div class="rt-dungeon-map-subtitle">Revealed rooms, routes, and known assets. Unrevealed map facts and material Evolution details stay hidden unless you turn on Reveal All.</div>
         <div class="rt-dungeon-map-toolbar">
             <label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"> Reveal All</label>
-            <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Map Evolution: Run Now</button>
         </div>
-        <div class="rt-dungeon-map-run-status" role="status" aria-live="polite"></div>
         <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Map view">
             <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Map Entries</button>
             <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" disabled title="Turn on Reveal All to inspect raw JSON"><i class="fa-solid fa-code"></i> Raw JSON</button>
@@ -217,7 +215,11 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '' 
         <div class="rt-dungeon-map-readable" data-map-panel="readable"></div>
         <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden></pre>
         <section class="rt-dungeon-map-evolution-section">
-            <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
+            <div class="rt-dungeon-map-evolution-header">
+                <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
+                <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Map Evolution: Run Now</button>
+            </div>
+            <div class="rt-dungeon-map-run-status" role="status" aria-live="polite"></div>
             <div class="rt-dungeon-map-evolution-privacy">Material summaries follow Reveal All; quiet checkpoints never reveal hidden map contents.</div>
             <div class="rt-dungeon-map-evolution-history"></div>
         </section>`;

@@ -107,6 +107,8 @@ export function buildDefaultSettings() {
 
         agentModulesOpen: true,
 
+        agentMapEvolutionOpen: false,
+
         agentWorldOpen: false,
 
         dayNightCycleEnabled: false,
@@ -1351,11 +1353,11 @@ Rules:
 
         mapEvolutionEnabled: true,
 
-        mapEvolutionIntervalHours: 4,
+        mapEvolutionIntervalHours: 12,
 
         mapEvolutionMaxTokens: 25000,
 
-        mapEvolutionTickScope: "active",
+        mapEvolutionTickScope: "all",
 
         mapEvolutionTickCount: 1,
 

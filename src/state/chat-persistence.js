@@ -398,7 +398,7 @@ export function saveChatState(chatId, opts = {}) {
         mapEvolutionBacklogBySite: JSON.parse(JSON.stringify(s.mapEvolutionBacklogBySite || {})),
         mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
         mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
-        mapEvolutionTickScope: s.mapEvolutionTickScope || 'active',
+        mapEvolutionTickScope: s.mapEvolutionTickScope || 'all',
         mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
         mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
         mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),

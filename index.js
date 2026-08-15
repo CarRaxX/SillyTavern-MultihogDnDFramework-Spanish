@@ -214,7 +214,7 @@ function persistMapEvolutionSelectedRootsFromUi() {
 }
 
 function syncMapEvolutionTickRows(settings) {
-    const scope = settings?.mapEvolutionTickScope || 'active';
+    const scope = settings?.mapEvolutionTickScope || 'all';
     $('#rpg_map_evolution_n_row').toggle(scope === 'count' || scope === 'selected');
     $('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected');
 }
@@ -263,11 +263,14 @@ function updateMapEvolutionScheduleDisplay() {
     $('#rpg_map_evolution_last_fired').text(lastText);
     $('#rpg_map_evolution_last_report_val').text(lastText);
     $('#rpg_map_evolution_next_report_val').text(schedule.nextMins >= 0 ? formatInWorldTime(schedule.nextMins) : '—');
+    if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+        runtimeState.updateAgentMapEvolutionStatusRef();
+    }
 }
 
 function applyMapEvolutionTickSettingsToUi(settings) {
     const s = settings || getSettings();
-    $('#rpg_map_evolution_tick_scope').val(s.mapEvolutionTickScope || 'active');
+    $('#rpg_map_evolution_tick_scope').val(s.mapEvolutionTickScope || 'all');
     $('#rpg_map_evolution_tick_count').val(s.mapEvolutionTickCount ?? 1);
     $('#rpg_map_evolution_tick_randomize').prop('checked', s.mapEvolutionTickRandomize !== false);
     syncMapEvolutionTickRows(s);
@@ -276,6 +279,7 @@ function applyMapEvolutionTickSettingsToUi(settings) {
 }
 
 runtimeState.updateMapEvolutionScheduleDisplayRef = updateMapEvolutionScheduleDisplay;
+runtimeState.applyMapEvolutionTickSettingsToUiRef = applyMapEvolutionTickSettingsToUi;
 runtimeState.runMapEvolutionPassRef = runMapEvolutionPass;
 runtimeState.loadMappedEvolutionSiteRef = loadMappedEvolutionSite;
 runtimeState.isLoreOrMapAgentBusyRef = () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning();
@@ -2794,9 +2798,9 @@ function loadProfile(name) {
     s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 25000;
     s.mapUpdaterSystemPrompt = p.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
     s.mapEvolutionEnabled = p.mapEvolutionEnabled !== false;
-    s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 4);
+    s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 12);
     s.mapEvolutionMaxTokens = p.mapEvolutionMaxTokens ?? 25000;
-    s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'active';
+    s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'all';
     s.mapEvolutionTickCount = (() => {
         const n = Number(p.mapEvolutionTickCount);
         return Number.isFinite(n) ? Math.max(0, Math.min(50, n)) : 1;
@@ -2905,7 +2909,7 @@ function loadProfile(name) {
     $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
     $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
     $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
-    $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 4);
+    $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
     $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
     $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
     applyMapEvolutionTickSettingsToUi(s);
@@ -5271,12 +5275,16 @@ function organizeConnectionSettingsUI() {
         $('#rpg_map_evolution_enabled').prop('checked', settings.mapEvolutionEnabled !== false).on('change', function () {
             settings.mapEvolutionEnabled = !!$(this).prop('checked');
             saveSettings();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+                runtimeState.updateAgentMapEvolutionStatusRef();
+            }
         });
-        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 4).on('change', function () {
-            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 4));
+        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 12).on('change', function () {
+            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 12));
             $(this).val(settings.mapEvolutionIntervalHours);
             saveSettings();
             updateMapEvolutionScheduleDisplay();
+            $('#rt-agent-map-evo-interval').val(settings.mapEvolutionIntervalHours);
         });
         $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
             settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
@@ -5290,20 +5298,25 @@ function organizeConnectionSettingsUI() {
         });
         applyMapEvolutionTickSettingsToUi(settings);
         $('#rpg_map_evolution_tick_scope').on('change', function () {
-            settings.mapEvolutionTickScope = String($(this).val() || 'active');
+            settings.mapEvolutionTickScope = String($(this).val() || 'all');
             syncMapEvolutionTickRows(settings);
             void refreshMapEvolutionSelectedList();
             saveSettings();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+                runtimeState.updateAgentMapEvolutionStatusRef();
+            }
         });
         $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 1).on('change', function () {
             const parsed = parseInt(String($(this).val()), 10);
             settings.mapEvolutionTickCount = Math.max(0, Math.min(50, Number.isFinite(parsed) ? parsed : 1));
             $(this).val(settings.mapEvolutionTickCount);
             saveSettings();
+            $('#rt-agent-map-evo-tick-count').val(settings.mapEvolutionTickCount);
         });
         $('#rpg_map_evolution_tick_randomize').prop('checked', settings.mapEvolutionTickRandomize !== false).on('change', function () {
             settings.mapEvolutionTickRandomize = !!$(this).prop('checked');
             saveSettings();
+            $('#rt-agent-map-evo-tick-randomize').prop('checked', settings.mapEvolutionTickRandomize);
         });
         $('#rpg_map_evolution_selected_refresh').on('click', function () {
             void refreshMapEvolutionSelectedList();
@@ -5345,7 +5358,7 @@ function organizeConnectionSettingsUI() {
         });
         $('#rpg_map_evolution_btn_override_next').on('click', async function () {
             const s = getSettings();
-            const intervalHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 4);
+            const intervalHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 12);
             const intervalMinutes = intervalHours * 60;
             const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
                 intervalHours,
@@ -10437,6 +10450,7 @@ RULES:
             getSettings().worldProgressionLocationsPerReport = Math.max(1, Math.min(12, parseInt(String($(this).val()), 10) || 3));
             $(this).val(getSettings().worldProgressionLocationsPerReport);
             saveSettings();
+            $('#rt-agent-world-locations').val(getSettings().worldProgressionLocationsPerReport);
         });
         $wpLocationRandomize.prop('checked', settings.worldProgressionLocationRandomize !== false).on('change', function () {
             getSettings().worldProgressionLocationRandomize = !!$(this).prop('checked');
@@ -11230,7 +11244,7 @@ RULES:
             $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
             $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
             $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
-            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 4);
+            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
             $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
             applyMapEvolutionTickSettingsToUi(s);
             $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
@@ -11287,6 +11301,7 @@ RULES:
             // World Progression
             $('#rpg_world_progression_enabled').prop('checked', !!s.worldProgressionEnabled);
             $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+            $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
             $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
             $('#rpg_world_progression_skeleton_use_existing').prop('checked', !!s.worldProgressionSkeletonUseExisting);
             $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
@@ -11295,6 +11310,8 @@ RULES:
             syncSkeletonLorebookOnlyAvailability();
             if (s.worldProgressionSkeletonUseLorebooks) void refreshSkeletonLorebookList();
             $('#rpg_world_progression_consolidate_enabled').prop('checked', !!s.worldProgressionConsolidateEnabled);
+            if (typeof runtimeState.updateAgentWorldStatusRef === 'function') runtimeState.updateAgentWorldStatusRef();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') runtimeState.updateAgentMapEvolutionStatusRef();
 
             // Textareas (Agent prompt templates)
             if (typeof syncRouterPromptUi === 'function') syncRouterPromptUi();

@@ -67,6 +67,7 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Do not invent raids');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('own factions');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('WP is primary');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Prefer a durable local change and interesting dynamism over noop whenever in-world time has passed');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Never write MOVE_ASSET with "location"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('MOVE_ASSET uses to (required)');

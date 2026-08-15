@@ -1,6 +1,7 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { createRouterViewRenderer } from './panel-router-view.js';
 import { wireAgentWorldProgression } from './panel-world-progression.js';
+import { wireAgentMapEvolution } from './panel-map-evolution.js';
 import { wireAgentActivity } from './panel-agent-activity.js';
 import { buildPanelMarkup } from './panel-markup.js';
 import { createSceneViewController } from './panel-scene-view.js';
@@ -414,6 +415,17 @@ export function createPanel(dependencies) {
         /** Header controls live on #rt-header-face-agent (main panel or detached agent header). */
         const queryAgentUi = (sel) => agentPanel.querySelector(sel) || panel.querySelector(sel);
 
+        const agentMapEvolution = wireAgentMapEvolution({
+            agentPanel,
+            extractCurrentTimeStr,
+            formatInWorldTime,
+            getSettings,
+            parseInWorldTime,
+            saveChatState,
+            saveSettings,
+        });
+        const updateAgentMapEvolutionStatus = agentMapEvolution.updateStatus;
+
         const agentWorldProgression = wireAgentWorldProgression({
             agentPanel,
             confirmAndPurgeWorldHistory,
@@ -468,6 +480,7 @@ export function createPanel(dependencies) {
 
         // Apply on open
         updateAgentPanelDisabled();
+        updateAgentMapEvolutionStatus();
         updateAgentWorldStatus();
 
         // ── Agent collapse/expand ──

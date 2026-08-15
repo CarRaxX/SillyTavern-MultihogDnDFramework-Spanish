@@ -220,6 +220,64 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                         </div>
                     </div>
 
+                    <!-- Map Evolution Collapsible Header -->
+                    <div id="rt-agent-map-evo-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
+                        <div style="font-weight: bold; font-size: 0.846em; display: flex; align-items: center; gap: 6px; color: var(--rt-text-muted);">
+                            <i class="fa-solid ${settings.agentMapEvolutionOpen ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-map-evo-toggle-icon"></i>
+                            🗺️ Map Evolution
+                        </div>
+                        <span id="rt-agent-map-evo-enabled-badge" style="font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; ${settings.mapEvolutionEnabled !== false ? 'background:rgba(52,168,83,0.18); color:#34a853; border:1px solid rgba(52,168,83,0.3);' : 'background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);'}" title="Click to toggle Map Evolution">${settings.mapEvolutionEnabled !== false ? 'ON' : 'OFF'}</span>
+                    </div>
+
+                    <!-- Map Evolution Drawer -->
+                    <div id="rt-agent-map-evo-drawer" style="display: ${settings.agentMapEvolutionOpen ? 'block' : 'none'}; margin-bottom: 10px; flex-shrink: 0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+                            <div style="background:var(--rt-card-bg); border:var(--rt-border); border-radius:4px; padding:5px 8px;">
+                                <div style="font-size:0.692em; opacity:0.5; color:var(--rt-text-muted); margin-bottom:2px;">Last evolved</div>
+                                <div id="rt-agent-map-evo-last-fired" style="font-size:0.769em; color:var(--rt-text);">—</div>
+                            </div>
+                            <div style="background:var(--rt-card-bg); border:var(--rt-border); border-radius:4px; padding:5px 8px;">
+                                <div style="font-size:0.692em; opacity:0.5; color:var(--rt-text-muted); margin-bottom:2px;">Next evolution</div>
+                                <div id="rt-agent-map-evo-next-fire" style="font-size:0.769em; color:var(--rt-text);">—</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                            <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Interval:</span>
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-evo-interval" value="${settings.mapEvolutionIntervalHours ?? 12}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;">
+                            <span style="font-size:0.769em; opacity:0.5;">in-world hours</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+                            <label style="font-size:0.769em; opacity:0.7; display:flex; flex-direction:column; gap:3px;">
+                                Maps per interval tick
+                                <select id="rt-agent-map-evo-tick-scope" style="width:100%; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; font-size:0.769em; padding:3px 4px;">
+                                    <option value="active"${(settings.mapEvolutionTickScope || 'all') === 'active' ? ' selected' : ''}>Current map only</option>
+                                    <option value="count"${settings.mapEvolutionTickScope === 'count' ? ' selected' : ''}>N maps from every mapped site</option>
+                                    <option value="all"${(settings.mapEvolutionTickScope || 'all') === 'all' ? ' selected' : ''}>Every due mapped site</option>
+                                    <option value="selected"${settings.mapEvolutionTickScope === 'selected' ? ' selected' : ''}>Selected maps</option>
+                                </select>
+                            </label>
+                            <div id="rt-agent-map-evo-n-row" style="display:${(settings.mapEvolutionTickScope === 'count' || settings.mapEvolutionTickScope === 'selected') ? 'flex' : 'none'}; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <label style="font-size:0.769em; opacity:0.7; display:flex; align-items:center; gap:5px;">
+                                    How many
+                                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-evo-tick-count" value="${settings.mapEvolutionTickCount ?? 1}" style="width:44px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="0 = all due maps in the set">
+                                </label>
+                                <label style="font-size:0.769em; opacity:0.7; display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none;">
+                                    <input type="checkbox" id="rt-agent-map-evo-tick-randomize" ${settings.mapEvolutionTickRandomize !== false ? 'checked' : ''} style="margin:0; cursor:pointer;">
+                                    Randomize due maps
+                                </label>
+                            </div>
+                            <div id="rt-agent-map-evo-selected-hint" style="display:${settings.mapEvolutionTickScope === 'selected' ? 'block' : 'none'}; font-size:0.692em; opacity:0.55; line-height:1.35;">
+                                Selected maps use the checklist under Settings → Persistent Maps → Map Evolution.
+                            </div>
+                        </div>
+                        <button id="rt-agent-map-evo-fire-now" style="width:100%; background:rgba(156,39,176,0.15); border:1px solid rgba(156,39,176,0.3); color:#ce93d8; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                            <i class="fa-solid fa-map-location-dot"></i> Evolve Now
+                        </button>
+                        <button id="rt-agent-map-evo-reset-timeline" title="Clears per-site last-evolved timestamps so Map Evolution starts fresh from now" style="width:100%; background:rgba(234,67,53,0.1); border:1px solid rgba(234,67,53,0.25); color:rgba(234,67,53,0.75); border-radius:4px; padding:4px; font-size:0.692em; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; margin-top:5px;">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Reset Timeline
+                        </button>
+                    </div>
+
                     <!-- World Progression Collapsible Header -->
                     <div id="rt-agent-world-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
                         <div style="font-weight: bold; font-size: 0.846em; display: flex; align-items: center; gap: 6px; color: var(--rt-text-muted);">
@@ -245,6 +303,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Interval:</span>
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-interval" value="${settings.worldProgressionIntervalHours || 24}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;">
                             <span style="font-size:0.769em; opacity:0.5;">in-world hours</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                            <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Locations:</span>
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-locations" value="${settings.worldProgressionLocationsPerReport ?? 3}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="How many location dossiers receive their own section in each report.">
+                            <span style="font-size:0.769em; opacity:0.5;">per report</span>
                         </div>
                         <button id="rt-agent-world-fire-now" style="width:100%; background:rgba(52,168,83,0.15); border:1px solid rgba(52,168,83,0.3); color:#34a853; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
                             <i class="fa-solid fa-globe"></i> Fire Now

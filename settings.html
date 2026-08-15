@@ -1402,7 +1402,7 @@
                                             <input id="rpg_map_architect_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" class="text_pole" title="Recent chat messages supplied to Map Architect as established context." />
                                         </label>
                                         <label style="flex:1; min-width:140px;">Max Output Tokens
-                                            <input id="rpg_map_architect_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Maximum generation length for the complete JSON map." />
+                                            <input id="rpg_map_architect_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Maximum generation length for the complete JSON map." />
                                         </label>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
@@ -1433,7 +1433,7 @@
                                             <input id="rpg_map_updater_run_every" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="50" class="text_pole" title="How often the Map Updater auto-fires while inside a mapped site. 1 = every turn." />
                                         </label>
                                         <label style="flex:1; min-width:140px;">Max Output Tokens
-                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Maximum generation length for a map occupancy update." />
+                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Maximum generation length for a map occupancy update." />
                                         </label>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
@@ -1483,10 +1483,10 @@
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                                         <label style="flex:1; min-width:140px;">Interval (in-world hours)
-                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" class="text_pole" title="How often a mapped site in the interval pool may evolve and consume relevant World Report pressure." />
+                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" value="12" class="text_pole" title="How often a mapped site in the interval pool may evolve and consume relevant World Report pressure." />
                                         </label>
                                         <label style="flex:1; min-width:140px;">Max Output Tokens
-                                            <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Maximum generation length for one Map Evolution site pass." />
+                                            <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Maximum generation length for one Map Evolution site pass." />
                                         </label>
                                     </div>
                                     <label style="font-size:0.85em;">World Report Lookback
@@ -1496,7 +1496,7 @@
                                         <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Which mapped sites the automatic interval may evolve. Only maps selected by the normal pass can consume report pressure.">
                                             <option value="active">Current map only</option>
                                             <option value="count">N maps from every mapped site</option>
-                                            <option value="all">Every due mapped site</option>
+                                            <option value="all" selected>Every due mapped site</option>
                                             <option value="selected">Selected maps</option>
                                         </select>
                                     </label>

@@ -131,6 +131,11 @@ function getSettingsInternal(extensionSettings) {
     } else {
         localStorage.setItem('rpg_tracker_agent_console_open', String(s.agentConsoleOpen));
     }
+    if (localStorage.getItem('rpg_tracker_agent_map_evo_open') !== null) {
+        s.agentMapEvolutionOpen = localStorage.getItem('rpg_tracker_agent_map_evo_open') === 'true';
+    } else {
+        localStorage.setItem('rpg_tracker_agent_map_evo_open', String(s.agentMapEvolutionOpen));
+    }
     if (localStorage.getItem('rpg_tracker_agent_world_open') !== null) {
         s.agentWorldOpen = localStorage.getItem('rpg_tracker_agent_world_open') === 'true';
     } else {
@@ -861,7 +866,7 @@ function getSettingsInternal(extensionSettings) {
         s.mapRuntimeConnectionSeeded = true;
     }
     const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
-    s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'active';
+    s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'all';
     const tickCount = Number(s.mapEvolutionTickCount);
     s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;

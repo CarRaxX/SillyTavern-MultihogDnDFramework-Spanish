@@ -259,7 +259,7 @@ export const MAP_EVOLUTION_TICK_SCOPES = ['active', 'count', 'all', 'selected'];
 
 export function normalizeEvolutionTickScope(value) {
     const scope = String(value || '').trim().toLowerCase();
-    return MAP_EVOLUTION_TICK_SCOPES.includes(scope) ? scope : 'active';
+    return MAP_EVOLUTION_TICK_SCOPES.includes(scope) ? scope : 'all';
 }
 
 export function normalizeEvolutionRootList(roots) {

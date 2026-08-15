@@ -79,7 +79,7 @@ export function createChatStateLoader({
     s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(saved.mapEvolutionBacklogBySite || {}));
     s.mapEvolutionLastSiteRoot = saved.mapEvolutionLastSiteRoot || '';
     s.mapEvolutionPendingExitRoot = saved.mapEvolutionPendingExitRoot || '';
-    s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'active';
+    s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'all';
     s.mapEvolutionTickCount = saved.mapEvolutionTickCount ?? 1;
     s.mapEvolutionTickRandomize = saved.mapEvolutionTickRandomize !== false;
     s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(saved.mapEvolutionSelectedRoots || []));
@@ -150,8 +150,12 @@ export function createChatStateLoader({
     }
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
     $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
     $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
     $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
+    if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+        runtimeState.updateAgentMapEvolutionStatusRef();
+    }
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
