@@ -55,15 +55,102 @@ export async function getConnectionProfiles() {
 }
 
 export async function getCurrentCompletionPreset() {
-    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
-    const result = await executeSlashCommandsWithOptions(`/preset`);
-    return result?.pipe?.trim() || null;
+    try {
+        const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+        if (typeof executeSlashCommandsWithOptions !== 'function') return null;
+        const result = await executeSlashCommandsWithOptions('/preset');
+        return result?.pipe?.trim() || null;
+    } catch {
+        return null;
+    }
 }
 
 export async function setCompletionPreset(name) {
     if (!name) return;
     const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
     await executeSlashCommandsWithOptions(`/preset "${name}"`);
+}
+
+const LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS = [
+    'custom_url',
+    'vertexai_region',
+    'zai_endpoint',
+    'siliconflow_endpoint',
+    'minimax_endpoint',
+    'reverse_proxy',
+    'proxy_password',
+];
+
+function completionPresetExists(context, name) {
+    const wanted = String(name || '').trim();
+    if (!wanted) return false;
+    if (typeof context.getPresetManager !== 'function') return true;
+    for (const type of [undefined, 'openai', 'textgenerationwebui']) {
+        const manager = type ? context.getPresetManager(type) : context.getPresetManager();
+        if (manager?.getCompletionPresetByName?.(wanted)) return true;
+    }
+    return false;
+}
+
+function applyLiveChatCompletionOverrides(context, overridePayload = {}) {
+    const live = context.chatCompletionSettings || {};
+    for (const field of LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS) {
+        if (overridePayload[field] == null || overridePayload[field] === '') {
+            const value = live[field];
+            if (value != null && value !== '') overridePayload[field] = value;
+        }
+    }
+    return overridePayload;
+}
+
+/** Prefer an explicit override, then the profile's preset, then the live ST preset. */
+async function resolveProfilePresetName(context, requestedPreset, profile) {
+    const candidates = [
+        String(requestedPreset || '').trim(),
+        String(profile?.preset || '').trim(),
+        String(await getCurrentCompletionPreset() || '').trim(),
+    ];
+    for (const name of candidates) {
+        if (name && completionPresetExists(context, name)) return name;
+    }
+    return '';
+}
+
+/**
+ * Profile requests without a CC preset omit custom_url and 404 on Custom OpenAI.
+ * "Use Current Settings" must still attach a real preset or the live endpoint URL.
+ */
+async function sendViaConnectionProfile(context, settings, messages, { signal = null, extraOverride = {} } = {}) {
+    const maxTokens = resolveMaxTokens(settings);
+    const profile = typeof service.getProfile === 'function'
+        ? service.getProfile(settings.connectionProfileId)
+        : null;
+    const effectivePreset = await resolveProfilePresetName(context, settings.completionPresetId, profile);
+    const overridePayload = applyLiveChatCompletionOverrides(context, { ...extraOverride });
+    let profileOriginalPreset = null;
+    try {
+        if (effectivePreset && profile && profile.preset !== effectivePreset) {
+            profileOriginalPreset = profile.preset;
+            profile.preset = effectivePreset;
+        }
+        return await service.sendRequest(
+            settings.connectionProfileId,
+            messages,
+            maxTokens,
+            {
+                stream: false,
+                extractData: true,
+                includePreset: !!effectivePreset,
+                includeInstruct: true,
+                signal,
+            },
+            overridePayload,
+        );
+    } finally {
+        if (profile && profileOriginalPreset !== null) {
+            profile.preset = profileOriginalPreset;
+        }
+    }
 }
 
 // ── Combat Main-Profile Auto-Switch ────────────────────────────────────────────
@@ -270,7 +357,7 @@ function resolveMaxTokens(settings) {
 
 // ── Ollama ─────────────────────────────────────────────────────────────────────
 
-export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null) {
+export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null) {
     if (!url) throw new Error('Ollama URL is not configured.');
     if (!model) throw new Error('Ollama model is not selected.');
 
@@ -292,6 +379,7 @@ export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTok
             num_predict: (maxTokens && maxTokens > 0) ? maxTokens : undefined,
         },
     };
+    if (jsonSchema?.value) requestBody.format = jsonSchema.value;
     console.log(`[RPG Tracker] sendViaOllama — model: "${model}", url: "${targetUrl}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
     console.log(`[RPG Tracker] Parameters — Temp: ${requestBody.options.temperature}, Top_P: ${requestBody.options.top_p}, Top_K: ${requestBody.options.top_k}`);
@@ -359,7 +447,7 @@ export async function fetchOllamaModels(url) {
 
 // ── OpenAI Compatible ──────────────────────────────────────────────────────────
 
-export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null) {
+export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null) {
     if (!url) throw new Error('OpenAI Compatible URL is not configured.');
     if (!model) throw new Error('OpenAI Compatible model name is not set.');
 
@@ -384,7 +472,18 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
         stream: true,
         reasoning_format: 'auto',
     };
-    requestBody.max_tokens = (maxTokens && Number(maxTokens) > 0) ? Number(maxTokens) : 8192;
+    requestBody.max_tokens = resolveMaxTokens({ maxTokens, routerMaxTokens: maxTokens });
+    if (jsonSchema?.value) {
+        requestBody.response_format = {
+            type: 'json_schema',
+            json_schema: {
+                name: jsonSchema.name || 'structured_response',
+                description: jsonSchema.description,
+                schema: jsonSchema.value,
+                strict: jsonSchema.strict ?? false,
+            },
+        };
+    }
 
     console.log(`[RPG Tracker] sendViaOpenAI — model: "${model}", url: "${endpoint}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
@@ -507,6 +606,60 @@ export async function testOpenAIConnection(url, apiKey, model) {
     }
 }
 
+function responsePartText(value) {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+        return value.map(part => {
+            if (typeof part === 'string') return part;
+            return part?.text ?? part?.content ?? '';
+        }).filter(Boolean).join('\n');
+    }
+    if (value && typeof value === 'object') return JSON.stringify(value);
+    return '';
+}
+
+/** Extract provider output without SillyTavern's dialogue cleanup layer. */
+function extractRawStateResponse(context, raw) {
+    if (typeof raw === 'string') return raw.trim();
+
+    let extracted = '';
+    try {
+        extracted = responsePartText(context.extractMessageFromData?.(raw, context.mainApi));
+    } catch (_) { /* use provider-shape fallbacks below */ }
+    if (extracted.trim()) return extracted.trim();
+
+    const finalCandidates = [
+        raw?.choices?.[0]?.message?.content,
+        raw?.choices?.[0]?.text,
+        raw?.message?.content,
+        raw?.content,
+        raw?.response,
+        raw?.text,
+        raw?.output,
+        raw?.responseContent?.parts,
+    ];
+    for (const candidate of finalCandidates) {
+        const text = responsePartText(candidate).trim();
+        if (text) return text;
+    }
+
+    // Some reasoning models put their only usable payload in a reasoning field.
+    // The caller still parses and validates it as a map before persistence.
+    const reasoningCandidates = [
+        raw?.choices?.[0]?.message?.reasoning_content,
+        raw?.choices?.[0]?.message?.reasoning,
+        raw?.message?.reasoning_content,
+        raw?.message?.reasoning,
+        raw?.reasoning_content,
+        raw?.reasoning,
+    ];
+    for (const candidate of reasoningCandidates) {
+        const text = responsePartText(candidate).trim();
+        if (text) return text;
+    }
+    return '';
+}
+
 // ── Primary dispatch ───────────────────────────────────────────────────────────
 
 /**
@@ -516,12 +669,13 @@ export async function testOpenAIConnection(url, apiKey, model) {
  * @param {string} systemPrompt
  * @param {string} userPrompt
  * @param {AbortSignal|null} [signal]
- * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[] }} [options]
+ * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null }} [options]
  * @returns {Promise<string>}
  */
 export async function sendStateRequest(settings, systemPrompt, userPrompt, signal = null, options = {}) {
     const preserveUserMacro = !!options.preserveUserMacro;
     const userMacroNames = options.userMacroNames || [];
+    const jsonSchema = options.jsonSchema || null;
     const finalize = (text) => {
         let val = (preserveUserMacro && typeof text === 'string')
             ? restoreUserMacro(text, userMacroNames)
@@ -548,7 +702,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
         systemPrompt = reasoningGuidance + systemPrompt;
     }
 
-    console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${settings.connectionProfileId}", preset: "${settings.completionPresetId}"`);
+    const activeProfileId = settings.connectionSource === 'profile' ? (settings.connectionProfileId || '') : '(inactive)';
+    console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${activeProfileId}", preset: "${settings.completionPresetId}"`);
 
     // ── Profile mode: use ConnectionManagerRequestService (silent, no UI flicker) ──
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
@@ -564,55 +719,12 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 { role: 'user',   content: userPrompt   },
             ];
 
-            const maxTokens = resolveMaxTokens(settings);
-            const requestedPreset = String(settings.completionPresetId || '').trim();
-            const profile = (typeof service.getProfile === 'function')
-                ? service.getProfile(settings.connectionProfileId)
-                : null;
-            const profilePreset = String(profile?.preset || '').trim();
-            const shouldOverrideProfilePreset = !!requestedPreset && !!profile;
-
-            // Use the canonical ST service path. This correctly handles secret_id
-            // lookup, prompt formatting for text-completion backends (instruct
-            // template), and preset loading for all API types.
-            let raw;
-            let profileOriginalPreset = null;
-            try {
-                if (shouldOverrideProfilePreset) {
-                    profileOriginalPreset = profilePreset;
-                    profile.preset = requestedPreset;
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        {
-                            stream: false,
-                            extractData: true,
-                            includePreset: true,
-                            includeInstruct: true,
-                            signal,
-                        },
-                    );
-                } else {
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        {
-                            stream: false,
-                            extractData: true,
-                            includePreset: true,
-                            includeInstruct: true,
-                            reasoning_format: 'auto',
-                            signal,
-                        },
-                    );
-                }
-            } finally {
-                if (shouldOverrideProfilePreset && profile && profileOriginalPreset !== null && profile.preset !== profileOriginalPreset) {
-                    profile.preset = profileOriginalPreset;
-                }
-            }
+            // Never send provider-level json_schema here. Many Chat Completion
+            // profiles (custom OpenAI-compatible, OpenRouter, Claude, local
+            // proxies) 404/400 on structured-output endpoints. Map Architect
+            // already parses and validates the text itself; jsonSchema on this
+            // function is only a signal for the Main API generateRawData path.
+            const raw = await sendViaConnectionProfile(context, settings, messages, { signal });
 
             if (typeof raw === 'string') {
                 let parsed = null;
@@ -644,6 +756,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                     ?? text;
             }
 
+            if (text && typeof text === 'object') text = JSON.stringify(text);
+
             if (typeof text === 'string') {
                 logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
                 return finalize(text);
@@ -673,18 +787,20 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── Ollama Mode ──
     if (settings.connectionSource === 'ollama') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via Ollama: ${settings.ollamaModel}`);
-        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal));
+        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null));
     }
 
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal));
+        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null));
     }
 
     // ── Default mode: generateRaw through the active connection ──
     const { generateRaw } = context;
-    if (!generateRaw) throw new Error('[RPG Tracker] generateRaw is not available.');
+    if (!generateRaw && !(jsonSchema && typeof context.generateRawData === 'function')) {
+        throw new Error('[RPG Tracker] Neither generateRaw nor generateRawData is available.');
+    }
 
     let originalPreset = null;
     try {
@@ -701,11 +817,25 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             trimNames: false,
             reasoning_format: 'auto',
             signal,
+            // SillyTavern's built-in structured-output extraction currently
+            // supports Chat Completion here. Other Main API types still use the
+            // prompt contract plus Map Architect's runtime validator.
+            jsonSchema: context.mainApi === 'openai' ? jsonSchema : null,
         };
 
         options.responseLength = resolveMaxTokens(settings);
 
-        const result = await generateRaw(options);
+        let result;
+        if (jsonSchema && typeof context.generateRawData === 'function') {
+            // Map Architect already owns parsing, validation, and correction.
+            // Read the untouched provider response so unsupported response_format
+            // schemas cannot cause HTTP 400 and ST cleanup cannot erase the JSON.
+            const raw = await context.generateRawData({ ...options, jsonSchema: null });
+            result = extractRawStateResponse(context, raw);
+            if (!result) throw new Error('Main API returned no usable response content.');
+        } else {
+            result = await generateRaw(options);
+        }
 
         let text = "";
         if (typeof result === 'string') {
@@ -819,9 +949,12 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         const _reasoning = msg?.reasoning_content ?? msg?.reasoning ?? null;
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
+            const rawArguments = tc.function.arguments;
             let args;
-            try { args = JSON.parse(tc.function.arguments); } catch (_) { args = {}; }
-            return { content: msg.content || '', reasoning: _reasoning, toolCall: { name: tc.function.name, args, id: tc.id } };
+            let argumentError = null;
+            try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : (rawArguments ?? {}); }
+            catch (error) { args = {}; argumentError = String(error?.message || error); }
+            return { content: msg.content || '', reasoning: _reasoning, toolCall: { name: tc.function.name, args, id: tc.id, argumentError, rawArguments } };
         }
         const text = msg?.content ?? data.choices?.[0]?.text ?? '';
         return { content: text, reasoning: _reasoning, toolCall: null };
@@ -860,8 +993,14 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         const msg = data.message;
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
-            const args = tc.function?.arguments ?? {};
-            return { content: msg.content || '', toolCall: { name: tc.function.name, args, id: `call_${Date.now()}` } };
+            const rawArguments = tc.function?.arguments ?? {};
+            let args = rawArguments;
+            let argumentError = null;
+            if (typeof rawArguments === 'string') {
+                try { args = JSON.parse(rawArguments); }
+                catch (error) { args = {}; argumentError = String(error?.message || error); }
+            }
+            return { content: msg.content || '', toolCall: { name: tc.function.name, args, id: `call_${Date.now()}`, argumentError, rawArguments } };
         }
         return { content: msg?.content ?? '', toolCall: null };
     }
@@ -870,49 +1009,21 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
     if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
         const service = context.ConnectionManagerRequestService;
         if (service && typeof service.sendRequest === 'function') {
-            const maxTokens = resolveMaxTokens(settings);
-            const requestedPreset = String(settings.completionPresetId || '').trim();
-            const profile = (typeof service.getProfile === 'function')
-                ? service.getProfile(settings.connectionProfileId)
-                : null;
-            const profilePreset = String(profile?.preset || '').trim();
-            const shouldOverrideProfilePreset = !!requestedPreset && !!profile;
             // Do NOT pass tools to the profile service — ConnectionManagerRequestService
             // does not reliably forward them to all API backends, causing MALFORMED_FUNCTION_CALL
             // errors. The router uses a text-format fallback for profile connections.
-            let raw;
-            let profileOriginalPreset = null;
-            try {
-                if (shouldOverrideProfilePreset) {
-                    profileOriginalPreset = profilePreset;
-                    profile.preset = requestedPreset;
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        { stream: false, extractData: true, includePreset: true, includeInstruct: true, signal }
-                    );
-                } else {
-                    raw = await service.sendRequest(
-                        settings.connectionProfileId,
-                        messages,
-                        maxTokens,
-                        { stream: false, extractData: true, includePreset: true, includeInstruct: true, signal }
-                    );
-                }
-            } finally {
-                if (shouldOverrideProfilePreset && profile && profileOriginalPreset !== null && profile.preset !== profileOriginalPreset) {
-                    profile.preset = profileOriginalPreset;
-                }
-            }
+            const raw = await sendViaConnectionProfile(context, settings, messages, { signal });
             if (typeof raw === 'string') return { content: raw, toolCall: null };
             const r = /** @type {any} */ (raw);
             // Check for native tool_calls first
             const tc = r?.choices?.[0]?.message?.tool_calls?.[0] ?? r?.tool_calls?.[0] ?? null;
             if (tc) {
+                const rawArguments = tc.function?.arguments ?? {};
                 let args;
-                try { args = typeof tc.function?.arguments === 'string' ? JSON.parse(tc.function.arguments) : (tc.function?.arguments ?? {}); } catch (_) { args = {}; }
-                return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}` } };
+                let argumentError = null;
+                try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : rawArguments; }
+                catch (error) { args = {}; argumentError = String(error?.message || error); }
+                return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}`, argumentError, rawArguments } };
             }
             let text = r?.content
                 ?? r?.message?.content

@@ -4,6 +4,11 @@ import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundL
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
 import { scanRecentOutputForPresentNpcs } from './router.js';
+import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
+import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
+import { isDungeonMapDetached } from './src/ui/panel/dungeon-map-panel.js';
+import { isLocationMappingEnabled } from './src/state/section-enabled.js';
+import { runtimeState } from './src/app/runtime-state.js';
 
 /**
  * Parse current location from recent chat status footer, then memo [TIME] block.
@@ -124,7 +129,7 @@ export async function loadLocationEntryByPath(path, settings) {
             return {
                 id: fullId,
                 label: entry.comment || label,
-                content: entry.content || '',
+                content: stripDungeonMapSection(entry.content || ''),
                 keys: entry.key,
                 is_active: (s.activeRouterKeys || []).includes(fullId),
                 book: bookName,
@@ -215,6 +220,29 @@ export async function buildImmersionSceneState(memo, settings) {
     let npcs = await loadActiveSceneNpcs(s, ctx);
     npcs = prependPlayerCharacterToSceneNpcs(npcs, s, ctx);
 
+    let dungeonMap = null;
+    if (isLocationMappingEnabled(s)) {
+        try {
+            const overlay = runtimeState.dungeonMapHistoryOverlay;
+            if (overlay) {
+                dungeonMap = resolveDungeonMapFromHistorySnapshot(overlay, rawLocationText || resolvedPath);
+            } else {
+                const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
+                const bookName = prefix ? `${prefix}_Locations` : 'Locations';
+                const locBook = locBooks[bookName] || await ctx.loadWorldInfo(bookName);
+                if (locBook?.entries) {
+                    dungeonMap = resolveDungeonMapForLocation(
+                        locBook.entries,
+                        rawLocationText || resolvedPath,
+                        bookName,
+                    );
+                }
+            }
+        } catch (err) {
+            console.error('[RPG Tracker] dungeon map scene resolve failed:', err);
+        }
+    }
+
     return {
         rawLocationText,
         resolvedPath,
@@ -224,6 +252,7 @@ export async function buildImmersionSceneState(memo, settings) {
         locationBreadcrumb,
         locationLeaf,
         npcs,
+        dungeonMap,
         locationImagesEnabled: !!s.locationImages,
         npcPortraitsEnabled: s.npcPortraits !== false,
         isLocationGenerating: storagePath ? isLocationImageGenerating(storagePath) : false,
@@ -288,6 +317,18 @@ export function renderImmersionViewHtml(scene) {
         }).join('')
         : `<div class="rt-immersion-empty">No player character linked and no NPCs named in the latest narrator output.</div>`;
 
+    let mapHtml = '';
+    if (scene.dungeonMap?.document) {
+        const graph = buildDungeonMapGraph(scene.dungeonMap.document, {
+            playerFacing: true,
+            currentLocation: rawLocationText || resolvedPath || '',
+        });
+        mapHtml = renderDungeonMapEmbedHtml(graph, {
+            detached: isDungeonMapDetached(),
+            siteRoot: scene.dungeonMap.siteRoot || graph.site,
+        });
+    }
+
     return `<div class="rt-immersion-root">
         ${locationImagesEnabled ? `
         <div class="rt-immersion-hero-wrap${isLocationGenerating ? ' rt-immersion-hero-generating' : ''}" ${locDataAttrs} role="button" tabindex="0" title="${isLocationGenerating ? 'Generating scene art…' : (locationImage ? 'View location' : 'Set location image')}">
@@ -302,6 +343,7 @@ export function renderImmersionViewHtml(scene) {
             <div class="rt-immersion-hero-title">${locTitle}</div>
             ${breadcrumbHtml}
         </div>`}
+        ${mapHtml}
         <div class="rt-immersion-section-label">Present now</div>
         <div class="rt-immersion-npc-grid">${npcTiles}</div>
     </div>`;
@@ -443,7 +485,7 @@ function getRealtimeTriggerMode(s) {
 
 /**
  * Run Real-Time scene-art generation check (safe to call on every generation end).
- * Does not require Visualization Mode to be open.
+ * Does not require Visuals/Map to be open.
  */
 export async function runRealtimeSceneArtCheck() {
     const s = getSettings();

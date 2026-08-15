@@ -27,6 +27,11 @@ describe('stripCoreMarkersForNarrator', () => {
         expect(stripCoreMarkersForNarrator(input)).toBe(input);
     });
 
+    it('hides [MAP] from ordinary narrator lore while retaining visible location history', () => {
+        const input = '[CORE]A mapped crypt.[/CORE]\n[MAP]\nArea: Secret Reliquary\nA shade waits.\n[/MAP]\n[Day 1] The altar was scorched.';
+        expect(stripCoreMarkersForNarrator(input)).toBe('A mapped crypt.\n\n[Day 1] The altar was scorched.');
+    });
+
     it('passes through falsy input unchanged', () => {
         expect(stripCoreMarkersForNarrator('')).toBe('');
         expect(stripCoreMarkersForNarrator(null)).toBe(null);

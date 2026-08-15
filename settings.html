@@ -287,7 +287,7 @@
                             <small style="display: block; padding-left: 4px; font-size: 0.78em; opacity: 0.6; margin-top: 10px;">Imágenes de Ubicación y Visualización</small>
                             <div id="rpg_loc_images_settings_block" class="rt-loc-settings-block flex-container flexFlowColumn gap-1" style="padding-left: 4px;">
                                 <div class="rt-loc-settings-intro">
-                                    Arte de la escena en el Agente de Lorebook: miniaturas del árbol de ubicaciones, imágenes panorámicas y Modo Visualización.
+                                    Arte de escena en el Agente de Lorebook: miniaturas del árbol de ubicaciones, imágenes panorámicas y Visuales / Mapa. Desactivado por defecto.
                                 </div>
                                 <div id="rpg_loc_images_standard_group" class="rt-loc-settings-section">
                                     <div id="rpg_loc_images_standard_core">
@@ -295,7 +295,7 @@
                                             <input id="rpg_tracker_location_images" type="checkbox" />
                                             <span>Mostrar Imágenes de Ubicación</span>
                                             <i class="fa-solid fa-circle-question interactable"
-                                                title="Control principal para el arte de escenas de ubicación en el Agente de Lorebook."></i>
+                                                title="Interruptor principal para el arte de escenas de ubicación en el Agente de Lorebook: miniaturas en el árbol de ubicaciones, vista detallada con arte panorámico, subida arrastrando y soltando, y pestaña Visuales / Mapa en el panel del agente. También se activa automáticamente con el Modo Visualización en Tiempo Real o Generar Ubicaciones Automáticamente."></i>
                                         </label>
                                         <label class="checkbox_label">
                                             <input id="rpg_tracker_portrait_auto_locations" type="checkbox" />
@@ -327,7 +327,7 @@
                                         <input id="rpg_tracker_portrait_auto_scene_view" type="checkbox" />
                                         <span>Habilitar Modo Visualización en Tiempo Real</span>
                                         <i class="fa-solid fa-circle-question interactable"
-                                            title="Genera arte de escena dinámico usando el contexto del chat actual y los personajes presentes."></i>
+                                            title="Cuando está activo, el arte de escena se genera desde Visuales / Mapa usando el contexto del chat actual y los personajes presentes. Elige un activador abajo: al entrar en la ubicación, al cambiar de ubicación o cada N respuestas (+ al cambiar). También activa 'Mostrar Imágenes de Ubicación'. 'Generar Ubicaciones Automáticamente' se desactiva."></i>
                                     </label>
                                     <div id="rpg_loc_realtime_trigger_group" class="rt-loc-realtime-trigger-group" style="display: none;">
                                         <label class="rt-loc-realtime-trigger-label">Generar arte de la escena</label>
@@ -548,6 +548,7 @@
 
                     <div id="rpg_connection_slot_adventure_companion" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_game_system_wizard" class="rt-connection-drawer-slot"></div>
+                    <div id="rpg_connection_slot_map_architect" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_world_progression" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_portraits" class="rt-connection-drawer-slot"></div>
                 </div>
@@ -656,7 +657,7 @@
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Eventos</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Descanso</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Grupo en Reserva</span></label>
-                                <label class="checkbox_label" title="Construye un mapa oculto completo de la ubicación antes de explorar mazmorras/ruinas y resuelve trampas, sigilo y enemigos sobre dicho mapa. Experimental."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapeo Realista de Mazmorras (Experimental)</span></label>
+                                <label class="checkbox_label" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra/ruina (a escala de habitaciones) o pueblo/ciudad (a escala de distritos). Las llamadas a funciones DEBEN estar habilitadas o no podrá ejecutarse CreateAreaMap. No se recomienda junto con Progresión del Mundo hasta que se añada compatibilidad."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha) — llamadas a funciones obligatorias</span></label>
                                 <div style="display:flex;align-items:center;gap:4px;">
                                 <label class="checkbox_label" style="flex:1;" title="Inyecta las instrucciones de opciones CYOA (y etiquetas de ritmo activas) en el contexto de cada turno justo arriba de la cola RNG."><input type="checkbox" id="rpg_sysprompt_mod_cyoa_mode" /><span>🧭 Modo CYOA</span></label>
                                 <button id="rpg_cyoa_settings_btn" class="menu_button interactable" style="padding:1px 7px;font-size:11px;flex-shrink:0;" title="Ajustes del Modo CYOA"><i class="fa-solid fa-gear"></i></button>
@@ -1296,6 +1297,114 @@
                 </div>
             </div>
 
+            <!-- SUB-DRAWER: MAP ARCHITECT -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <i class="fa-solid fa-map" style="margin-right: 8px; opacity: 0.7;"></i>
+                    <b>Arquitecto de Mapas</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="flex-container flexFlowColumn gap-1">
+                        <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4; margin-bottom: 8px;">
+                            Cuando el narrador entra por primera vez en una mazmorra o asentamiento sin mapear, llama a este agente especializado una sola vez. Las mazmorras obtienen un mapa completo a escala de habitaciones; las ciudades y pueblos obtienen un mapa a escala de distritos. El arquitecto valida cada pasaje y referencia de entidad, lo guarda en la entrada raíz de Ubicación y devuelve una versión privada compacta al narrador.
+                        </div>
+                        <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                            <label style="flex:1; min-width:140px;">Historial del Chat
+                                <input id="rpg_map_architect_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" class="text_pole" title="Mensajes recientes del chat proporcionados al Arquitecto de Mapas como contexto establecido." />
+                            </label>
+                            <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
+                                <input id="rpg_map_architect_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Longitud máxima de generación para el mapa JSON completo." />
+                            </label>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Prompt del Arquitecto</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
+                                    <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado únicamente durante las llamadas a CreateAreaMap.</span>
+                                    <button id="rpg_map_architect_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado del Arquitecto de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
+                                </div>
+                                <textarea id="rpg_map_architect_system_prompt" class="text_pole" rows="14" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para el Arquitecto de Mapas"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Ajustes de Conexión</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <label>Fuente de Conexión</label>
+                                    <select id="rpg_map_architect_connection_source" class="text_pole">
+                                        <option value="default">API Principal</option>
+                                        <option value="profile">Perfil de Conexión (recomendado)</option>
+                                        <option value="ollama">Ollama</option>
+                                        <option value="openai">OpenAI Compatible</option>
+                                    </select>
+                                    <div id="rpg_map_architect_profile_group" style="display:none;">
+                                        <select id="rpg_map_architect_connection_profile" class="text_pole"></select>
+                                    </div>
+                                    <div id="rpg_map_architect_ollama_group" style="display:none;">
+                                        <input id="rpg_map_architect_ollama_url" type="text" class="text_pole" placeholder="URL" />
+                                        <div class="flex-container gap-1">
+                                            <select id="rpg_map_architect_ollama_model" class="text_pole" style="flex:1;"></select>
+                                            <button id="rpg_map_architect_ollama_refresh" class="menu_button interactable" title="Actualizar modelos de Ollama"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                        </div>
+                                    </div>
+                                    <div id="rpg_map_architect_openai_group" style="display:none;">
+                                        <input id="rpg_map_architect_openai_url" type="text" class="text_pole" placeholder="URL" />
+                                        <input id="rpg_map_architect_openai_key" type="password" class="text_pole" placeholder="Clave API" />
+                                        <div class="flex-container gap-1">
+                                            <select id="rpg_map_architect_openai_model" class="text_pole" style="flex:1;"></select>
+                                            <button id="rpg_map_architect_openai_refresh" class="menu_button interactable" title="Actualizar modelos compatibles con OpenAI"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                        </div>
+                                        <input id="rpg_map_architect_openai_model_manual" type="text" class="text_pole" placeholder="Nombre manual del modelo" />
+                                    </div>
+                                    <label>Ajuste Preestablecido (Preset)</label>
+                                    <select id="rpg_map_architect_completion_preset" class="text_pole"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Actualizador de Mapas</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
+                                        Tras crear un mapa, esta pasada especializada mantiene la ocupación de salas actualizada. No registra biografías ni relaciones de PNJs (eso corresponde al Agente de Lorebook). Utiliza la conexión del Arquitecto de Mapas superior. Por defecto se ejecuta en cada turno.
+                                    </div>
+                                    <label class="checkbox_label">
+                                        <input id="rpg_map_updater_enabled" type="checkbox" checked />
+                                        <span>Actualizar mapas automáticamente mientras el grupo esté dentro de una ubicación mapeada</span>
+                                    </label>
+                                    <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                        <label style="flex:1; min-width:140px;">Ejecutar Cada N Mensajes
+                                            <input id="rpg_map_updater_run_every" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="50" class="text_pole" title="Frecuencia con la que el Actualizador de Mapas se ejecuta automáticamente dentro de un lugar mapeado. 1 = cada turno." />
+                                        </label>
+                                        <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
+                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="400" max="16000" class="text_pole" title="Longitud máxima de generación para una actualización de ocupación de mapa." />
+                                        </label>
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado únicamente para actualizaciones de ocupación tras haber creado un mapa.</span>
+                                        <button id="rpg_map_updater_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado del Actualizador de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
+                                    </div>
+                                    <textarea id="rpg_map_updater_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para el Actualizador de Mapas"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- SUB-DRAWER 4: WORLD PROGRESSION -->
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
@@ -1309,6 +1418,9 @@
                             La Progresión del Mundo genera automáticamente informes de simulación fuera de escena a un intervalo de tiempo fijo en el juego.
                             Los informes son redactados por el LLM y se guardan en el libro de lore <code style="font-size:0.9em;">{prefix}_World</code>.
                             La activación es <b>determinista</b>: JavaScript verifica el bloque <code>[TIME]</code> tras cada actualización del Rastreador de Estado.
+                        </div>
+                        <div style="font-size: 0.8em; line-height: 1.4; margin-bottom: 8px; border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 6px; padding: 8px 10px; background: rgba(234, 179, 8, 0.08); color: #f5d76e;">
+                            No se recomienda usar Progresión del Mundo al mismo tiempo que <b>Mapas Persistentes</b> hasta que se añada compatibilidad completa. Elige uno u otro por ahora.
                         </div>
 
                         <!-- QUICK START GUIDE -->
@@ -1383,7 +1495,7 @@
                         <label class="checkbox_label" style="font-size: 0.92em; font-weight: bold; margin-bottom: 6px;">
                             <input id="rpg_world_progression_enabled" type="checkbox" />
                             <span>Habilitar Progresión del Mundo</span>
-                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Cuando está habilitado, la Progresión del Mundo se ejecuta automáticamente tras las actualizaciones del Rastreador de Estado cuando transcurre el intervalo."></i>
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Cuando está habilitado, la Progresión del Mundo se ejecuta automáticamente tras las actualizaciones del Rastreador de Estado cuando transcurre el intervalo en el juego. Requiere que el Agente de Lorebook esté activo y un prefijo de campaña válido. No se recomienda junto con Mapas Persistentes hasta que se añada compatibilidad."></i>
                         </label>
 
                         <!-- QUICK CONTROLS & STATUS CARD -->
@@ -1791,6 +1903,10 @@
                                     <label class="checkbox_label">
                                         <input id="rpg_adventure_companion_inject_memo" type="checkbox" />
                                         <span>Inyectar Rastreador de Estado</span>
+                                    </label>
+                                    <label class="checkbox_label" title="Attach the player-facing current dungeon/town map (same knowledge as Visuals/Map) so the Companion can discuss exploration.">
+                                        <input id="rpg_adventure_companion_inject_map" type="checkbox" />
+                                        <span>Inject current site map</span>
                                     </label>
                                 </div>
                             </div>

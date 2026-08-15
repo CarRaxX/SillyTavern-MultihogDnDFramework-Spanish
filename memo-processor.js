@@ -1486,6 +1486,12 @@ export function cleanMessageContent(msg) {
         mes = mes.replace(extraThought, '');
     }
 
+    // Private dungeon maps are persistence payloads for the extension, not
+    // narrative evidence for the Lorebook Agent. Removing the whole block
+    // prevents undiscovered rooms, enemies, and traps from becoming visible
+    // child Location entries. Accept the common malformed `</div hidden>` too.
+    mes = mes.replace(/<div\b(?=[^>]*\bdata-dungeon-(?:map|delta)\b)[^>]*>[\s\S]*?<\/div(?:\s+hidden)?>/gi, '');
+
     // Strip any remaining HTML/XML tags
     mes = mes.replace(/<[^>]+>/g, '');
 

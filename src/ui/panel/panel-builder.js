@@ -8,6 +8,10 @@ import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis } from './card
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
+import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
+import { renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -57,6 +61,7 @@ export function createPanel(dependencies) {
         buildNpcInstruction,
         canResizePanels,
         captureRouterLoreState,
+        restoreActiveDungeonMapHistory,
         checkAndTriggerAutoGenerations,
         clampFloatingPanelToViewport,
         resolveViewportClampedGeometry,
@@ -73,8 +78,10 @@ export function createPanel(dependencies) {
         getNpcRelationshipMaxDefault,
         getRequestHeaders,
         getRouterTick,
+        getMapUpdaterTick,
         getSettings,
         handleTrackerEnabledChange,
+        isMapUpdaterRunning,
         isRouterRunning,
         loadChatState,
         loadDeltaHeight,
@@ -109,6 +116,7 @@ export function createPanel(dependencies) {
         resolvePortraitSrcForPlayerCharacter,
         rollbackRouterPass,
         runRealtimeSceneArtCheck,
+        runMapUpdaterPass,
         runRouterPass,
         runStateModelPass,
         sanitizeLorebookRecordContent,
@@ -126,6 +134,7 @@ export function createPanel(dependencies) {
         showLorebookAgentDocumentation,
         showPortraitSettingsMenu,
         stopRouterPass,
+        stopMapUpdaterPass,
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
@@ -526,6 +535,42 @@ export function createPanel(dependencies) {
         // Tracks entries whose body is currently expanded
         const _openEntries = new Set();
 
+        const openDungeonMapPopup = async (item) => {
+            if (!isLocationMappingEnabled(getSettings())) return;
+            const map = extractDungeonMapSection(item?.content);
+            if (!map) return;
+            const mapDocument = parseDungeonMapDocument(map, item.label || '').document;
+            const ctx = SillyTavern.getContext();
+            if (!ctx.callGenericPopup) return;
+            const popupDom = document.createElement('div');
+            popupDom.className = 'rt-dungeon-map-popup';
+            popupDom.innerHTML = `
+                <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(mapDocument.site || item.label || 'Dungeon Map')} <small class="rt-dungeon-alpha-tag">ALPHA</small></div>
+                <div class="rt-dungeon-map-subtitle">Alpha private current state. Lorebook Agent reads the structured version while this site is active.</div>
+                <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Dungeon map view">
+                    <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Readable</button>
+                    <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false"><i class="fa-solid fa-code"></i> Raw JSON</button>
+                </div>
+                <div class="rt-dungeon-map-readable" data-map-panel="readable">${renderDungeonMapReadableHtml(mapDocument, { revealAll: true })}</div>
+                <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden>${escapeHtml(map)}</pre>`;
+            const setMapView = (view) => {
+                for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+                    const active = button.dataset.mapView === view;
+                    button.classList.toggle('rt-dungeon-map-view-btn-active', active);
+                    button.setAttribute('aria-selected', String(active));
+                }
+                for (const panel of popupDom.querySelectorAll('[data-map-panel]')) {
+                    panel.hidden = panel.dataset.mapPanel !== view;
+                }
+            };
+            for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+                button.addEventListener('click', () => setMapView(button.dataset.mapView));
+            }
+            await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
+                okButton: 'Close', cancelButton: false, wide: true, large: true,
+            });
+        };
+
         /**
          * @param {object} item - manifest row from getLorebookManifest
          * @param {{ stale?: boolean, dirty?: {content:string, keys:string, comment:string} | null, isNpcEntry?: boolean }} [opts]
@@ -561,7 +606,7 @@ export function createPanel(dependencies) {
 
             const syncReadFromItem = () => {
                 keysRead.textContent = '[' + item.keys.join(', ') + ']';
-                const raw = item.content || '';
+                const raw = stripDungeonMapSection(item.content || '');
                 const coreMatch = raw.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
                 const dynamic = sanitizeLorebookRecordContent(
                     raw.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '').trim()
@@ -854,7 +899,12 @@ export function createPanel(dependencies) {
 
         refreshManifest = async (source = 'auto') => {
             const s = getSettings();
-            if (s.agentImmersionMode && !_manifestBypassImmersion) {
+            const dungeonRealityEnabled = isLocationMappingEnabled(s);
+            if (!_manifestBypassImmersion && (dungeonRealityEnabled || !s.locationImages || s.agentImmersionMode)) {
+                await runtimeState.refreshImmersionView();
+            }
+            const visualsOpen = !!(s.agentImmersionMode && (s.locationImages || runtimeState.hasActiveDungeonMap));
+            if (visualsOpen && !_manifestBypassImmersion) {
                 if (!areAgentCharacterDetailHandlersReady()) {
                     _manifestBypassImmersion = true;
                     try {
@@ -863,7 +913,6 @@ export function createPanel(dependencies) {
                         _manifestBypassImmersion = false;
                     }
                 }
-                await runtimeState.refreshImmersionView();
                 return;
             }
 
@@ -979,7 +1028,7 @@ export function createPanel(dependencies) {
                 buildCardAppearanceSynopsis(content, substituteDisplayMacros);
 
             const renderSectionsHtml = (rawContent, isPC = false) => {
-                const parsed = parseNpcSections(rawContent, isPC);
+                const parsed = parseNpcSections(stripDungeonMapSection(rawContent), isPC);
                 const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
                 let html = '';
                 const coreEntries = Object.entries(parsed.core);
@@ -2238,7 +2287,7 @@ export function createPanel(dependencies) {
 
                                 getLocationDescription = (content) => {
                                     if (!content) return '';
-                                    const cleanContent = content.replace(/\[\/?CORE\]/gi, '');
+                                    const cleanContent = stripDungeonMapSection(content).replace(/\[\/?CORE\]/gi, '');
                                     const coreMatch = cleanContent.match(/(?:^|\n)\s*(?:\[CORE\])?\s*([\s\S]*?)(?=\n\s*(?:Atmosphere|Notable Features|History|Connections|Dangers|Resources):|$)/i);
                                     if (coreMatch?.[1]?.trim()) {
                                         return substituteDisplayMacros(coreMatch[1].trim().substring(0, 260));
@@ -2317,7 +2366,7 @@ export function createPanel(dependencies) {
                                                 heroWrap.innerHTML = renderLocPopupHeroInner(meta.src);
                                                 if (typeof refreshManifest === 'function') refreshManifest();
                                             };
-                                            await showLocationImageSettingsMenu(normPath, refreshPopupHero, item.content || '');
+                                            await showLocationImageSettingsMenu(normPath, refreshPopupHero, stripDungeonMapSection(item.content || ''));
                                         });
                                     }
 
@@ -2786,6 +2835,7 @@ export function createPanel(dependencies) {
 
                                     // Tokens and action buttons
                                     let tokensHtml = '';
+                                    let dungeonMapBadgeHtml = '';
                                     let cleanHtml = '';
                                     let viewNpcHtml = '';
                                     let viewLocHtml = '';
@@ -2801,6 +2851,9 @@ export function createPanel(dependencies) {
                                     if (node.item) {
                                         const entryTokens = Math.round((node.item.content || '').length / 4);
                                         tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
+                                        if (dungeonRealityEnabled && node.item.has_dungeon_map) {
+                                            dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map (alpha) attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
+                                        }
                                         if (isNpcBook) {
                                             viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
                                             if (s.npcRelationshipBars && renderCompactRelStats) {
@@ -2831,6 +2884,7 @@ export function createPanel(dependencies) {
                             ${statusDotHtml}
                             <span class="rt-agent-entry-label-span" style="${labelStyle}">${escapeHtml(node.name)}${isDirty ? ' <span style="color:#ffa500; font-size:8px;" title="Unsaved edits">●</span>' : ''}</span>
                             ${relStatsHtml}
+                            ${dungeonMapBadgeHtml}
                             ${tokensHtml}
                             ${pinHtml}
                             ${editHtml}
@@ -2854,11 +2908,19 @@ export function createPanel(dependencies) {
                                         });
                                     }
 
+                                    const dungeonMapBtn = entryHdr.querySelector('.rt-dungeon-map-badge');
+                                    if (dungeonMapBtn && node.item) {
+                                        dungeonMapBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            await openDungeonMapPopup(node.item);
+                                        });
+                                    }
+
                                     const locThumbWrap = entryHdr.querySelector('.rt-loc-thumb-wrap');
                                     if (locThumbWrap && node.item && locFullPath) {
                                         locThumbWrap.addEventListener('click', async (e) => {
                                             e.stopPropagation();
-                                            await showLocationImageSettingsMenu(locFullPath, () => refreshManifest(), node.item.content || '');
+                                            await showLocationImageSettingsMenu(locFullPath, () => refreshManifest(), stripDungeonMapSection(node.item.content || ''));
                                         });
                                         locThumbWrap.addEventListener('dragover', (ev) => { ev.preventDefault(); locThumbWrap.classList.add('rt-loc-thumb-drag'); });
                                         locThumbWrap.addEventListener('dragleave', () => { locThumbWrap.classList.remove('rt-loc-thumb-drag'); });
@@ -2921,7 +2983,7 @@ export function createPanel(dependencies) {
 
                                     if (node.item) {
                                         entryHdr.addEventListener('click', (e) => {
-                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-loc-thumb-wrap')) return;
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-loc-thumb-wrap')) return;
                                             const opening = entryBody.style.display === 'none';
                                             entryBody.style.display = opening ? 'flex' : 'none';
                                             entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
@@ -2994,6 +3056,9 @@ export function createPanel(dependencies) {
 
         runtimeState.refreshAgentManifest = refreshManifest;
         runtimeState.refreshNpcManifest = refreshManifest;
+        // Probe the mapped site even while the tracker tab is showing, so
+        // Visuals/Map can appear on first open without a settings toggle.
+        void runtimeState.refreshImmersionView();
 
         // ════════════════════════════════════════════════════════════════════
         //  NPC Creator Dialog — Card Import, Freeform, Archetype Generator
@@ -4049,7 +4114,7 @@ ${namingRule}`;
                 if (!btn || btn.classList.contains('rt-agent-view-mode-btn-active')) return;
                 e.stopPropagation();
                 const s = getSettings();
-                if (btn.id === 'rt-agent-view-mode-visualization' && !s.locationImages) return;
+                if (btn.id === 'rt-agent-view-mode-visualization' && !s.locationImages && !runtimeState.hasActiveDungeonMap) return;
                 s.agentImmersionMode = btn.id === 'rt-agent-view-mode-visualization';
                 saveSettings(true);
                 await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
@@ -4351,7 +4416,7 @@ ${namingRule}`;
         if (maxAct) {
             maxAct.addEventListener('input', () => {
                 const s = getSettings();
-                const val = parseInt(maxAct.value) || 8;
+                const val = parseInt(maxAct.value) || 12;
                 s.routerMaxActivations = val;
                 $('#rpg_tracker_router_max_activations').val(s.routerMaxActivations);
                 saveSettings();
@@ -4528,6 +4593,15 @@ ${namingRule}`;
                 saveSettings();
             });
         }
+        const mapRunEveryInput = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-map-updater-run-every'));
+        if (mapRunEveryInput) {
+            mapRunEveryInput.addEventListener('input', (e) => {
+                const s = getSettings();
+                s.mapUpdaterRunEvery = Math.max(1, parseInt((/** @type {HTMLInputElement} */ (e.target)).value) || 1);
+                $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery);
+                saveSettings();
+            });
+        }
 
         // ── Agent pause button ──
         const agentPauseBtn = queryAgentUi('#rt-agent-router-pause-btn');
@@ -4550,14 +4624,83 @@ ${namingRule}`;
 
 
         const manualRunBtn = queryAgentUi('#rt-agent-router-manual-run');
-        if (manualRunBtn) {
-            manualRunBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
+        const researchDropdown = queryAgentUi('#rt-research-dropdown');
+        const researchMenuWrap = queryAgentUi('#rt-research-menu-wrap');
+        const researchLorebookBtn = queryAgentUi('#rt-research-lorebook');
+        const researchMapUpdaterBtn = queryAgentUi('#rt-research-map-updater');
+        if (manualRunBtn && researchDropdown) {
+            const closeResearchDropdown = () => {
+                researchDropdown.style.display = 'none';
+                researchDropdown.closest('.rpg-tracker-panel')?.classList.remove('rt-research-menu-open');
+            };
+            const positionResearchDropdown = () => {
+                const hostPanel = manualRunBtn.closest('.rpg-tracker-panel');
+                if (!(hostPanel instanceof HTMLElement)) return;
+                if (researchDropdown.parentElement !== hostPanel) {
+                    hostPanel.appendChild(researchDropdown);
+                }
+                const rect = manualRunBtn.getBoundingClientRect();
+                const panelRect = hostPanel.getBoundingClientRect();
+                researchDropdown.style.top = `${rect.bottom - panelRect.top + 5}px`;
+                researchDropdown.style.right = `${panelRect.right - rect.right}px`;
+                researchDropdown.style.left = 'auto';
+                researchDropdown.style.display = 'flex';
+                hostPanel.classList.add('rt-research-menu-open');
+            };
+            const agentsBusy = () => isRouterRunning() || isMapUpdaterRunning();
+            const runManualLorebook = async () => {
+                if (agentsBusy()) {
+                    toastr.warning('An agent is already running.', 'Lorebook Agent');
+                    return;
+                }
                 const s = getSettings();
                 const { chat } = SillyTavern.getContext();
                 const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
-                toastr['info']("Starting manual research pass...");
+                toastr['info']('Starting Lorebook Agent pass...');
                 await runRouterPass(combinedNarrative, null, s.routerLookback || 4, true);
+            };
+            const runManualMapUpdater = async () => {
+                if (agentsBusy()) {
+                    toastr.warning('An agent is already running.', 'Map Updater');
+                    return;
+                }
+                const s = getSettings();
+                toastr['info']('Starting Map Updater pass...');
+                updateAgentStatusIndicator(isRouterRunning());
+                const result = await runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 });
+                updateAgentStatusIndicator(isRouterRunning());
+                const skipped = result?.skipped;
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Updater');
+                else if (skipped === 'no_active_map') toastr.warning('No active dungeon or settlement map.', 'Map Updater');
+                else if (skipped === 'disabled') toastr.warning('Map Updater is disabled.', 'Map Updater');
+                else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Updater');
+                else if (skipped === 'stopped') toastr['info']('Stopped.', 'Map Updater');
+                else if (result?.ok && result?.noop) toastr['info']('Nothing durable changed.', 'Map Updater');
+                else if (result?.ok) toastr['success']('Occupancy update applied.', 'Map Updater');
+                else toastr.error('Could not apply a valid occupancy update.', 'Map Updater');
+            };
+
+            manualRunBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = researchDropdown.style.display !== 'none';
+                if (isOpen) closeResearchDropdown();
+                else positionResearchDropdown();
+            });
+            researchDropdown.addEventListener('click', (e) => e.stopPropagation());
+            document.addEventListener('click', (e) => {
+                const target = /** @type {Node} */ (e.target);
+                if (researchMenuWrap?.contains(target) || researchDropdown.contains(target)) return;
+                closeResearchDropdown();
+            });
+            researchLorebookBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                closeResearchDropdown();
+                await runManualLorebook();
+            });
+            researchMapUpdaterBtn?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                closeResearchDropdown();
+                await runManualMapUpdater();
             });
         }
 
@@ -4566,6 +4709,7 @@ ${namingRule}`;
             agentStopBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 stopRouterPass();
+                stopMapUpdaterPass();
             });
         }
 
@@ -4904,6 +5048,7 @@ ${namingRule}`;
         agentPanel,
         captureRouterLoreState,
         getRouterTick,
+        getMapUpdaterTick,
         getSettings,
         reapplyRouterPass,
         refreshManifest,
@@ -4916,6 +5061,10 @@ ${namingRule}`;
     const terminal = agentPanel.querySelector('#rt-agent-router-terminal');
     const terminalClear = agentPanel.querySelector('#rt-agent-router-terminal-clear');
     const logClear = agentPanel.querySelector('#rt-agent-router-log-clear');
+
+    document.addEventListener('rt_map_updater_status', () => {
+        updateAgentStatusIndicator(isRouterRunning());
+    });
 
     document.addEventListener('rt_lore_agent_step', (e) => {
         const step = (/** @type {CustomEvent} */ (e)).detail;
@@ -4942,7 +5091,7 @@ ${namingRule}`;
             console.log(`[RPG Tracker] Lorebook Agent step "${step.type}" matched. Refreshing manifest...`);
             refreshManifest();
             updateAgentStatusIndicator(false);
-            if (step.type === 'finish') {
+            if (step.type === 'finish' && step.metadata?.source !== 'map_updater') {
                 console.log('[RPG Tracker] Lorebook Agent pass finished. Invoking checkAndTriggerAutoGenerations...');
                 checkAndTriggerAutoGenerations(refreshAll);
             }
@@ -5084,11 +5233,12 @@ ${namingRule}`;
 
         if (isAgent) {
             syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
-            if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
-                globalThis._rpgSyncAgentImmersionUi();
-            }
             if (typeof runtimeState.renderRouterUI === 'function') runtimeState.renderRouterUI();
-            void refreshManifest();
+            void Promise.resolve(refreshManifest()).then(() => {
+                if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+                    globalThis._rpgSyncAgentImmersionUi();
+                }
+            });
         } else {
             applyViewState();
         }
@@ -5448,6 +5598,7 @@ ${namingRule}`;
         if (runtimeState.historyViewIndex === -1) return;
         const snapshot = s.memoHistory[runtimeState.historyViewIndex];
         if (snapshot === undefined) return;
+        const mapSnapshot = getDungeonMapHistoryEntry(s, runtimeState.historyViewIndex);
 
         // Simply move the live pointer to this snapshot.
         // The history already contains all states — no need to archive currentMemo here.
@@ -5455,9 +5606,16 @@ ${namingRule}`;
         s.currentMemo = snapshot;
         s.historyIndex = runtimeState.historyViewIndex;
         runtimeState.historyViewIndex = -1;
+        runtimeState.dungeonMapHistoryOverlay = null;
+        runtimeState.liveDungeonMapBackup = null;
         saveSettings();
         if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
         syncMemoView();
+        if (mapSnapshot && typeof restoreActiveDungeonMapHistory === 'function') {
+            void restoreActiveDungeonMapHistory(mapSnapshot).then(ok => {
+                if (!ok) console.warn('[RPG Tracker] Could not restore dungeon map occupancy for this snapshot.');
+            });
+        }
         toastr['success']('Historical state restored as LIVE.', 'RPG Tracker');
     });
 
@@ -5467,7 +5625,7 @@ ${namingRule}`;
             settings.currentMemo = "";
             settings.prevMemo1 = "";
             settings.prevMemo2 = "";
-            settings.memoHistory = [];
+            clearMemoAndMapHistory(settings);
             settings.historyIndex = -1;
             settings.lastDelta = "";
             runtimeState.historyViewIndex = -1;

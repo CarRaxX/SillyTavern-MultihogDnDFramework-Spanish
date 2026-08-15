@@ -12,6 +12,8 @@ describe('new-chat Narrator Configuration inheritance', () => {
 
         const resetSource = source.slice(resetStart, resetEnd);
         expect(resetSource).toContain("s.currentMemo = '';");
+        expect(resetSource).toContain('s.npcRelationshipValues = {}');
+        expect(resetSource).toContain('s.npcRelationshipLog = {}');
         expect(resetSource).not.toContain('resetChatSetupToStock');
         expect(resetSource).toContain('clearChatBoundActivations(s)');
         expect(source).toContain('a new chat inherits that configuration');

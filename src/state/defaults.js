@@ -7,6 +7,8 @@ import { MODULE_NAME } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
 import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
+import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
+import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -79,6 +81,7 @@ export function buildDefaultSettings() {
         prevMemo2: "",
 
         memoHistory: [],
+        dungeonMapHistory: [],
 
         lastDelta: "",
 
@@ -317,6 +320,9 @@ export function buildDefaultSettings() {
         onboardingPersonaWords: "150",
 
         onboardingPersonaWordsCustom: "",
+
+        /** Instant Action: when true, auto-send "Begin the adventure" after the character is ready. On by default; uncheck to type your own first action. */
+        onboardingSendStarterMessage: true,
 
         /** Last Character Creator form values, saved when Generate Character is pressed. */
 
@@ -666,9 +672,9 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         routerMaxTurns: 5,
 
-        routerMaxActivations: 8,
+        routerMaxActivations: 12,
 
-        routerMaxKeywordOverflow: 0,   // 0 = unlimited; N = max extra keyword-activated entries above routerMaxActivations
+        routerMaxKeywordOverflow: 6,   // 0 = unlimited; N = max extra keyword-activated entries above routerMaxActivations
 
         routerCampaignPrefix: "",
 
@@ -1087,7 +1093,9 @@ Use these tags in your response:
 
 For LOC entries, the Name field MUST be the FULL hierarchical path using " :: " (space, colon, colon, space) as the separator.
 
-The current scene's location stack is shown above as "CURRENT LOCATION". Prepend it to any sub-location you record.
+The current scene's location stack is shown above as "CURRENT LOCATION" (parsed from the narrator status footer). Prepend it to any sub-location you record.
+
+If the latest narration clearly enters a more specific interior (chapel, inn, shop, house, alley) that CURRENT LOCATION omitted, record that interior anyway — do not wait for the footer to catch up.
 
 
 
@@ -1111,6 +1119,8 @@ Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keywor
 
 NPC / FAC / QUEST / EVENT labels: Name only — NO " :: " hierarchy, NO tag prefix.
 
+**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private \`[MAP]...[/MAP]\` section. Never reveal, rewrite, summarize, remove, or quote \`[MAP]\` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit \`[MAP_COMMIT]\`, \`commit.map\`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or local map mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).
+
 Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
 
 
@@ -1129,7 +1139,7 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
 ## ATTENTION & MEMORY
 1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
 2. **ACTIVE MEMORY**: Full details of all other currently active entities. You can update them at any time.
-3. **ARCHIVE INDEX**: Inactive entries — labels and keywords only. You CANNOT see their full biography.
+3. **ARCHIVE INDEX**: Complete catalog of inactive entries — Book::UID, labels, and keywords only. You CANNOT see their full biography. If a name is not in ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX, it does not exist.
 4. **RECALL**: To read or update an archive entry, use [[ACTIVATE: Name]]. Its full content becomes visible next turn.
 5. **LIMIT**: You are limited to **{{maxActivations}} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends.
 
@@ -1169,7 +1179,7 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
   - To change/add another eligible [CORE] field: use [[UPDATE_CORE: Name | FieldName | new text]].
   - To append a chronicle/timeline note: use the module's normal update format (e.g. re-use the [[EVENT:...]] name to accumulate, or update the existing entry) — never a second [CORE] block.
   - To bring an archived entry into full view first: use [[ACTIVATE: Name]].
-- Only use a fresh [[NPC:...]]/[[LOC:...]]/[[FAC:...]] record for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY or ARCHIVE INDEX before.
+- Only use a fresh [[NPC:...]]/[[LOC:...]]/[[FAC:...]] record for entities that are BRAND NEW — names absent from ACTIVE MEMORY and ARCHIVE INDEX. Absence means the entry does not exist.
 
 {{combatProfileGuidance}}
 
@@ -1211,16 +1221,19 @@ Maximum Active Entities: **{{maxActivations}}**.
 {{existingNpcNudge}}
 
 ## DO NOT RE-RECORD EXISTING ENTITIES
-Before using \`record\` for anyone or anything, check ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and the ARCHIVE INDEX for a matching name (check keywords too, they may be listed under a different label).
+Before using \`record\` for anyone or anything, scan ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and the ARCHIVE INDEX (labels and keywords). That catalog is complete.
 - If the entity ALREADY EXISTS anywhere in that context — even if you only see its label in the ARCHIVE INDEX with no full content — do NOT call \`record\` for it. Instead:
   - To change Body: use \`commit({"appearance": [{"id": "Book::UID or Name", "content": "..."}]})\`.
   - To change Worn Equipment: use \`commit({"equipment": [{"id": "Book::UID or Name", "content": "..."}]})\`.
   - To change/add another eligible [CORE] field: use \`commit({"core": [{"id": "Book::UID or Name", "field": "...", "content": "..."}]})\`.
   - To append new chronicle text: use \`commit({"update": [{"id": "Book::UID or Name", "content": "..."}]})\`.
-  - To see its full content first: use \`read_entry\` or \`grep_lore\`, or \`activate\` it.
-- Only use \`record\` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.
+  - To see its full content first: use \`read_entry\` with the Book::UID from that ARCHIVE INDEX line, or \`activate\` it. Never grep_lore or inspect_book to check whether a name exists.
+- Only use \`record\` for entities that are BRAND NEW — names absent from ACTIVE MEMORY, NEWLY ACTIVATED, and ARCHIVE INDEX. Absence means the entry does not exist.
 
 {{combatProfileGuidance}}
+
+## DUNGEON LOCATION OWNERSHIP
+A mapped root Location may contain a private \`[MAP]...[/MAP]\` section. Never reveal, rewrite, summarize, remove, or quote \`[MAP]\` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit \`[MAP_COMMIT]\`, \`commit.map\`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or local map mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).
 
 ## WORLD SKELETON (OFF-LIMITS)
 World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for World Progression only. They are NOT in your archive, tools cannot access them, and you must NEVER activate, read, update, or commit changes to Skeleton entries.
@@ -1341,6 +1354,42 @@ Rules:
         portraitLocationSystemPrompt: getDefaultPortraitLocationSystemPrompt(false),
 
         savedPortraitPromptPresets: {},
+
+        // Dedicated one-shot hidden site generator. The Dungeon Reality section
+        // toggle controls tool availability; these settings remain global.
+        mapArchitectLookback: 12,
+
+        mapArchitectMaxTokens: 25000,
+
+        mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
+
+        mapArchitectConnectionSource: "default",
+
+        mapArchitectConnectionProfileId: "",
+
+        mapArchitectCompletionPresetId: "",
+
+        mapArchitectOllamaUrl: "http://localhost:11434",
+
+        mapArchitectOllamaModel: "",
+
+        mapArchitectOpenaiUrl: "",
+
+        mapArchitectOpenaiKey: "",
+
+        mapArchitectOpenaiModel: "",
+
+        mapUpdaterEnabled: true,
+
+        mapUpdaterRunEvery: 1,
+
+        mapUpdaterMaxTokens: 2500,
+
+        mapUpdaterSystemPrompt: DEFAULT_MAP_UPDATER_SYSTEM_PROMPT,
+
+        mapUpdaterLastRunChatLength: 0,
+
+        mapUpdaterLastRunAt: 0,
 
         worldConnectionSource: "default",
 

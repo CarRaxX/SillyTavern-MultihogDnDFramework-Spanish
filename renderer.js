@@ -2133,7 +2133,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Acción Instantánea</div>
-                    <div class="rt-quickstart-sub">Elige un género literario, opcionalmente escribe un nombre o una Configuración Inicial y comienza. Si dejas el nombre en blanco, la IA elegirá uno. La extensión usará tu Configuración del Narrador, generará el resto del personaje, creará una Ficha de Jugador en el Agente de Lorebook junto con una persona de solo nombre en SillyTavern y comenzará la aventura.</div>
+                    <div class="rt-quickstart-sub">Elige un género literario, opcionalmente escribe un nombre o una Configuración Inicial y comienza. Si dejas el nombre en blanco, la IA elegirá uno. La extensión usará tu Configuración del Narrador, generará el resto del personaje y creará una Ficha de Jugador en el Agente de Lorebook junto con una persona de solo nombre en SillyTavern. Desmarca "¿Enviar Mensaje Inicial?" si prefieres escribir tú mismo tu primera acción en lugar de dejar que la IA abra la campaña.</div>
                     <div class="rt-quickstart-genres" role="group" aria-label="Quick Start genre">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasía</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Moderno</button>
@@ -2149,16 +2149,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <small>Guía el personaje, entorno, premisa o tono. Todo lo que dejes sin especificar se generará aleatoriamente.</small>
                     </label>
                     <textarea class="rt-quickstart-instructions" id="rt-quickstart-instructions" rows="2" maxlength="1000" placeholder="Ej. Una exploradora de 28 años con ballesta, comenzando en un pueblo fronterizo azotado por la tormenta" aria-label="Configuración Inicial opcional de Acción Instantánea"></textarea>
-                    <div class="rt-quickstart-player-card-length">
-                        <label for="rt-quickstart-persona-words">Longitud de Ficha de Jugador</label>
-                        <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Recuento de palabras de la Ficha de Jugador">
-                            ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
-                                const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
-                                return `<option value="${n}"${selected}>${n} palabras</option>`;
-                            }).join('')}
-                            <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Personalizada…</option>
-                        </select>
-                        <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras" />
+                    <div class="rt-quickstart-options">
+                        <div class="rt-quickstart-player-card-length">
+                            <label for="rt-quickstart-persona-words">Longitud de Ficha de Jugador</label>
+                            <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Recuento de palabras de la Ficha de Jugador">
+                                ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
+                                    const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
+                                    return `<option value="${n}"${selected}>${n} palabras</option>`;
+                                }).join('')}
+                                <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Personalizada…</option>
+                            </select>
+                            <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras" />
+                        </div>
+                        <div class="rt-quickstart-starter-message">
+                            <label for="rt-quickstart-send-starter" title="Si está marcado, la IA inicia la campaña automáticamente en cuanto el personaje esté listo.">
+                                <span>¿Enviar Mensaje Inicial?</span>
+                                <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''} aria-label="Enviar Mensaje Inicial" />
+                            </label>
+                            <span class="rt-cr-help-icon" title="Si está marcado, la IA inicia la campaña automáticamente en cuanto el personaje esté listo.">?</span>
+                        </div>
                     </div>
                     <button type="button" class="rt-quickstart-begin-btn" id="rt-quickstart-begin" disabled>⚡ Comenzar Acción Instantánea</button>
                     <div class="rt-quickstart-status" id="rt-quickstart-status">Selecciona un género literario para comenzar</div>
@@ -2600,9 +2609,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
                             <span>⛺ Grupo en Reserva (Rastrea compañeros ausentes)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Experimental: builds a full hidden location map before dungeon/ruin exploration.">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled. Not recommended together with World Progression until compatibility is added.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
-                            <span>🗺️ Dungeon Reality Mapping (Experimental)</span>
+                            <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />

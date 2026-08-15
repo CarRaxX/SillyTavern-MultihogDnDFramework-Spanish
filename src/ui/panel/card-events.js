@@ -1,5 +1,7 @@
 import { getRuntimeActions, sectionPages } from '../../app/runtime-bridge.js';
+import { runtimeState } from '../../app/runtime-state.js';
 import { pickGenreCharacterName } from '../../state/character-names.js';
+import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../../state/section-enabled.js';
 
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const runtime = getRuntimeActions();
@@ -652,14 +654,25 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 : (s.syspromptModules?.[settingKey] ?? true);
             cb.addEventListener('change', () => {
                 syncSettingsAndUI(settings => {
-                    if (!settings.syspromptModules) settings.syspromptModules = {};
-                    settings.syspromptModules[settingKey] = !!cb.checked;
+                    if (settingKey === LOCATION_MAPPING_SECTION_TAG) {
+                        setLocationMappingEnabled(!!cb.checked, settings);
+                    } else {
+                        if (!settings.syspromptModules) settings.syspromptModules = {};
+                        settings.syspromptModules[settingKey] = !!cb.checked;
+                    }
                     if (settingKey === 'party_bench') {
                         if (!settings.modules) settings.modules = {};
                         settings.modules['benched party'] = !!cb.checked;
                         if (cb.checked) settings.modules.party = true;
                     }
                 });
+                if (settingKey === LOCATION_MAPPING_SECTION_TAG) {
+                    // Keep the optional Components toggle authoritative for
+                    // the live Scene View and any detached map window.
+                    runtimeState.hasActiveDungeonMap = false;
+                    globalThis._rpgSyncAgentImmersionUi?.();
+                    void globalThis._rpgRefreshImmersionView?.();
+                }
             });
         }
     };

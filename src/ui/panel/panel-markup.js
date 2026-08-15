@@ -35,9 +35,15 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     </div>
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENTE EN PAUSA' : ''}</div>
                     <div class="rpg-tracker-header-right">
-                        <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Ejecutar Investigación Ahora" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                        <div id="rt-research-menu-wrap" style="position:relative; display:inline-flex;">
+                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Ejecutar Investigación Ahora — Agente de Lorebook o Actualizador de Mapas" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                            <div id="rt-research-dropdown" class="rt-update-menu rt-research-dropdown" style="display:none;">
+                                <div class="rt-menu-item" id="rt-research-lorebook"><b>Agente de Lorebook</b><small>PNJs, ubicaciones, relaciones</small></div>
+                                <div class="rt-menu-item" id="rt-research-map-updater"><b>Actualizador de Mapas</b><small>Ocupación de mazmorras y pueblos</small></div>
+                            </div>
+                        </div>
                         <button class="rpg-tracker-stop-btn" id="rt-agent-stop-btn" title="Detener Agente" style="display:none;">■</button>
-                        <button class="rpg-tracker-icon-btn" id="rt-agent-router-full-audit-panel" title="Ejecutar Auditoría Completa" style="color: #ff5555;"><i class="fa-solid fa-book-journal-whills"></i></button>
+                        <button class="rpg-tracker-icon-btn" id="rt-agent-router-full-audit-panel" title="Ejecutar Auditoría Completa (Por fragmentos)" style="color: #ff5555;"><i class="fa-solid fa-book-journal-whills"></i></button>
                          <div id="rt-cleanup-menu-wrap" style="position:relative; display:inline-flex;">
                              <button class="rpg-tracker-icon-btn" id="rt-agent-router-cleanup" title="Menú de Limpieza" style="color: #e67e22;"><i class="fa-solid fa-broom"></i></button>
                              <div id="rt-cleanup-dropdown" class="rt-cleanup-dropdown" style="display:none;">
@@ -136,6 +142,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-run-every" value="${settings.routerRunEvery || 3}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
                                 <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                             </div>
+                            <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Map Updater cadence while inside a mapped dungeon or settlement. Independent of Lorebook Agent. 1 = occupancy updates every turn.">
+                                <span style="font-size: 0.769em; opacity: 0.7;">Map every:</span>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-updater-run-every" value="${settings.mapUpdaterRunEvery ?? 1}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
+                                <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
+                            </div>
                         </div>
 
                         <label style="display: flex; align-items: center; gap: 5px; margin-bottom: 10px; cursor: pointer; font-size: 0.769em; opacity: 0.75;" title="Incluye mensajes ocultos (ej. mensajes colapsados por un resumidor) en la ventana de revisión del agente.">
@@ -155,11 +166,12 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             </div>
                             <div style="flex: 1;" title="Claves Activas Máximas: El número máximo de entradas de lore que el agente puede mantener en Memoria Activa. Una vez alcanzado, debe desactivar entradas antiguas para añadir nuevas.">
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted);">${t('agent.maxActiveKeys', 'Claves Activas Máximas:')}</div>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-max-activations" value="${settings.routerMaxActivations || 8}" min="1" max="20" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-max-activations" value="${settings.routerMaxActivations || 12}" min="1" max="20" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
                             </div>
-                            <div style="flex: 1;" title="Límite de Desbordamiento de Claves: máximo de entradas por palabras clave permitidas por encima de las Claves Activas Máximas (0 = sin límite). Ejemplo: Máximo Activo=8, Límite=4 → techo máximo de 12 en total.">
+                            <div style="flex: 1;" title="Límite de Desbordamiento de Claves: máximo de entradas por palabras clave permitidas por encima de las Claves Activas Máximas (0 = sin límite). Cuando se supera, las más antiguas se desalojan. Ejemplo: Máximo Activo=12, Límite=6 → techo de 18 en total.">
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted); line-height: 1.2;">${t('agent.keywordOverflowCap', 'Límite de Desbordamiento de Claves')}<br><span style="font-size: 0.75em; opacity: 0.5; font-weight: normal;">${t('agent.noCap', '(0 = sin límite)')}</span>:</div>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-kw-overflow-cap" value="${settings.routerMaxKeywordOverflow ?? 0}" min="0" max="50" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-kw-overflow-cap" value="${settings.routerMaxKeywordOverflow ?? 6}" min="0" max="50" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
+                            </div>
                             </div>
                         </div>
                         
@@ -236,6 +248,9 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-interval" value="${settings.worldProgressionIntervalHours || 24}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;">
                             <span style="font-size:0.769em; opacity:0.5;">${t('agent.inWorldHours', 'in-world hours')}</span>
                         </div>
+                        <div style="font-size:0.692em; line-height:1.35; margin-bottom:8px; padding:6px 8px; border-radius:4px; border:1px solid rgba(234,179,8,0.35); background:rgba(234,179,8,0.08); color:#f5d76e;">
+                            Not recommended together with Persistent Maps until compatibility is added (soon).
+                        </div>
                         <button id="rt-agent-world-fire-now" style="width:100%; background:rgba(52,168,83,0.15); border:1px solid rgba(52,168,83,0.3); color:#34a853; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
                             <i class="fa-solid fa-globe"></i> ${t('agent.fireNow', 'Fire Now')}
                         </button>
@@ -264,11 +279,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <div id="rt-agent-campaign-section" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; display: flex; flex-direction: column; flex-shrink: 0;">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; gap: 8px;">
                             <div id="rt-agent-campaign-header-title" style="font-weight: bold; opacity: 0.8; font-size: 0.846em; flex: 1; min-width: 0;${settings.locationImages ? ' display: none;' : ''}">${t('agent.campaignRecords', 'REGISTROS DE CAMPAÑA')}</div>
-                            <div class="rt-agent-view-mode-switch" id="rt-agent-view-mode-switch" role="tablist" aria-label="Lorebook view mode"${settings.locationImages ? '' : ' style="display: none;"'}>
+                            <div class="rt-agent-view-mode-switch" id="rt-agent-view-mode-switch" role="tablist" aria-label="Registros de Campaña o Visuales / Mapa"${settings.locationImages ? '' : ' style="display: none;"'}>
                                 <button type="button" class="rt-agent-view-mode-btn${settings.agentImmersionMode ? '' : ' rt-agent-view-mode-btn-active'}" id="rt-agent-view-mode-records" role="tab" aria-selected="${settings.agentImmersionMode ? 'false' : 'true'}">${t('agent.campaignRecordsTab', 'Registros de Campaña')}</button>
                                 <button type="button" class="rt-agent-view-mode-btn rt-agent-view-mode-btn-visualization${settings.agentImmersionMode ? ' rt-agent-view-mode-btn-active' : ''}" id="rt-agent-view-mode-visualization" role="tab" aria-selected="${settings.agentImmersionMode ? 'true' : 'false'}">
                                     <span class="rt-agent-view-mode-glow" aria-hidden="true"></span>
-                                    <span class="rt-agent-view-mode-label">${t('agent.visualizationMode', 'Modo Visualización')}</span>
+                                    <span class="rt-agent-view-mode-label">${t('agent.visualsMapTab', 'Visuales / Mapa')}</span>
                                 </button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">

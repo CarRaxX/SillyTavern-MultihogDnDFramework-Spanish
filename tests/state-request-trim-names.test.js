@@ -31,4 +31,134 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
         expect(capturedOptions.trimNames).toBe(false);
         expect(result).toBe('Hyperion Blackwood: a grim mercenary...');
     });
+
+    it('reads raw Main API data for structured requests without sending provider-level schema', async () => {
+        let capturedOptions = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            generateRaw: async () => {
+                throw new Error('generateRaw cleanup path must not be used');
+            },
+            generateRawData: async (opts) => {
+                capturedOptions = opts;
+                return { choices: [{ message: { content: '{"ok":true}' } }] };
+            },
+            extractMessageFromData: raw => raw.choices[0].message.content,
+        });
+        const jsonSchema = { name: 'test', value: { type: 'object' }, returnInvalid: true };
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema },
+        );
+
+        expect(capturedOptions.jsonSchema).toBeNull();
+        expect(result).toBe('{"ok":true}');
+    });
+
+    it('recovers reasoning-only raw responses for downstream parsing and validation', async () => {
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            generateRawData: async () => ({
+                choices: [{ message: { content: '', reasoning_content: '{"version":3}' } }],
+            }),
+            extractMessageFromData: () => '',
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema: { name: 'test', value: { type: 'object' } } },
+        );
+
+        expect(result).toBe('{"version":3}');
+    });
+
+    it('does not send JSON schema to profile requests; callers parse the text themselves', async () => {
+        let capturedOverride = null;
+        const jsonSchema = { name: 'test', value: { type: 'object' } };
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            ConnectionManagerRequestService: {
+                getProfile: () => ({ preset: '' }),
+                sendRequest: async (_profileId, _messages, _maxTokens, _options, override) => {
+                    capturedOverride = override;
+                    return { content: { ok: true }, reasoning: '' };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1' },
+            'system prompt',
+            'user prompt',
+            null,
+            { jsonSchema },
+        );
+
+        expect(capturedOverride).toEqual({});
+        expect(result).toBe('{"ok":true}');
+    });
+
+    it('uses the live ST preset when the profile preset is Use Current Settings', async () => {
+        const profile = { preset: '' };
+        let capturedPreset = null;
+        let capturedIncludePreset = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            executeSlashCommandsWithOptions: async () => ({ pipe: 'Live CC' }),
+            getPresetManager: (type) => (type && type !== 'openai' ? null : {
+                getCompletionPresetByName: name => (name === 'Live CC' ? { openai_max_tokens: 2048 } : null),
+            }),
+            ConnectionManagerRequestService: {
+                getProfile: () => profile,
+                sendRequest: async (_profileId, _messages, _maxTokens, options) => {
+                    capturedPreset = profile.preset;
+                    capturedIncludePreset = options.includePreset;
+                    return { content: '{"ok":true}', reasoning: '' };
+                },
+            },
+        });
+
+        await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1', completionPresetId: '' },
+            'system prompt',
+            'user prompt',
+        );
+
+        expect(capturedIncludePreset).toBe(true);
+        expect(capturedPreset).toBe('Live CC');
+        expect(profile.preset).toBe('');
+    });
+
+    it('fills the live Custom OpenAI URL when no completion preset can be attached', async () => {
+        let capturedOverride = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            executeSlashCommandsWithOptions: async () => ({ pipe: '' }),
+            chatCompletionSettings: { custom_url: 'http://127.0.0.1:1234/v1' },
+            ConnectionManagerRequestService: {
+                getProfile: () => ({ preset: '' }),
+                sendRequest: async (_profileId, _messages, _maxTokens, options, override) => {
+                    capturedOverride = override;
+                    return { content: '{"ok":true}', reasoning: '' };
+                },
+            },
+        });
+
+        await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1' },
+            'system prompt',
+            'user prompt',
+        );
+
+        expect(capturedOverride.custom_url).toBe('http://127.0.0.1:1234/v1');
+    });
 });

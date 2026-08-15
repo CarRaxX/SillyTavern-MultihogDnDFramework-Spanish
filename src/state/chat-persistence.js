@@ -71,6 +71,30 @@ export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
     }
 }
 
+/** Persist the Map Updater "since last run" chat-length watermark. */
+export function persistMapUpdaterLastRunWatermark(length) {
+    const s = getSettings();
+    s.mapUpdaterLastRunChatLength = length;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
+/** Persist the Map Updater "last ran at" timestamp (display only). */
+export function persistMapUpdaterLastRunTimestamp(epochMs = Date.now()) {
+    const s = getSettings();
+    s.mapUpdaterLastRunAt = epochMs;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
 /**
  * Sync localStorage write-ahead log for module schema (customFields / blockOrder / modules).
  * Survives F5 when the async /api/settings/save fetch is cancelled mid-reload (common when
@@ -315,6 +339,7 @@ export function saveChatState(chatId, opts = {}) {
         memoPersistedAt,
         memoPersistedBy: s.memoPersistedBy || null,
         memoHistory:  JSON.parse(JSON.stringify(s.memoHistory)),
+        dungeonMapHistory: JSON.parse(JSON.stringify(s.dungeonMapHistory || [])),
         lastDelta:    s.lastDelta || '',
         customPortraits: JSON.parse(JSON.stringify(s.customPortraits || {})),
         customLocationImages: JSON.parse(JSON.stringify(s.customLocationImages || {})),
@@ -331,6 +356,8 @@ export function saveChatState(chatId, opts = {}) {
         routerLookback: s.routerLookback || 4,
         routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
         routerLastRunAt: s.routerLastRunAt ?? 0,
+        mapUpdaterLastRunChatLength: s.mapUpdaterLastRunChatLength ?? 0,
+        mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,
@@ -380,6 +407,8 @@ export function saveChatState(chatId, opts = {}) {
         initialDate: s.initialDate || 'Day 1',
         initialTime: s.initialTime || '08:00 AM',
         npcRelationshipMax: getNpcRelationshipMax(s),
+        npcRelationshipValues: JSON.parse(JSON.stringify(s.npcRelationshipValues || {})),
+        npcRelationshipLog: JSON.parse(JSON.stringify(s.npcRelationshipLog || {})),
 
         // Optional full configuration lock. State-only Chat Link behavior remains
         // unchanged unless the user explicitly enables this setting.
@@ -395,6 +424,9 @@ export function saveChatState(chatId, opts = {}) {
 
         // Preserve Player Character pseudo-persona which is injected into the chat state
         playerCharacter: existing.playerCharacter,
+
+        // Authored directly in this partition by the narrative interceptor.
+        dungeonReality: existing.dungeonReality ? JSON.parse(JSON.stringify(existing.dungeonReality)) : null,
 
         // Adventure Companion (CHAT mode) — per-chat brainstorming history.
         // Only overwrite from the live session when saving the *active* chat; otherwise

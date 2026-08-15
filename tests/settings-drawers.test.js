@@ -17,6 +17,7 @@ describe('General & Visuals settings', () => {
             '<b>Sistemas de Juego y Personalización</b>',
             '<b>State Tracker y Módulos</b>',
             '<b>Agente de Lorebook</b>',
+            '<b>Arquitecto de Mapas</b>',
             '<b>Progresión del Mundo</b>',
             '<b>Acompañante de Aventura</b>',
         ];
@@ -51,6 +52,7 @@ describe('General & Visuals settings', () => {
             'rpg_connection_slot_character_creation',
             'rpg_connection_slot_adventure_companion',
             'rpg_connection_slot_game_system_wizard',
+            'rpg_connection_slot_map_architect',
             'rpg_connection_slot_world_progression',
             'rpg_connection_slot_portraits',
         ].forEach(id => expect(settingsMarkup).toContain(`id="${id}"`));
@@ -63,6 +65,7 @@ describe('General & Visuals settings', () => {
         expect(indexSource).toContain("control: '#rpg_tracker_router_source'");
         expect(indexSource).toContain("control: '#rpg_adventure_companion_connection_source'");
         expect(indexSource).toContain("control: '#rpg_gs_wizard_connection_source'");
+        expect(indexSource).toContain("control: '#rpg_map_architect_connection_source'");
         expect(indexSource).toContain("control: '#rpg_world_connection_source'");
         expect(indexSource).toContain("control: '#rpg_portrait_connection_source'");
         expect(indexSource).toContain('I recommend a cheap mid-tier model such as GPT-5.6 Luna, Gemini Flash/Flash-Lite series, or Deepseek V4 Flash latest.');
@@ -114,6 +117,7 @@ describe('General & Visuals settings', () => {
             'rpg_adventure_companion_lookback_all',
             'rpg_adventure_companion_inject_lore',
             'rpg_adventure_companion_inject_memo',
+            'rpg_adventure_companion_inject_map',
             'rpg_adventure_companion_connection_source',
             'rpg_adventure_companion_connection_profile',
             'rpg_adventure_companion_ollama_url',
@@ -124,6 +128,16 @@ describe('General & Visuals settings', () => {
             'rpg_adventure_companion_openai_model_manual',
             'rpg_adventure_companion_completion_preset',
         ].forEach((id) => expect(companionMarkup).toContain(`id="${id}"`));
+    });
+
+    it('places Map Architect directly below Lorebook Agent', () => {
+        const agentStart = settingsMarkup.indexOf('<b>Lorebook Agent</b>');
+        const mapStart = settingsMarkup.indexOf('<b>Map Architect</b>');
+        const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
+
+        expect(agentStart).toBeGreaterThanOrEqual(0);
+        expect(mapStart).toBeGreaterThan(agentStart);
+        expect(worldStart).toBeGreaterThan(mapStart);
     });
 
     it('places Adventure Companion directly below World Progression', () => {

@@ -101,6 +101,8 @@ export function getSchedulerSnapshot() {
             routerAutoTick: tick,
             routerRunEvery: runEvery,
             nextInMsgs: nextIn,
+            mapUpdaterAutoTick: internals.mapUpdaterAutoTick ?? 0,
+            mapUpdaterRunEvery: settings.mapUpdaterRunEvery ?? 1,
             stateTrackerAutoTick: internals.stateTrackerAutoTick ?? null,
             stateTrackerRunEvery: settings.stateTrackerRunEvery || 1,
             pendingKeywordTriggered: internals.pendingKeywordCount ?? 0,

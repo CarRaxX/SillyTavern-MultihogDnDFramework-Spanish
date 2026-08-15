@@ -2,6 +2,219 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.82.4] - 2026-08-15
+
+### Fixed
+- **Keyword Overflow / Max Active Keys upgrade**: the one-time 0→6 and 8→12 raises now actually run for existing chats. The previous flags were seeded `true` from defaults, so saved 0/8 never changed. After this pass, setting 0 or 8 again is kept.
+
+## [7.82.3] - 2026-08-15
+
+### Changed
+- **Max Active Keys**: default is now 12 (was 8). Existing chats still at 8 are raised once; you can set 8 again afterward.
+
+## [7.82.2] - 2026-08-15
+
+### Changed
+- **Keyword Overflow Cap**: default is now 6 (was 0 / no cap). Existing chats still at 0 are raised once; you can set 0 again afterward for no cap.
+
+## [7.82.1] - 2026-08-15
+
+### Changed
+- **Persistent Maps (Alpha)**: the Components toggle is renamed from Location Mapping (Alpha). The internal `<dungeon_reality_and_hidden_mapping>` tag is unchanged.
+- **World Progression**: settings and the Lorebook Agent drawer now warn that using WP together with Persistent Maps is not recommended until compatibility is added.
+
+## [7.82.0] - 2026-08-14
+
+### Added
+- **Adventure Companion site map**: CHAT options and the Adventure Companion settings drawer can inject the currently active player-facing site map (same knowledge fog as Visuals/Map with Reveal all off) so the Companion can discuss exploration. Visited rooms include known contents; discovered names are outside-only; unrevealed rooms, traps, and occupants stay hidden. Injected lore also strips private `[MAP]` JSON.
+
+## [7.80.0] - 2026-08-14
+
+Public release of Location Mapping: dedicated Map Updater, settlement maps, ARCHIVE INDEX existence checks, and a Components kill switch that actually stops architect/updater API calls. See 7.50.14–7.50.30 for the stepwise notes.
+
+## [7.50.30] - 2026-08-14
+
+### Changed
+- **Location Mapping (Alpha)**: the Components toggle is renamed from Dungeon Reality Mapping. It covers dungeons, ruins, towns, and cities. The internal `<dungeon_reality_and_hidden_mapping>` tag is unchanged.
+
+### Fixed
+- **Location Mapping disable**: turning the Components checkbox off now actually stops the stack — CreateAreaMap unregisters, in-flight Map Updater requests abort, and occupancy API calls are not sent. Unlocking the sysprompt section no longer greys out this kill switch.
+
+## [7.50.29] - 2026-08-14
+
+### Fixed
+- **Map Architect "Use Current Settings"**: profile requests with an empty completion-preset override no longer send a bare Custom OpenAI payload (HTTP 404). The live SillyTavern completion preset is used when the connection profile has none, and the live endpoint URL is filled in as a fallback.
+
+## [7.50.28] - 2026-08-14
+
+### Changed
+- **Lorebook Agent existence checks**: ARCHIVE INDEX is treated as the complete catalog (now includes Book::UID). The agent is told not to `grep_lore` / `inspect_book` to verify whether a name exists; absence means record it. Concatenated name-dump greps are rejected with that hint.
+
+## [7.50.27] - 2026-08-14
+
+### Fixed
+- **Site map current-area highlight**: a footer interior that is an occupying asset (chapel, inn) or a breadcrumb tail above a matching district now highlights the host district. The graph no longer falls back to the entrance when the leaf is not itself an area.
+
+## [7.50.26] - 2026-08-14
+
+### Changed
+- **Map Architect prompt examples**: the shipped architect prompt now includes truncated valid DUNGEON and SETTLEMENT JSON (reciprocal routes, LOCKED passages, INITIAL_MAP assets, chapel as a district OBJECT not an area). Reset the Map Architect prompt in settings if you still have an older copy.
+
+## [7.50.25] - 2026-08-14
+
+### Changed
+- **Map Updater prompt examples**: the shipped occupancy prompt now includes compact valid JSON for noop, ADD_ASSET (chapel + occupant), and SET_ASSET, plus a note not to use `{type, asset:{...}}`. Reset the Map Updater prompt in settings if you still have an older copy.
+
+## [7.50.24] - 2026-08-14
+
+### Fixed
+- **Wrapped ADD_ASSET operations**: Map Updater accepts `{type:"ADD_ASSET", asset:{...}}` and flattens it to `{op, name, kind, ...}` instead of burning correction retries on `type` vs `op` and a nested `asset` object.
+
+## [7.50.23] - 2026-08-14
+
+### Fixed
+- **Chronicle `area` alias**: Map Updater chronicles that send `area` instead of `area_id` are accepted instead of forcing a correction retry.
+
+## [7.50.22] - 2026-08-14
+
+### Fixed
+- **Manual Map Updater lookback**: Play-button Map Updater runs now use the Lorebook Agent lookback (last N user turns) instead of the since-last-run watermark. After an auto-run on the same turn, a manual pass no longer sends empty RECENT STORY. A settlement footer interior that is not yet an OBJECT asset is called out so the model cannot noop it away.
+
+## [7.50.21] - 2026-08-14
+
+### Changed
+- **Map Architect max output tokens** now default to **25000** (UI still clamps 1000–32000). Existing saved values are kept; only new installs and reset-to-default pick up 25000, so long maps are not truncated after the generation cost is already paid.
+
+### Fixed
+- **Map Updater Stop + Lorebook Terminal**: occupancy updates now share the Lorebook Agent terminal and Stop button. Stop appears only after an active map is confirmed (auto-ticks outside a mapped site no longer flash it). Cancel aborts the in-flight request. Occupancy finishes still refresh Campaign Records but do not trigger NPC portrait auto-generation.
+
+## [7.50.20] - 2026-08-14
+
+### Changed
+- **Run Research Now** on the Lorebook Agent header expands into a choice: **Lorebook Agent** (NPC/location/relationship records) or **Map Updater** (dungeon and town occupancy). Map Updater can be run by hand even when its auto cadence is off.
+
+## [7.50.19] - 2026-08-14
+
+### Changed
+- **Map Updater is separate from Lorebook Agent**: Dungeon and settlement occupancy updates no longer ride on the Lorebook Agent pass. A dedicated Map Updater (Map Architect connection, compact JSON, default every turn) maintains `[MAP]`. Lorebook Agent keeps NPC/location/relationship records on its own cadence and no longer receives `inspect_map`, `commit.map`, or `[MAP_COMMIT]`. The agent panel has **Map every:** next to **Run every:**.
+
+## [7.50.18] - 2026-08-14
+
+### Fixed
+- **Map commit bounce on omitted evidence**: ADD_ASSET without `evidence` no longer rejects the whole Lorebook Agent commit. Missing evidence defaults to CONFIRMED. `kind: NPC` (and PERSON/CHARACTER) is stored as CREATURE, so a chapel+priest settlement commit can land instead of retrying until the model hangs.
+
+## [7.50.17] - 2026-08-14
+
+### Changed
+- **Settlement interiors in the footer**: When the party enters a chapel, inn, shop, or similar invented interior, the GM Location footer must append that building (city, district, interior) instead of stopping at the district.
+- **Lorebook Agent settlement interiors**: On SETTLEMENT maps, an interior the party actually enters is recorded as a KNOWN OBJECT asset in that district. The agent uses the latest narration, not only the status footer, so a missing third footer segment no longer skips the chapel.
+
+## [7.50.16] - 2026-08-14
+
+### Fixed
+- **Map Architect on Connection Profiles**: CreateAreaMap no longer sends a provider-level JSON schema through Connection Profile / Ollama / OpenAI-compatible connections. Those schemas 404 on many chat-completion backends. Main API already skipped them; the architect still parses and validates the raw JSON itself.
+
+## [7.50.15] - 2026-08-14
+
+### Changed
+- **Dungeon map GM leeway**: Room-scale dungeon maps are preferred canon, not a hard ban. The narrator may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.
+
+## [7.50.14] - 2026-08-14
+
+### Changed
+- **CreateAreaMap**: The Map Architect tool is now `CreateAreaMap` (was `CreateDungeonMap`). It accepts `kind: DUNGEON` for room-scale interiors or `kind: SETTLEMENT` for district-scale towns and cities. Settlement maps stay macroscopic; the GM may invent granular interiors that do not contradict those districts.
+
+## [7.50.13] - 2026-08-14
+
+### Changed
+- **Map Architect hubs**: The architect prompt now says occasional hub/nexus layouts are welcome — one area may have many routes instead of forcing a linear chain.
+
+## [7.50.12] - 2026-08-14
+
+### Changed
+- **Map Architect density**: The architect prompt no longer says to skip incidental objects. It now tells the model to populate furnishings, clutter, tools, loot, and hazards on the initial map instead of leaving it sparse for later invention.
+
+## [7.50.11] - 2026-08-14
+
+### Changed
+- **Dungeon map lag note**: The narrator now treats established story events as overriding a lagging map (a killed enemy stays dead even if still listed ACTIVE), instead of treating the latest DUNGEON_REALITY occupancy as catch-up truth.
+
+## [7.50.10] - 2026-08-14
+
+### Changed
+- **Map Architect settings tab**: Map Architect now has its own left-rail settings section, directly below Lorebook Agent, matching World Progression and Adventure Companion.
+
+## [7.50.9] - 2026-08-14
+
+### Added
+- **Settings search**: The floating settings window has a keyword search that filters nested drawers across tabs.
+
+### Changed
+- **Dungeon map lag note**: The narrator `<dungeon_reality_and_hidden_mapping>` prompt now says the attached map may lag a few turns behind play due to update frequency.
+
+## [7.50.8] - 2026-08-14
+
+### Fixed
+- **Tracker snapshot map rollback**: The State Tracker `[ LIVE ]` arrows now roll dungeon-map occupancy back with the memo. Each tracker snapshot stores the current `[MAP]`; viewing or restoring a previous stone writes that occupancy back, and returning to LIVE restores the map that was live when you started browsing.
+
+## [7.50.7] - 2026-08-14
+
+### Changed
+- **Dungeon map combat granularity**: Lorebook Agent map commits now treat `[MAP]` as lasting occupancy, not the current combat beat. Transient targeting, poses, HP, and conditions such as frightened stay in the combat tracker.
+
+## [7.50.6] - 2026-08-14
+
+### Fixed
+- **Branch Campaign keeps relationship stats**: Friendship/affection values and their change logs are now saved with the chat, copied onto the branch, and remapped to the cloned lorebook names. A branch no longer resets every NPC to 0.
+
+## [7.50.5] - 2026-08-14
+
+### Changed
+- **Companion documentation**: Tutorial Mode's framework doc now covers Dungeon Reality Mapping — Map Architect, `[MAP]` storage, Visuals/Map vs the GM MAP badge, knowledge fog, and function-calling requirements.
+
+### Fixed
+- **Visuals/Map on first boot**: The Campaign Records / Visuals/Map switch is probed as soon as the panel is built, so a mapped site can show the tab without turning on location images or Real-Time Visualization.
+
+## [7.50.1] - 2026-08-14
+
+### Changed
+- **Draggable site graph**: Dragging the Visuals/Map graph pans the view instead of selecting text. Revealed rooms still open on click.
+- **Site details from Visuals/Map**: The list button next to the graph opens the readable map (rooms, geometry, routes, and assets). Unrevealed rooms and assets stay hidden unless **Reveal all** is turned on. The Lorebook MAP badge remains the full GM inspector, including Raw JSON.
+
+## [7.50.0] - 2026-08-14
+
+Dungeon Reality Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats.
+
+### Added
+- **Dedicated Map Architect**: The narrator can call a one-shot private agent with its own prompt, connection profile, model, preset, lookback, and output budget to create dangerous-site maps.
+- **Initial-map validation and correction**: New maps are checked for valid JSON, exact site/entrance identity, scale, stable IDs, asset references, reciprocal passage details, and a fully connected physical graph. Invalid output receives up to two correction passes and is never partially saved.
+- **Visuals/Map site graph**: While inside a mapped dungeon, Visuals/Map shows a knowledge-filtered node graph (visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled stubs). It can be popped out into its own window. The Lorebook MAP badge remains the private GM inspector.
+
+### Changed
+- **Lightweight narrator contract**: The full map-authoring specification is no longer carried in every GM prompt. A short `CreateDungeonMap` contract replaces it, while the dedicated agent stores validated JSON directly in the root Location entry and returns compact prose to the narrator.
+- **Visuals/Map rename**: The Lorebook Agent **Visualization Mode** tab is now **Visuals/Map**. Real-Time Visualization Mode (scene-art generation) keeps its settings name. The Campaign Records / Visuals/Map switch appears when location images are on or the party is inside a mapped site.
+
+### Fixed
+- **Site map connectors**: Connection lines now stop at each room’s border instead of running through node labels.
+- **Mapped-site activation**: The site map follows whole location segments, so a nested dungeon such as `Whispering Woods, Forgotten Tomb` stays active, while a nearby place that only mentions the site (`Forest Near the Hall of the Ember-Ancestors`) does not.
+- **Map Architect progress feedback**: A persistent toast now indicates when a location map is being generated, then reports completion or failure when the tool call ends.
+- **Reliable Map Architect tool calls**: Main API map creation now reads the untouched provider response, bypassing both unsupported provider-level JSON schemas (`Bad Request`) and SillyTavern dialogue cleanup (`No message generated`). Connection Profile, Ollama, and direct OpenAI-compatible modes retain structured-output support.
+- **No immediate retry loops**: Architect transport, configuration, validation, and persistence failures are now real tool errors. The narrator remains outside the site and must not retry the tool during the same turn.
+
+## [7.25.1] - 2026-08-13
+
+### Fixed
+- **Safe campaign cloning**: Clone Stack and Branch Campaign now abort before writing when a destination lorebook already exists, preventing whole-book overwrite and cleanup of pre-existing books.
+- **Chat-scoped Lorebook Agent history**: Undo and redo now operate only on the active chat, preserve other chats' history, reject mismatched redo snapshots, and follow safe chat renames.
+
+## [7.25.0] - 2026-08-13
+
+### Changed
+- **Optional Instant Action starter message**: A **Send Starter Message?** checkbox sits below Player Card length. It is on by default so Instant Action still opens the campaign automatically; uncheck it if you want to type your own first action.
+
+### Fixed
+- **Instant Action honors Initial Setup level and class**: A requested level such as "A level 7 ranger" now overrides the Other Ways level dropdown. The prompt no longer forces `STARTING LEVEL: 6` as mandatory when Initial Setup asked for a different level, and the random archetype is treated as a fallback when a class is specified.
+
 ## [7.20.1] - 2026-08-12
 
 ### Changed

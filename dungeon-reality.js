@@ -1,0 +1,2142 @@
+/**
+ * Durable dungeon-reality capture and deterministic prompt injection helpers.
+ *
+ * Hidden maps are persisted as a structured current-state snapshot in a root
+ * Location entry. Legacy prose is migrated without depending on the original
+ * chat message remaining in context.
+ */
+
+// Some models incorrectly emit `</div hidden>`. Accept that legacy/malformed
+// closing tag so an otherwise valid hidden map is not silently lost.
+const DIV_RE = /<div\b([^>]*)>([\s\S]*?)<\/div(?:\s+hidden)?>/gi;
+const LOCATION_RE = /\(Location:\s*([^)]+)\)/gi;
+const SITE_MARKER_RE = /^\s*(?:Dungeon\s+)?Site(?:\s+Root)?\s*:\s*(.+?)\s*$/im;
+const DELTA_LINE_RE = /^\s*(mutation|addition)\s*:\s*(.+?)\s*\|\s*(.+?)\s*$/i;
+const LEADING_ARTICLE_RE = /^(?:the|a|an)\s+/;
+
+function clone(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function hasHiddenAttribute(attributes) {
+    return /(?:^|\s)hidden(?:\s|=|$)/i.test(String(attributes || ''));
+}
+
+function hasDungeonDeltaAttribute(attributes) {
+    return /(?:^|\s)data-dungeon-delta(?:\s|=|$)/i.test(String(attributes || ''));
+}
+
+function hasDungeonMapAttribute(attributes) {
+    return /(?:^|\s)data-dungeon-map(?:\s|=|$)/i.test(String(attributes || ''));
+}
+
+/** Lorebook entry extension field containing the private objective map. */
+export const DUNGEON_MAP_EXTENSION_KEY = 'multihogDungeonMap';
+export const DUNGEON_MAP_OPERATION_IDS_KEY = 'multihogDungeonMapOperationIds';
+export const DUNGEON_MAP_FORMAT_VERSION = 3;
+const MAP_SECTION_RE = /\[MAP\]([\s\S]*?)\[\/MAP\]/i;
+
+const AREA_KNOWLEDGE = ['UNREVEALED', 'DISCOVERED', 'VISITED'];
+const ASSET_KNOWLEDGE = ['UNREVEALED', 'SUSPECTED', 'KNOWN'];
+const ASSET_KINDS = ['CREATURE', 'GROUP', 'TRAP', 'HAZARD', 'OBJECT', 'LOOT', 'BARRIER', 'ALARM', 'EFFECT', 'OTHER'];
+const ASSET_KIND_ALIASES = {
+    NPC: 'CREATURE',
+    PERSON: 'CREATURE',
+    CHARACTER: 'CREATURE',
+    ITEM: 'OBJECT',
+    BUILDING: 'OBJECT',
+    INTERIOR: 'OBJECT',
+};
+const ASSET_STATES = [
+    'ACTIVE', 'ALERT', 'IDLE', 'DORMANT', 'FLEEING', 'CAPTURED',
+    'DEAD', 'DESTROYED', 'DISABLED', 'DISARMED', 'ARMED', 'TRIGGERED',
+    'LOCKED', 'UNLOCKED', 'OPEN', 'CLOSED', 'BLOCKED', 'CLEARED',
+    'INTACT', 'DAMAGED', 'TAKEN', 'AVAILABLE', 'EXHAUSTED', 'EXPIRED',
+    'DISMISSED', 'REMOVED', 'UNKNOWN',
+];
+const CONNECTION_STATES = ['OPEN', 'CLOSED', 'LOCKED', 'BLOCKED', 'DESTROYED', 'UNKNOWN'];
+const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS'];
+const MAP_OPERATIONS = ['ADD_AREA', 'SET_AREA', 'ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION'];
+export const MAP_SITE_KINDS = ['DUNGEON', 'SETTLEMENT'];
+
+function mapSlug(value, fallback = 'item') {
+    const slug = String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return slug || fallback;
+}
+
+function allocateMapId(existingIds, label, fallback) {
+    const base = mapSlug(label, fallback);
+    let id = base;
+    let suffix = 2;
+    while (existingIds.has(id)) id = `${base}-${suffix++}`;
+    existingIds.add(id);
+    return id;
+}
+
+function cleanStringList(value) {
+    return Array.isArray(value)
+        ? value.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+}
+
+function enumValue(value, allowed, fallback) {
+    const normalized = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return allowed.includes(normalized) ? normalized : fallback;
+}
+
+function coerceAssetKind(value) {
+    const normalized = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return ASSET_KIND_ALIASES[normalized] || normalized;
+}
+
+function coerceMapEvidence(value) {
+    if (value == null || value === '') return 'CONFIRMED';
+    return value;
+}
+
+function normalizeChronicleFields(chronicle) {
+    if (!chronicle || typeof chronicle !== 'object' || Array.isArray(chronicle)) return chronicle;
+    const next = { ...chronicle };
+    if (!next.area_id) {
+        const alias = next.area_id || next.areaId || next.area;
+        if (alias) next.area_id = alias;
+    }
+    delete next.area;
+    delete next.areaId;
+    return next;
+}
+
+function normalizeMapOperation(operation) {
+    if (!operation || typeof operation !== 'object' || Array.isArray(operation)) return operation;
+    const next = { ...operation };
+    if (!next.op) {
+        const alias = next.type || next.action || next.operation;
+        if (alias) next.op = alias;
+    }
+    delete next.type;
+    delete next.action;
+    delete next.operation;
+
+    const wrappers = [
+        ['asset', 'asset_id'],
+        ['area', 'area_id'],
+        ['connection', null],
+    ];
+    for (const [wrapper, idField] of wrappers) {
+        const nested = next[wrapper];
+        if (!nested || typeof nested !== 'object' || Array.isArray(nested)) continue;
+        for (const [key, value] of Object.entries(nested)) {
+            if (key === 'id' && idField) {
+                if (next[idField] == null || next[idField] === '') next[idField] = value;
+                continue;
+            }
+            if (next[key] == null || next[key] === '') next[key] = value;
+        }
+        delete next[wrapper];
+    }
+    return next;
+}
+
+export function normalizeMapSiteKind(value) {
+    return enumValue(value, MAP_SITE_KINDS, 'DUNGEON');
+}
+
+function scaleAreaBounds(scale, kind) {
+    const key = String(scale || '').toUpperCase();
+    if (normalizeMapSiteKind(kind) === 'SETTLEMENT') {
+        return { SMALL: [4, 7], MEDIUM: [6, 10], LARGE: [8, 14] }[key];
+    }
+    return { SMALL: [4, 7], MEDIUM: [7, 12], LARGE: [12, 20] }[key];
+}
+
+function stripJsonFence(value) {
+    return String(value || '').trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+}
+
+function tryParseStructuredMap(content) {
+    const source = stripJsonFence(content);
+    if (!source.startsWith('{')) return null;
+    try {
+        const parsed = JSON.parse(source);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function inferLegacyAssetKind(line) {
+    const text = String(line || '').toLowerCase();
+    if (/\b(?:trap|tripwire|pressure plate|snare|pitfall|poison needle|rune trap)\b/.test(text)) return 'TRAP';
+    if (/\b(?:alarm|bell|gong|warning horn)\b/.test(text)) return 'ALARM';
+    if (/\b(?:door|gate|portcullis|barricade|barrier|grate)\b/.test(text)
+        && /\b(?:locked|barred|chained|sealed|closed|open|ajar|blocked|corroded)\b/.test(text)) return 'BARRIER';
+    if (/\b(?:contents?|loot|coins?|\bgp\b|treasure|cache|pouch|reliquary|holy water|gem|key\b)\b/.test(text)) return 'LOOT';
+    if (/\b(?:ghouls?|skeletons?|wights?|zombies?|rats?|spiders?|goblins?|orcs?|guards?|cultists?|bandits?|shades?|spirits?|demons?|devils?|beasts?|creatures?|monsters?|undead|enemy|enemies|patrols?)\b/.test(text)) {
+        return /\b(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\b/.test(text) ? 'GROUP' : 'CREATURE';
+    }
+    if (/\b(?:fire|flood|gas|sludge|unstable|collapse|difficult terrain|necromantic residue)\b/.test(text)) return 'HAZARD';
+    return null;
+}
+
+function legacyAssetName(line, kind) {
+    const clean = String(line || '').replace(/^[-*]\s*/, '').trim();
+    if (['CREATURE', 'GROUP'].includes(kind)) {
+        const creatureNoun = clean.match(/\b(shadow rats?|crawling claws?|skeleton guards?|ghouls?|skeletons?|wights?|zombies?|rats?|spiders?|goblins?|orcs?|guards?|cultists?|bandits?|shades?|spirits?|demons?|devils?|beasts?|creatures?|monsters?|undead|enemies?|patrols?)\b/i)?.[1];
+        if (creatureNoun) return creatureNoun;
+    }
+    if (kind === 'BARRIER') {
+        const barrier = clean.match(/\b((?:(?:heavy|oaken|oak|iron-banded|iron|corroded|rusted|stone|wooden|secret|concealed)\s+){0,3}(?:door|gate|portcullis|barricade|barrier|grate))\b/i)?.[1];
+        if (barrier) return barrier;
+    }
+    if (kind === 'LOOT') {
+        const loot = clean.match(/\b((?:(?:rusted|iron|silver|tarnished|copper|bronze|heavy)\s+){0,3}(?:reliquary|key|cache|pouch|treasure|holy water|holy symbol|contents?))\b/i)?.[1];
+        if (loot) return loot;
+    }
+    if (kind === 'HAZARD') {
+        const hazard = clean.match(/\b(black sludge|flooded water|black water|necromantic residue|difficult terrain|unstable rubble|gas|fire|flood)\b/i)?.[1];
+        if (hazard) return hazard;
+    }
+    const creature = clean.match(/^(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+|a|an|the)\s+(.+?)(?=\s+(?:stands?|lies?|crouches?|nests?|waits?|guards?|flanks?|patrols?|lurks?|hides?|rests?|hangs?|is|are)\b|[.;]|$)/i);
+    if (creature && ['CREATURE', 'GROUP'].includes(kind)) return creature[1].trim().replace(/\b(?:its|their)$/i, '').trim();
+    const beforeColon = clean.match(/^([^:]{2,48}):/)?.[1]?.trim();
+    if (beforeColon) return beforeColon;
+    const words = clean.replace(/[.;].*$/, '').split(/\s+/).slice(0, 7).join(' ');
+    return words || kind.toLowerCase();
+}
+
+function splitLegacyAssetStatements(line) {
+    return String(line || '').split(/;\s+|(?<=[.!?])\s+(?=(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+|a|an|the)\s)/i);
+}
+
+function inferLegacyAssetState(kind, line) {
+    const text = String(line || '').toLowerCase();
+    if (kind === 'TRAP' || kind === 'ALARM') return 'ARMED';
+    if (kind === 'LOOT') return 'AVAILABLE';
+    if (kind !== 'BARRIER') return 'ACTIVE';
+    if (/\b(?:open|ajar)\b/.test(text)) return 'OPEN';
+    if (/\b(?:locked|chained|sealed)\b/.test(text)) return 'LOCKED';
+    if (/\b(?:blocked)\b/.test(text)) return 'BLOCKED';
+    if (/\b(?:barred|closed|shut)\b/.test(text)) return 'CLOSED';
+    if (/\b(?:destroyed|broken)\b/.test(text)) return 'DESTROYED';
+    return 'UNKNOWN';
+}
+
+/** Convert the original prose map format into the mutable v3 geometry/assets model. */
+export function convertLegacyDungeonMapToDocument(content, siteFallback = '') {
+    const source = String(content || '').trim();
+    const site = source.match(SITE_MARKER_RE)?.[1]?.trim() || String(siteFallback || '').trim() || 'Mapped Site';
+    const rawAreas = [];
+    let current = null;
+    for (const rawLine of source.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || SITE_MARKER_RE.test(line)) continue;
+        const areaMatch = line.match(/^Area\s*:\s*(.+?)\s*$/i);
+        if (areaMatch) {
+            current = { name: areaMatch[1].trim(), lines: [] };
+            rawAreas.push(current);
+            continue;
+        }
+        if (!current) {
+            current = { name: 'Site Overview', lines: [] };
+            rawAreas.push(current);
+        }
+        current.lines.push(line.replace(/^[-*]\s*/, '').trim());
+    }
+    if (!rawAreas.length) rawAreas.push({ name: 'Site Overview', lines: ['No area details were supplied.'] });
+
+    const areaIds = new Set();
+    const areas = rawAreas.map(area => ({
+        id: allocateMapId(areaIds, area.name, 'area'),
+        name: area.name,
+        knowledge: 'UNREVEALED',
+        geometry: [],
+        connections: [],
+    }));
+    const assetIds = new Set();
+    const assets = [];
+    rawAreas.forEach((rawArea, index) => {
+        const area = areas[index];
+        for (const line of rawArea.lines) {
+            const statements = splitLegacyAssetStatements(line);
+            let foundAsset = false;
+            for (const statement of statements) {
+                const kind = inferLegacyAssetKind(statement);
+                if (!kind) {
+                    if (statements.length > 1) area.geometry.push(statement);
+                    continue;
+                }
+                foundAsset = true;
+                const name = legacyAssetName(statement, kind);
+                assets.push({
+                    id: allocateMapId(assetIds, name, 'asset'),
+                    kind,
+                    name,
+                    location: area.id,
+                    state: inferLegacyAssetState(kind, statement),
+                    knowledge: 'UNREVEALED',
+                    detail: statement,
+                    origin: 'INITIAL_MAP',
+                });
+            }
+            if (!foundAsset && statements.length === 1) area.geometry.push(line);
+        }
+    });
+
+    // Recover explicit prose connections after every stable area label is known.
+    rawAreas.forEach((rawArea, index) => {
+        const haystack = rawArea.lines.join(' ').toLowerCase();
+        for (const target of areas) {
+            if (target.id === areas[index].id) continue;
+            if (haystack.includes(target.name.toLowerCase())) {
+                areas[index].connections.push({ to: target.id, state: 'OPEN', detail: '' });
+            }
+        }
+    });
+
+    return { version: DUNGEON_MAP_FORMAT_VERSION, site, kind: 'DUNGEON', areas, assets };
+}
+
+/** Normalize model-authored structured maps and fill safe defaults/IDs. */
+export function normalizeDungeonMapDocument(raw, siteFallback = '') {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return convertLegacyDungeonMapToDocument('', siteFallback);
+    }
+    const site = String(raw.site || raw.siteRoot || siteFallback || '').trim() || 'Mapped Site';
+    const areaIds = new Set();
+    const areas = (Array.isArray(raw.areas) ? raw.areas : []).map((area, index) => {
+        const name = String(area?.name || area?.label || area?.id || `Area ${index + 1}`).trim();
+        const proposed = mapSlug(area?.id || name, `area-${index + 1}`);
+        const id = areaIds.has(proposed) ? allocateMapId(areaIds, name, 'area') : (areaIds.add(proposed), proposed);
+        return {
+            id,
+            name,
+            knowledge: enumValue(area?.knowledge, AREA_KNOWLEDGE, 'UNREVEALED'),
+            geometry: cleanStringList(area?.geometry || area?.features || area?.notes),
+            connections: [],
+        };
+    });
+    if (!areas.length) {
+        areas.push({ id: 'site-overview', name: 'Site Overview', knowledge: 'UNREVEALED', geometry: [], connections: [] });
+        areaIds.add('site-overview');
+    }
+    const resolveArea = (ref) => {
+        const rawRef = String(ref || '').trim();
+        if (!rawRef) return '';
+        const exact = areas.find(area => area.id === rawRef || normalizeDungeonLabel(area.name) === normalizeDungeonLabel(rawRef));
+        return exact?.id || '';
+    };
+    (Array.isArray(raw.areas) ? raw.areas : []).forEach((area, index) => {
+        if (!areas[index]) return;
+        const connections = Array.isArray(area?.connections) ? area.connections : [];
+        for (const connection of connections) {
+            const to = resolveArea(typeof connection === 'string' ? connection : connection?.to);
+            if (!to || to === areas[index].id || areas[index].connections.some(item => item.to === to)) continue;
+            areas[index].connections.push({
+                to,
+                state: enumValue(connection?.state, CONNECTION_STATES, 'OPEN'),
+                detail: typeof connection === 'object' ? String(connection?.detail || '').trim() : '',
+            });
+        }
+    });
+
+    const assetIds = new Set();
+    const rawAssets = Array.isArray(raw.assets) ? raw.assets : [];
+    const assets = rawAssets.map((asset, index) => {
+        const name = String(asset?.name || asset?.label || asset?.id || `Asset ${index + 1}`).trim();
+        const proposed = mapSlug(asset?.id || name, `asset-${index + 1}`);
+        const id = assetIds.has(proposed) ? allocateMapId(assetIds, name, 'asset') : (assetIds.add(proposed), proposed);
+        const state = enumValue(asset?.state, ASSET_STATES, 'ACTIVE');
+        const location = state === 'REMOVED' && asset?.location == null
+            ? null
+            : (resolveArea(asset?.location) || areas[0].id);
+        const normalized = {
+            id,
+            kind: enumValue(asset?.kind, ASSET_KINDS, 'OTHER'),
+            name,
+            location,
+            state,
+            knowledge: enumValue(asset?.knowledge, ASSET_KNOWLEDGE, 'UNREVEALED'),
+            detail: String(asset?.detail || asset?.description || '').trim(),
+            origin: String(asset?.origin || 'INITIAL_MAP').trim(),
+        };
+        const lastLocation = resolveArea(asset?.last_location);
+        if (lastLocation) normalized.last_location = lastLocation;
+        const behavior = String(asset?.behavior || '').trim();
+        if (behavior) normalized.behavior = behavior;
+        for (const field of ['faction', 'owner', 'duration']) {
+            const value = String(asset?.[field] || '').trim();
+            if (value) normalized[field] = value;
+        }
+        const route = cleanStringList(asset?.route).map(resolveArea).filter(Boolean);
+        if (route.length) normalized.route = [...new Set(route)];
+        return normalized;
+    });
+    return { version: DUNGEON_MAP_FORMAT_VERSION, site, kind: normalizeMapSiteKind(raw.kind), areas, assets };
+}
+
+function architectureError(code, path, received, hint) {
+    return { code, path, received, hint };
+}
+
+/**
+ * Strictly validate a newly generated map before it becomes campaign canon.
+ * Unlike normalizeDungeonMapDocument(), this never repairs missing topology or
+ * silently invents IDs: the Map Architect gets actionable errors and retries.
+ */
+export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', scale = '', kind = '' } = {}) {
+    const errors = [];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return {
+            valid: false,
+            errors: [architectureError('INVALID_DOCUMENT', '$', raw, 'Output one JSON object with version, site, areas, and assets.')],
+            document: null,
+        };
+    }
+
+    const allowedTop = new Set(['version', 'site', 'kind', 'areas', 'assets']);
+    for (const key of Object.keys(raw)) {
+        if (!allowedTop.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `$.${key}`, raw[key], `Remove unsupported top-level field "${key}".`));
+    }
+    if (raw.version !== DUNGEON_MAP_FORMAT_VERSION) {
+        errors.push(architectureError('INVALID_VERSION', '$.version', raw.version, `Use numeric version ${DUNGEON_MAP_FORMAT_VERSION}.`));
+    }
+    const rawSite = typeof raw.site === 'string' ? raw.site.trim() : '';
+    if (!rawSite) errors.push(architectureError('MISSING_SITE', '$.site', raw.site, 'Supply the exact site root as a non-empty string.'));
+    const exactSiteMatches = rawSite.replace(/\s+/g, ' ').toLocaleLowerCase() === String(site || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    if (site && rawSite && !exactSiteMatches) {
+        errors.push(architectureError('SITE_MISMATCH', '$.site', raw.site, `Use the requested site root exactly: "${site}".`));
+    }
+    const requestedKind = kind ? normalizeMapSiteKind(kind) : '';
+    if (raw.kind != null && raw.kind !== '') {
+        const rawKind = String(raw.kind || '').trim().toUpperCase();
+        if (!MAP_SITE_KINDS.includes(rawKind)) {
+            errors.push(architectureError('INVALID_KIND', '$.kind', raw.kind, 'Use DUNGEON or SETTLEMENT.'));
+        } else if (requestedKind && rawKind !== requestedKind) {
+            errors.push(architectureError('KIND_MISMATCH', '$.kind', raw.kind, `Use the requested kind exactly: "${requestedKind}".`));
+        }
+    }
+    if (!Array.isArray(raw.areas) || raw.areas.length < 2) {
+        errors.push(architectureError('TOO_FEW_AREAS', '$.areas', raw.areas, 'Supply at least two connected areas.'));
+    }
+    if (!Array.isArray(raw.assets)) {
+        errors.push(architectureError('INVALID_ASSETS', '$.assets', raw.assets, 'Supply an assets array; use [] when there are no assets.'));
+    }
+
+    const areas = Array.isArray(raw.areas) ? raw.areas : [];
+    const resolvedKind = requestedKind || normalizeMapSiteKind(raw.kind);
+    const scaleBounds = scaleAreaBounds(scale, resolvedKind);
+    if (scaleBounds && (areas.length < scaleBounds[0] || areas.length > scaleBounds[1])) {
+        errors.push(architectureError('SCALE_AREA_COUNT', '$.areas', areas.length, `${resolvedKind} ${String(scale).toUpperCase()} maps require ${scaleBounds[0]}-${scaleBounds[1]} meaningful areas.`));
+    }
+    const areaIds = new Set();
+    const areaNames = new Set();
+    const allowedArea = new Set(['id', 'name', 'knowledge', 'geometry', 'connections']);
+    areas.forEach((area, index) => {
+        const path = `$.areas[${index}]`;
+        if (!area || typeof area !== 'object' || Array.isArray(area)) {
+            errors.push(architectureError('INVALID_AREA', path, area, 'Each area must be a JSON object.'));
+            return;
+        }
+        for (const key of Object.keys(area)) {
+            if (!allowedArea.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, area[key], `Remove unsupported area field "${key}".`));
+        }
+        const id = typeof area.id === 'string' ? area.id.trim() : '';
+        const name = typeof area.name === 'string' ? area.name.trim() : '';
+        if (!id || mapSlug(id) !== id) errors.push(architectureError('INVALID_AREA_ID', `${path}.id`, area.id, 'Use a non-empty stable kebab-case ID.'));
+        else if (areaIds.has(id)) errors.push(architectureError('DUPLICATE_AREA_ID', `${path}.id`, id, 'Every area ID must be unique.'));
+        else areaIds.add(id);
+        const nameKey = normalizeDungeonLabel(name);
+        if (!name) errors.push(architectureError('MISSING_AREA_NAME', `${path}.name`, area.name, 'Supply a short natural area name.'));
+        else if (areaNames.has(nameKey)) errors.push(architectureError('DUPLICATE_AREA_NAME', `${path}.name`, name, 'Every area name must be distinguishable.'));
+        else areaNames.add(nameKey);
+        if (!AREA_KNOWLEDGE.includes(area.knowledge)) errors.push(architectureError('INVALID_AREA_KNOWLEDGE', `${path}.knowledge`, area.knowledge, `Use one of: ${AREA_KNOWLEDGE.join(', ')}.`));
+        if (index === 0 && area.knowledge !== 'VISITED') errors.push(architectureError('ENTRANCE_NOT_VISITED', `${path}.knowledge`, area.knowledge, 'The first/entrance area must be VISITED.'));
+        if (index > 0 && area.knowledge === 'VISITED') errors.push(architectureError('PREMATURELY_VISITED', `${path}.knowledge`, area.knowledge, 'Only the entrance is VISITED on initial creation; use DISCOVERED or UNREVEALED.'));
+        if (index === 0 && entrance && name && !dungeonLabelsMatch(name, entrance)) {
+            errors.push(architectureError('ENTRANCE_MISMATCH', `${path}.name`, name, `The first area must match the requested entrance: "${entrance}".`));
+        }
+        if (!Array.isArray(area.geometry)) errors.push(architectureError('INVALID_GEOMETRY', `${path}.geometry`, area.geometry, 'Supply an array of durable geometry strings.'));
+        else area.geometry.forEach((fact, factIndex) => {
+            if (typeof fact !== 'string' || !fact.trim()) errors.push(architectureError('INVALID_GEOMETRY_FACT', `${path}.geometry[${factIndex}]`, fact, 'Geometry facts must be non-empty strings.'));
+        });
+        if (!Array.isArray(area.connections)) errors.push(architectureError('INVALID_CONNECTIONS', `${path}.connections`, area.connections, 'Supply a connections array.'));
+        else if (areas.length > 1 && area.connections.length === 0) errors.push(architectureError('AREA_WITHOUT_CONNECTION', `${path}.connections`, area.connections, 'Every area must have at least one route. Represent inaccessibility with LOCKED or BLOCKED, never by omitting passages.'));
+    });
+
+    const graph = new Map([...areaIds].map(id => [id, new Set()]));
+    areas.forEach((area, areaIndex) => {
+        if (!area || typeof area !== 'object' || !Array.isArray(area.connections)) return;
+        const from = String(area.id || '').trim();
+        const seenTargets = new Set();
+        area.connections.forEach((connection, connectionIndex) => {
+            const path = `$.areas[${areaIndex}].connections[${connectionIndex}]`;
+            if (!connection || typeof connection !== 'object' || Array.isArray(connection)) {
+                errors.push(architectureError('INVALID_CONNECTION', path, connection, 'Each connection must be an object with to, state, and detail.'));
+                return;
+            }
+            for (const key of Object.keys(connection)) {
+                if (!['to', 'state', 'detail'].includes(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, connection[key], `Remove unsupported connection field "${key}".`));
+            }
+            const to = typeof connection.to === 'string' ? connection.to.trim() : '';
+            if (!areaIds.has(to)) errors.push(architectureError('UNKNOWN_CONNECTION_TARGET', `${path}.to`, connection.to, 'Reference an existing area ID.'));
+            else if (to === from) errors.push(architectureError('SELF_CONNECTION', `${path}.to`, to, 'Connect to a different area.'));
+            else {
+                if (seenTargets.has(to)) errors.push(architectureError('DUPLICATE_CONNECTION', `${path}.to`, to, 'List each outgoing route only once.'));
+                seenTargets.add(to);
+                graph.get(from)?.add(to);
+            }
+            if (!CONNECTION_STATES.includes(connection.state)) errors.push(architectureError('INVALID_CONNECTION_STATE', `${path}.state`, connection.state, `Use one of: ${CONNECTION_STATES.join(', ')}.`));
+            if (typeof connection.detail !== 'string') errors.push(architectureError('INVALID_CONNECTION_DETAIL', `${path}.detail`, connection.detail, 'Supply a concise string; use "" when no detail is needed.'));
+        });
+    });
+
+    // Routes are physical topology even when CLOSED/LOCKED/BLOCKED. Every route
+    // must be reciprocal so an area can never become unreachable by omission.
+    areas.forEach((area, areaIndex) => {
+        for (const connection of Array.isArray(area?.connections) ? area.connections : []) {
+            const targetIndex = areas.findIndex(candidate => candidate?.id === connection?.to);
+            if (targetIndex < 0) continue;
+            const reverse = (areas[targetIndex].connections || []).find(candidate => candidate?.to === area.id);
+            if (!reverse) {
+                errors.push(architectureError('MISSING_RECIPROCAL_CONNECTION', `$.areas[${areaIndex}].connections`, connection.to, `Add the reverse connection from "${connection.to}" to "${area.id}" with the same state.`));
+            } else if (reverse.state !== connection.state) {
+                errors.push(architectureError('CONNECTION_STATE_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.state, `Use ${connection.state} in both directions.`));
+            } else if (String(reverse.detail || '') !== String(connection.detail || '')) {
+                errors.push(architectureError('CONNECTION_DETAIL_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.detail, 'Use the same route detail in both directions so the reciprocal passage has one canonical description.'));
+            }
+        }
+    });
+    if (areas[0]?.id && graph.has(areas[0].id)) {
+        const reached = new Set([areas[0].id]);
+        const queue = [areas[0].id];
+        while (queue.length) {
+            for (const target of graph.get(queue.shift()) || []) {
+                if (!reached.has(target)) { reached.add(target); queue.push(target); }
+            }
+        }
+        for (const area of areas) {
+            if (area?.id && !reached.has(area.id)) errors.push(architectureError('UNREACHABLE_AREA', '$.areas', area.id, 'Connect this area to the entrance graph. Use a LOCKED/BLOCKED route when access is initially prevented.'));
+        }
+    }
+
+    const assetIds = new Set();
+    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration']);
+    for (let index = 0; index < (Array.isArray(raw.assets) ? raw.assets.length : 0); index++) {
+        const asset = raw.assets[index];
+        const path = `$.assets[${index}]`;
+        if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
+            errors.push(architectureError('INVALID_ASSET', path, asset, 'Each asset must be a JSON object.'));
+            continue;
+        }
+        for (const key of Object.keys(asset)) {
+            if (!allowedAsset.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `${path}.${key}`, asset[key], `Remove unsupported asset field "${key}".`));
+        }
+        const id = typeof asset.id === 'string' ? asset.id.trim() : '';
+        if (!id || mapSlug(id) !== id) errors.push(architectureError('INVALID_ASSET_ID', `${path}.id`, asset.id, 'Use a non-empty stable kebab-case ID.'));
+        else if (assetIds.has(id)) errors.push(architectureError('DUPLICATE_ASSET_ID', `${path}.id`, id, 'Every asset ID must be unique.'));
+        else assetIds.add(id);
+        if (typeof asset.name !== 'string' || !asset.name.trim()) errors.push(architectureError('MISSING_ASSET_NAME', `${path}.name`, asset.name, 'Supply a concise entity name.'));
+        if (!ASSET_KINDS.includes(asset.kind)) errors.push(architectureError('INVALID_ASSET_KIND', `${path}.kind`, asset.kind, `Use one of: ${ASSET_KINDS.join(', ')}.`));
+        if (!ASSET_STATES.includes(asset.state)) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        if (!ASSET_KNOWLEDGE.includes(asset.knowledge)) errors.push(architectureError('INVALID_ASSET_KNOWLEDGE', `${path}.knowledge`, asset.knowledge, `Use one of: ${ASSET_KNOWLEDGE.join(', ')}.`));
+        if (!areaIds.has(asset.location)) errors.push(architectureError('UNKNOWN_ASSET_LOCATION', `${path}.location`, asset.location, 'Place every initial asset in an existing area.'));
+        if (typeof asset.detail !== 'string') errors.push(architectureError('INVALID_ASSET_DETAIL', `${path}.detail`, asset.detail, 'Supply a concise string; use "" when no detail is needed.'));
+        if (asset.origin !== 'INITIAL_MAP') errors.push(architectureError('INVALID_ASSET_ORIGIN', `${path}.origin`, asset.origin, 'Initial Map Architect assets must use origin "INITIAL_MAP".'));
+        for (const field of ['behavior', 'faction', 'owner', 'duration']) {
+            if (asset[field] !== undefined && (typeof asset[field] !== 'string' || !asset[field].trim())) {
+                errors.push(architectureError('INVALID_ASSET_METADATA', `${path}.${field}`, asset[field], `Optional ${field} must be a non-empty string when present.`));
+            }
+        }
+        if (asset.route !== undefined) {
+            if (!Array.isArray(asset.route) || asset.route.some(ref => !areaIds.has(ref))) errors.push(architectureError('INVALID_ASSET_ROUTE', `${path}.route`, asset.route, 'Route must be an array containing only existing area IDs.'));
+        }
+    }
+
+    const document = errors.length === 0 ? normalizeDungeonMapDocument(raw, site || rawSite) : null;
+    if (document && site) document.site = String(site).trim();
+    if (document) document.kind = resolvedKind;
+    return {
+        valid: errors.length === 0,
+        errors,
+        document,
+    };
+}
+
+/** Parse either a v3 JSON map or a legacy prose map without losing its facts. */
+export function parseDungeonMapDocument(content, siteFallback = '') {
+    const structured = tryParseStructuredMap(content);
+    if (structured) {
+        return { document: normalizeDungeonMapDocument(structured, siteFallback), migrated: Number(structured.version) !== DUNGEON_MAP_FORMAT_VERSION };
+    }
+    return { document: convertLegacyDungeonMapToDocument(content, siteFallback), migrated: true };
+}
+
+export function serializeDungeonMapDocument(document) {
+    return JSON.stringify(normalizeDungeonMapDocument(document, document?.site), null, 2);
+}
+
+function formatMapAsset(asset, areasById) {
+    const tags = [asset.kind, asset.state, asset.knowledge].filter(Boolean).join(' / ');
+    const lines = [`- ${asset.name} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
+    const metadata = [];
+    if (asset.behavior) metadata.push(`Behavior: ${asset.behavior}`);
+    if (asset.route?.length) {
+        metadata.push(`Route: ${asset.route.map(id => areasById.get(id)?.name || id).join(' -> ')}`);
+    }
+    if (asset.faction) metadata.push(`Faction: ${asset.faction}`);
+    if (asset.owner) metadata.push(`Owner: ${asset.owner}`);
+    if (asset.duration) metadata.push(`Duration: ${asset.duration}`);
+    if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`Origin: ${asset.origin}`);
+    if (asset.last_location) metadata.push(`Last location: ${areasById.get(asset.last_location)?.name || asset.last_location}`);
+    if (metadata.length) lines.push(`  ${metadata.join('; ')}`);
+    return lines;
+}
+
+function formatMapRoutes(document, areasById) {
+    const routes = [];
+    const seen = new Set();
+    for (const area of document.areas) {
+        for (const connection of area.connections || []) {
+            const target = areasById.get(connection.to);
+            if (!target) continue;
+            const reverse = (target.connections || []).find(candidate =>
+                candidate.to === area.id
+                && candidate.state === connection.state
+                && String(candidate.detail || '') === String(connection.detail || ''));
+            const pairKey = [area.id, target.id].sort().join('|');
+            const key = reverse ? `pair:${pairKey}:${connection.state}:${connection.detail || ''}` : `one:${area.id}:${target.id}:${connection.state}:${connection.detail || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const arrow = reverse ? '<->' : '->';
+            routes.push(`- ${area.name} ${arrow} ${target.name} [${connection.state}]${connection.detail ? ` — ${connection.detail}` : ''}`);
+        }
+    }
+    return routes;
+}
+
+/**
+ * Render a structured current map as compact adjudication prose. The stored JSON
+ * remains authoritative for Lorebook Agent tools; this representation is for
+ * humans and the narrator, where field names/braces/IDs are needless token cost.
+ */
+export function formatDungeonMapForNarrator(documentOrContent, siteFallback = '') {
+    const document = typeof documentOrContent === 'string'
+        ? parseDungeonMapDocument(documentOrContent, siteFallback).document
+        : normalizeDungeonMapDocument(documentOrContent, siteFallback || documentOrContent?.site);
+    const areasById = new Map(document.areas.map(area => [area.id, area]));
+    const assetsByArea = new Map(document.areas.map(area => [area.id, []]));
+    const unplacedAssets = [];
+    for (const asset of document.assets) {
+        const bucket = asset.location ? assetsByArea.get(asset.location) : null;
+        if (bucket) bucket.push(asset);
+        else unplacedAssets.push(asset);
+    }
+
+    const lines = [`Dungeon Site: ${document.site}`];
+    const mapKind = normalizeMapSiteKind(document.kind);
+    if (mapKind === 'SETTLEMENT') {
+        lines.push('Map kind: SETTLEMENT (district-scale). Invent granular interiors during play if they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).');
+    } else {
+        lines.push('Map kind: DUNGEON (room-scale). Prefer this interior; you may add a room if play requires it, so long as it does not contradict established facts.');
+    }
+    const routes = formatMapRoutes(document, areasById);
+    if (routes.length) lines.push('', 'Routes:', ...routes);
+
+    for (const area of document.areas) {
+        lines.push('', `Area: ${area.name} [${area.knowledge}]`);
+        for (const fact of area.geometry) lines.push(`- ${fact}`);
+        const assets = assetsByArea.get(area.id) || [];
+        if (assets.length) {
+            lines.push('Assets:');
+            for (const asset of assets) lines.push(...formatMapAsset(asset, areasById));
+        }
+    }
+    if (unplacedAssets.length) {
+        lines.push('', 'Removed / unplaced assets:');
+        for (const asset of unplacedAssets) lines.push(...formatMapAsset(asset, areasById));
+    }
+    return lines.join('\n').trim();
+}
+
+/**
+ * Player-facing map prose for Adventure Companion.
+ * Matches Visuals/Map with Reveal all off: visited rooms in full, discovered
+ * names only, unrevealed neighbors as Unexplored, and no hidden assets.
+ */
+export function formatDungeonMapForPlayer(documentOrContent, currentLocation = '') {
+    const document = typeof documentOrContent === 'string'
+        ? parseDungeonMapDocument(documentOrContent, '').document
+        : normalizeDungeonMapDocument(documentOrContent, documentOrContent?.site);
+    const areasById = new Map(document.areas.map(area => [area.id, area]));
+    const revealedAreas = document.areas.filter(area =>
+        area.knowledge === 'VISITED' || area.knowledge === 'DISCOVERED');
+    const revealedIds = new Set(revealedAreas.map(area => area.id));
+    const placement = resolveCurrentMapPlacement(document, currentLocation);
+    const areaLabel = (id) => (revealedIds.has(id) ? (areasById.get(id)?.name || id) : 'Unexplored');
+    const isPlayerVisibleAsset = (asset) => {
+        const knowledge = String(asset?.knowledge || '').toUpperCase();
+        return knowledge === 'KNOWN' || knowledge === 'SUSPECTED';
+    };
+
+    const lines = [`Site: ${document.site}`];
+    const mapKind = normalizeMapSiteKind(document.kind);
+    lines.push(mapKind === 'SETTLEMENT'
+        ? 'Kind: SETTLEMENT (district-scale)'
+        : 'Kind: DUNGEON (room-scale)');
+    if (placement.area && revealedIds.has(placement.area.id)) {
+        const interior = placement.interiorAsset && isPlayerVisibleAsset(placement.interiorAsset)
+            ? placement.interiorAsset.name
+            : (placement.unmatchedInterior || '');
+        lines.push(interior
+            ? `You are here: ${placement.area.name} (in ${interior})`
+            : `You are here: ${placement.area.name}`);
+    } else if (currentLocation) {
+        lines.push(`Current location: ${currentLocation}`);
+    }
+
+    const routes = [];
+    const seen = new Set();
+    for (const area of revealedAreas) {
+        for (const connection of area.connections || []) {
+            const target = areasById.get(connection.to);
+            if (!target) continue;
+            const pairKey = [area.id, target.id].sort().join('|');
+            const key = `${pairKey}:${connection.state}:${connection.detail || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const targetRevealed = revealedIds.has(connection.to);
+            const detail = targetRevealed && connection.detail ? ` — ${connection.detail}` : '';
+            routes.push(`- ${area.name} -> ${areaLabel(connection.to)} [${connection.state}]${detail}`);
+        }
+    }
+    if (routes.length) lines.push('', 'Known routes:', ...routes);
+
+    for (const area of revealedAreas) {
+        const here = placement.area?.id === area.id ? ' (you are here)' : '';
+        lines.push('', `Area: ${area.name} [${area.knowledge}]${here}`);
+        if (area.knowledge !== 'VISITED') {
+            lines.push('- Seen from outside; interior not yet revealed.');
+            continue;
+        }
+        for (const fact of area.geometry) lines.push(`- ${fact}`);
+        const assets = document.assets.filter(asset =>
+            asset.location === area.id && isPlayerVisibleAsset(asset));
+        if (assets.length) {
+            lines.push('Known occupants / objects:');
+            for (const asset of assets) lines.push(...formatMapAsset(asset, areasById));
+        }
+    }
+    if (!revealedAreas.length) {
+        lines.push('', 'No revealed rooms or districts yet.');
+    }
+    return lines.join('\n').trim();
+}
+
+/** Replace only the private map section, retaining [CORE] and visible chronicles. */
+export function replaceDungeonMapSection(content, mapBody) {
+    const body = String(mapBody || '').trim();
+    const source = String(content || '');
+    if (MAP_SECTION_RE.test(source)) return source.replace(MAP_SECTION_RE, `[MAP]\n${body}\n[/MAP]`);
+    const visible = source.trimEnd();
+    return `${visible}${visible ? '\n\n' : ''}[MAP]\n${body}\n[/MAP]`;
+}
+
+/** Return the private map body stored in a normal lorebook [MAP] section. */
+export function extractDungeonMapSection(content) {
+    return String(content || '').match(MAP_SECTION_RE)?.[1]?.trim() || '';
+}
+
+/** Remove [MAP] from display/narrator copies while leaving stored content intact. */
+export function stripDungeonMapSection(content) {
+    return String(content || '')
+        .replace(MAP_SECTION_RE, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+/** Return the selected plain-text body for either ST or API message shapes. */
+export function getDungeonMessageText(message) {
+    if (!message) return '';
+    if (typeof message.mes === 'string') return message.mes;
+    if (typeof message.content === 'string') return message.content;
+    if (Array.isArray(message.content)) {
+        return message.content
+            .filter(part => part?.type === 'text' && typeof part.text === 'string')
+            .map(part => part.text)
+            .join('\n');
+    }
+    return '';
+}
+
+function extractHiddenDivs(text) {
+    const blocks = [];
+    const source = String(text || '');
+    DIV_RE.lastIndex = 0;
+    let match;
+    while ((match = DIV_RE.exec(source)) !== null) {
+        const attributes = String(match[1] || '');
+        if (!hasHiddenAttribute(attributes)) continue;
+        const body = String(match[2] || '').trim();
+        if (!body) continue;
+        blocks.push({
+            attributes,
+            body,
+            isMap: hasDungeonMapAttribute(attributes),
+            isDelta: hasDungeonDeltaAttribute(attributes),
+        });
+    }
+    return blocks;
+}
+
+/** Extract immutable map candidates, excluding explicit status-delta blocks. */
+export function extractHiddenDungeonMapBlocks(text) {
+    return extractHiddenDivs(text)
+        .filter(block => !block.isDelta)
+        .map(block => block.body);
+}
+
+/** Read a private map attachment from a lorebook Location entry. */
+export function getDungeonMapAttachment(entry) {
+    const mapSection = extractDungeonMapSection(entry?.content);
+    if (mapSection) {
+        const parsed = parseDungeonMapDocument(mapSection, String(entry?.comment || '').trim());
+        return {
+            version: DUNGEON_MAP_FORMAT_VERSION,
+            siteRoot: parsed.document.site || String(entry?.comment || '').trim(),
+            content: mapSection,
+            storage: 'content',
+            structured: !parsed.migrated,
+        };
+    }
+    const attachment = entry?.extensions?.[DUNGEON_MAP_EXTENSION_KEY];
+    if (!attachment || typeof attachment !== 'object') return null;
+    const siteRoot = String(attachment.siteRoot || entry?.comment || '').trim();
+    const content = String(attachment.content || '').trim();
+    if (!siteRoot || !content) return null;
+    return { ...attachment, siteRoot, content, storage: 'legacy-extension' };
+}
+
+/** Attach the immutable initial map without replacing an existing attachment. */
+export function attachDungeonMapToLocationEntry(entry, map) {
+    if (!entry || !map || extractDungeonMapSection(entry.content)) return false;
+    const siteRoot = String(map.siteRoot || entry.comment || '').trim();
+    const content = String(map.content || '').trim();
+    if (!siteRoot || !content) return false;
+    const document = parseDungeonMapDocument(content, siteRoot).document;
+    const visible = stripDungeonMapSection(entry.content);
+    entry.content = `${visible}${visible ? '\n\n' : ''}[MAP]\n${serializeDungeonMapDocument(document)}\n[/MAP]`;
+    if (entry.extensions?.[DUNGEON_MAP_EXTENSION_KEY]) {
+        delete entry.extensions[DUNGEON_MAP_EXTENSION_KEY];
+    }
+    return true;
+}
+
+/** Upgrade the earlier private-extension representation to normal [MAP] lore. */
+export function migrateDungeonMapAttachmentToContent(entry) {
+    const legacy = entry?.extensions?.[DUNGEON_MAP_EXTENSION_KEY];
+    if (!legacy || typeof legacy !== 'object' || extractDungeonMapSection(entry.content)) return false;
+    return attachDungeonMapToLocationEntry(entry, legacy);
+}
+
+/** Extract explicit append-only status blocks from a narrator message. */
+export function extractHiddenDungeonDeltaBlocks(text) {
+    return extractHiddenDivs(text)
+        .filter(block => block.isDelta)
+        .map(block => block.body);
+}
+
+/** Parse the intentionally small, prose-friendly delta cue format. */
+export function parseDungeonDeltaBlock(block) {
+    const text = String(block || '').trim();
+    const siteRoot = text.match(SITE_MARKER_RE)?.[1]?.trim() || '';
+    const entries = [];
+    const errors = [];
+    for (const rawLine of text.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || SITE_MARKER_RE.test(line)) continue;
+        const match = line.match(DELTA_LINE_RE);
+        if (!match) {
+            errors.push(`unrecognized delta line: "${line}"`);
+            continue;
+        }
+        const type = match[1].toLowerCase();
+        const label = match[2].trim();
+        const detail = match[3].trim();
+        if (!label || !detail) {
+            errors.push(`delta line requires both a label and detail: "${line}"`);
+            continue;
+        }
+        entries.push(type === 'addition'
+            ? { type, label, detail }
+            : { type, label, state: detail });
+    }
+    if (!entries.length && !errors.length) errors.push('delta block contains no mutation or addition lines');
+    return { siteRoot, entries, errors };
+}
+
+/** Extract the last status-footer location from a narrator message. */
+export function extractFooterLocation(text) {
+    const source = String(text || '');
+    LOCATION_RE.lastIndex = 0;
+    let location = '';
+    let match;
+    while ((match = LOCATION_RE.exec(source)) !== null) {
+        location = String(match[1] || '').trim();
+    }
+    return location;
+}
+
+function splitLocationSegments(location) {
+    return String(location || '')
+        .split(/\s*(?:::|,|\/|>|›|»|→)\s*/)
+        .map(part => part.trim())
+        .filter(Boolean);
+}
+
+/** Top-level footer segment, used as the stable site binding unit. */
+export function getSiteRootFromLocation(location) {
+    return splitLocationSegments(location)[0] || '';
+}
+
+/** Deepest footer segment, used to highlight the current mapped area. */
+export function getLocationLeaf(location) {
+    const parts = splitLocationSegments(location);
+    return parts.at(-1) || '';
+}
+
+/**
+ * Bind a location footer to a map area, and optionally to an occupying asset
+ * when the leaf is a settlement interior (chapel, inn) rather than a district/room.
+ */
+export function resolveCurrentMapPlacement(document, currentLocation = '') {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    const parts = splitLocationSegments(currentLocation);
+    if (!parts.length) return { area: null, interiorAsset: null, unmatchedInterior: '' };
+
+    for (let i = parts.length - 1; i >= 0; i--) {
+        const part = parts[i];
+        const area = resolveMapArea(map, part).area;
+        if (area) {
+            const unmatchedInterior = parts.slice(i + 1).join(', ');
+            const interiorAsset = unmatchedInterior
+                ? (resolveMapAsset(map, unmatchedInterior).asset
+                    || map.assets.find(asset => dungeonLabelsMatch(asset.name, unmatchedInterior))
+                    || null)
+                : null;
+            return { area, interiorAsset, unmatchedInterior };
+        }
+        const asset = resolveMapAsset(map, part).asset
+            || map.assets.find(item => dungeonLabelsMatch(item.name, part))
+            || null;
+        if (asset) {
+            const host = resolveMapArea(map, asset.location).area;
+            return {
+                area: host,
+                interiorAsset: asset,
+                unmatchedInterior: host ? '' : part,
+            };
+        }
+    }
+    return { area: null, interiorAsset: null, unmatchedInterior: parts.at(-1) || '' };
+}
+
+/** Light normalization for footer drift without introducing opaque IDs. */
+export function normalizeDungeonLabel(label) {
+    return String(label || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[’'`]/g, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .replace(LEADING_ARTICLE_RE, '');
+}
+
+function editDistance(a, b) {
+    if (a === b) return 0;
+    if (!a) return b.length;
+    if (!b) return a.length;
+    const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i++) {
+        let diagonal = row[0];
+        row[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const above = row[j];
+            row[j] = Math.min(
+                row[j] + 1,
+                row[j - 1] + 1,
+                diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+            );
+            diagonal = above;
+        }
+    }
+    return row[b.length];
+}
+
+function dungeonLabelEditDistanceMatch(left, right) {
+    const a = normalizeDungeonLabel(left);
+    const b = normalizeDungeonLabel(right);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const allowance = Math.max(1, Math.floor(Math.max(a.length, b.length) * 0.12));
+    return editDistance(a, b) <= allowance;
+}
+
+/**
+ * Site-root identity for map activation. Nearby places that mention a mapped
+ * site ("Forest Near the Hall of the Ember-Ancestors") must not count as inside it.
+ */
+export function dungeonSiteRootsMatch(left, right) {
+    return dungeonLabelEditDistanceMatch(left, right);
+}
+
+/** True when a footer/lore path has a whole segment that is this mapped site. */
+export function locationContainsSiteRoot(location, siteRoot) {
+    if (!normalizeDungeonLabel(siteRoot)) return false;
+    return splitLocationSegments(location).some(segment => dungeonSiteRootsMatch(segment, siteRoot));
+}
+
+/** Conservative fuzzy equality for punctuation/article drift and small typos. */
+export function dungeonLabelsMatch(left, right) {
+    const a = normalizeDungeonLabel(left);
+    const b = normalizeDungeonLabel(right);
+    if (!a || !b) return false;
+    if (dungeonLabelEditDistanceMatch(a, b)) return true;
+    const shorter = a.length <= b.length ? a : b;
+    const longer = a.length <= b.length ? b : a;
+    if (shorter.length < 8 || !longer.startsWith(shorter)) return false;
+    const next = longer[shorter.length];
+    return next === ' ' || (next === 's' && longer.length === shorter.length + 1);
+}
+
+/** Upgrade a prose/older JSON [MAP] section to the v3 geometry/assets model. */
+export function migrateDungeonMapSectionToStructured(entry) {
+    const body = extractDungeonMapSection(entry?.content);
+    if (!body) return false;
+    const parsed = parseDungeonMapDocument(body, String(entry?.comment || '').trim());
+    if (!parsed.migrated) return false;
+    entry.content = replaceDungeonMapSection(entry.content, serializeDungeonMapDocument(parsed.document));
+    return true;
+}
+
+/** Mark mapped areas with real child Location records as visited during migration. */
+export function reconcileDungeonMapAreaKnowledge(entry, allEntries) {
+    const body = extractDungeonMapSection(entry?.content);
+    if (!body) return false;
+    const parsed = parseDungeonMapDocument(body, String(entry?.comment || '').trim());
+    const rootLabel = String(entry?.comment || parsed.document.site || '').trim();
+    const wasMigrated = parsed.migrated;
+    const children = Object.values(allEntries || {})
+        .filter(candidate => candidate && candidate !== entry)
+        .filter(candidate => {
+            const label = String(candidate.comment || '').trim();
+            const segments = splitLocationSegments(label);
+            return segments.length > 1 && segments.some(segment => dungeonSiteRootsMatch(segment, rootLabel));
+        });
+    let changed = wasMigrated;
+    const legacyCoreSentence = `${rootLabel} is a mapped site. Persistent room and area changes are recorded in its child Location entries.`;
+    const currentCoreSentence = `${rootLabel} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.`;
+    if (String(entry.content || '').includes(legacyCoreSentence)) {
+        entry.content = String(entry.content).replace(legacyCoreSentence, currentCoreSentence);
+        changed = true;
+    }
+    for (const area of parsed.document.areas) {
+        const child = children.find(candidate => {
+            const leaf = String(candidate.comment || '').split(/\s*::\s*/).filter(Boolean).at(-1);
+            const keys = Array.isArray(candidate.key) ? candidate.key : [];
+            return dungeonLabelsMatch(leaf, area.name) || keys.some(key => dungeonLabelsMatch(key, area.name));
+        });
+        if (child && area.knowledge !== 'VISITED') {
+            area.knowledge = 'VISITED';
+            changed = true;
+        }
+
+        // One-time legacy reconciliation: strongly explicit historical outcomes
+        // become the initial v3 current state. Never rerun this inference on an
+        // already-structured map, because a later validated operation may supersede
+        // an older chronicle without rewriting history.
+        if (!wasMigrated || !child) continue;
+        const visibleContent = stripDungeonMapSection(child.content);
+        const history = visibleContent
+            .replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '')
+            .trim();
+        for (const asset of parsed.document.assets.filter(candidate => candidate.location === area.id)) {
+            const normalizedName = normalizeDungeonLabel(asset.name);
+            const distinctiveNoun = normalizedName.split(/\s+/).at(-1) || '';
+            const terms = [...new Set([
+                normalizedName,
+                normalizeDungeonLabel(asset.id),
+                distinctiveNoun,
+            ].filter(term => term.length >= 4 && !['thing', 'asset', 'other'].includes(term)))];
+            const normalizedVisible = normalizeDungeonLabel(visibleContent);
+            if (terms.some(term => normalizedVisible.includes(term)) && asset.knowledge !== 'KNOWN') {
+                asset.knowledge = 'KNOWN';
+                changed = true;
+            }
+            if (!history) continue;
+            const relevantLines = history.split(/\r?\n/).filter(line => {
+                const normalized = normalizeDungeonLabel(line);
+                return terms.some(term => normalized.includes(term));
+            });
+            if (!relevantLines.length) continue;
+            const latest = relevantLines.at(-1);
+            const normalizedLatest = normalizeDungeonLabel(latest);
+            const stateRulesByKind = {
+                CREATURE: [
+                    { re: /\b(?:destroyed|obliterated|slain|killed|dead)\b/, state: 'DESTROYED' },
+                    { re: /\b(?:captured|bound|imprisoned)\b/, state: 'CAPTURED' },
+                ],
+                GROUP: [
+                    { re: /\b(?:destroyed|obliterated|slain|killed|dead)\b/, state: 'DESTROYED' },
+                    { re: /\b(?:captured|bound|imprisoned)\b/, state: 'CAPTURED' },
+                ],
+                TRAP: [
+                    { re: /\b(?:disarmed)\b/, state: 'DISARMED' },
+                    { re: /\b(?:triggered|sprung)\b/, state: 'TRIGGERED' },
+                    { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
+                ],
+                ALARM: [
+                    { re: /\b(?:triggered|sounded|raised)\b/, state: 'TRIGGERED' },
+                    { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
+                ],
+                BARRIER: [
+                    { re: /\b(?:destroyed|smashed|collapsed)\b/, state: 'DESTROYED' },
+                    { re: /\b(?:unlocked)\b/, state: 'UNLOCKED' },
+                    { re: /\b(?:opened|open)\b/, state: 'OPEN' },
+                    { re: /\b(?:blocked)\b/, state: 'BLOCKED' },
+                    { re: /\b(?:locked|sealed|chained)\b/, state: 'LOCKED' },
+                ],
+                LOOT: [
+                    { re: /\b(?:taken|recovered|removed|looted)\b/, state: 'TAKEN' },
+                    { re: /\b(?:destroyed)\b/, state: 'DESTROYED' },
+                ],
+                OBJECT: [
+                    { re: /\b(?:taken|recovered|removed)\b/, state: 'TAKEN' },
+                    { re: /\b(?:destroyed|broken)\b/, state: 'DESTROYED' },
+                ],
+                HAZARD: [
+                    { re: /\b(?:cleared|neutralized)\b/, state: 'CLEARED' },
+                    { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
+                ],
+                EFFECT: [
+                    { re: /\b(?:cleared|dispelled|ended)\b/, state: 'CLEARED' },
+                    { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
+                ],
+            };
+            const stateRules = stateRulesByKind[asset.kind] || [
+                { re: /\b(?:destroyed)\b/, state: 'DESTROYED' },
+                { re: /\b(?:removed)\b/, state: 'REMOVED' },
+            ];
+            const inferred = stateRules.find(rule => rule.re.test(normalizedLatest));
+            if (!inferred) continue;
+            asset.state = inferred.state;
+            asset.knowledge = 'KNOWN';
+            asset.detail = latest.replace(/^\s*\[[^\]]+\]\s*/, '').trim() || asset.detail;
+            changed = true;
+        }
+    }
+    if (changed) entry.content = replaceDungeonMapSection(entry.content, serializeDungeonMapDocument(parsed.document));
+    return changed;
+}
+
+function mapError(code, path, received, hint, extra = {}) {
+    return { code, path, received, hint, ...extra };
+}
+
+function unknownKeys(value, allowed) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    return Object.keys(value).filter(key => !allowed.includes(key));
+}
+
+function resolveMapArea(document, ref) {
+    const received = String(ref || '').trim();
+    if (!received) return { area: null, candidates: [] };
+    const exactId = document.areas.find(area => area.id === received);
+    if (exactId) return { area: exactId, candidates: [exactId] };
+    const normalized = normalizeDungeonLabel(received);
+    const exactNames = document.areas.filter(area => normalizeDungeonLabel(area.name) === normalized);
+    if (exactNames.length === 1) return { area: exactNames[0], candidates: exactNames };
+    const fuzzy = document.areas.filter(area => dungeonLabelsMatch(area.name, received));
+    return { area: fuzzy.length === 1 ? fuzzy[0] : null, candidates: fuzzy.length ? fuzzy : exactNames };
+}
+
+function resolveMapAsset(document, ref) {
+    const received = String(ref || '').trim();
+    if (!received) return { asset: null, candidates: [] };
+    const exactId = document.assets.find(asset => asset.id === received);
+    if (exactId) return { asset: exactId, candidates: [exactId] };
+    const normalized = normalizeDungeonLabel(received);
+    const exactNames = document.assets.filter(asset => normalizeDungeonLabel(asset.name) === normalized);
+    if (exactNames.length === 1) return { asset: exactNames[0], candidates: exactNames };
+    return { asset: null, candidates: exactNames };
+}
+
+function validateEnumField(value, allowed, path, errors, required = false) {
+    if (value == null || value === '') {
+        if (required) errors.push(mapError('MISSING_FIELD', path, value, `Supply one of: ${allowed.join(', ')}.`, { allowed }));
+        return null;
+    }
+    const normalized = String(value).trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!allowed.includes(normalized)) {
+        errors.push(mapError('INVALID_ENUM', path, value, `Use one of: ${allowed.join(', ')}.`, { allowed }));
+        return null;
+    }
+    return normalized;
+}
+
+function requireMapString(value, path, errors) {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    if (!normalized) errors.push(mapError('MISSING_FIELD', path, value, 'Supply a non-empty string.'));
+    return normalized;
+}
+
+function validateOperationShape(operation, index, errors) {
+    const path = `map.operations[${index}]`;
+    if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
+        errors.push(mapError('INVALID_OPERATION', path, operation, 'Each operation must be a JSON object.'));
+        return null;
+    }
+    const op = validateEnumField(operation.op, MAP_OPERATIONS, `${path}.op`, errors, true);
+    const common = ['op', 'evidence'];
+    const byOperation = {
+        ADD_AREA: ['name', 'knowledge', 'geometry', 'connections'],
+        SET_AREA: ['area_id', 'knowledge', 'geometry_append', 'geometry_replace'],
+        ADD_ASSET: ['name', 'kind', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'distinct_from'],
+        MOVE_ASSET: ['asset_id', 'to', 'from', 'state', 'knowledge', 'detail'],
+        SET_ASSET: ['asset_id', 'name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'],
+        REMOVE_ASSET: ['asset_id', 'knowledge', 'detail'],
+        SET_CONNECTION: ['from', 'to', 'state', 'detail', 'bidirectional'],
+    };
+    if (op) {
+        const extras = unknownKeys(operation, [...common, ...(byOperation[op] || [])]);
+        for (const key of extras) {
+            errors.push(mapError('UNKNOWN_FIELD', `${path}.${key}`, operation[key], `Remove unsupported field "${key}" from ${op}.`, { allowed: [...common, ...(byOperation[op] || [])] }));
+        }
+    }
+    const evidence = validateEnumField(coerceMapEvidence(operation.evidence), MAP_EVIDENCE, `${path}.evidence`, errors, true);
+    return op && evidence ? { op, evidence, path } : null;
+}
+
+function addOrUpdateConnection(area, to, state, detail) {
+    const existing = area.connections.find(connection => connection.to === to);
+    if (existing) {
+        existing.state = state;
+        existing.detail = detail;
+    } else {
+        area.connections.push({ to, state, detail });
+    }
+}
+
+/**
+ * Validate and apply a Lorebook Agent map transaction to a cloned document.
+ * No caller-owned object is changed when validation fails.
+ */
+export function applyDungeonMapTransaction(document, transaction) {
+    const current = normalizeDungeonMapDocument(clone(document), document?.site);
+    const errors = [];
+    if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
+        return { ok: false, retryable: true, errors: [mapError('INVALID_MAP_TRANSACTION', 'map', transaction, 'Supply a JSON object with operation_id, operations, and optional chronicles.')] };
+    }
+    for (const key of unknownKeys(transaction, ['operation_id', 'operations', 'chronicles'])) {
+        errors.push(mapError('UNKNOWN_FIELD', `map.${key}`, transaction[key], `Remove unsupported map transaction field "${key}".`, { allowed: ['operation_id', 'operations', 'chronicles'] }));
+    }
+    const operationId = requireMapString(transaction.operation_id, 'map.operation_id', errors);
+    if (operationId && !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$/.test(operationId)) {
+        errors.push(mapError('INVALID_OPERATION_ID', 'map.operation_id', operationId, 'Use 3-120 characters: letters, numbers, dot, underscore, colon, or hyphen.'));
+    }
+    if (!Array.isArray(transaction.operations) || !transaction.operations.length) {
+        errors.push(mapError('MISSING_OPERATIONS', 'map.operations', transaction.operations, 'Supply at least one map operation.'));
+    } else if (transaction.operations.length > 24) {
+        errors.push(mapError('TOO_MANY_OPERATIONS', 'map.operations', transaction.operations.length, 'Split the change into at most 24 operations.'));
+    }
+    if (transaction.chronicles != null && !Array.isArray(transaction.chronicles)) {
+        errors.push(mapError('INVALID_CHRONICLES', 'map.chronicles', transaction.chronicles, 'Chronicles must be an array. Omit it for unobserved off-screen changes.'));
+    }
+    if (errors.length) return { ok: false, retryable: true, errors };
+
+    const working = clone(current);
+    const createdAssets = [];
+    const createdAreas = [];
+    const areaIds = new Set(working.areas.map(area => area.id));
+    const assetIds = new Set(working.assets.map(asset => asset.id));
+
+    for (let index = 0; index < transaction.operations.length; index++) {
+        const operation = normalizeMapOperation(transaction.operations[index]);
+        const shape = validateOperationShape(operation, index, errors);
+        if (!shape) continue;
+        const { op, evidence, path } = shape;
+
+        if (evidence === 'AUTONOMOUS' && !['MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET'].includes(op)) {
+            errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, `${op} requires narrator-established CONFIRMED or IMPLIED evidence.`));
+            continue;
+        }
+
+        if (op === 'ADD_AREA') {
+            const name = requireMapString(operation.name, `${path}.name`, errors);
+            const knowledge = validateEnumField(operation.knowledge, AREA_KNOWLEDGE, `${path}.knowledge`, errors, true);
+            if (!name || !knowledge) continue;
+            const duplicates = working.areas.filter(area => dungeonLabelsMatch(area.name, name));
+            if (duplicates.length) {
+                errors.push(mapError('DUPLICATE_AREA', `${path}.name`, name, 'Use SET_AREA for the existing area.', { candidates: duplicates.map(area => ({ id: area.id, name: area.name })) }));
+                continue;
+            }
+            const area = {
+                id: allocateMapId(areaIds, name, 'area'),
+                name,
+                knowledge,
+                geometry: cleanStringList(operation.geometry),
+                connections: [],
+            };
+            working.areas.push(area);
+            createdAreas.push({ id: area.id, name: area.name });
+            for (const [connectionIndex, connectionRef] of cleanStringList(operation.connections).entries()) {
+                const resolved = resolveMapArea(working, connectionRef);
+                if (!resolved.area || resolved.area.id === area.id) {
+                    errors.push(mapError('AREA_NOT_FOUND', `${path}.connections[${connectionIndex}]`, connectionRef, 'Use an exact existing area ID or label.', { allowed: working.areas.filter(item => item.id !== area.id).map(item => item.id) }));
+                    continue;
+                }
+                addOrUpdateConnection(area, resolved.area.id, 'OPEN', '');
+                addOrUpdateConnection(resolved.area, area.id, 'OPEN', '');
+            }
+            continue;
+        }
+
+        if (op === 'SET_AREA') {
+            const resolved = resolveMapArea(working, operation.area_id);
+            if (!resolved.area) {
+                errors.push(mapError('AREA_NOT_FOUND', `${path}.area_id`, operation.area_id, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id), candidates: resolved.candidates.map(area => area.id) }));
+                continue;
+            }
+            const hasMutation = operation.knowledge != null || operation.geometry_append != null || operation.geometry_replace != null;
+            if (!hasMutation) {
+                errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_AREA must change knowledge or geometry.'));
+                continue;
+            }
+            if (operation.knowledge != null) {
+                const knowledge = validateEnumField(operation.knowledge, AREA_KNOWLEDGE, `${path}.knowledge`, errors);
+                if (knowledge) resolved.area.knowledge = knowledge;
+            }
+            if (operation.geometry_replace != null) {
+                if (!Array.isArray(operation.geometry_replace)) errors.push(mapError('INVALID_FIELD', `${path}.geometry_replace`, operation.geometry_replace, 'Use an array of complete current geometry facts.'));
+                else resolved.area.geometry = cleanStringList(operation.geometry_replace);
+            }
+            if (operation.geometry_append != null) {
+                if (!Array.isArray(operation.geometry_append)) errors.push(mapError('INVALID_FIELD', `${path}.geometry_append`, operation.geometry_append, 'Use an array of new durable geometry facts.'));
+                else {
+                    for (const fact of cleanStringList(operation.geometry_append)) {
+                        if (!resolved.area.geometry.some(existing => normalizeChunkForComparison(existing) === normalizeChunkForComparison(fact))) resolved.area.geometry.push(fact);
+                    }
+                }
+            }
+            continue;
+        }
+
+        if (op === 'ADD_ASSET') {
+            const name = requireMapString(operation.name, `${path}.name`, errors);
+            const kind = validateEnumField(coerceAssetKind(operation.kind), ASSET_KINDS, `${path}.kind`, errors, true);
+            const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors, true);
+            const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors, true);
+            const locationResult = resolveMapArea(working, operation.location);
+            if (!locationResult.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.location`, operation.location, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id), candidates: locationResult.candidates.map(area => area.id) }));
+            if (!name || !kind || !state || !knowledge || !locationResult.area) continue;
+            const duplicateCandidates = working.assets.filter(asset => normalizeDungeonLabel(asset.name) === normalizeDungeonLabel(name) && asset.state !== 'REMOVED');
+            const distinctFrom = new Set(cleanStringList(operation.distinct_from));
+            if (duplicateCandidates.length && duplicateCandidates.some(candidate => !distinctFrom.has(candidate.id))) {
+                errors.push(mapError('POSSIBLE_DUPLICATE_ASSET', `${path}.name`, name, 'Use MOVE_ASSET/SET_ASSET if this is an existing entity, or list every candidate ID in distinct_from if it is genuinely new.', { candidates: duplicateCandidates.map(asset => ({ id: asset.id, location: asset.location, state: asset.state })) }));
+                continue;
+            }
+            const asset = {
+                id: allocateMapId(assetIds, name, 'asset'),
+                kind,
+                name,
+                location: locationResult.area.id,
+                state,
+                knowledge,
+                detail: String(operation.detail || '').trim(),
+                origin: String(operation.origin || (evidence === 'IMPLIED' ? 'NARRATOR_IMPLIED' : 'NARRATOR_ESTABLISHED')).trim(),
+            };
+            const behavior = String(operation.behavior || '').trim();
+            if (behavior) asset.behavior = behavior;
+            for (const field of ['faction', 'owner', 'duration']) {
+                const value = String(operation[field] || '').trim();
+                if (value) asset[field] = value;
+            }
+            if (operation.route != null) {
+                if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
+                else {
+                    const route = [];
+                    for (const [routeIndex, ref] of operation.route.entries()) {
+                        const routeArea = resolveMapArea(working, ref);
+                        if (!routeArea.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.route[${routeIndex}]`, ref, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id) }));
+                        else route.push(routeArea.area.id);
+                    }
+                    if (route.length) asset.route = [...new Set(route)];
+                }
+            }
+            working.assets.push(asset);
+            createdAssets.push({ id: asset.id, name: asset.name });
+            continue;
+        }
+
+        if (['MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET'].includes(op)) {
+            const assetResult = resolveMapAsset(working, operation.asset_id);
+            if (!assetResult.asset) {
+                errors.push(mapError('ASSET_NOT_FOUND', `${path}.asset_id`, operation.asset_id, 'Use an exact asset ID from the occupancy snapshot.', { allowed: working.assets.map(asset => asset.id), candidates: assetResult.candidates.map(asset => asset.id) }));
+                continue;
+            }
+            const asset = assetResult.asset;
+            if (evidence === 'AUTONOMOUS' && !asset.behavior && !asset.route?.length) {
+                errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, 'Autonomous asset changes require an explicit behavior or route on the existing asset.'));
+                continue;
+            }
+            if (op === 'MOVE_ASSET') {
+                if (['DEAD', 'DESTROYED', 'REMOVED', 'EXPIRED', 'DISMISSED'].includes(asset.state)) {
+                    errors.push(mapError('ASSET_CANNOT_MOVE', `${path}.asset_id`, asset.id, `Asset state is ${asset.state}; change its state only if the narrative explicitly re-establishes mobility.`));
+                    continue;
+                }
+                const destination = resolveMapArea(working, operation.to);
+                if (!destination.area) {
+                    errors.push(mapError('AREA_NOT_FOUND', `${path}.to`, operation.to, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id), candidates: destination.candidates.map(area => area.id) }));
+                    continue;
+                }
+                if (operation.from != null) {
+                    const from = resolveMapArea(working, operation.from);
+                    if (!from.area || from.area.id !== asset.location) {
+                        const actual = working.areas.find(area => area.id === asset.location);
+                        errors.push(mapError('FROM_LOCATION_MISMATCH', `${path}.from`, operation.from, `Retry with the asset's actual current location: ${asset.location}.`, { actual: actual ? { id: actual.id, name: actual.name } : asset.location }));
+                        continue;
+                    }
+                }
+                const sourceArea = working.areas.find(area => area.id === asset.location);
+                const connection = sourceArea?.connections?.find(item => item.to === destination.area.id);
+                if (connection && ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state)) {
+                    errors.push(mapError('CONNECTION_NOT_TRAVERSABLE', `${path}.to`, operation.to, `The mapped connection is ${connection.state}. Apply SET_CONNECTION earlier in the same transaction if the narrative changed it.`));
+                    continue;
+                }
+                if (evidence === 'AUTONOMOUS' && (!connection || ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state))) {
+                    errors.push(mapError('DESTINATION_NOT_CONNECTED', `${path}.to`, operation.to, 'Autonomous movement must follow an open mapped connection.', { allowed: (sourceArea?.connections || []).filter(item => ['OPEN', 'UNKNOWN'].includes(item.state)).map(item => item.to) }));
+                    continue;
+                }
+                asset.location = destination.area.id;
+                if (operation.state != null) {
+                    const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors);
+                    if (state) asset.state = state;
+                }
+                if (operation.knowledge != null) {
+                    const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors);
+                    if (knowledge) asset.knowledge = knowledge;
+                }
+                if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                continue;
+            }
+            if (op === 'REMOVE_ASSET') {
+                asset.last_location = asset.location;
+                asset.location = null;
+                asset.state = 'REMOVED';
+                if (operation.knowledge != null) {
+                    const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors);
+                    if (knowledge) asset.knowledge = knowledge;
+                }
+                if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                continue;
+            }
+
+            const mutableFields = ['name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'];
+            if (!mutableFields.some(field => operation[field] != null)) {
+                errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_ASSET must change at least one mutable field.'));
+                continue;
+            }
+            if (operation.name != null) asset.name = requireMapString(operation.name, `${path}.name`, errors) || asset.name;
+            if (operation.state != null) {
+                const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors);
+                if (state) asset.state = state;
+            }
+            if (operation.knowledge != null) {
+                const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors);
+                if (knowledge) asset.knowledge = knowledge;
+            }
+            if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+            if (operation.behavior != null) asset.behavior = String(operation.behavior || '').trim();
+            for (const field of ['faction', 'owner', 'duration']) {
+                if (operation[field] != null) asset[field] = String(operation[field] || '').trim();
+            }
+            if (operation.route != null) {
+                if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
+                else {
+                    const route = [];
+                    for (const [routeIndex, ref] of operation.route.entries()) {
+                        const routeArea = resolveMapArea(working, ref);
+                        if (!routeArea.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.route[${routeIndex}]`, ref, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id) }));
+                        else route.push(routeArea.area.id);
+                    }
+                    asset.route = [...new Set(route)];
+                }
+            }
+            continue;
+        }
+
+        if (op === 'SET_CONNECTION') {
+            const from = resolveMapArea(working, operation.from);
+            const to = resolveMapArea(working, operation.to);
+            if (!from.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.from`, operation.from, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id) }));
+            if (!to.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.to`, operation.to, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id) }));
+            const state = validateEnumField(operation.state, CONNECTION_STATES, `${path}.state`, errors, true);
+            if (!from.area || !to.area || !state) continue;
+            if (from.area.id === to.area.id) {
+                errors.push(mapError('INVALID_CONNECTION', path, operation, 'A connection must join two different areas.'));
+                continue;
+            }
+            const detail = String(operation.detail || '').trim();
+            addOrUpdateConnection(from.area, to.area.id, state, detail);
+            if (operation.bidirectional !== false) addOrUpdateConnection(to.area, from.area.id, state, detail);
+        }
+    }
+
+    const resolvedChronicles = [];
+    for (const [index, chronicle] of (transaction.chronicles || []).entries()) {
+        const path = `map.chronicles[${index}]`;
+        if (!chronicle || typeof chronicle !== 'object' || Array.isArray(chronicle)) {
+            errors.push(mapError('INVALID_CHRONICLE', path, chronicle, 'Each chronicle must be a JSON object.'));
+            continue;
+        }
+        const entry = normalizeChronicleFields(chronicle);
+        for (const key of unknownKeys(entry, ['area_id', 'text'])) {
+            errors.push(mapError('UNKNOWN_FIELD', `${path}.${key}`, entry[key], `Remove unsupported chronicle field "${key}".`, { allowed: ['area_id', 'text'] }));
+        }
+        const area = resolveMapArea(working, entry.area_id);
+        const text = requireMapString(entry.text, `${path}.text`, errors);
+        if (!area.area) {
+            errors.push(mapError('AREA_NOT_FOUND', `${path}.area_id`, entry.area_id, 'Use the exact area ID whose player-observable history changed.', { allowed: working.areas.map(item => item.id), candidates: area.candidates.map(item => item.id) }));
+        } else if (text) {
+            // A player-observable chronicle is direct evidence that the area has
+            // been visited. Keep this invariant in the pure transaction result so
+            // every caller sees the same current map, not only the persistence path.
+            area.area.knowledge = 'VISITED';
+            resolvedChronicles.push({ areaId: area.area.id, areaName: area.area.name, text });
+        }
+    }
+
+    if (errors.length) return { ok: false, retryable: true, errors };
+    return {
+        ok: true,
+        retryable: false,
+        operationId,
+        document: normalizeDungeonMapDocument(working, working.site),
+        chronicles: resolvedChronicles,
+        createdAssets,
+        createdAreas,
+    };
+}
+
+const ASSET_DETAIL_SCHEMA = {
+    type: 'string',
+    description: 'Durable occupancy or lasting condition only (remaining count, destroyed remains, what is guarded). Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
+};
+
+/** Strict JSON Schema fragment added to commit only while a mapped site is active. */
+export function buildDungeonMapCommitSchema() {
+    const evidence = { type: 'string', enum: MAP_EVIDENCE };
+    const operationVariants = [
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['ADD_AREA'] }, evidence, name: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry: { type: 'array', items: { type: 'string' } }, connections: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'knowledge'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['SET_AREA'] }, evidence, area_id: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry_append: { type: 'array', items: { type: 'string' } }, geometry_replace: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'area_id'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, distinct_from: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id', 'to'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' } },
+            required: ['op', 'evidence', 'asset_id'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id'],
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: { op: { type: 'string', enum: ['SET_CONNECTION'] }, evidence, from: { type: 'string' }, to: { type: 'string' }, state: { type: 'string', enum: CONNECTION_STATES }, detail: { type: 'string' }, bidirectional: { type: 'boolean' } },
+            required: ['op', 'evidence', 'from', 'to', 'state'],
+        },
+    ];
+    return {
+        type: 'object',
+        additionalProperties: false,
+        description: 'Atomic current-map mutation for the active mapped site. Include only when the narrative established a durable map change (occupancy, destruction, area movement, traps, routes, lasting damage). Do not include transient combat poses, targeting, HP, or temporary statuses. The map and player-observable child Location chronicles save together.',
+        properties: {
+            operation_id: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$', description: 'Stable idempotency key for this narrative change, e.g. day1-0833-crypt-ghoul-destroyed. Reuse it on a correction retry.' },
+            operations: { type: 'array', minItems: 1, maxItems: 24, items: { oneOf: operationVariants } },
+            chronicles: {
+                type: 'array',
+                description: 'Player-observable lasting history only. Omit for hidden/off-screen changes. Not turn-by-turn combat choreography, HP, targeting, or temporary statuses.',
+                items: {
+                    type: 'object', additionalProperties: false,
+                    properties: {
+                        area_id: { type: 'string' },
+                        text: { type: 'string', description: 'Lasting observable history. Not mid-round poses, targeting, HP, or temporary combat statuses.' },
+                    },
+                    required: ['area_id', 'text'],
+                },
+            },
+        },
+        required: ['operation_id', 'operations'],
+    };
+}
+
+export function inspectDungeonMap(document, areaRef = '') {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    if (!areaRef) return map;
+    const resolved = resolveMapArea(map, areaRef);
+    if (!resolved.area) return null;
+    return {
+        site: map.site,
+        area: resolved.area,
+        assets: map.assets.filter(asset => asset.location === resolved.area.id),
+    };
+}
+
+export function listDungeonMapAssets(document, filters = {}) {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    let assets = map.assets;
+    if (filters.area) {
+        const resolved = resolveMapArea(map, filters.area);
+        if (!resolved.area) return null;
+        assets = assets.filter(asset => asset.location === resolved.area.id);
+    }
+    if (filters.state) assets = assets.filter(asset => asset.state === String(filters.state).toUpperCase());
+    if (filters.knowledge) assets = assets.filter(asset => asset.knowledge === String(filters.knowledge).toUpperCase());
+    return assets;
+}
+
+/**
+ * Compact ID-bearing snapshot for the Map Updater. Keeps stable IDs without
+ * dumping full geometry for every room on every turn.
+ */
+export function formatDungeonMapForUpdater(document, currentLocation = '') {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    const kind = normalizeMapSiteKind(map.kind);
+    const placement = resolveCurrentMapPlacement(map, currentLocation);
+    const currentArea = placement.area;
+    const unmatchedInterior = placement.unmatchedInterior;
+    const interiorAsset = placement.interiorAsset;
+    const areaLines = (map.areas || []).map(area => {
+        const routes = (area.connections || []).map(connection => `${connection.to}:${connection.state}`).join(', ') || 'none';
+        return `${area.id} | ${area.name} | ${area.knowledge} | ${routes}`;
+    });
+    const assetLines = (map.assets || []).map(asset => {
+        const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location}`, asset.state, asset.knowledge];
+        if (asset.behavior) bits.push(`behavior=${asset.behavior}`);
+        if (Array.isArray(asset.route) && asset.route.length) bits.push(`route=${asset.route.join('>')}`);
+        if (asset.detail) bits.push(asset.detail);
+        return bits.join(' | ');
+    });
+    const currentGeometry = currentArea
+        ? `${currentArea.id} (${currentArea.name})\n${(currentArea.geometry || []).map(line => `- ${line}`).join('\n') || '- (no geometry)'}`
+        : '(Current location did not match an area id/name.)';
+    const interiorHint = (kind === 'SETTLEMENT' && unmatchedInterior && !interiorAsset)
+        ? `\n\n## SETTLEMENT INTERIOR NOT ON MAP\n"${unmatchedInterior}" is in CURRENT LOCATION but is not an area and not an OBJECT asset. ADD_ASSET kind OBJECT, knowledge KNOWN, location = ${currentArea?.id || 'the current district'}. Do not output {"noop":true} for this.`
+        : '';
+    return [
+        `KIND: ${kind}`,
+        `SITE: ${map.site}`,
+        '',
+        '## AREAS',
+        'id | name | knowledge | routes',
+        areaLines.join('\n') || '(none)',
+        '',
+        '## ASSETS',
+        'id | kind | name | location | state | knowledge | notes',
+        assetLines.join('\n') || '(none)',
+        '',
+        '## CURRENT AREA GEOMETRY',
+        currentGeometry,
+    ].join('\n') + interiorHint;
+}
+
+function normalizeChunkForComparison(chunk) {
+    return String(chunk || '').replace(/\s+/g, ' ').trim();
+}
+
+function createEmptyState() {
+    return { version: 2, sites: {} };
+}
+
+function normalizeState(state) {
+    const next = state && typeof state === 'object' ? clone(state) : createEmptyState();
+    next.version = 2;
+    if (!next.sites || typeof next.sites !== 'object' || Array.isArray(next.sites)) next.sites = {};
+    for (const [key, rawSite] of Object.entries(next.sites)) {
+        if (!rawSite || typeof rawSite !== 'object') {
+            delete next.sites[key];
+            continue;
+        }
+        rawSite.siteRoot = String(rawSite.siteRoot || key).trim();
+        rawSite.mapChunks = Array.isArray(rawSite.mapChunks)
+            ? rawSite.mapChunks.map(String).map(value => value.trim()).filter(Boolean)
+            : [];
+        rawSite.statusLog = Array.isArray(rawSite.statusLog) ? rawSite.statusLog : [];
+    }
+    return next;
+}
+
+function findSiteRecord(state, siteRoot) {
+    const exactKey = normalizeDungeonLabel(siteRoot);
+    if (state?.sites?.[exactKey]) return { key: exactKey, site: state.sites[exactKey] };
+    for (const [key, site] of Object.entries(state?.sites || {})) {
+        if (dungeonSiteRootsMatch(site.siteRoot || key, siteRoot)) return { key, site };
+    }
+    return null;
+}
+
+function siteRootFromMapBlock(block) {
+    const proseMarker = String(block || '').match(SITE_MARKER_RE)?.[1]?.trim();
+    if (proseMarker) return proseMarker;
+    return String(tryParseStructuredMap(block)?.site || '').trim();
+}
+
+function statusEntryContentSignature(entry) {
+    return [
+        String(entry?.type || 'mutation').toLowerCase(),
+        normalizeDungeonLabel(entry?.label),
+        normalizeChunkForComparison(entry?.state || entry?.detail).toLowerCase(),
+    ].join('|');
+}
+
+function statusEntrySourceSignature(entry) {
+    if (entry?.at?.sourceKey) return `source:${entry.at.sourceKey}`;
+    if (Number.isInteger(entry?.at?.messageIndex)) {
+        return `position:${entry.at.messageIndex}:${entry.at.swipeId ?? 0}:${statusEntryContentSignature(entry)}`;
+    }
+    return `legacy:${statusEntryContentSignature(entry)}`;
+}
+
+function buildDeltaSourceKey(message, messageIndex, blockIndex, entryIndex) {
+    const messageKey = message?.send_date != null
+        ? `sent:${String(message.send_date)}`
+        : `index:${messageIndex}`;
+    return `${messageKey}:swipe:${message?.swipe_id ?? 0}:block:${blockIndex}:entry:${entryIndex}`;
+}
+
+function isAssistantMessage(message) {
+    const role = String(message?.role || message?.Role || '').toLowerCase().trim();
+    if (message?.is_user || message?.is_system || role === 'user' || role === 'system') return false;
+    if (['assistant', 'ai', 'model'].includes(role)) return true;
+    return message?.is_user === false && !message?.is_system;
+}
+
+/** Collect valid initial-map candidates from selected narrator messages. */
+export function collectDungeonMapCandidates(chat) {
+    const maps = [];
+    const errors = [];
+    for (let messageIndex = 0; messageIndex < (Array.isArray(chat) ? chat.length : 0); messageIndex++) {
+        const message = chat[messageIndex];
+        if (!isAssistantMessage(message)) continue;
+        const text = getDungeonMessageText(message);
+        const footerSnapshot = extractFooterLocation(text);
+        for (const content of extractHiddenDungeonMapBlocks(text)) {
+            const markedRoot = siteRootFromMapBlock(content);
+            if (footerSnapshot && markedRoot && !locationContainsSiteRoot(footerSnapshot, markedRoot)) {
+                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerSnapshot}"`);
+                continue;
+            }
+            const siteRoot = markedRoot || getSiteRootFromLocation(footerSnapshot);
+            if (!siteRoot) {
+                errors.push(`message ${messageIndex} contains a hidden map but no footer location or Dungeon Site marker`);
+                continue;
+            }
+            maps.push({
+                siteRoot,
+                content,
+                capturedAt: {
+                    messageIndex,
+                    swipeId: message?.swipe_id ?? 0,
+                    footerSnapshot,
+                    sentAt: message?.send_date ?? null,
+                },
+            });
+        }
+    }
+    return { maps, errors };
+}
+
+/** Build deterministic active-site records from Location lorebook entries. */
+export function buildDungeonSitesFromLocationEntries(entries, bookName = '') {
+    const rows = Object.entries(entries || {});
+    const sites = {};
+    for (const [uid, entry] of rows) {
+        const attachment = getDungeonMapAttachment(entry);
+        if (!attachment) continue;
+        const rootLabel = String(entry.comment || attachment.siteRoot).trim();
+        const locationEntries = rows
+            .filter(([, candidate]) => {
+                const label = String(candidate?.comment || '').trim();
+                if (!label) return false;
+                return splitLocationSegments(label).some(segment => dungeonSiteRootsMatch(segment, rootLabel));
+            })
+            .map(([childUid, candidate]) => ({
+                id: bookName ? `${bookName}::${childUid}` : String(childUid),
+                label: String(candidate.comment || childUid),
+                content: stripDungeonMapSection(candidate.content),
+            }));
+        sites[normalizeDungeonLabel(rootLabel)] = {
+            siteRoot: attachment.siteRoot || rootLabel,
+            entryId: bookName ? `${bookName}::${uid}` : String(uid),
+            mapChunks: [attachment.content],
+            locationEntries,
+            statusLog: [],
+        };
+    }
+    return sites;
+}
+
+/**
+ * Capture selected narrator-message hidden blocks and merge new chunks by site.
+ * Existing map chunks are never rewritten.
+ */
+export function syncDungeonRealityState(existingState, chat) {
+    const state = normalizeState(existingState);
+    const errors = [];
+    let changed = false;
+    let capturedChunks = 0;
+    let capturedDeltas = 0;
+
+    for (let messageIndex = 0; messageIndex < (Array.isArray(chat) ? chat.length : 0); messageIndex++) {
+        const message = chat[messageIndex];
+        if (!isAssistantMessage(message)) continue;
+        const text = getDungeonMessageText(message);
+        const mapBlocks = extractHiddenDungeonMapBlocks(text);
+        const deltaBlocks = extractHiddenDungeonDeltaBlocks(text);
+        if (!mapBlocks.length && !deltaBlocks.length) continue;
+
+        const footerSnapshot = extractFooterLocation(text);
+        for (const block of mapBlocks) {
+            const markedRoot = siteRootFromMapBlock(block);
+            if (footerSnapshot && markedRoot && !locationContainsSiteRoot(footerSnapshot, markedRoot)) {
+                errors.push(`message ${messageIndex} map marker "${markedRoot}" conflicts with footer site "${footerSnapshot}"`);
+                continue;
+            }
+            const siteRoot = markedRoot || getSiteRootFromLocation(footerSnapshot);
+            if (!siteRoot) {
+                errors.push(`message ${messageIndex} contains a hidden map but no footer location or Dungeon Site marker`);
+                continue;
+            }
+
+            let record = findSiteRecord(state, siteRoot);
+            if (!record) {
+                const key = normalizeDungeonLabel(siteRoot);
+                state.sites[key] = {
+                    siteRoot,
+                    capturedAt: {
+                        messageIndex,
+                        swipeId: message?.swipe_id ?? 0,
+                        footerSnapshot,
+                        sentAt: message?.send_date ?? null,
+                    },
+                    mapChunks: [],
+                    statusLog: [],
+                };
+                record = { key, site: state.sites[key] };
+                changed = true;
+            }
+
+            const comparison = normalizeChunkForComparison(block);
+            const duplicate = record.site.mapChunks
+                .some(existing => normalizeChunkForComparison(existing) === comparison);
+            if (!duplicate) {
+                record.site.mapChunks.push(block);
+                capturedChunks++;
+                changed = true;
+            }
+        }
+
+        for (const [blockIndex, block] of deltaBlocks.entries()) {
+            const parsed = parseDungeonDeltaBlock(block);
+            for (const error of parsed.errors) {
+                errors.push(`message ${messageIndex} has an invalid dungeon delta: ${error}`);
+            }
+            if (!parsed.entries.length) continue;
+
+            if (footerSnapshot && parsed.siteRoot && !locationContainsSiteRoot(footerSnapshot, parsed.siteRoot)) {
+                errors.push(`message ${messageIndex} delta marker "${parsed.siteRoot}" conflicts with footer site "${footerSnapshot}"`);
+                continue;
+            }
+
+            const siteRoot = parsed.siteRoot || getSiteRootFromLocation(footerSnapshot);
+            if (!siteRoot) {
+                errors.push(`message ${messageIndex} contains a dungeon delta but no footer location or Dungeon Site marker`);
+                continue;
+            }
+            const record = findSiteRecord(state, siteRoot);
+            if (!record?.site?.mapChunks?.length) {
+                errors.push(`message ${messageIndex} contains a dungeon delta for "${siteRoot}" but no captured immutable map exists`);
+                continue;
+            }
+
+            const existingSignatures = new Set(record.site.statusLog.map(statusEntrySourceSignature));
+            for (const [entryIndex, entry] of parsed.entries.entries()) {
+                const sourceKey = buildDeltaSourceKey(message, messageIndex, blockIndex, entryIndex);
+                const signature = `source:${sourceKey}`;
+                if (existingSignatures.has(signature)) continue;
+                record.site.statusLog.push({
+                    ...entry,
+                    at: {
+                        messageIndex,
+                        swipeId: message?.swipe_id ?? 0,
+                        footerSnapshot,
+                        sentAt: message?.send_date ?? null,
+                        sourceKey,
+                    },
+                });
+                existingSignatures.add(signature);
+                capturedDeltas++;
+                changed = true;
+            }
+        }
+    }
+
+    return {
+        state: existingState || changed ? state : null,
+        changed,
+        capturedChunks,
+        capturedDeltas,
+        errors,
+    };
+}
+
+/** Find the most recent narrator footer location in the transcript. */
+export function findLatestDungeonLocation(chat) {
+    if (!Array.isArray(chat)) return '';
+    for (let index = chat.length - 1; index >= 0; index--) {
+        if (!isAssistantMessage(chat[index])) continue;
+        const location = extractFooterLocation(getDungeonMessageText(chat[index]));
+        if (location) return location;
+    }
+    return '';
+}
+
+/** Resolve the stored site active under the current footer hierarchy. */
+export function resolveActiveDungeonSite(state, currentLocation) {
+    const segments = splitLocationSegments(currentLocation);
+    if (!segments.length || !state?.sites) return null;
+    for (let index = segments.length - 1; index >= 0; index--) {
+        const found = findSiteRecord(state, segments[index]);
+        if (found) return found.site;
+    }
+    return null;
+}
+
+/** Compact [MAP] occupancy for State Tracker memoHistory stones. */
+export function collectDungeonMapHistorySnapshot(entries, bookName = '') {
+    const maps = [];
+    for (const [uid, entry] of Object.entries(entries || {})) {
+        const map = extractDungeonMapSection(entry?.content);
+        if (!map) continue;
+        maps.push({
+            uid: String(uid),
+            comment: String(entry?.comment || ''),
+            map,
+            operationIds: Array.isArray(entry?.extensions?.[DUNGEON_MAP_OPERATION_IDS_KEY])
+                ? clone(entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY])
+                : [],
+        });
+    }
+    return maps.length ? { bookName, maps } : null;
+}
+
+/** Write a history snapshot back onto Location entries without touching [CORE]. */
+export function applyDungeonMapHistorySnapshotToBook(book, snapshot) {
+    if (!book?.entries || !snapshot?.maps?.length) return false;
+    let changed = false;
+    for (const item of snapshot.maps) {
+        const entry = book.entries[item.uid];
+        if (!entry) continue;
+        const next = replaceDungeonMapSection(entry.content, item.map);
+        if (next !== entry.content) {
+            entry.content = next;
+            changed = true;
+        }
+        entry.extensions = entry.extensions || {};
+        const nextIds = Array.isArray(item.operationIds) ? clone(item.operationIds) : [];
+        if (JSON.stringify(entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY] || []) !== JSON.stringify(nextIds)) {
+            entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY] = nextIds;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/** Resolve the active site from a memo-history map snapshot (view overlay). */
+export function resolveDungeonMapFromHistorySnapshot(snapshot, locationText) {
+    if (!snapshot?.maps?.length) return null;
+    const entries = {};
+    for (const item of snapshot.maps) {
+        entries[item.uid] = {
+            comment: item.comment,
+            content: `[MAP]\n${item.map}\n[/MAP]`,
+        };
+    }
+    return resolveDungeonMapForLocation(entries, locationText, snapshot.bookName || '');
+}
+
+/** Parse the active site's current map document for a footer/lore location. */
+export function resolveDungeonMapForLocation(entries, locationText, bookName = '') {
+    const sites = buildDungeonSitesFromLocationEntries(entries, bookName);
+    const site = resolveActiveDungeonSite({ version: 3, sites }, locationText);
+    if (!site?.mapChunks?.length) return null;
+    const parsed = parseDungeonMapDocument(site.mapChunks[0], site.siteRoot);
+    return {
+        siteRoot: site.siteRoot || parsed.document.site,
+        document: parsed.document,
+        entryId: site.entryId || '',
+    };
+}
+
+/** Remove only map/delta blocks whose durable copy is already in the site store. */
+export function stripCapturedDungeonMapBlocks(text, state) {
+    const storedMaps = new Set();
+    for (const site of Object.values(state?.sites || {})) {
+        for (const chunk of site?.mapChunks || []) storedMaps.add(normalizeChunkForComparison(chunk));
+    }
+    const source = String(text || '');
+    if (!storedMaps.size) return source;
+    const footerSnapshot = extractFooterLocation(source);
+    DIV_RE.lastIndex = 0;
+    return source.replace(DIV_RE, (full, attributes, rawBody) => {
+        if (!hasHiddenAttribute(attributes)) return full;
+        const body = String(rawBody || '').trim();
+        if (!hasDungeonDeltaAttribute(attributes)) {
+            return storedMaps.has(normalizeChunkForComparison(body)) ? '' : full;
+        }
+
+        const parsed = parseDungeonDeltaBlock(body);
+        if (parsed.errors.length || !parsed.entries.length) return full;
+        if (footerSnapshot && parsed.siteRoot && !locationContainsSiteRoot(footerSnapshot, parsed.siteRoot)) return full;
+        const record = findSiteRecord(state, parsed.siteRoot || getSiteRootFromLocation(footerSnapshot));
+        if (!record) return full;
+        const storedDeltas = new Set((record.site.statusLog || []).map(statusEntryContentSignature));
+        return parsed.entries.every(entry => storedDeltas.has(statusEntryContentSignature(entry))) ? '' : full;
+    });
+}
+
+/** Strip captured map HTML from outgoing prompt messages, never from disk chat. */
+export function stripCapturedDungeonMapsFromPrompt(chat, state) {
+    if (!Array.isArray(chat)) return;
+    for (const message of chat) {
+        if (typeof message?.mes === 'string') {
+            message.mes = stripCapturedDungeonMapBlocks(message.mes, state);
+        }
+        if (typeof message?.content === 'string') {
+            message.content = stripCapturedDungeonMapBlocks(message.content, state);
+        } else if (Array.isArray(message?.content)) {
+            for (const part of message.content) {
+                if (part?.type === 'text' && typeof part.text === 'string') {
+                    part.text = stripCapturedDungeonMapBlocks(part.text, state);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Strip all Dungeon Reality hidden blocks from an outgoing prompt.
+ *
+ * This is intentionally separate from stripCapturedDungeonMapsFromPrompt:
+ * when the component is disabled there is no reason to load the durable map
+ * state just to identify blocks that must not reach the narrator. Existing
+ * chat history is left untouched; only the prompt copy is sanitized.
+ */
+export function stripDungeonRealityBlocksFromPrompt(chat) {
+    if (!Array.isArray(chat)) return;
+    const strip = (text) => {
+        const source = String(text || '');
+        DIV_RE.lastIndex = 0;
+        return source.replace(DIV_RE, (full, attributes) => {
+            const attrs = String(attributes || '');
+            return hasHiddenAttribute(attrs)
+                && (hasDungeonMapAttribute(attrs) || hasDungeonDeltaAttribute(attrs))
+                ? ''
+                : full;
+        });
+    };
+    for (let index = chat.length - 1; index >= 0; index--) {
+        const message = chat[index];
+        const messageText = getDungeonMessageText(message);
+        // Depth injections are prompt-only messages. Remove a stale one as
+        // well, since it is not wrapped in a hidden HTML block.
+        if (String(message?.name || '').trim() === 'Dungeon Reality'
+            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)) {
+            chat.splice(index, 1);
+            continue;
+        }
+        if (typeof message?.mes === 'string') message.mes = strip(message.mes);
+        if (typeof message?.content === 'string') {
+            message.content = strip(message.content);
+        } else if (Array.isArray(message?.content)) {
+            for (const part of message.content) {
+                if (part?.type === 'text' && typeof part.text === 'string') part.text = strip(part.text);
+            }
+        }
+    }
+}
+
+function renderStatusEntry(entry) {
+    if (!entry || typeof entry !== 'object') return String(entry || '').trim();
+    const label = String(entry.label || 'Unlabeled change').trim();
+    const detail = String(entry.state || entry.detail || '').trim();
+    return `- ${entry.type === 'addition' ? 'ADDITION' : 'MUTATION'} — ${label}${detail ? `: ${detail}` : ''}`;
+}
+
+function extractPlayerObservableChronicle(content) {
+    return stripDungeonMapSection(content)
+        .replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '')
+        .trim();
+}
+
+/** Build the correctness-critical system block injected while inside the site. */
+export function buildDungeonRealityInjection(site, currentLocation) {
+    if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) return '';
+    const chunks = site.mapChunks
+        .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${formatDungeonMapForNarrator(chunk, site.siteRoot)}`)
+        .join('\n\n');
+    const locationState = (site.locationEntries || [])
+        .map(entry => ({ ...entry, chronicle: extractPlayerObservableChronicle(entry?.content) }))
+        .filter(entry => entry.chronicle)
+        .map(entry => `### ${entry.label}\n${entry.chronicle}`)
+        .join('\n\n');
+    const legacyDeltas = (site.statusLog || []).map(renderStatusEntry).filter(Boolean);
+    const persistedState = locationState
+        || (legacyDeltas.length ? legacyDeltas.join('\n') : '- No persisted Location updates yet.');
+    const mapKind = normalizeMapSiteKind(parseDungeonMapDocument(site.mapChunks[0], site.siteRoot).document?.kind);
+    const kindCanon = mapKind === 'SETTLEMENT'
+        ? 'This attached map is district-scale settlement canon. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).'
+        : 'This attached map is room-scale interior canon. Prefer it for layout and occupancy; you may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.';
+    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. ${kindCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
+}
+
+/** Heuristic used only to emit a loud missing-map diagnostic. */
+export function looksLikeDungeonSite(location) {
+    const dungeonWord = /\b(?:dungeons?|crypts?|catacombs?|tombs?|ruins?|strongholds?|lairs?|caverns?|caves?|vaults?|fortresses|keeps?|hideouts?|sewers?|mines?|temples?)\b/;
+    return splitLocationSegments(location).some(segment => dungeonWord.test(normalizeDungeonLabel(segment)));
+}

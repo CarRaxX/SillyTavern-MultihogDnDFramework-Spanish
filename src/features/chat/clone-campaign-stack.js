@@ -1,48 +1,76 @@
 import { getRequestHeaders } from '../../../../../../../script.js';
+import {
+    bookBelongsToPrefix,
+    findCloneDestinationCollisions,
+    plannedCloneDestinations,
+    renameBookForPrefix,
+} from './clone-campaign-stack-utils.js';
 
-/**
- * Same matching rule as Lorebook Agent / router: exact prefix, or prefix_SingleToken
- * with no further underscores in the suffix.
- * @param {string} bookName
- * @param {string} prefix
- */
-export function bookBelongsToPrefix(bookName, prefix) {
-    if (!prefix) return false;
-    if (bookName === prefix) return true;
-    const rest = bookName.startsWith(prefix + '_') ? bookName.slice(prefix.length + 1) : null;
-    return rest !== null && !rest.includes('_');
-}
-
-/**
- * @param {string} currentPrefix
- * @param {string} bookName
- * @param {string} newPrefix
- */
-export function renameBookForPrefix(currentPrefix, bookName, newPrefix) {
-    if (bookName === currentPrefix) return newPrefix;
-    const suffix = bookName.slice(currentPrefix.length); // includes leading '_'
-    return newPrefix + suffix;
-}
+export {
+    bookBelongsToPrefix,
+    findCloneDestinationCollisions,
+    plannedCloneDestinations,
+    renameBookForPrefix,
+};
 
 /**
  * @param {any} ctx
  * @returns {Promise<string[]>}
  */
 async function listWorldNames(ctx) {
-    if (typeof ctx.updateWorldInfoList === 'function') {
+    const namesSet = new Set();
+
+    if (typeof ctx?.updateWorldInfoList === 'function') {
         try { await ctx.updateWorldInfoList(); } catch (_) { /* non-fatal */ }
     }
-    if (typeof ctx.getWorldInfoNames === 'function') {
+
+    // Frontend registry (may be stale — always await; ST commonly returns a Promise).
+    if (typeof ctx?.getWorldInfoNames === 'function') {
         try {
-            const n = ctx.getWorldInfoNames();
-            return Array.isArray(n) ? [...n] : [];
+            const n = await ctx.getWorldInfoNames();
+            if (Array.isArray(n)) n.forEach((name) => namesSet.add(name));
+        } catch (_) { /* fall through */ }
+    } else if (typeof ctx?.getLorebookList === 'function') {
+        try {
+            const n = await ctx.getLorebookList();
+            if (Array.isArray(n)) n.forEach((name) => namesSet.add(name));
         } catch (_) { /* fall through */ }
     }
-    return [];
+
+    // Backend ground truth — same defense as router getWorldInfoNamesSafe.
+    try {
+        const r = await fetch('/api/settings/get', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({}),
+        });
+        if (r.ok) {
+            const j = await r.json();
+            if (Array.isArray(j?.world_names)) {
+                j.world_names.forEach((name) => namesSet.add(name));
+            }
+        }
+    } catch (_) { /* non-fatal */ }
+
+    try {
+        const r = await fetch('/api/worldinfo/list', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+        });
+        if (r.ok) {
+            const j = await r.json();
+            if (Array.isArray(j)) {
+                j.forEach((entry) => { if (entry?.file_id) namesSet.add(entry.file_id); });
+            }
+        }
+    } catch (_) { /* non-fatal */ }
+
+    return [...namesSet];
 }
 
 /**
  * Best-effort delete of lorebooks created during a failed clone.
+ * Only safe for names that this clone actually created (never pre-existing destinations).
  * @param {any} ctx
  * @param {string[]} bookNames
  */
@@ -56,13 +84,15 @@ export async function deleteWorldInfoBooks(ctx, bookNames) {
             });
         } catch (_) { /* best-effort */ }
     }
-    if (typeof ctx.updateWorldInfoList === 'function') {
+    if (typeof ctx?.updateWorldInfoList === 'function') {
         try { await ctx.updateWorldInfoList(); } catch (_) { /* non-fatal */ }
     }
 }
 
 /**
  * Duplicates every lorebook under currentPrefix to newPrefix.
+ * Aborts before any write when a destination name already exists — `/api/worldinfo/edit`
+ * replaces entire books, so collisions are data-loss without a preflight guard.
  * @param {string} currentPrefix
  * @param {string} newPrefix
  * @returns {Promise<{
@@ -72,6 +102,7 @@ export async function deleteWorldInfoBooks(ctx, bookNames) {
  *   bookRenameMap: Record<string, string>,
  *   createdBookNames: string[],
  *   errors: string[],
+ *   collisions?: string[],
  * }>}
  */
 export async function cloneCampaignStackToPrefix(currentPrefix, newPrefix) {
@@ -90,7 +121,7 @@ export async function cloneCampaignStackToPrefix(currentPrefix, newPrefix) {
             errors: ['Missing current or new campaign prefix.'],
         };
     }
-    if (currentPrefix === newPrefix) {
+    if (String(currentPrefix).toLowerCase() === String(newPrefix).toLowerCase()) {
         return {
             ok: false,
             cloned: 0,
@@ -102,7 +133,7 @@ export async function cloneCampaignStackToPrefix(currentPrefix, newPrefix) {
     }
 
     const allNames = await listWorldNames(ctx);
-    const matchingBooks = allNames.filter(n => bookBelongsToPrefix(n, currentPrefix));
+    const matchingBooks = allNames.filter((n) => bookBelongsToPrefix(n, currentPrefix));
 
     if (matchingBooks.length === 0) {
         return {
@@ -112,6 +143,23 @@ export async function cloneCampaignStackToPrefix(currentPrefix, newPrefix) {
             bookRenameMap,
             createdBookNames,
             errors: [],
+        };
+    }
+
+    const destinations = plannedCloneDestinations(matchingBooks, currentPrefix, newPrefix);
+    const collisions = findCloneDestinationCollisions(destinations, allNames);
+    if (collisions.length) {
+        return {
+            ok: false,
+            cloned: 0,
+            matchingCount: matchingBooks.length,
+            bookRenameMap,
+            createdBookNames,
+            collisions,
+            errors: [
+                `Aborted: destination lorebook(s) already exist — cloning would overwrite them: ${collisions.join(', ')}. `
+                + 'Choose a different prefix (or delete/rename the conflicting books first).',
+            ],
         };
     }
 

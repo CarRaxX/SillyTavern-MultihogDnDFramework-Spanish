@@ -1,5 +1,15 @@
 > 🇪🇸 **Versión en Español:** Para consultar la guía completa en español, lee [README.es.md](README.es.md).
 
+### New: Persistent maps. The framework now generates persistent maps that are automatically updated. Explore a dungeon or a town, leave, come back later, and it's still there as it was. Dungeons are no longer hallucinated but skill checks actually matter.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/9f5e6fec-9ea6-45fb-b514-9a89ee882d4c" width="100%" alt="Combat in progress" />
+  <br>
+  <em>Dungeon Area Map</em>
+</p>
+
+---
+
 # Multihog D&D Framework
 
 *A highly customizable and modular RPG platform/simulation engine for SillyTavern.*
@@ -19,7 +29,6 @@ I know it says "D&D Framework," but in addition to fantasy, the system works jus
 </p>
 
 ---
-
 
 ### The Core Components:
 
@@ -137,7 +146,7 @@ These are recommendations, not rules — experiment. Different models shine for 
 
 ---
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/a2c8a500-dbdf-4949-b2ee-bad025fd44e5" width="60%" alt="Combat in progress" />
+  <img src="https://github.com/user-attachments/assets/1de1d4cf-229f-447a-adc0-ab4aaaced139" width="60%" alt="Combat in progress" />
   <br>
   <em>Visualization Mode</em>
 </p>

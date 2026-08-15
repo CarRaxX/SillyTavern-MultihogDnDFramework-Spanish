@@ -534,6 +534,56 @@ function getSettingsInternal(extensionSettings) {
         );
     }
 
+    // Dungeon persistence ownership: map occupancy belongs to the Map Updater;
+    // Lorebook Agent still records NPCs and readable location lore.
+    const dungeonOwnershipRule = '**DUNGEON LOCATION OWNERSHIP:** A mapped root Location may contain a private `[MAP]...[/MAP]` section. Never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit `[MAP_COMMIT]`, `commit.map`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. Do NOT create or extend an EVENT merely to chronicle ordinary exploration, perception checks, room-by-room combat, or local map mutations. Use EVENT only for a site-scale outcome with lasting historical importance (for example the entire site was cleansed, destroyed, conquered, or changed ownership).';
+    if (s.routerModularPromptTemplate && !s.routerModularPromptTemplate.includes('DUNGEON LOCATION OWNERSHIP')) {
+        s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+            'Example: [[FAC: Iron Syndicate',
+            `${dungeonOwnershipRule}\n\nExample: [[FAC: Iron Syndicate`,
+        );
+    }
+    if (s.routerAgentSharedContextTemplate && !s.routerAgentSharedContextTemplate.includes('DUNGEON LOCATION OWNERSHIP')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            '## WORLD SKELETON (OFF-LIMITS)',
+            `## DUNGEON LOCATION OWNERSHIP\n${dungeonOwnershipRule.replace(/^\*\*DUNGEON LOCATION OWNERSHIP:\*\*\s*/, '')}\n\n## WORLD SKELETON (OFF-LIMITS)`,
+        );
+    }
+    const mapAwarenessRule = 'A mapped root Location may contain a private `[MAP]...[/MAP]` section. Never reveal, rewrite, summarize, remove, or quote `[MAP]` into visible lore. Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater — do not emit `[MAP_COMMIT]`, `commit.map`, inspect_map, or ADD_ASSET. You still record NPCs, factions, quests, events, and readable location lore. ';
+    if (s.routerModularPromptTemplate?.includes('DUNGEON LOCATION OWNERSHIP')
+        && !s.routerModularPromptTemplate.includes('Map Updater')) {
+        s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+            /(?:\*\*DUNGEON LOCATION OWNERSHIP:\*\*\s*)[\s\S]*?(?=\n\nExample: \[\[FAC:)/,
+            `${dungeonOwnershipRule}\n\n`,
+        );
+        if (!s.routerModularPromptTemplate.includes('Map Updater')) {
+            s.routerModularPromptTemplate = s.routerModularPromptTemplate.replace(
+                '**DUNGEON LOCATION OWNERSHIP:** ',
+                `**DUNGEON LOCATION OWNERSHIP:** ${mapAwarenessRule}`,
+            );
+        }
+    }
+    if (s.routerAgentSharedContextTemplate?.includes('## DUNGEON LOCATION OWNERSHIP')
+        && !s.routerAgentSharedContextTemplate.includes('Map Updater')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            /## DUNGEON LOCATION OWNERSHIP\n[\s\S]*?(?=\n## WORLD SKELETON)/,
+            `## DUNGEON LOCATION OWNERSHIP\n${mapAwarenessRule}\n`,
+        );
+    }
+
+    if (s.routerAgentSharedContextTemplate?.includes('use `read_entry` or `grep_lore`, or `activate` it.')) {
+        s.routerAgentSharedContextTemplate = s.routerAgentSharedContextTemplate.replace(
+            '  - To see its full content first: use `read_entry` or `grep_lore`, or `activate` it.\n- Only use `record` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.',
+            '  - To see its full content first: use `read_entry` with the Book::UID from that ARCHIVE INDEX line, or `activate` it. Never grep_lore or inspect_book to check whether a name exists.\n- Only use `record` for entities that are BRAND NEW — names absent from ACTIVE MEMORY, NEWLY ACTIVATED, and ARCHIVE INDEX. Absence means the entry does not exist.',
+        );
+    }
+    if (s.routerBasicSystemPromptTemplate?.includes('Inactive entries — labels and keywords only.')) {
+        s.routerBasicSystemPromptTemplate = s.routerBasicSystemPromptTemplate.replace(
+            '3. **ARCHIVE INDEX**: Inactive entries — labels and keywords only. You CANNOT see their full biography.',
+            '3. **ARCHIVE INDEX**: Complete catalog of inactive entries — Book::UID, labels, and keywords only. You CANNOT see their full biography. If a name is not in ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX, it does not exist.',
+        );
+    }
+
     // ── MIGRATION: Update World Progression System Prompt with Quests/Events rule (v3.4.4+) ──────
     if (s.worldProgressionSystemPrompt && !s.worldProgressionSystemPrompt.includes('QUESTS and EVENTS are historical records')) {
         s.worldProgressionSystemPrompt = s.worldProgressionSystemPrompt.replace(
@@ -765,6 +815,29 @@ function getSettingsInternal(extensionSettings) {
 
     enforceRealtimeVisualizationDisabled(s);
 
+    // Old shipped default was 0 (no cap). Raise existing 0s once to 6.
+    // The flag must NOT live in defaults: seeding it true skipped this for everyone
+    // who already had 0 saved. After this flag is persisted, 0 stays a valid choice.
+    if (!s.keywordOverflowMigratedTo6) {
+        if (Number(s.routerMaxKeywordOverflow) === 0) s.routerMaxKeywordOverflow = 6;
+        for (const snapshot of Object.values(s.chatStates || {})) {
+            if (!snapshot || typeof snapshot !== 'object') continue;
+            if (Number(snapshot.routerMaxKeywordOverflow) === 0) snapshot.routerMaxKeywordOverflow = 6;
+        }
+        s.keywordOverflowMigratedTo6 = true;
+    }
+
+    // Old shipped default was 8. Raise existing 8s once to 12. Same: flag is
+    // persisted only after this pass, so it cannot skip the first upgrade.
+    if (!s.maxActiveKeysMigratedTo12) {
+        if (Number(s.routerMaxActivations) === 8) s.routerMaxActivations = 12;
+        for (const snapshot of Object.values(s.chatStates || {})) {
+            if (!snapshot || typeof snapshot !== 'object') continue;
+            if (Number(snapshot.routerMaxActivations) === 8) snapshot.routerMaxActivations = 12;
+        }
+        s.maxActiveKeysMigratedTo12 = true;
+    }
+
     return extensionSettings[MODULE_NAME];
 }
 
@@ -951,6 +1024,23 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitOpenaiUrl',
     'portraitOpenaiKey',
     'portraitOpenaiModel',
+    'keywordOverflowMigratedTo6',
+    'maxActiveKeysMigratedTo12',
+    'mapArchitectLookback',
+    'mapArchitectMaxTokens',
+    'mapArchitectSystemPrompt',
+    'mapArchitectConnectionSource',
+    'mapArchitectConnectionProfileId',
+    'mapArchitectCompletionPresetId',
+    'mapArchitectOllamaUrl',
+    'mapArchitectOllamaModel',
+    'mapArchitectOpenaiUrl',
+    'mapArchitectOpenaiKey',
+    'mapArchitectOpenaiModel',
+    'mapUpdaterEnabled',
+    'mapUpdaterRunEvery',
+    'mapUpdaterMaxTokens',
+    'mapUpdaterSystemPrompt',
     'worldConnectionSource',
     'worldConnectionProfileId',
     'worldCompletionPresetId',

@@ -67,11 +67,12 @@ export function stripChatFileExtension(name) {
 // data so a newer schema can never be silently overwritten by this migrator.
 const KNOWN_PARTITION_KEYS = new Set([
     'currentMemo', 'combatDefeatedUi', 'memoPersistedAt', 'memoPersistedBy',
-    'memoHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
+    'memoHistory', 'dungeonMapHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
     'modules', 'blockOrder', 'stockPrompts', 'quests', 'historyIndex',
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
-    'routerLastRunAt', 'pcCharacterBlockSeeded', 'routerDirectPrompt',
+    'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
+    'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
     'routerDefaultOrder', 'routerDefaultRole', 'loreInjectionPosition',
     'loreInjectionDepth', 'loreInjectionRole', 'worldProgressionLookback',
@@ -93,9 +94,10 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionSkeletonLorebookFilter', 'worldProgressionSkeletonLorebookOnly',
     'worldProgressionConsolidateEnabled', 'worldProgressionConsolidateInterval',
     'worldProgressionExclusionList', 'use24hTime', 'useDdMmYyFormat',
-    'initialDate', 'initialTime', 'npcRelationshipMax', 'setup', 'campaignBooks',
+    'initialDate', 'initialTime', 'npcRelationshipMax', 'npcRelationshipValues',
+    'npcRelationshipLog', 'setup', 'campaignBooks',
     'lastImmersionSceneArtPath', 'lastImmersionSceneArtChatLen',
-    'playerCharacter', 'adventureCompanion',
+    'playerCharacter', 'dungeonReality', 'adventureCompanion',
 ]);
 
 const hasItems = (value) => Array.isArray(value) && value.length > 0;
@@ -116,10 +118,13 @@ export function partitionHasCampaignSubstance(p) {
     if (['currentMemo', 'lastDelta', 'worldProgressionLastFiredPeriodLabel',
         'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath']
         .some((key) => hasText(p[key]))) return true;
-    if (['combatDefeatedUi', 'memoHistory', 'quests', 'activeRouterKeys',
+    if (['combatDefeatedUi', 'memoHistory', 'dungeonMapHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
         .some((key) => hasItems(p[key]))) return true;
-    if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)) return true;
+    if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)
+        || hasMapEntries(p.dungeonReality?.sites)
+        || hasMapEntries(p.npcRelationshipValues)
+        || hasMapEntries(p.npcRelationshipLog)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)
         || (Number(p.routerLastRunChatLength) || 0) > 0
@@ -207,6 +212,17 @@ export async function onChatRenamedMigrate(detail, deps) {
         }
     } else if (!hasOld && hasNew) {
         // Already under new key (e.g. Branch Campaign seeded then renamed).
+    }
+
+    if (migratedPartition) {
+        for (const entry of Array.isArray(s.routerHistory) ? s.routerHistory : []) {
+            if (String(entry?.chatId || '') === oldId) entry.chatId = newId;
+        }
+        for (const redoEntry of runtimeState.loreRedoStack || []) {
+            for (const state of [redoEntry?.prePassSnapshot, redoEntry?.postPassState]) {
+                if (String(state?.chatId || '') === oldId) state.chatId = newId;
+            }
+        }
     }
 
     // A genuine partition collision may represent two different chats, so keep

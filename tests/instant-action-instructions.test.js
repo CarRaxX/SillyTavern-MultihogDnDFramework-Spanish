@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { buildDefaultSettings } from '../src/state/defaults.js';
 import {
     buildInstantActionOpeningMessage,
     buildInstantActionPromptSection,
+    extractInstantActionLevel,
     MAX_INSTANT_ACTION_INSTRUCTION_LENGTH,
     normalizeInstantActionInstructions,
     resolveInstantActionPlayerCardWords,
@@ -50,11 +52,33 @@ describe('Instant Action instructions', () => {
         expect(quickStartSource).toContain('buildInstantActionOpeningMessage(instantActionInstructions)');
         expect(creatorSource).toContain('instantActionInstructions: opts.instantActionInstructions');
         expect(creatorSource).toContain('If the Initial Setup specifies');
+        expect(creatorSource).toContain('extractInstantActionLevel(instantActionInstructions)');
+    });
+
+    it('lets Initial Setup override the onboarding level dropdown', () => {
+        expect(extractInstantActionLevel('A level 7 ranger.')).toBe(7);
+        expect(extractInstantActionLevel('lvl 3 wizard')).toBe(3);
+        expect(extractInstantActionLevel('a 7th-level ranger with a crossbow')).toBe(7);
+        expect(extractInstantActionLevel('A 28-year-old female ranger with a crossbow')).toBeNull();
+        expect(extractInstantActionLevel('')).toBeNull();
+        expect(creatorSource).toContain('extractedLevel ?? (opts.level || 1)');
+        expect(creatorSource).toContain('STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).');
     });
 
     it('exposes a selectable Player Card word count in Instant Action', () => {
         expect(rendererSource).toContain('id="rt-quickstart-persona-words"');
         expect(rendererSource).toContain('id="rt-quickstart-persona-words-custom"');
         expect(quickStartSource).toContain('resolveInstantActionPlayerCardWords(');
+    });
+
+    it('makes the Instant Action starter message optional and on by default', () => {
+        expect(buildDefaultSettings().onboardingSendStarterMessage).toBe(true);
+        expect(rendererSource).toContain('id="rt-quickstart-send-starter"');
+        expect(rendererSource).toContain('Send Starter Message?');
+        expect(rendererSource).toContain('If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.');
+        expect(rendererSource).toContain("obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''");
+        expect(quickStartSource).toMatch(/if \(s\.onboardingSendStarterMessage !== false\)/);
+        expect(quickStartSource).toMatch(/sendStarterCheckbox\?\.addEventListener\('change', persistQuickStartOptions\)/);
+        expect(quickStartSource).toContain('Type your first action.');
     });
 });

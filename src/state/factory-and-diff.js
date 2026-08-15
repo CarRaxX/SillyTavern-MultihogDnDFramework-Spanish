@@ -193,6 +193,8 @@ export function buildBundledPromptsSnapshot() {
             modules,
         },
         world: {
+            mapArchitectSystemPrompt: defaults.mapArchitectSystemPrompt || '',
+            mapUpdaterSystemPrompt: defaults.mapUpdaterSystemPrompt || '',
             worldProgressionSystemPrompt: defaults.worldProgressionSystemPrompt || '',
             worldProgressionSkeletonSystemPrompt: defaults.worldProgressionSkeletonSystemPrompt || '',
         },
@@ -220,7 +222,7 @@ export const PROMPT_DEFAULTS_CATEGORY_LABELS = {
     sysprompt: 'Main System Prompt',
     tracker: 'State Tracker Prompts',
     lorebook: 'Lorebook Agent Prompts',
-    world: 'World Progression Prompts',
+    world: 'World, Map Architect & Map Updater Prompts',
     sections: 'NPC / PC Core Sections',
 };
 
@@ -288,6 +290,8 @@ export function getSnapshotCategoryBlocks(snap, category) {
     }
     if (category === 'world') {
         return [
+            { label: 'Map Architect System', text: snap.world?.mapArchitectSystemPrompt || '' },
+            { label: 'Map Updater System', text: snap.world?.mapUpdaterSystemPrompt || '' },
             { label: 'World Progression System', text: snap.world?.worldProgressionSystemPrompt || '' },
             { label: 'Skeleton System Prompt', text: snap.world?.worldProgressionSkeletonSystemPrompt || '' },
         ];
@@ -391,6 +395,14 @@ export function getLivePromptCategoryBlocks(settings, category, opts = {}) {
     if (category === 'world') {
         const defaults = buildDefaultSettings();
         return [
+            {
+                label: 'Map Architect System',
+                text: s.mapArchitectSystemPrompt ?? defaults.mapArchitectSystemPrompt ?? '',
+            },
+            {
+                label: 'Map Updater System',
+                text: s.mapUpdaterSystemPrompt ?? defaults.mapUpdaterSystemPrompt ?? '',
+            },
             {
                 label: 'World Progression System',
                 text: s.worldProgressionSystemPrompt ?? defaults.worldProgressionSystemPrompt ?? '',
@@ -531,6 +543,8 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     'routerModules',
     'routerCustomTags',
     // ── World Progression ──────────────────────────────────────────────────────
+    'mapArchitectSystemPrompt',
+    'mapUpdaterSystemPrompt',
     'worldProgressionSystemPrompt',
 ];
 
@@ -608,6 +622,12 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
             'routerExistingNpcNudgeTemplate', 'routerRelSectionBasicTemplate', 'routerRelSectionAgentTemplate',
             'routerModules', 'routerCustomTags',
         ],
+    },
+    {
+        id: 'mapArchitect',
+        label: 'Map Architect',
+        description: 'Dedicated hidden-site generation and occupancy-updater prompts',
+        keys: ['mapArchitectSystemPrompt', 'mapUpdaterSystemPrompt'],
     },
     {
         id: 'worldProgression',

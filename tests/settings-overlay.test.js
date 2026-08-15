@@ -47,9 +47,16 @@ describe('settings overlay', () => {
             "id: 'gamesystems'",
             "id: 'statetracker'",
             "id: 'agent'",
+            "id: 'maparchitect'",
             "id: 'worldprog'",
             "id: 'companion'",
         ].forEach((fragment) => expect(overlaySource).toContain(fragment));
+
+        const agentIdx = overlaySource.indexOf("id: 'agent'");
+        const mapIdx = overlaySource.indexOf("id: 'maparchitect'");
+        const worldIdx = overlaySource.indexOf("id: 'worldprog'");
+        expect(mapIdx).toBeGreaterThan(agentIdx);
+        expect(worldIdx).toBeGreaterThan(mapIdx);
 
         expect(indexSource).toContain('initSettingsOverlay(settingsHtml');
         expect(indexSource).toContain("settings-stub");
@@ -63,5 +70,27 @@ describe('settings overlay', () => {
         // Guard against the broken comma-concat form that matched the whole settings root.
         expect(indexSource).not.toContain('settingsDrawerRoot} .inline-drawer-toggle');
         expect(indexSource).toContain("closest('input, select, textarea, button, a, label.checkbox_label')");
+    });
+
+    it('adds a keyword search field that filters settings across tabs', () => {
+        const searchSource = readFileSync(new URL('../src/ui/settings-search.js', import.meta.url), 'utf8');
+        expect(overlaySource).toContain('installSettingsSearch');
+        expect(overlaySource).toContain('id="rt-so-search-input"');
+        expect(overlaySource).toContain('placeholder="Search settings…');
+        expect(overlaySource).toContain('handleSettingsSearchKeydown');
+        expect(overlaySource).toContain('dataset.tabLabel');
+        expect(overlaySource).toContain('rt-so-tab-count');
+        expect(overlaySource).toContain("closest('button, input, textarea, .rt-so-search')");
+        expect(searchSource).toContain('export function applySettingsSearch');
+        expect(searchSource).toContain('tokenizeQuery');
+        expect(searchSource).toContain('haystackFrom');
+        expect(searchSource).toContain('snapshotDrawerStates');
+        expect(searchSource).toContain('restoreDrawerStates');
+        expect(searchSource).toContain('rtSoWasOpen');
+        expect(style).toContain('attr(data-tab-label)');
+        expect(style).toContain('.rt-so-search');
+        expect(style).toContain('.rt-so-search-hidden');
+        expect(style).toContain('.rt-so-search-hit');
+        expect(style).toContain('rt-so-tab-has-match');
     });
 });

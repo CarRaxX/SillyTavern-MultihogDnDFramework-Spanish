@@ -1,5 +1,6 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { applyChatSetup, resetChatSetupToStock } from '../../state/chat-setup.js';
+import { ensureDungeonMapHistory } from '../../state/dungeon-map-history.js';
 
 /** Restores one chat-linked tracker snapshot and synchronizes dependent UI. */
 export function createChatStateLoader({
@@ -44,6 +45,8 @@ export function createChatStateLoader({
         s.combatDefeatedUi = [];
     }
     s.memoHistory = saved.memoHistory ?? [];
+    s.dungeonMapHistory = saved.dungeonMapHistory ?? [];
+    ensureDungeonMapHistory(s);
     s.lastDelta = saved.lastDelta ?? '';
     // Legacy Chat Link keeps these presentation fields at the partition root.
     // Under setup lock the dedicated setup snapshot is authoritative, including
@@ -69,6 +72,8 @@ export function createChatStateLoader({
     s.routerLookback = saved.routerLookback || 4;
     s.routerLastRunChatLength = saved.routerLastRunChatLength ?? 0;
     s.routerLastRunAt = saved.routerLastRunAt ?? 0;
+    s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
+    s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;
@@ -108,6 +113,15 @@ export function createChatStateLoader({
 
     applyChatTimeFormatSettings(saved);
     applyChatNpcRelMaxSettings(saved);
+
+    // Legacy partitions predate per-chat relationship maps. Leave live values
+    // alone so the next saveChatState can adopt them instead of wiping to 0.
+    if (Object.prototype.hasOwnProperty.call(saved, 'npcRelationshipValues')) {
+        s.npcRelationshipValues = JSON.parse(JSON.stringify(saved.npcRelationshipValues || {}));
+    }
+    if (Object.prototype.hasOwnProperty.call(saved, 'npcRelationshipLog')) {
+        s.npcRelationshipLog = JSON.parse(JSON.stringify(saved.npcRelationshipLog || {}));
+    }
 
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
@@ -284,6 +298,9 @@ export function createChatStateLoader({
     }
     scheduleAgentManifestRefresh();
 
+    if (typeof runtimeState.refreshImmersionView === 'function') {
+        void runtimeState.refreshImmersionView().catch(() => {});
+    }
     if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
         globalThis._rpgSyncAgentImmersionUi();
     }

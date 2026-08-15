@@ -10,7 +10,7 @@ When **Tutorial Mode** is enabled, this document is injected into every Adventur
 
 The Adventure Companion's CHAT view can be detached into a draggable, resizable floating panel with the **⧉** control on desktop. On mobile it always uses the full-height floating presentation, with no detach or reattach control. Its header keeps the same collapse/expand arrow used by the main tracker, so the player can minimize CHAT without leaving it. Reattaching moves the same live conversation back into the State Tracker panel, and closing CHAT reattaches it automatically.
 
-Adventure Companion has its own **Connection Settings** drawer and can use Main API, a Connection **Profile**, or dedicated Ollama/OpenAI endpoints independently from State Tracker. The same drawer mirrors all CHAT options: Tutorial Mode, story lookback count / All, Lorebook Agent lore injection, and State Tracker memo injection.
+Adventure Companion has its own **Connection Settings** drawer and can use Main API, a Connection **Profile**, or dedicated Ollama/OpenAI endpoints independently from State Tracker. The same drawer mirrors all CHAT options: Tutorial Mode, story lookback count / All, Lorebook Agent lore injection, State Tracker memo injection, and current site map injection.
 
 The **Adventure Companion can perform exactly three actions** when ordinary conversational language shows clear intent — and nothing else:
 
@@ -97,7 +97,7 @@ For the narrator, I'd recommend trying at least the following:
 
 2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work.
+3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Persistent Maps** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
 
 It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
@@ -111,12 +111,12 @@ The system rejects the traditional ST use of character cards, which are meant fo
 
 ### Instant Action (fastest path)
 
-On an empty tracker, use Instant Action / Quick Start by genre (**Fantasy**, **Modern**, **Sci-Fi**, **Horror**). Select a genre, optionally type or roll a name (leave it blank for the AI to choose), and optionally enter an **Initial Setup** for the character, starting setting, premise, or tone. Specified details override rolled defaults, while everything you omit remains randomized. Choose the Player Card word count you want, then select **Begin Instant Action**. The pipeline is sequential:
+On an empty tracker, use Instant Action / Quick Start by genre (**Fantasy**, **Modern**, **Sci-Fi**, **Horror**). Select a genre, optionally type or roll a name (leave it blank for the AI to choose), and optionally enter an **Initial Setup** for the character, starting setting, premise, or tone. Specified details override rolled defaults, while everything you omit remains randomized. Choose the Player Card word count you want, then select **Begin Instant Action**. **Send Starter Message?** is on by default so the AI opens the campaign for you; uncheck it if you want to type your own first action. The pipeline is sequential:
 
 1. Applies your current Narrator Configuration (settings + sysprompt).
-2. Keeps a supplied name or invents one when blank, picks a random archetype from the genre, then generates a character sheet into the State Tracker. Initial Setup details are treated as higher priority than the random archetype.
+2. Keeps a supplied name or invents one when blank, picks a random archetype from the genre, then generates a character sheet into the State Tracker. Initial Setup details are treated as higher priority than the random archetype **and** the onboarding Level dropdown — so "a level 7 ranger" becomes a Level 7 Ranger even if Other Ways still has Level 6 selected.
 3. Generates a **Player Card** at the selected word count for Lorebook Agent, using both the character sheet and the same Initial Setup. It then creates/selects a SillyTavern persona with the same name and an empty description. The name-only ST persona controls the sender label without duplicating Player Card content in the prompt.
-4. Sends `Begin the adventure` together with any optional instructions so the narrator's opening matches the requested character, setting, and premise.
+4. If **Send Starter Message?** is checked, sends `Begin the adventure` together with any optional instructions so the narrator's opening matches the requested character, setting, and premise. If it is unchecked, Instant Action stops after the character is ready and waits for your first action.
 
 Character-sheet generation sends the model only the active tracker-module instructions as its system prompt. The full State Extractor core prompt is reserved for ordinary tracking and manual tracker commands.
 
@@ -205,7 +205,7 @@ The prompt is modular XML-style sections, including among others:
 | Identity & dice | `<role>`, `<rng_system>`, `<rng_queue_instructions>` |
 | Combat | `<combat>`, `<combat_start>`, `<combat_flow>`, `<damage_logic>`, `<positioning_and_movement>`, `<npc_stat_scaling>`, `<critical_hits_and_dying>` |
 | Progression | `<xp_system>`, `<level_up_protocol>`, `<quests>`, `<loot>` |
-| Simulation | `<narrative>`, `<world_progression>`, `<resting>`, `<leaving_vs_benching>`, `<bench_ETA_system>`, `<relationship_tracking>` |
+| Simulation | `<narrative>`, `<world_progression>`, `<dungeon_reality_and_hidden_mapping>`, `<resting>`, `<leaving_vs_benching>`, `<bench_ETA_system>`, `<relationship_tracking>` |
 | Output contract | `<state_memo>`, `<end_of_output_footer>`, `<CYOA_mode>`, various `<constraints>` |
 
 ### Combat rules the GM is taught (summary)
@@ -464,7 +464,7 @@ If the State Tracker is the mechanical accountant, the Lorebook Agent (LA) is th
 Native SillyTavern lorebooks are used as the database. Entries default inactive. LA’s attention model:
 
 - **Active** entries: full content visible to the agent.
-- **Inactive** entries: title + keywords only (the **keyring** / archive summary) until activated.
+- **Inactive** entries: Book::UID, title, and keywords only (the **keyring** / archive summary) until activated. That index is exhaustive — if a name is not in active memory or the keyring, the entry does not exist. `grep_lore` is for searching entry *bodies* for a fact, not for checking whether a name exists.
 - **Max Active** can FIFO-prune to control tokens.
 
 LA is aware of keyword activations inside one container (extension scanner and/or native ST keyword activation, depending on settings).
@@ -509,8 +509,8 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 
 - Portraits via SillyTavern Image Generation **or** Pollinations.ai.
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
-- **Visualization Mode**: location hero image + present NPC/PC tiles (immersion / realtime scene view).
-- Real-time triggers: on location enter/change and/or every N outputs.
+- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Persistent Maps** below.
+- Real-time scene-art triggers: on location enter/change and/or every N outputs.
 
 ### Slash command
 
@@ -525,9 +525,64 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ---
 
+## Persistent Maps (Alpha)
+
+Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect and Map Updater API calls. Using Persistent Maps at the same time as **World Progression** is not recommended until compatibility is added.
+
+It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
+
+The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are. If they enable **Inject current site map** in CHAT options, the Companion receives the same knowledge as Visuals/Map with Reveal all off: visited interiors, discovered names, and unexplored neighbors as unknown. It must not invent hidden rooms, traps, or occupants.
+
+### How a map is created
+
+1. The narrator calls `CreateAreaMap` **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`).
+2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map.
+3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
+4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
+
+New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Architect connection. Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+
+Repeated `CreateAreaMap` calls do not replace an already attached map.
+
+Dungeon maps are **room-scale**. Settlement maps are **district-scale**: gates, plazas, wards, and a few major landmarks — not every shop or interior. The GM may invent granular locations (a specific inn, alley, house) against that skeleton.
+
+### What the map stores
+
+- **Areas** (rooms/passages): geometry, routes, and knowledge `UNREVEALED` | `DISCOVERED` | `VISITED`.
+- **Assets** (creatures, traps, loot, hazards, corpses): one site-level identity with a current `location`, plus knowledge `UNREVEALED` | `SUSPECTED` | `KNOWN`.
+
+Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain). Asset `detail` is a lasting occupancy note (who remains, who was destroyed), not the current combat beat — mid-round targeting, poses, HP, and temporary conditions stay in the combat tracker. The State Tracker `[ LIVE ]` arrows roll that occupancy back with the memo snapshot.
+
+### When the map is active
+
+Activation uses **whole location segments**, not substring matches and not first-segment-only. Deepest matching mapped segment wins.
+
+| Current location | Map |
+|---|---|
+| `Hall of the Ember-Ancestors, Threshold` | on |
+| `Whispering Woods, Forgotten Tomb` | Forgotten Tomb on (region wrapping) |
+| `Forest Near the Hall of the Ember-Ancestors` | **off** (nearby mention only) |
+
+Leaving the site stops narrator injection without deleting the map; returning resumes it.
+
+### Player vs GM views
+
+- **Visuals/Map** (Lorebook Agent): player-facing node graph — visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled `?` stubs. Drag to pan; click a revealed room to open its location record. The list button opens the readable inspector (rooms, geometry, routes, assets). Unrevealed rooms and assets stay hidden unless **Reveal all** is on. The graph can be popped out into its own window.
+- **MAP badge** on a mapped root in Campaign Records: private GM inspector, including unrevealed facts and Raw JSON.
+
+The Visuals/Map tab does **not** require Real-Time Visualization or location scene art. Those are for generated pictures. The map tab appears when location images are on **or** the party is inside a mapped site.
+
+### Map Architect settings
+
+Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, architect prompt, and **Map Updater** (run every N messages, occupancy prompt). Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent** or **Map Updater**.
+
+---
+
 ## World Progression
 
 World Progression (WP) is the fourth major simulation pillar: a macroscopic backbone so the GM thinks beyond the player’s bubble.
+
+Using World Progression at the same time as **Persistent Maps** is not recommended until compatibility is added (soon). Pick one or the other for now.
 
 Every X **in-world** hours (default 24), WP injects a World Report into context (stored in `{prefix}_World`, injection every turn while active). Example flavor:
 
@@ -616,6 +671,7 @@ Configurable narrator-side behaviors include:
 - **Narrative Pacing** modes: Normal (no length instructions), Shorter Outputs (modest length), High-Agency, and Downtime
 - **Benched Party** handling (ties into WP eligibility)
 - **Relationship Tracking** sections in the GM prompt
+- **Persistent Maps** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); requires function calling for `CreateAreaMap`
 - **CYOA** choice presentation
 - End-of-output footer reminders so the GM closes turns in the format ST expects
 
@@ -657,12 +713,14 @@ The framework’s backbone is still **time + memo + optional lore/world layers**
 | Wrong campaign data or setup in a new chat | Check that Chat-Linked Mode and **Lock Control Room & Modules to each chat** are enabled. GLOBAL items intentionally share activation; CHAT-BOUND items restore that chat's saved setup. Lock-off mode is a temporary carry-over bypass. |
 | Tracker formatting broken after paste | Use 💬 Direct Prompt: “Reformat this sheet to stock module layout.” |
 | Modules disappear / drift on a local or small tracker model | Enable **Full Review Mode** (State Tracker & Modules, below Enable State Tracker). Delta-only updates are hard for weaker models; Full Review dumps every enabled module each pass. Also raise response length. |
+| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Persistent Maps** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
+| CreateAreaMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry (`DUNGEON` or `SETTLEMENT`); Map Architect failures are real errors and must not be retried in the same turn. |
 
 ---
 
 ## Mental Model (one paragraph)
 
-The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
+The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Persistent Maps** (alpha) stores an objective hidden map for dangerous interiors and settlements, and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
 
 These are recommendations, not rules — experiment. Different models shine for different styles of play.
 

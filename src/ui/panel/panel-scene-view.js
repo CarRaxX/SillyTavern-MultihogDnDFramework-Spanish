@@ -1,6 +1,13 @@
 import { runtimeState } from '../../app/runtime-state.js';
+import { isLocationMappingEnabled } from '../../state/section-enabled.js';
+import {
+    bindDungeonMapEmbedEvents,
+    isDungeonMapDetached,
+    reattachDungeonMapPanel,
+    updateDetachedDungeonMapPanel,
+} from './dungeon-map-panel.js';
 
-/** Manages the Lorebook Agent Scene View and its Records/Visualization mode UI. */
+/** Manages the Lorebook Agent Scene View and its Records/Visuals/Map UI. */
 export function createSceneViewController({
     agentPanel,
     buildImmersionSceneState,
@@ -12,7 +19,25 @@ export function createSceneViewController({
     runRealtimeSceneArtCheck,
     showLocationImageSettingsMenu,
 }) {
-        const bindImmersionViewEvents = () => {
+        const openMappedLocation = async (path) => {
+            const item = await loadLocationEntryByPath(path);
+            const opener = globalThis._rpgAgentOpenLocationDetail;
+            if (item && typeof opener === 'function') {
+                await opener(item, path);
+                return;
+            }
+            if (path) {
+                toastr.info(`No location record for "${path}" yet.`, 'Visuals/Map');
+            }
+        };
+
+        const mapHandlers = () => ({
+            onAreaClick: openMappedLocation,
+            onDetach: () => { void runtimeState.refreshImmersionView(); },
+            onReattach: () => { void runtimeState.refreshImmersionView(); },
+        });
+
+        const bindImmersionViewEvents = (scene) => {
             const root = agentPanel.querySelector('#rt-agent-immersion-view');
             if (!root) return;
 
@@ -30,7 +55,7 @@ export function createSceneViewController({
                             await showLocationImageSettingsMenu(path, () => runtimeState.refreshImmersionView(), item?.content || '');
                         }
                     } else if (raw) {
-                        toastr.info(`No lore match for "${raw}". Add a Locations entry or check the name.`, 'Scene View');
+                        toastr.info(`No lore match for "${raw}". Add a Locations entry or check the name.`, 'Visuals/Map');
                     }
                 };
                 hero.addEventListener('click', () => { void activateHero(); });
@@ -75,29 +100,9 @@ export function createSceneViewController({
                     })();
                 });
             });
-        };
 
-        runtimeState.refreshImmersionView = async () => {
-            const s = getSettings();
-            try {
-                const scene = await buildImmersionSceneState(s.currentMemo, s);
-                maybeAutoGenerateImmersionSceneArt(scene, () => { void runtimeState.refreshImmersionView(); });
-
-                if (!s.agentImmersionMode) return;
-                const container = agentPanel.querySelector('#rt-agent-immersion-view');
-                if (!container || agentPanel.style.display === 'none') return;
-                container.innerHTML = renderImmersionViewHtml(scene);
-                bindImmersionViewEvents();
-            } catch (err) {
-                console.error('[RPG Tracker] runtimeState.refreshImmersionView failed:', err);
-                const container = agentPanel.querySelector('#rt-agent-immersion-view');
-                if (container) {
-                    container.innerHTML = '<div style="text-align:center;opacity:0.5;font-size:0.769em;padding:10px;">Failed to load scene view.</div>';
-                }
-            }
+            bindDungeonMapEmbedEvents(root, { scene, ...mapHandlers() });
         };
-        globalThis._rpgRefreshImmersionView = runtimeState.refreshImmersionView;
-        globalThis._rpgCheckRealtimeSceneArt = runRealtimeSceneArtCheck;
 
         const syncAgentImmersionUi = () => {
             const s = getSettings();
@@ -107,34 +112,68 @@ export function createSceneViewController({
             const vizBtn = agentPanel.querySelector('#rt-agent-view-mode-visualization');
             const viewModeSwitch = agentPanel.querySelector('#rt-agent-view-mode-switch');
             const campaignTitle = agentPanel.querySelector('#rt-agent-campaign-header-title');
-            const locationsOn = !!s.locationImages;
-            let immersion = !!s.agentImmersionMode;
+            const visualsAvailable = !!s.locationImages || !!runtimeState.hasActiveDungeonMap;
+            const showImmersion = visualsAvailable && !!s.agentImmersionMode;
 
-            if (!locationsOn) {
-                if (immersion) {
-                    s.agentImmersionMode = false;
-                    immersion = false;
-                }
-                if (viewModeSwitch) viewModeSwitch.style.display = 'none';
-                if (campaignTitle) campaignTitle.style.display = 'block';
-            } else {
-                if (viewModeSwitch) viewModeSwitch.style.display = '';
-                if (campaignTitle) campaignTitle.style.display = 'none';
-            }
-
-            if (immersionEl) immersionEl.style.display = immersion ? 'flex' : 'none';
-            if (manifestEl) manifestEl.style.display = immersion ? 'none' : 'flex';
+            if (viewModeSwitch) viewModeSwitch.style.display = visualsAvailable ? '' : 'none';
+            if (campaignTitle) campaignTitle.style.display = visualsAvailable ? 'none' : 'block';
+            if (immersionEl) immersionEl.style.display = showImmersion ? 'flex' : 'none';
+            if (manifestEl) manifestEl.style.display = showImmersion ? 'none' : 'flex';
             if (recordsBtn) {
-                recordsBtn.classList.toggle('rt-agent-view-mode-btn-active', !immersion);
-                recordsBtn.setAttribute('aria-selected', !immersion ? 'true' : 'false');
+                recordsBtn.classList.toggle('rt-agent-view-mode-btn-active', !showImmersion);
+                recordsBtn.setAttribute('aria-selected', !showImmersion ? 'true' : 'false');
             }
             if (vizBtn) {
-                vizBtn.classList.toggle('rt-agent-view-mode-btn-active', immersion);
-                vizBtn.setAttribute('aria-selected', immersion ? 'true' : 'false');
+                vizBtn.classList.toggle('rt-agent-view-mode-btn-active', showImmersion);
+                vizBtn.setAttribute('aria-selected', showImmersion ? 'true' : 'false');
             }
         };
         globalThis._rpgSyncAgentImmersionUi = syncAgentImmersionUi;
 
+        runtimeState.refreshImmersionView = async () => {
+            const s = getSettings();
+            try {
+                const scene = await buildImmersionSceneState(s.currentMemo, s);
+                runtimeState.hasActiveDungeonMap = !!scene.dungeonMap;
+                maybeAutoGenerateImmersionSceneArt(scene, () => { void runtimeState.refreshImmersionView(); });
+                syncAgentImmersionUi();
+                if (isDungeonMapDetached()) {
+                    if (scene.dungeonMap) {
+                        updateDetachedDungeonMapPanel(scene, mapHandlers());
+                    } else {
+                        // Turning the component off must close a previously
+                        // detached map window rather than leaving stale UI.
+                        reattachDungeonMapPanel();
+                    }
+                }
+
+                const showImmersion = s.agentImmersionMode && (s.locationImages || runtimeState.hasActiveDungeonMap);
+                if (!showImmersion) return;
+                const container = agentPanel.querySelector('#rt-agent-immersion-view');
+                if (!container || agentPanel.style.display === 'none') return;
+                container.innerHTML = renderImmersionViewHtml(scene);
+                bindImmersionViewEvents(scene);
+            } catch (err) {
+                console.error('[RPG Tracker] runtimeState.refreshImmersionView failed:', err);
+                runtimeState.hasActiveDungeonMap = false;
+                syncAgentImmersionUi();
+                const container = agentPanel.querySelector('#rt-agent-immersion-view');
+                if (container) {
+                    container.innerHTML = '<div style="text-align:center;opacity:0.5;font-size:0.769em;padding:10px;">Failed to load scene view.</div>';
+                }
+            }
+        };
+        globalThis._rpgRefreshImmersionView = runtimeState.refreshImmersionView;
+        globalThis._rpgCheckRealtimeSceneArt = runRealtimeSceneArtCheck;
+
+        if (isDungeonMapDetached()) {
+            const enabled = isLocationMappingEnabled(getSettings());
+            if (enabled) {
+                updateDetachedDungeonMapPanel(null, mapHandlers());
+            } else {
+                reattachDungeonMapPanel();
+            }
+        }
 
     return { syncAgentImmersionUi };
 }

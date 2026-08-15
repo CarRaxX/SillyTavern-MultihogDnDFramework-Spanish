@@ -321,6 +321,9 @@ export function patchLabeledSection(text, field, newContent, opts = {}) {
 export function stripCoreMarkersForNarrator(content) {
     if (!content) return content;
     return content
+        // [MAP] is routed through Dungeon Reality's location-gated injection.
+        // Ordinary lore activation must never reveal it out of location.
+        .replace(/\[MAP\][\s\S]*?\[\/MAP\]/gi, '')
         .replace(/\[CORE\]\n?/g, '')
         .replace(/\n?\[\/CORE\]\n?/g, '\n\n')
         .replace(/\n{3,}/g, '\n\n')

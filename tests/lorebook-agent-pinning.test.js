@@ -55,8 +55,9 @@ describe('router.js pin enforcement', () => {
         expect(routerSource).toContain('newWorldActive = newWorldActive.filter(k => !deactivate.includes(k) || pinnedSet.has(k));');
     });
 
-    it('budget accounting uses computeUnpinnedActiveCount (no prompt text changes)', () => {
-        expect(routerSource).toContain('computeUnpinnedActiveCount(settings.activeRouterKeys, settings.pinnedRouterKeys)');
+    it('budget accounting excludes the location-owned active map root', () => {
+        expect(routerSource).toContain("const budgetActiveKeys = (settings.activeRouterKeys || []).filter(id => id !== activeDungeonEntryId);");
+        expect(routerSource).toContain('computeUnpinnedActiveCount(budgetActiveKeys, settings.pinnedRouterKeys)');
         expect(routerSource).toContain('Active entries: ${activeCount} / ${maxActive}');
     });
 

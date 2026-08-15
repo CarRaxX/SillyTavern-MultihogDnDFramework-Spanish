@@ -29,7 +29,7 @@ import {
     autoApplySysprompt,
     fetchBaseSyspromptRaw,
 } from './src/app/runtime-bridge.js';
-import { isBaseSectionEnabled, isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isBaseSectionEnabled, isEffectiveSectionEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
 import { normalizeGmContent, unwrapManagedSectionContent } from './src/state/sysprompt-content.js';
 import { buildNarrativePacingSection } from './src/state/narrative-pacing.js';
 import {
@@ -378,6 +378,8 @@ const NARRATOR_TOGGLE_IDS = {
     dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
+const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges. Not recommended together with World Progression until compatibility is added.';
+
 export function isSectionUnlocked(settings, tag) {
     return (settings.customSyspromptLibrary || []).some(p =>
         p.origin === 'unlocked_base' && p.baseTag === tag && p._chatSetupMember !== false,
@@ -403,8 +405,14 @@ function syncNarratorToggleUi(tag, settings) {
     if (!el) return;
     const unlocked = isSectionUnlocked(settings, tag);
     el.checked = isEffectiveSectionEnabled(tag, settings);
-    el.disabled = unlocked;
     const label = el.closest('label');
+    // Persistent Maps stays a live kill switch even when the sysprompt section is unlocked.
+    if (tag === LOCATION_MAPPING_SECTION_TAG) {
+        el.disabled = false;
+        if (label) label.title = LOCATION_MAPPING_TOGGLE_TITLE;
+        return;
+    }
+    el.disabled = unlocked;
     if (label) label.title = unlocked ? 'Managed in Game Systems (unlocked) — edit it there instead.' : '';
 }
 
@@ -2910,6 +2918,12 @@ export async function openSystemPromptControlRoom() {
                     const row = getSectionRowDescriptor(key, settings, baseSectionMap);
                     if (!row) return;
                     const checked = e.currentTarget.checked;
+
+                    if (row.tag === LOCATION_MAPPING_SECTION_TAG) {
+                        setLocationMappingEnabled(checked, settings);
+                        refresh();
+                        return;
+                    }
 
                     if (row.kind === 'wizard' && row.gameSystemId) {
                         const gs = (settings.gameSystems || []).find(g => g.id === row.gameSystemId);

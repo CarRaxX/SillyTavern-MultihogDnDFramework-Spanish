@@ -57,4 +57,35 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
 
         for (const source of sources) expect(source).not.toMatch(abbreviatedDamage);
     });
+
+    it('ships the short Map Architect and external-agent ownership contract in both narrator prompts', () => {
+        const sources = [
+            RT_PROMPTS['sysprompt.txt'],
+            RT_PROMPTS['sysprompt_legacy.txt'],
+            readFileSync(new URL('../sysprompt.txt', import.meta.url), 'utf8'),
+            readFileSync(new URL('../sysprompt_legacy.txt', import.meta.url), 'utf8'),
+        ];
+
+        for (const source of sources) {
+            expect(source).toContain('call `CreateAreaMap` exactly once');
+            expect(source).toContain('kind DUNGEON');
+            expect(source).toContain('kind SETTLEMENT');
+            expect(source).toContain('SETTLEMENT maps are district-scale');
+            expect(source).toContain('You may invent granular interiors and incidental locations');
+            expect(source).toContain('When {{user}} actually enters an invented interior');
+            expect(source).toContain('that interior MUST be the last segment');
+            expect(source).toContain('You may add a room or incidental feature if play naturally requires it');
+            expect(source).not.toContain('Do not invent missing rooms or hidden occupancy');
+            expect(source).toContain('Do not design or emit the hidden map yourself');
+            expect(source).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
+            expect(source).not.toContain('<div hidden data-dungeon-map>');
+            expect(source).not.toContain('one valid JSON object');
+            expect(source).not.toContain('CreateDungeonMap');
+            expect(source).toContain('an external agent owns validated current-map updates');
+            expect(source).toContain('Established story events override stale map states');
+            expect(source).toContain('a killed enemy stays dead even if still listed ACTIVE');
+            expect(source).not.toContain('use the latest DUNGEON_REALITY block and do not invent catch-up facts');
+            expect(source).not.toContain('Lorebook Agent');
+        }
+    });
 });

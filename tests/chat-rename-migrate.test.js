@@ -107,7 +107,10 @@ describe('chat rename migration helpers', () => {
         ['quest', { quests: [{ id: 'q1' }] }],
         ['portrait', { customPortraits: { Hero: 'hero.png' } }],
         ['location image', { customLocationImages: { Camp: 'camp.png' } }],
+        ['dungeon reality', { dungeonReality: { sites: { crypt: { mapChunks: ['Area: Gate'] } } } }],
         ['companion history', { adventureCompanion: { lookback: 5, history: [{ role: 'user', content: 'Plan' }] } }],
+        ['relationship values', { npcRelationshipValues: { 'Eldoria_NPCs::1': { friendship: 12, affection: 4 } } }],
+        ['relationship log', { npcRelationshipLog: { 'Eldoria_NPCs::1': [{ field: 'friendship', delta: 2 }] } }],
         ['world progression timer', { worldProgressionLastFiredAtMinutes: 60 }],
         ['future schema field', { futureCampaignPayload: {} }],
     ])('treats %s data as campaign substance', (_label, partition) => {
@@ -135,6 +138,7 @@ describe('onChatRenamedMigrate', () => {
         localStorage.clear();
         runtimeState.currentChatId = null;
         runtimeState.pendingUnseenChatReset = null;
+        runtimeState.loreRedoStack = [];
         globalThis.toastr = { warning: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn() };
         const base = SillyTavern.getContext();
         SillyTavern.getContext = () => ({
@@ -176,6 +180,14 @@ describe('onChatRenamedMigrate', () => {
         s.chatStates = {
             'Old Chat': { currentMemo: 'alive', playerCharacter: { name: 'Ada' } },
         };
+        s.routerHistory = [
+            { chatId: 'Other Chat', campaignPrefix: 'Other' },
+            { chatId: 'Old Chat', campaignPrefix: 'Old_Chat' },
+        ];
+        runtimeState.loreRedoStack = [{
+            prePassSnapshot: { chatId: 'Old Chat', campaignPrefix: 'Old_Chat' },
+            postPassState: { chatId: 'Old Chat', campaignPrefix: 'Old_Chat' },
+        }];
         localStorage.setItem(COMPANION_BY_CHAT_KEY, JSON.stringify({
             'Old Chat': { history: [{ content: 'old plan' }] },
         }));
@@ -197,6 +209,9 @@ describe('onChatRenamedMigrate', () => {
         expect(readLocalMap(MEMO_RECOVERY_KEY)['Renamed Chat']?.currentMemo).toBe('alive');
         expect(loadChatState).toHaveBeenCalledWith('Renamed Chat');
         expect(runtimeState.currentChatId).toBe('Renamed Chat');
+        expect(s.routerHistory.map(entry => entry.chatId)).toEqual(['Other Chat', 'Renamed Chat']);
+        expect(runtimeState.loreRedoStack[0].prePassSnapshot.chatId).toBe('Renamed Chat');
+        expect(runtimeState.loreRedoStack[0].postPassState.chatId).toBe('Renamed Chat');
     });
 
     it('replaces the exact setup-only shell marked by CHAT_CHANGED', async () => {
