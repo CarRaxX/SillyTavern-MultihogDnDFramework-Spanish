@@ -6,6 +6,12 @@
   <em>Dungeon Area Map</em>
 </p>
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/a9873a1e-9bdb-450f-98b4-fdf779b593a6" width="100%" alt="Combat in progress" />
+  <br>
+  <em>Map Assets</em>
+</p>
+
 ---
 
 # Multihog D&D Framework
