@@ -1,3 +1,4 @@
+import { runtimeState } from '../../app/runtime-state.js';
 import { t } from '../../i18n/index.js';
 import {
     findLoreHistoryIndexForChat,
