@@ -1935,6 +1935,7 @@
 
 /* Onboarding empty state */
 .rt-empty {
+    position: relative;
     color: var(--rt-text-muted);
     font-size: 0.95em;
     padding: 20px 16px;
@@ -1944,6 +1945,37 @@
     align-items: center;
     gap: 8px;
     line-height: 1.5;
+}
+
+.rt-bmc-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px 5px 6px;
+    border-radius: 8px;
+    background: #ffdd00;
+    color: #0d0c22;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+
+.rt-bmc-btn img {
+    display: block;
+    width: 14px;
+    height: 20px;
+}
+
+.rt-bmc-btn:hover {
+    filter: brightness(1.06);
+    color: #0d0c22;
 }
 
 .rt-empty-icon {

@@ -10,6 +10,7 @@ import { buildDisplayGroupRenderPlan } from './src/features/display-groups.js';
 
 const DEFAULT_HP_COLOR = '#00ffaa';
 const DEFAULT_XP_COLOR = 'linear-gradient(90deg, #0088ff, #00d4ff)';
+const BUY_ME_A_COFFEE_ICON = new URL('./src/ui/buy_me_a_coffee-63ed78263f6e.svg', import.meta.url).href;
 
 /** CSS tint for any browser-supported solid color token (named or hexadecimal). */
 function makeColorTintStyle(color, backgroundPct = 12, borderPct = 40) {
@@ -1970,6 +1971,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             const startTimeInputVal = obSettings.initialTime || '08:00 AM';
 
             return `<div class="rt-empty" style="text-align: left; align-items: flex-start; padding: 12px; gap: 10px; overflow-y: auto;">
+                <a class="rt-bmc-btn" href="https://buymeacoffee.com/multihog" target="_blank" rel="noopener noreferrer" title="Buy Me a Coffee">
+                    <img src="${escapeHtml(BUY_ME_A_COFFEE_ICON)}" alt="" width="14" height="20">
+                    <span>Buy Me a Coffee</span>
+                </a>
                 <div style="text-align: center; width: 100%; margin-bottom: 2px; flex-shrink: 0;">
                     <div class="rt-empty-icon rt-onboarding-crest" aria-label="Fencers guarding a shield">
                         <span class="rt-onboarding-crest-fencer" aria-hidden="true">🤺</span>

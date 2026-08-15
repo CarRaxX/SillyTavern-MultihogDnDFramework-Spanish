@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.95.2] - 2026-08-16
+
+### Added
+- **Buy Me a Coffee**: donation button on the startup page (top right).
+
 ## [7.95.1] - 2026-08-16
 
 ### Fixed
