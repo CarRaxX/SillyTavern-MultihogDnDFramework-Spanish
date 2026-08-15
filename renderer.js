@@ -2348,7 +2348,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-chat-tip" role="note">
                     <div class="rt-onboarding-chat-tip-title">Need help? Open <b>CHAT</b> in the State Tracker header</div>
                     <div class="rt-onboarding-chat-tip-body">Talk to the <b>Adventure Companion</b> for help with Multihog or to discuss your story. Enable Tutorial Mode in CHAT when you want the full framework guide attached to every request. Or head to the Discord, under the Extensions subforum: <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">https://discord.gg/sillytavern</a>. Hell, head there anyway!</div>
-                    <div class="rt-onboarding-chat-tip-body" style="margin-top: 6px;">Here's a video on how to get started for good measure: <a href="https://www.youtube.com/watch?v=dKKFQqrH7qQ" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=dKKFQqrH7qQ</a></div>
+                    <div class="rt-onboarding-chat-tip-body" style="margin-top: 6px;">Here's a video on how to get started for good measure: <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=82Lt9pRYFS0</a></div>
                 </div>
 
                 <div style="font-size: 13px; opacity: 0.9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; line-height: 1.4;">

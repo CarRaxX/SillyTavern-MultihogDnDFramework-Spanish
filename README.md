@@ -97,7 +97,7 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 
 ### Initial Setup Video Guide
 
-https://youtu.be/dKKFQqrH7qQ
+https://www.youtube.com/watch?v=82Lt9pRYFS0
 
 ---
 

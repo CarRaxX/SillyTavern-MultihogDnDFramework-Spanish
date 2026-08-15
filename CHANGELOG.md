@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.95.3] - 2026-08-16
+
+### Changed
+- **Tutorial video**: startup page and README now point to the current getting-started video.
+
 ## [7.95.2] - 2026-08-16
 
 ### Added
