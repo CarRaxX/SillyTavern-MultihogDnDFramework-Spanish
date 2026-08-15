@@ -2,6 +2,16 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Location-centric World Progression**: WP now rotates through complete readable location dossiers and Wider Currents. It strips `[MAP]`, treats named entities as read-only constraints, and produces directional prose instead of entity timelines or structured deltas. Trend guidance explicitly supports persistence, plateau, transformation, resolution, backlash, and causal reversal rather than automatic escalation.
+- **Lazy report realization**: World Reports no longer trigger an immediate Map Evolution fan-out. Each map reads its relevant unconsumed location section plus Wider Currents during its next normal interval, site-exit, or manual pass. Evolution chooses the concrete manifestation and tracks whether each report was materialized, already realized through play, or merely considered, preventing duplicate realization.
+- **Location Rotation settings**: entity Focus Randomization is replaced in the UI by locations-per-report and equal-cohort randomization. Map Evolution adds a recent-report lookback setting.
+
+### Fixed
+- **World Progression map isolation**: hidden `[MAP]` JSON can no longer enter the World Progression prompt through raw Location lore.
+
 ## [7.86.2] - 2026-08-15
 
 ### Fixed

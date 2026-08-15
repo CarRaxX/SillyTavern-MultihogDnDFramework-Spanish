@@ -80,6 +80,8 @@ const KNOWN_PARTITION_KEYS = new Set([
     'loreInjectionDepth', 'loreInjectionRole', 'worldProgressionLookback',
     'worldProgressionHistoryLookback', 'worldProgressionInjectionPosition',
     'worldProgressionInjectionDepth', 'worldProgressionInjectionRole',
+    'worldProgressionLocationsPerReport', 'worldProgressionLocationRandomize',
+    'worldProgressionLocationLastAdvanced',
     'worldProgressionRandomizeNPCs', 'worldProgressionRandomSkeletonNPCCount',
     'worldProgressionRandomNarrativeNPCCount', 'worldProgressionRandomizeLocations',
     'worldProgressionRandomSkeletonLocationCount',
@@ -96,6 +98,7 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionSkeletonLorebookFilter', 'worldProgressionSkeletonLorebookOnly',
     'worldProgressionConsolidateEnabled', 'worldProgressionConsolidateInterval',
     'worldProgressionExclusionList', 'use24hTime', 'useDdMmYyFormat',
+    'mapEvolutionWorldReportLookback', 'mapEvolutionWorldReportApplications',
     'initialDate', 'initialTime', 'npcRelationshipMax', 'npcRelationshipValues',
     'npcRelationshipLog', 'setup', 'campaignBooks',
     'lastImmersionSceneArtPath', 'lastImmersionSceneArtChatLen',
@@ -129,6 +132,8 @@ export function partitionHasCampaignSubstance(p) {
         || hasMapEntries(p.npcRelationshipValues)
         || hasMapEntries(p.npcRelationshipLog)
         || hasMapEntries(p.mapEvolutionLastFiredBySite)
+        || hasMapEntries(p.mapEvolutionWorldReportApplications)
+        || hasMapEntries(p.worldProgressionLocationLastAdvanced)
         || hasItems(p.mapEvolutionSelectedRoots)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)

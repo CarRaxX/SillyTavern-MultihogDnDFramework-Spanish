@@ -99,7 +99,6 @@ export function wireAgentWorldProgression({
         if (worldFireNowBtn) {
             worldFireNowBtn.addEventListener('click', async () => {
                 const { parseInWorldMinutes: piw, runWorldProgressionPass: rwp } = await import('../../../router.js');
-                const { groundMapsAfterWorldProgression } = await import('../../../map-evolution.js');
                 const s = getSettings();
                 const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
                 const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
@@ -113,8 +112,7 @@ export function wireAgentWorldProgression({
                 /** @type {HTMLButtonElement} */ (worldFireNowBtn).disabled = true;
                 worldFireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating…';
                 try {
-                    const result = await rwp(timeStr, currentMinutes);
-                    await groundMapsAfterWorldProgression(result);
+                    await rwp(timeStr, currentMinutes);
                     updateAgentWorldStatus();
                     toastr['success']('World Progression report generated.', 'World Progression');
                 } catch (e) {
@@ -170,9 +168,7 @@ export function wireAgentWorldProgression({
                 /** @type {HTMLButtonElement} */ (worldFireExtraBtn).disabled = true;
                 worldFireExtraBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating…';
                 try {
-                    const result = await rwp(timeStr, currentMinutes, extraInstructions);
-                    const { groundMapsAfterWorldProgression } = await import('../../../map-evolution.js');
-                    await groundMapsAfterWorldProgression(result);
+                    await rwp(timeStr, currentMinutes, extraInstructions);
                     updateAgentWorldStatus();
                     toastr['success']('World Progression report generated.', 'World Progression');
                 } catch (e) {

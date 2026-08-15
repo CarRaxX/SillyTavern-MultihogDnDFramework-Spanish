@@ -542,7 +542,7 @@ The Adventure Companion cannot flip the Components checkbox or open Visuals/Map 
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 
-New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Updater & Evolution connection. **Map Evolution** is a separate pass on that same connection: it advances mapped sites off-screen on in-world time and grounds World Progression reports onto matching maps one site at a time (never all maps in one prompt). Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Updater & Evolution connection. **Map Evolution** is a separate pass on that same connection: it advances mapped sites off-screen on normal interval, site-exit, or manual passes. Each selected map also receives any relevant unconsumed World Report prose and decides how to realize it locally. A report never launches an immediate all-map reconciliation. Lorebook Agent continues NPC/location/relationship records on a separate cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
 
 Repeated `CreateAreaMap` calls do not replace an already attached map.
 
@@ -593,20 +593,24 @@ Every X **in-world** hours (default 24), WP injects a World Report into context 
 
 JavaScript checks `[TIME]` in the State Memo after State Tracker updates. The AI writes the report; it does **not** decide whether to generate one. WP requires Lorebook Agent enabled. First successful TIME parse stamps a baseline and does not fire; later elapsed intervals fire reports. Manual **Generate Now** is always available.
 
-WP does not write `[MAP]` and is not taught room IDs. After a report is stored, **Map Evolution** grounds named entities onto matching attached maps sequentially (site, asset, and faction name hits only). Evolution itself is the primary off-screen map writer — restock, new occupants, and local change do not wait for a World Report. Settlements may evolve as ordinary civic occupancy or unrest; neither is preferred. Every change must still make logical and narrative sense for the site. Occupancy still records what play already established.
+WP is location-centric. It receives selected locations' readable lore dossiers, including sublocations and pertinent entity facts, but every `[MAP]` block is stripped. Entity facts are constraints, not simulation subjects. WP writes directional prose about location-scale conditions and Wider Currents; it does not write JSON deltas or decide rooms, assets, patrols, or encounters.
+
+The same report creates two pressures. It biases the narrator immediately through normal World Report injection, rumor, and improvisation. It also waits as prose for relevant maps. During a map's next ordinary Evolution pass, Evolution interprets that prose against current reality, chooses a concrete manifestation, and records the report as materialized, already realized through play, or considered. This avoids immediate fan-out and duplicate realization.
+
+Previous trends are causal state, not a command to escalate. WP may intensify, persist, plateau, fragment, transform, backfire, resolve, reverse abruptly, or supersede a trend when plausible.
 
 ### Quick Start Guide
 
 1. **Skeleton Source** — this replaces the former Atmosphere Summary and can be a short thematic seed or a detailed description of what you want the world and skeleton to be. Auto-Generate remains intentionally conservative: it derives a generalized backdrop from recent chat without copying named characters, party members, locations, factions, or plot events.
-2. **Generate Skeleton** — factions, locations, NPCs, conflicts as Day 0 baseline in `{prefix}_Skeleton`. **Source from Existing Lorebooks** now lets you choose lorebooks from a list, using the same selection pattern as State Tracker lorebook injection. Selected books are supplied as source material. With normal extrapolation enabled, specify how many NPCs, Locations, Factions, and Conflicts you want and the LLM may build compatible new entities from those books. Alternatively, enable **Only use entities explicitly mentioned in source lorebooks (no extrapolation)**; the count fields are disabled and the generator creates entities only for what actually appears in the injected lorebook(s). Edit the generated skeleton afterward in the native SillyTavern Lorebook UI for full customization.
-3. **Focus Randomization** (recommended) — lottery across skeleton vs organic pools so reports don’t fixate on the player bubble. Active `[PARTY]` is excluded; `[BENCHED PARTY]` members remain eligible.
-4. **Generate the First Report** — Generate Now (skeleton-only if early) or wait for the interval (later runs include organic lore).
+2. **Generate Skeleton** — locations become potential macro-simulation subjects; factions and conflicts provide regional context. NPC seeds may inform dossiers but WP never advances them independently.
+3. **Location Rotation** — choose how many locations each report covers. The oldest-unadvanced dossiers go first; optional randomization only breaks ties among equally old locations.
+4. **Generate the First Report** — Generate Now or wait for the interval. The report enters narrator context immediately and becomes lazy input to later Map Evolution passes.
 
 ### Tips
 
 - 24h in-world is a solid default; try shorter/longer intervals.
 - Injection position/depth changes how prominently reports sit near recent messages.
-- WP is optional but deepens simulation and lets dormant entities resurface.
+- WP is optional but deepens simulation by making locations and wider currents change beyond the player bubble.
 
 ---
 

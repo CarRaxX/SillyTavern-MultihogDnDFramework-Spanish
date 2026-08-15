@@ -45,6 +45,13 @@ import {
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
 import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
+import {
+    buildWorldProgressionLocationDossiers,
+    normalizeWorldReportMetadata,
+    selectWorldProgressionLocations,
+    stampLocationAdvancement,
+    WORLD_REPORT_METADATA_KEY,
+} from './world-progression-lib.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -4329,6 +4336,8 @@ export async function purgeWorldHistoryForChat(opts = {}) {
     settings.worldProgressionLastFiredAtMinutes = -1;
     settings.worldProgressionLastFiredPeriodLabel = '';
     settings.worldProgressionSkeletonAtmosphereSummary = '';
+    settings.worldProgressionLocationLastAdvanced = {};
+    settings.mapEvolutionWorldReportApplications = {};
 
     if (settings.chatStates && chatId && settings.chatStates[chatId]) {
         const cs = settings.chatStates[chatId];
@@ -4336,6 +4345,8 @@ export async function purgeWorldHistoryForChat(opts = {}) {
         cs.worldProgressionLastFiredAtMinutes = -1;
         cs.worldProgressionLastFiredPeriodLabel = '';
         cs.worldProgressionSkeletonAtmosphereSummary = '';
+        cs.worldProgressionLocationLastAdvanced = {};
+        cs.mapEvolutionWorldReportApplications = {};
     }
 
     persistWorldProgressionTimer();
@@ -4435,13 +4446,26 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
     const worldBook = archiveBooks[worldBookName] ?? null;
     const cleanPeriod = periodLabel.toLowerCase().trim();
     if (worldBook?.entries) {
-        for (const entry of Object.values(worldBook.entries)) {
+        for (const [uid, entry] of Object.entries(worldBook.entries)) {
             const existingLabel = (entry.comment || '').toLowerCase().trim();
             if (existingLabel === cleanPeriod) {
                 broadcastStep('thought', `\uD83C\uDF0D World Progression: "${periodLabel}" already exists - advancing timer.`);
                 settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+                const metadata = normalizeWorldReportMetadata(entry, worldBookName, uid);
+                settings.worldProgressionLocationLastAdvanced = stampLocationAdvancement(
+                    settings.worldProgressionLocationLastAdvanced,
+                    metadata.selectedLocations,
+                    periodLabel,
+                );
                 persistWorldProgressionTimer();
-                return { skipped: 'duplicate', periodLabel };
+                return {
+                    ok: true,
+                    skipped: 'duplicate',
+                    periodLabel,
+                    reportContent: String(entry.content || '').trim(),
+                    reportId: metadata.reportId,
+                    selectedLocations: metadata.selectedLocations,
+                };
             }
         }
     }
@@ -4497,7 +4521,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
 ## RULES
 1. Merge all reports into a single coherent, present-tense narrative.
 2. Always retain temporal context. The summary MUST begin with the overall period label (e.g. "[${consolidatedLabel}]"). Never remove all temporal markers.
-3. Preserve every unique fact — faction developments, NPC actions, location changes, economic shifts, and plot developments. Never replace detailed facts with generic summaries (e.g. writing "Various events occurred" is a critical failure).
+3. Preserve every unique location-scale or wider-current fact — institutional developments, location changes, economic shifts, environmental conditions, public sentiment, and causal reversals. Named entities may remain only where needed to identify historical causes; do not turn them into new simulation subjects. Never replace detailed facts with generic summaries.
 4. Eliminate only true redundancies — if the same fact repeats across multiple reports, write it once.
 5. Target 40–60% of the combined original token count.
 6. Format: dense prose or tight bullet points, no filler, no markdown headers beyond the period label. 1–2 sentences per development.
@@ -4568,206 +4592,24 @@ ${rawDump}`;
         }
     }
 
-    // 3. Build full lore context from ALL campaign lorebooks, split into three sections.
-    //    _Skeleton books -> Day 0 Baseline (foundational undiscovered entities, never injected
-    //                       into narrative context — only visible to the World Progression engine)
-    //    Regular books   -> Active World Lore (all discovered entities, active or not)
-    //    _World books    -> Historical Reports (all prior periods, incl. deactivated)
-    //
-    //    Segregating the Skeleton into its own timestamped section prevents the LLM from
-    //    treating Day-0 stub data as current events, while still making those entities available
-    //    for off-screen simulation.
-    const skeletonLines = [];
-    const loreGrouped = {}; // categoryHeader -> Array of entry lines
+    // 3. Historical macro context only. Location lore and pertinent read-only
+    //    constraints are assembled below by buildWorldProgressionLocationDossiers().
     const historicalReportLines = [];
-    // Typed entity name pools — skeleton vs. narrative
-    const skeletonNpcNames = [];
-    const narrativeNpcNames = [];
-    const skeletonLocationNames = [];
-    const narrativeLocationNames = [];
-    const skeletonFactionNames = [];
-    const narrativeFactionNames = [];
-    const conflictNames = [];
-    // First-sentence descriptions for the fallback generator context
-    const skeletonFactionDescs = []; // { name, desc }
-    const skeletonLocationDescs = []; // { name, desc }
-
-    // Compute exclusion list (manual, general-purpose — soft: only affects the
-    // randomized designation pool, not raw context visibility, by long-standing design).
-    const excludedTerms = [];
-    if (settings.worldProgressionExclusionList) {
-        settings.worldProgressionExclusionList
-            .split(',')
-            .map(term => term.trim().toLowerCase())
-            .filter(Boolean)
-            .forEach(term => excludedTerms.push(term));
-    }
-
-    // Party presence, unconditional (no toggle) — [PARTY] members are HARD-excluded below
-    // (stripped from context entirely, not just the randomization pool), because they are
-    // physically with {{user}} right now and any off-screen activity for them risks
-    // contradicting the live scene. [BENCHED PARTY] members are the opposite: eligible for
-    // simulation, with their benching note captured as flavor for their designation entry.
-    // See <leaving_vs_benching> in sysprompt.txt / DEFAULT_STOCK_PROMPTS['benched party'] for the
-    // inference contract that keeps these two blocks in sync with the narrative.
-    function extractPartyRoster(memo, tagName) {
-        const roster = [];
-        const re = new RegExp(`\\[${tagName}\\]([\\s\\S]*?)\\[\\/${tagName}\\]`, 'i');
-        const match = memo.match(re);
-        if (!match) return roster;
-        const blockContent = match[1];
-        // Each member starts a new "Name (Class): cur/max HP" line — split on those anchors
-        // rather than every line, so we can carry a member's Status line along with their name.
-        const memberChunks = blockContent.split(/\n(?=[^\n]*\([^)]*\):\s*\d)/);
-        for (const chunk of memberChunks) {
-            const lines = chunk.split('\n').map(l => l.trim()).filter(Boolean);
-            if (!lines.length) continue;
-            const headerLine = lines[0];
-            const colonIdx = headerLine.indexOf(':');
-            const entityPart = colonIdx !== -1 ? headerLine.substring(0, colonIdx).trim() : headerLine;
-            const namePart = entityPart.replace(/\s*\([^)]*\)/g, '').trim();
-            if (!namePart || namePart === '(unnamed)') continue;
-            const statusLine = lines.find(l => l.toLowerCase().startsWith('status:'));
-            const note = statusLine ? statusLine.substring(statusLine.indexOf(':') + 1).trim() : '';
-            roster.push({ name: namePart, note });
-        }
-        return roster;
-    }
-
-    const memoForParty = settings.currentMemo || '';
-    const presentPartyRoster = extractPartyRoster(memoForParty, 'PARTY');
-    const benchedPartyRoster = extractPartyRoster(memoForParty, 'BENCHED PARTY');
-    const presentPartyNames = new Set(presentPartyRoster.map(m => m.name.toLowerCase()));
-
-    function getBookCategoryHeader(bookName, prefix) {
-        let cleanName = bookName;
-        if (prefix && bookName.startsWith(prefix + '_')) {
-            cleanName = bookName.slice(prefix.length + 1);
-        }
-        return cleanName.toUpperCase();
-    }
-
     for (const [bookName, book] of Object.entries(archiveBooks)) {
-        const nameLower = bookName.toLowerCase();
-        const isSkeletonBook = nameLower.endsWith('_skeleton');
+        const nameLower = String(bookName || '').toLowerCase();
         const isWorldBook = nameLower.endsWith('_world') || nameLower === 'world';
-        // Sort by uid (numeric insertion order ≈ chronological)
+        if (!isWorldBook || !book?.entries) continue;
         let sortedEntries = Object.entries(book.entries)
-            .sort(([a], [b]) => Number(a) - Number(b));
-
-        if (isWorldBook) {
-            const historyLookback = settings.worldProgressionHistoryLookback ?? 0;
-            if (historyLookback > 0) {
-                sortedEntries = sortedEntries.slice(-historyLookback);
-            }
-        }
-
+            .sort(([left], [right]) => Number(left) - Number(right));
+        const historyLookback = settings.worldProgressionHistoryLookback ?? 0;
+        if (historyLookback > 0) sortedEntries = sortedEntries.slice(-historyLookback);
         for (const [, entry] of sortedEntries) {
-            if (!entry?.content?.trim()) continue;
-            const label = (entry.comment || entry.key?.[0] || '(unnamed)').trim();
-            if (label === '(unnamed)' || !label) continue;
-
-            const categoryHeader = getBookCategoryHeader(bookName, prefix);
-            const isNpc = (isSkeletonBook && entry.extensions?.rpgCategory === 'NPC') ||
-                          (!isSkeletonBook && (categoryHeader === 'NPC' || categoryHeader === 'NPCS' || nameLower.includes('npc')));
-            const isLoc = (isSkeletonBook && entry.extensions?.rpgCategory === 'LOC') ||
-                          (!isSkeletonBook && (categoryHeader === 'LOC' || categoryHeader === 'LOCATIONS' || nameLower.includes('location') || nameLower.includes('place')));
-            const isFac = (isSkeletonBook && entry.extensions?.rpgCategory === 'FAC') ||
-                          (!isSkeletonBook && (categoryHeader === 'FAC' || categoryHeader === 'FACTIONS' || nameLower.includes('faction') || nameLower.includes('guild')));
-            const isConflict = (isSkeletonBook && entry.extensions?.rpgCategory === 'EVENT') ||
-                               (!isSkeletonBook && (categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' || categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' || nameLower.includes('event') || nameLower.includes('conflict') || nameLower.includes('quest')));
-
-            // HARD exclusion for present party members: skip this entry entirely (never enters
-            // skeletonLines/loreGrouped/any name pool) if it's an NPC-type entry representing
-            // someone currently in [PARTY]. Historical [_World] reports are exempt — they're
-            // archived record of the past, not something being freshly selected now.
-            if (isNpc && !isWorldBook && presentPartyNames.size > 0) {
-                const labelLower = label.toLowerCase();
-                const primaryKeysForParty = Array.isArray(entry.key) ? entry.key.map(k => String(k).trim().toLowerCase()) : [];
-                const matchesPresentParty = [...presentPartyNames].some(name =>
-                    labelLower.includes(name) || primaryKeysForParty.some(k => k.includes(name))
-                );
-                if (matchesPresentParty) continue;
-            }
-
-            // Check exclusion list
-            let isExcluded = false;
-            if (excludedTerms.length > 0) {
-                const labelLower = label.toLowerCase();
-                const primaryKeys = Array.isArray(entry.key) ? entry.key.map(k => String(k).trim().toLowerCase()) : [];
-                const secondaryKeys = Array.isArray(entry.keysecondary) ? entry.keysecondary.map(k => String(k).trim().toLowerCase()) : [];
-
-                isExcluded = excludedTerms.some(term => {
-                    if (labelLower.includes(term)) return true;
-                    if (primaryKeys.some(k => k.includes(term))) return true;
-                    if (secondaryKeys.some(k => k.includes(term))) return true;
-                    return false;
-                });
-            }
-
-            if (isSkeletonBook) {
-                skeletonLines.push(`### ${label}\n${entry.content.trim()}`);
-                if (!isExcluded) {
-                    if (isNpc) skeletonNpcNames.push(label);
-                    else if (isLoc) {
-                        skeletonLocationNames.push(label);
-                        skeletonLocationDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                    } else if (isFac) {
-                        skeletonFactionNames.push(label);
-                        skeletonFactionDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                    } else if (isConflict) conflictNames.push(label);
-                }
-            } else if (isWorldBook) {
-                historicalReportLines.push(`### ${label}\n${entry.content.trim()}`);
-            } else {
-                const isQuestOrEvent = categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' ||
-                                       categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' ||
-                                       nameLower.includes('event') || nameLower.includes('quest');
-                if (isQuestOrEvent) continue;
-
-                if (!loreGrouped[categoryHeader]) {
-                    loreGrouped[categoryHeader] = [];
-                }
-                loreGrouped[categoryHeader].push(`### ${label}\n${entry.content.trim()}`);
-                if (!isExcluded) {
-                    if (isNpc) narrativeNpcNames.push(label);
-                    else if (isLoc) narrativeLocationNames.push(label);
-                    else if (isFac) narrativeFactionNames.push(label);
-                }
-            }
+            const content = String(entry?.content || '').trim();
+            if (!content) continue;
+            const label = String(entry?.comment || entry?.key?.[0] || 'Prior report').trim();
+            historicalReportLines.push(`### ${label}\n${content}`);
         }
     }
-
-    // Benched party members are eligible for simulation regardless of whether they also have
-    // a standalone NPC lorebook entry — synthesize a category so WP has real content to work
-    // with (their benching note as flavor), and make them selectable via the same NPC
-    // designation pool as any other narrative NPC.
-    if (benchedPartyRoster.length > 0) {
-        const benchedLabel = 'PARTY MEMBERS (BENCHED)';
-        loreGrouped[benchedLabel] = benchedPartyRoster.map(m =>
-            `### ${m.name}\n${m.note || 'Currently separated from {{user}}.'}`
-        );
-        for (const m of benchedPartyRoster) {
-            narrativeNpcNames.push(m.name);
-        }
-    }
-
-    const skeletonDump = skeletonLines.length
-        ? skeletonLines.join('\n\n')
-        : '(No skeleton generated — engine will rely solely on discovered lore.)';
-
-    let loreDump = '';
-    const categories = Object.keys(loreGrouped).sort();
-    if (categories.length > 0) {
-        const categoryBlocks = [];
-        for (const cat of categories) {
-            categoryBlocks.push(`## ${cat}\n${loreGrouped[cat].join('\n\n')}`);
-        }
-        loreDump = categoryBlocks.join('\n\n');
-    } else {
-        loreDump = 'No lore entries found.';
-    }
-
     const historicalDump = historicalReportLines.length
         ? historicalReportLines.join('\n\n')
         : 'No prior World Progression reports.';
@@ -4792,6 +4634,23 @@ ${rawDump}`;
         recentNarrative = narrativeBlocks.join('\n\n');
     }
 
+    const locationContext = buildWorldProgressionLocationDossiers(archiveBooks, {
+        prefix,
+        exclusionList: settings.worldProgressionExclusionList || '',
+    });
+    const selectedDossiers = selectWorldProgressionLocations(locationContext.dossiers, {
+        count: settings.worldProgressionLocationsPerReport ?? 3,
+        lastAdvanced: settings.worldProgressionLocationLastAdvanced,
+        randomize: settings.worldProgressionLocationRandomize !== false,
+    });
+    const selectedLocations = selectedDossiers.map(dossier => dossier.name);
+    const designatedLocationLines = selectedLocations.length
+        ? selectedLocations.map(name => `- ${name}`).join('\n')
+        : '(No recorded locations are available; write only Wider Currents.)';
+    const dossierDump = selectedDossiers.length
+        ? selectedDossiers.map(dossier => `# ${dossier.name}\n${dossier.text}`).join('\n\n')
+        : '(No location dossiers available.)';
+
     // 5. Build the system prompt from settings ({periodLabel} and {wordTarget} substitution)
     const rawPrompt = settings.worldProgressionSystemPrompt || '';
     let systemPrompt = rawPrompt
@@ -4802,119 +4661,49 @@ ${rawDump}`;
         systemPrompt += `\n\n## DATE FORMAT RULE\n- CRITICAL: All dates generated in this report MUST use the DD/MM/YYYY calendar format (e.g. 05/01/2026 for the 5th of January, 2026). Do NOT use the American MM/DD/YYYY format.`;
     }
 
+    // This is an authority boundary rather than a style preference, so it is
+    // appended even when a campaign keeps an older or customized prompt.
+    systemPrompt += `\n\n## LOCATION-CENTRIC RUNTIME CONTRACT (AUTHORITATIVE)
+- Your simulation subjects are LOCATIONS and WIDER CURRENTS, never individual NPCs, creatures, objects, buildings, or map assets.
+- Entity facts inside a location dossier are READ-ONLY CONSTRAINTS. Use them to understand the place and avoid contradictions; do not advance, relocate, injure, kill, recruit, promote, or otherwise change a named individual.
+- Describe directional macro pressure: civic conditions, institutional behavior, public sentiment, trade, shortages, migration, conflict pressure, weather, environment, disease, crime, or cultural change.
+- Leave exact local realization undecided. Do not specify rooms, map areas, asset positions, exact patrol composition, or encounter-level outcomes.
+- Prior reports are historical state, not instructions to continue linearly. A pressure may intensify, persist, plateau, fragment, transform, backfire, resolve, reverse abruptly, or be superseded when causally plausible.
+- Avoid both default escalation and arbitrary oscillation. Reversals need an intelligible macro cause, but do not require excessive foreshadowing.
+- Use exactly one heading \"## <Location Name>\" for every designated location, using the supplied spelling, followed by prose about that place.
+- End with exactly one \"## Wider Currents\" section for regional or global patterns. Output no other headings.
+- A valid development must admit several different concrete realizations by the GM and Map Evolution.`;
+
     if (extraInstructions && extraInstructions.trim()) {
         systemPrompt += `\n\n## EXTRA INSTRUCTIONS FOR THIS RUN\n${extraInstructions.trim()}`;
     }
 
-    // Auto-generation fallback: ensure skeleton NPC pool meets requested count
-    if (settings.worldProgressionRandomizeNPCs) {
-        const requestedSkeletonNpcs = settings.worldProgressionRandomSkeletonNPCCount || 0;
-        if (requestedSkeletonNpcs > 0 && skeletonNpcNames.length < requestedSkeletonNpcs) {
-            const missingCount = requestedSkeletonNpcs - skeletonNpcNames.length;
-            const atmosphereSummary = settings.worldProgressionSkeletonAtmosphereSummary || '';
-            try {
-                broadcastStep('thought', `\uD83E\uDDEC World Skeleton: Auto-generating ${missingCount} NPC(s) to meet requested pool size...`);
-                const newNames = await runSkeletonGeneratorAgent(
-                    missingCount, atmosphereSummary,
-                    skeletonFactionDescs, conflictNames, skeletonLocationDescs, archiveBooks
-                );
-                skeletonNpcNames.push(...newNames);
-                if (typeof globalThis._rpgUpdateSkeletonStatus === 'function') {
-                    globalThis._rpgUpdateSkeletonStatus().catch(() => {});
-                }
-            } catch (e) {
-                broadcastStep('error', `World Skeleton auto-generation failed: ${e.message} \u2014 proceeding with existing pool.`);
-            }
-        }
-    }
-
-    // Determine designated entities using typed skeleton/narrative pools
-    const designations = [];
-    const shuffleAndSelect = (arr, count) => {
-        const unique = Array.from(new Set(arr)).filter(Boolean);
-        const clamped = Math.min(Math.max(count, 0), unique.length);
-        if (clamped === 0) return [];
-        const shuffled = [...unique];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled.slice(0, clamped);
-    };
-
-    const handleTypedRandomization = (enabled, skeletonNames, narrativeNames, skeletonCount, narrativeCount, category) => {
-        if (!enabled) return;
-        const skelSelected = shuffleAndSelect(skeletonNames, skeletonCount);
-        const narSelected = shuffleAndSelect(narrativeNames, narrativeCount);
-        if (skelSelected.length > 0 || narSelected.length > 0) {
-            let block = `### ${category}`;
-            if (skelSelected.length > 0) {
-                block += `\n#### SKELETON ENTITIES [drawn from skeleton lorebook only]\n` + skelSelected.map(n => `- ${n}`).join('\n');
-            }
-            if (narSelected.length > 0) {
-                block += `\n#### NARRATIVE ENTITIES [drawn from active world lore only]\n` + narSelected.map(n => `- ${n}`).join('\n');
-            }
-            designations.push(block);
-        }
-    };
-
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeNPCs,
-        skeletonNpcNames, narrativeNpcNames,
-        settings.worldProgressionRandomSkeletonNPCCount || 0,
-        settings.worldProgressionRandomNarrativeNPCCount || 0,
-        'NPCs'
-    );
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeLocations,
-        skeletonLocationNames, narrativeLocationNames,
-        settings.worldProgressionRandomSkeletonLocationCount || 0,
-        settings.worldProgressionRandomNarrativeLocationCount || 0,
-        'Locations'
-    );
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeFactions,
-        skeletonFactionNames, narrativeFactionNames,
-        settings.worldProgressionRandomSkeletonFactionCount || 0,
-        settings.worldProgressionRandomNarrativeFactionCount || 0,
-        'Factions'
-    );
-
-
-
-    let selectedNPCsText = '';
-    if (designations.length > 0) {
-        selectedNPCsText = `\n\n## DESIGNATED ENTITIES FOR THIS PERIOD\n` +
-            `The following entities have been pre-selected by the system simulator. Entities listed under SKELETON ENTITIES originate from the hidden background skeleton (off-screen, undiscovered by the player). Entities listed under NARRATIVE ENTITIES originate from the active discovered world lore. You MUST focus on and advance the timeline only for these designated entities:\n\n` +
-            designations.join('\n\n') +
-            `\n\nYou are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for entities not listed above. You MAY mention them passively as background context where their prior established actions are a direct catalyst for a designated entity.`;
-    }
-
+    // No raw map or entity pool can enter the World Progression LLM call.
     let userPrompt =
-`## WORLD SKELETON (Day 0 Baseline — Foundational Undiscovered State)
-These entities existed at the start of the campaign. They have been acting off-screen since Day 1.
-They are NOT yet known to the player. Use them freely to generate off-screen activity.
-${skeletonDump}
+`## DESIGNATED LOCATIONS
+Advance only these location-scale subjects during this period:
+${designatedLocationLines}
 
-## ACTIVE WORLD LORE (Discovered Entities — Current Known State)
-${loreDump}
+## LOCATION DOSSIERS
+These dossiers contain the known character, history, sublocations, institutions, and relevant facts for each designated place. Named entities and map-scale facts are context only, not simulation subjects.
+${dossierDump}
 
-## HISTORICAL WORLD REPORTS (Previously Generated Off-Screen Activity)
+## WIDER-WORLD CONTEXT
+Use this only to derive regional or global pressures. Do not advance any named individual found here.
+${locationContext.globalContext || '(No wider-world context recorded.)'}
+
+## HISTORICAL WORLD REPORTS
+These are prior macro conditions. Continue their causal consequences where appropriate, but consider persistence, transformation, resolution, backlash, and reversal rather than assuming linear escalation.
 ${historicalDump}`;
 
     if (recentNarrative) {
         userPrompt += `\n\n## RECENT NARRATIVE (Current Scene Context)\n${recentNarrative}`;
     }
 
-    if (selectedNPCsText) {
-        userPrompt += selectedNPCsText;
-    }
-
-    userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**.`;
+    userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**, with exactly one section for every designated location and a final Wider Currents section.`;
 
     // 6. Send the LLM request using the Lorebook Agent connection settings
-    const loreCount = Object.values(loreGrouped).reduce((sum, arr) => sum + arr.length, 0);
-    broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${skeletonLines.length} skeleton, ${loreCount} lore, ${historicalReportLines.length} prior reports)...`);
+    broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${selectedLocations.length} locations, ${historicalReportLines.length} prior reports)...`);
     let reportContent;
     try {
         reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
@@ -4938,74 +4727,10 @@ ${historicalDump}`;
         reason: `World Progression: auto-generated report for ${periodLabel}`,
     }, archiveBooks, timeStr, '');
 
-    // 7b. Breadcrumb write-back: for each benched party member mentioned in this report,
-    // concatenate the matching bullet(s) into their [BENCHED PARTY] Status field as a
-    // period-timestamped "last update" trailer. This keeps a benched companion's thread
-    // alive in the always-injected memo even after the _World book's rolling window
-    // (worldProgressionKeepActive) moves past the report that mentioned them. Bullets in a
-    // single report are synchronous (one shared period timestamp) — there is no ordering to
-    // exploit across multiple matches, so all matches are kept, not just "the last one".
-    if (benchedPartyRoster.length > 0) {
-        const bullets = reportContent
-            .split(/\n\s*\n/)
-            .map(b => b.replace(/^[-*]\s*/, '').trim())
-            .filter(Boolean);
-
-        let memoForBreadcrumbs = settings.currentMemo || '';
-        let anyBreadcrumbWritten = false;
-
-        for (const member of benchedPartyRoster) {
-            const escapedName = member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const nameRx = new RegExp(`\\b${escapedName}\\b`, 'i');
-            const matchingBullets = bullets.filter(b => nameRx.test(b));
-            if (matchingBullets.length === 0) continue;
-
-            const breadcrumb = matchingBullets.join('; ');
-
-            // Locate this member's chunk within [BENCHED PARTY] the same way extractPartyRoster
-            // split it, so we only touch this member's Status line, not the whole block.
-            const blockRe = /\[BENCHED PARTY\]([\s\S]*?)\[\/BENCHED PARTY\]/i;
-            const blockMatch = memoForBreadcrumbs.match(blockRe);
-            if (!blockMatch) break; // block vanished mid-loop (shouldn't happen) — bail safely
-
-            const blockContent = blockMatch[1];
-            const chunks = blockContent.split(/\n(?=[^\n]*\([^)]*\):\s*\d)/);
-            const chunkIdx = chunks.findIndex(c => {
-                const headerLine = c.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
-                const colonIdx = headerLine.indexOf(':');
-                const entityPart = colonIdx !== -1 ? headerLine.substring(0, colonIdx).trim() : headerLine;
-                const namePart = entityPart.replace(/\s*\([^)]*\)/g, '').trim();
-                return namePart.toLowerCase() === member.name.toLowerCase();
-            });
-            if (chunkIdx === -1) continue;
-
-            let chunk = chunks[chunkIdx];
-            const statusLineRe = /^(\s*Status:\s*)(.*)$/im;
-            if (statusLineRe.test(chunk)) {
-                chunk = chunk.replace(statusLineRe, (full, prefix, value) => {
-                    // Strip any prior "— Last update: ..." trailer before appending the fresh one.
-                    const baseValue = value.replace(/\s*—\s*Last update:.*$/i, '').trim();
-                    return `${prefix}${baseValue} — Last update: ${periodLabel}: ${breadcrumb}`;
-                });
-            } else {
-                chunk = chunk.trim() + `\nStatus: Benched — Last update: ${periodLabel}: ${breadcrumb}`;
-            }
-            chunks[chunkIdx] = chunk;
-
-            const newBlockContent = chunks.join('\n');
-            memoForBreadcrumbs = memoForBreadcrumbs.replace(blockRe, `[BENCHED PARTY]${newBlockContent}[/BENCHED PARTY]`);
-            anyBreadcrumbWritten = true;
-        }
-
-        if (anyBreadcrumbWritten) {
-            settings.currentMemo = memoForBreadcrumbs;
-            void saveSettings();
-        }
-    }
-
     // 8. Rolling window: keep only the N most recent WORLD entries active.
     await new Promise(r => setTimeout(r, 300));
     let freshWorldBook = null;
+    let reportId = '';
     try { freshWorldBook = await ctx.loadWorldInfo(worldBookName); } catch (_) {}
     if (!freshWorldBook?.entries) {
         try {
@@ -5021,6 +4746,32 @@ ${historicalDump}`;
     if (freshWorldBook?.entries) {
         const sorted = Object.entries(freshWorldBook.entries)
             .sort(([a], [b]) => Number(a) - Number(b));
+        const reportPair = [...sorted].reverse().find(([, entry]) =>
+            String(entry?.comment || '').trim().toLowerCase() === cleanPeriod
+        );
+        if (reportPair) {
+            const [uid, entry] = reportPair;
+            reportId = `${worldBookName}::${uid}`;
+            entry.extensions = {
+                ...(entry.extensions || {}),
+                [WORLD_REPORT_METADATA_KEY]: {
+                    reportId,
+                    periodLabel,
+                    selectedLocations: [...selectedLocations],
+                },
+            };
+            try {
+                const response = await fetch('/api/worldinfo/edit', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ name: worldBookName, data: freshWorldBook }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.warn('[RPG Tracker] Could not persist World Report routing metadata through the API.', error);
+            }
+            try { await ctx.saveWorldInfo(worldBookName, freshWorldBook); } catch (_) {}
+        }
         const allWorldIds = sorted.map(([uid]) => `${worldBookName}::${uid}`);
         const toActivate = allWorldIds.slice(-keepActive);
         const toDeactivate = allWorldIds.slice(0, Math.max(0, allWorldIds.length - keepActive));
@@ -5042,13 +4793,24 @@ ${historicalDump}`;
 
     // 9. Advance the timer — only the period label is stored; numeric field is legacy.
     settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+    settings.worldProgressionLocationLastAdvanced = stampLocationAdvancement(
+        settings.worldProgressionLocationLastAdvanced,
+        selectedLocations,
+        periodLabel,
+    );
     persistWorldProgressionTimer();
 
     broadcastStep('finish', `\uD83C\uDF0D World Progression: "${periodLabel}" report saved.`);
     if (typeof globalThis._rpgRenderRouterUI === 'function') {
         globalThis._rpgRenderRouterUI();
     }
-    return { ok: true, reportContent: reportContent.trim(), periodLabel };
+    return {
+        ok: true,
+        reportContent: reportContent.trim(),
+        periodLabel,
+        reportId,
+        selectedLocations,
+    };
 }
 // -- World Skeleton ------------------------------------------------------------------
 

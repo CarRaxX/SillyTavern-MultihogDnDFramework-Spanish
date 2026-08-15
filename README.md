@@ -35,7 +35,7 @@ I know it says "D&D Framework," but in addition to fantasy, the system works jus
    - RNG Queue: Pre-seeded deterministic dice injected into every turn. Cheaper than using tool calls and very smooth when a lot of rolls are used in sequence such as in combat.
    - Tool Call RNG: Enables a commitment logic where the AI must declare a DC before seeing the result, completely preventing sycophancy.
 3. 🤖 **Lorebook Agent** - Automatically creates, activates/deactivates, updates, consolidates, etc, lorebook entries, ensuring long-term memory despite summarization.
-4. 🌍 **World Progression** - A system that creates daily (or more frequent) reports about NPC/world affairs using existing lore entries as well as an optional world "skeleton" created beforehand. The world moves regardless of you.
+4. 🌍 **World Progression** - A location-centric macro simulator that creates daily (or more frequent) prose reports from readable location lore and an optional world skeleton. Reports steer the narrator immediately and are realized lazily by Map Evolution; granular entities and hidden maps remain outside WP authority.
 
 Together they solve the four core problems of LLM tabletop RP: the AI forgetting your inventory/spells, the AI forgetting long-term context, you always winning (aka. plot armor), and the world being static outside of the immediate player's bubble. I have high confidence in the system's reliability—you can just play and not worry about tinkering with much of anything.
 

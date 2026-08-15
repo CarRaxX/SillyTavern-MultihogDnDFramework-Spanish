@@ -1,67 +1,14 @@
 /**
- * Pure Map Evolution helpers: site selection, ordering, digest, player bubble, interval due.
+ * Pure Map Evolution helpers: scheduled site selection, digest, player bubble, interval due.
  * Kept out of map-evolution.js so filters stay testable without the LLM pass / router.
  */
-import {
-    isPlayCanonLockedState,
-    normalizeDungeonLabel,
-    resolveCurrentMapPlacement,
-} from './dungeon-reality.js';
+import { normalizeDungeonLabel, resolveCurrentMapPlacement } from './dungeon-reality.js';
 import { parseInWorldTime } from './memo-processor.js';
-
-const MIN_MENTION_LENGTH = 4;
 
 export function isEvolutionNoop(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     if (value.noop === true) return true;
     return Array.isArray(value.operations) && value.operations.length === 0;
-}
-
-export function reportMentionsLabel(reportText, label) {
-    const haystack = normalizeDungeonLabel(reportText);
-    const needle = normalizeDungeonLabel(label);
-    if (!needle || needle.length < MIN_MENTION_LENGTH) return false;
-    return haystack.includes(needle);
-}
-
-function isMobileAsset(asset) {
-    return !isPlayCanonLockedState(asset?.state);
-}
-
-/**
- * Deterministic prefilter: which mapped sites a World Report can ground onto.
- * Matches site roots, asset names, and factions — not short area labels.
- */
-export function selectMappedSitesForWorldReport(sites, reportText) {
-    const report = String(reportText || '');
-    if (!report.trim()) return [];
-    const selected = [];
-    for (const site of sites || []) {
-        const reasons = [];
-        const hostAssets = [];
-        if (reportMentionsLabel(report, site.siteRoot) || reportMentionsLabel(report, site.document?.site)) {
-            reasons.push('site');
-        }
-        for (const asset of site.document?.assets || []) {
-            const nameHit = reportMentionsLabel(report, asset.name);
-            const factionHit = !!(asset.faction && reportMentionsLabel(report, asset.faction));
-            if (!nameHit && !factionHit) continue;
-            reasons.push(nameHit ? 'asset' : 'faction');
-            if (nameHit && isMobileAsset(asset)) hostAssets.push(asset.id);
-        }
-        if (reasons.length) {
-            selected.push({ ...site, reasons: [...new Set(reasons)], hostAssets });
-        }
-    }
-    return selected;
-}
-
-/** Hosts (matched living assets) first, then sites named only as destinations. */
-export function orderMappedSitesForEvolution(selected) {
-    const rows = Array.isArray(selected) ? selected : [];
-    const hosts = rows.filter(site => site.hostAssets?.length);
-    const named = rows.filter(site => !site.hostAssets?.length);
-    return [...hosts, ...named];
 }
 
 export function summarizeEvolutionDigest(siteRoot, transaction) {

@@ -17,7 +17,7 @@ import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
 import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
-import { groundMapsAfterWorldProgression, maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
+import { maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
@@ -2786,6 +2786,5 @@ async function maybeRunWorldProgression() {
     // Guard: don't start a World Progression pass while the Lorebook Agent is already running
     if (isRouterRunning()) return;
 
-    const wpResult = await runWorldProgressionPass(timeStr, currentMinutes);
-    await groundMapsAfterWorldProgression(wpResult);
+    await runWorldProgressionPass(timeStr, currentMinutes);
 }

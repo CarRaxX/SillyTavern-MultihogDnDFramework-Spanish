@@ -1,10 +1,10 @@
 /**
- * Map Evolution — off-screen site simulation and World Progression grounding.
+ * Map Evolution — off-screen site simulation with lazy World Report pressure.
  *
  * Separate module from Map Updater occupancy: own prompt, own cadence, same
  * transaction API. Never mixed into the occupancy request.
  */
-import { getSettings, persistMapEvolutionState } from './state-manager.js';
+import { getEffectiveRouterCampaignPrefix, getSettings, hydrateWorldProgressionFromChatState, persistMapEvolutionState } from './state-manager.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { sendStateRequest, isCombatActive } from './llm-client.js';
 import { extractCurrentTimeStr } from './memo-processor.js';
@@ -22,11 +22,8 @@ import {
     filterSitesByRoots,
     isEvolutionNoop,
     normalizeEvolutionTickScope,
-    orderMappedSitesForEvolution,
     pickSitesForEvolutionTick,
-    reportMentionsLabel,
     resolvePlayerBubble,
-    selectMappedSitesForWorldReport,
     siteEvolutionDue,
     summarizeEvolutionDigest,
 } from './map-evolution-lib.js';
@@ -38,15 +35,17 @@ import {
     restoreCampaignLocationsBook,
     snapshotCampaignLocationsBook,
 } from './router.js';
+import {
+    normalizeWorldReportMetadata,
+    selectPendingWorldReportsForLocation,
+    WORLD_REPORT_METADATA_KEY,
+} from './world-progression-lib.js';
 
 export {
     filterSitesByRoots,
     normalizeEvolutionTickScope,
-    orderMappedSitesForEvolution,
     pickSitesForEvolutionTick,
-    reportMentionsLabel,
     resolvePlayerBubble,
-    selectMappedSitesForWorldReport,
     siteEvolutionDue,
     summarizeEvolutionDigest,
 };
@@ -108,6 +107,90 @@ function stampSiteFired(settings, siteRoot, timeLabel) {
     settings.mapEvolutionLastFiredBySite[key] = timeLabel;
 }
 
+function reportApplicationsForSite(settings, siteRoot) {
+    const siteKey = normalizeDungeonLabel(siteRoot);
+    if (!settings.mapEvolutionWorldReportApplications || typeof settings.mapEvolutionWorldReportApplications !== 'object') {
+        settings.mapEvolutionWorldReportApplications = {};
+    }
+    if (!settings.mapEvolutionWorldReportApplications[siteKey]
+        || typeof settings.mapEvolutionWorldReportApplications[siteKey] !== 'object') {
+        settings.mapEvolutionWorldReportApplications[siteKey] = {};
+    }
+    return settings.mapEvolutionWorldReportApplications[siteKey];
+}
+
+async function loadRecentWorldReports(settings, ctx) {
+    const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId || ctx.getCurrentChatId?.() || '');
+    const worldBookName = prefix ? `${prefix}_World` : 'World';
+    let book = null;
+    try { book = await ctx.loadWorldInfo(worldBookName); } catch (_) {}
+    if (!book?.entries) return [];
+
+    return Object.entries(book.entries)
+        .sort(([left], [right]) => Number(left) - Number(right))
+        .map(([uid, entry]) => {
+            const label = String(entry?.comment || '').trim();
+            const keys = Array.isArray(entry?.key) ? entry.key.map(value => String(value || '').toLowerCase()) : [];
+            const hasMetadata = !!entry?.extensions?.[WORLD_REPORT_METADATA_KEY];
+            const recognizableLegacyReport = keys.includes('world progression')
+                || keys.includes('world report')
+                || /^day\s+\d+\b/i.test(label);
+            if (!hasMetadata && !recognizableLegacyReport) return null;
+            if (/condensed|compressed|merged|summary/i.test(label)
+                || /^days?\s+\d+\s*[-–—]\s*\d+/i.test(label)) return null;
+            const metadata = normalizeWorldReportMetadata(entry, worldBookName, uid);
+            return metadata.reportId
+                ? { ...metadata, content: String(entry?.content || '') }
+                : null;
+        })
+        .filter(Boolean);
+}
+
+function pendingWorldReportsForSite(reports, siteRoot, settings) {
+    const applied = reportApplicationsForSite(settings, siteRoot);
+    return selectPendingWorldReportsForLocation(reports, siteRoot, {
+        lookback: settings.mapEvolutionWorldReportLookback,
+        applied,
+    });
+}
+
+function formatWorldReportPressures(reports) {
+    if (!Array.isArray(reports) || reports.length === 0) {
+        return '(No unconsumed World Report pressure applies to this location.)';
+    }
+    return reports.map(report =>
+        `### ${report.periodLabel || 'World Report'} [report_id: ${report.reportId}]\n${report.excerpt}`,
+    ).join('\n\n');
+}
+
+function normalizeReportOutcomes(rawOutcomes, reports, fallbackStatus, digest = '') {
+    const allowed = new Set(['materialized', 'already_realized_by_play', 'considered']);
+    const supplied = new Map((Array.isArray(rawOutcomes) ? rawOutcomes : [])
+        .map(outcome => [String(outcome?.report_id || '').trim(), String(outcome?.status || '').trim()])
+        .filter(([reportId, status]) => reportId && allowed.has(status)));
+    return (reports || []).map(report => ({
+        reportId: report.reportId,
+        status: supplied.get(report.reportId) || fallbackStatus,
+        localDigest: String(digest || '').trim(),
+    }));
+}
+
+function stampReportOutcomes(settings, siteRoot, outcomes, consideredAt) {
+    const applied = reportApplicationsForSite(settings, siteRoot);
+    for (const outcome of outcomes || []) {
+        if (!outcome?.reportId) continue;
+        applied[outcome.reportId] = {
+            status: outcome.status || 'considered',
+            localDigest: outcome.localDigest || '',
+            consideredAt: String(consideredAt || '').trim(),
+        };
+    }
+    const reportIds = Object.keys(applied);
+    for (const reportId of reportIds.slice(0, Math.max(0, reportIds.length - 50))) {
+        delete applied[reportId];
+    }
+}
+
 function formatFailure(errors) {
     return JSON.stringify({
         ok: false,
@@ -120,25 +203,22 @@ function formatFailure(errors) {
 
 function kindPolicy(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT: district and OBJECT change is expected in any way that makes logical and narrative sense — ordinary civic occupancy or unrest. Ground named World Report events when present; do not wait for WP to invent local occupancy. Interiors are OBJECT assets in a district, not new areas.'
+        ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
         : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
 }
 
 function triggerHeadline(trigger) {
-    if (trigger === 'world_progression') return 'WORLD PROGRESSION GROUNDING';
     if (trigger === 'site_exit') return 'SITE EXIT RESTOCK / DECAY';
     if (trigger === 'manual') return 'MANUAL MAP EVOLUTION';
     return 'INTERVAL RESTLESSNESS';
 }
 
-function initialUserPrompt({ site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere }) {
+function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere }) {
     const kind = normalizeMapSiteKind(site.document?.kind);
     const bubbleLine = bubble.area
         ? `${bubble.area.id} (${bubble.area.name})${bubble.combatActive ? ' — combat is active' : ''}`
         : '(Party is not inside this site. No freeze.)';
-    const reportBlock = String(worldReport || '').trim()
-        ? worldReport.trim()
-        : '(No World Report for this pass.)';
+    const reportBlock = formatWorldReportPressures(worldReports);
     const digestBlock = String(digest || '').trim() || '(None yet this period.)';
     return `${triggerHeadline(trigger)}
 Exact site root: ${site.siteRoot}
@@ -155,16 +235,18 @@ ${currentLocation || 'Unknown'}
 ## CURRENT MAP
 ${formatDungeonMapForEvolution(site.document, partyIsHere ? currentLocation : '')}
 
-## WORLD REPORT
+## WORLD REPORT PRESSURES
 ${reportBlock}
+
+These reports are directional prose, not explicit deltas. Decide the best concrete local realization using this map and its current state. A newer pressure may reverse or supersede an older direction while leaving plausible aftermath. If play or the Map Updater already realized a pressure, preserve it and mark that report already_realized_by_play instead of duplicating it.
 
 ## PRIOR EVOLUTION THIS PERIOD
 ${digestBlock}
 
-Output only the required JSON object. Prefer a durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Use {"noop":true} only when this site would not plausibly stir.`;
+Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer a durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
-function correctionPrompt({ site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere, priorOutput, errors, attempt }) {
+function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, priorOutput, errors, attempt }) {
     return `CORRECTION PASS ${attempt}
 Your previous map evolution was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -178,7 +260,7 @@ Field reminder: MOVE_ASSET uses "to" and optional "from", never "location". SET_
 PREVIOUS OUTPUT
 ${priorOutput}
 
-${initialUserPrompt({ site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere })}`;
+${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere })}`;
 }
 
 function swipeSnapshotKey(ctx, message, swipeId = message?.swipe_id ?? 0) {
@@ -207,7 +289,14 @@ export async function maybeRollbackMapEvolutionForSwipe(msg) {
     const snapshot = swipeSnapshots.get(swipeSnapshotKey(ctx, msg, msg.extra.rpgMapEvolutionRanForSwipe));
     delete msg.extra.rpgMapEvolutionRanForSwipe;
     if (!snapshot) return false;
-    return restoreCampaignLocationsBook(snapshot, ctx);
+    const restored = await restoreCampaignLocationsBook(snapshot.locationsBook || snapshot, ctx);
+    if (restored && snapshot.locationsBook) {
+        const settings = getSettings();
+        settings.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(snapshot.lastFiredBySite || {}));
+        settings.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(snapshot.reportApplications || {}));
+        persistMapEvolutionState();
+    }
+    return restored;
 }
 
 function activeSiteFrom(loaded, currentLocation) {
@@ -226,7 +315,7 @@ async function evolveOneSite({
     site,
     books,
     trigger,
-    worldReport,
+    worldReports,
     digest,
     currentLocation,
     currentTime,
@@ -244,9 +333,16 @@ async function evolveOneSite({
         ? resolvePlayerBubble(site.document, currentLocation, { combatActive })
         : { frozenAreaIds: [], combatActive: false, area: null };
     const frozenAreaIds = bubble.frozenAreaIds;
-    const systemPrompt = String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim();
+    const systemPrompt = `${String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim()}
+
+AUTHORITATIVE WORLD REPORT CONTRACT
+- World Report excerpts are directional macro pressure, never pre-decided map deltas.
+- Choose the concrete local realization yourself from the current map state.
+- Do not duplicate pressure already realized through play or Map Updater; preserve it and mark already_realized_by_play.
+- Newer pressure may reverse, resolve, transform, or supersede an older direction while plausible aftermath remains.
+- Return report_outcomes for every supplied report ID. This bookkeeping field is removed before transaction validation.`;
     let prompt = initialUserPrompt({
-        site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere,
+        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
     });
     let lastIssues = [];
     let lastOutput = '';
@@ -270,7 +366,7 @@ async function evolveOneSite({
             lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -278,14 +374,26 @@ async function evolveOneSite({
             break;
         }
         if (isEvolutionNoop(parsed.value)) {
-            return { ok: true, noop: true, siteRoot: site.siteRoot };
+            return {
+                ok: true,
+                noop: true,
+                siteRoot: site.siteRoot,
+                reportOutcomes: normalizeReportOutcomes(
+                    parsed.value.report_outcomes,
+                    worldReports,
+                    'considered',
+                ),
+            };
         }
-        const validation = applyDungeonMapTransaction(site.document, parsed.value, { frozenAreaIds });
+        const rawReportOutcomes = parsed.value.report_outcomes;
+        const transaction = { ...parsed.value };
+        delete transaction.report_outcomes;
+        const validation = applyDungeonMapTransaction(site.document, transaction, { frozenAreaIds });
         if (!validation.ok) {
             lastIssues = validation.errors || [];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -293,7 +401,7 @@ async function evolveOneSite({
             break;
         }
         const mapResult = await applyDungeonMapCommit(
-            parsed.value,
+            transaction,
             site,
             books,
             currentTime,
@@ -303,7 +411,7 @@ async function evolveOneSite({
             lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReport, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -313,8 +421,8 @@ async function evolveOneSite({
         if (mapResult.alreadyApplied) {
             broadcastStep('finish', `${site.siteRoot}: already applied.`);
         } else {
-            const n = Array.isArray(parsed.value.operations) ? parsed.value.operations.length : 0;
-            broadcastStep('result', summarizeEvolutionDigest(site.siteRoot, parsed.value));
+            const n = Array.isArray(transaction.operations) ? transaction.operations.length : 0;
+            broadcastStep('result', summarizeEvolutionDigest(site.siteRoot, transaction));
             broadcastStep('finish', `${site.siteRoot}: applied ${n} operation${n === 1 ? '' : 's'}.`);
         }
         stampTriggerMessage(ctx, snapshot);
@@ -322,8 +430,14 @@ async function evolveOneSite({
             ok: true,
             siteRoot: site.siteRoot,
             result: mapResult,
-            transaction: parsed.value,
-            digestLine: summarizeEvolutionDigest(site.siteRoot, parsed.value),
+            transaction,
+            digestLine: summarizeEvolutionDigest(site.siteRoot, transaction),
+            reportOutcomes: normalizeReportOutcomes(
+                rawReportOutcomes,
+                worldReports,
+                'considered',
+                summarizeEvolutionDigest(site.siteRoot, transaction),
+            ),
         };
     }
 
@@ -334,12 +448,9 @@ async function evolveOneSite({
 }
 
 function resolveSitesForPass(loaded, {
-    trigger, worldReport, isManual, siteRoots, currentLocation, settings, currentMinutes,
+    trigger, isManual, siteRoots, currentLocation, settings, currentMinutes,
 }) {
     const sites = loaded.sites || [];
-    if (trigger === 'world_progression') {
-        return orderMappedSitesForEvolution(selectMappedSitesForWorldReport(sites, worldReport));
-    }
     if (trigger === 'site_exit') {
         const departed = String(settings.mapEvolutionPendingExitRoot || '').trim();
         return sites.filter(site => dungeonRootsEqual(site.siteRoot, departed));
@@ -376,8 +487,7 @@ function dungeonRootsEqual(left, right) {
  * into a single prompt.
  *
  * @param {{
- *   trigger?: 'world_progression'|'interval'|'site_exit'|'manual',
- *   worldReport?: string,
+ *   trigger?: 'interval'|'site_exit'|'manual',
  *   periodLabel?: string,
  *   isManual?: boolean,
  *   siteRoots?: string[],
@@ -385,7 +495,6 @@ function dungeonRootsEqual(left, right) {
  */
 export async function runMapEvolutionPass({
     trigger = 'interval',
-    worldReport = '',
     periodLabel = '',
     isManual = false,
     siteRoots = null,
@@ -407,7 +516,7 @@ export async function runMapEvolutionPass({
         const currentTime = periodLabel || currentTimeFrom(settings);
         const currentMinutes = parseInWorldMinutes(currentTime);
         const selected = resolveSitesForPass(loaded, {
-            trigger, worldReport, isManual, siteRoots, currentLocation, settings, currentMinutes,
+            trigger, isManual, siteRoots, currentLocation, settings, currentMinutes,
         });
         if (!selected.length) return { skipped: 'no_matching_sites' };
 
@@ -426,10 +535,15 @@ export async function runMapEvolutionPass({
         document.dispatchEvent(new CustomEvent('rt_map_evolution_status', { detail: { running: true } }));
         broadcastStep('start', `Initializing Map Evolution (${trigger})...`);
 
-        const snapshot = await snapshotCampaignLocationsBook();
+        const snapshot = {
+            locationsBook: await snapshotCampaignLocationsBook(),
+            lastFiredBySite: JSON.parse(JSON.stringify(settings.mapEvolutionLastFiredBySite || {})),
+            reportApplications: JSON.parse(JSON.stringify(settings.mapEvolutionWorldReportApplications || {})),
+        };
         const digestLines = [];
         const results = [];
         const books = loaded.books;
+        const recentWorldReports = await loadRecentWorldReports(settings, ctx);
 
         for (const site of [...baselineOnly, ...toEvolve]) {
             if (site.stampBaselineOnly) {
@@ -440,7 +554,7 @@ export async function runMapEvolutionPass({
                 site,
                 books,
                 trigger,
-                worldReport,
+                worldReports: pendingWorldReportsForSite(recentWorldReports, site.siteRoot, settings),
                 digest: digestLines.join('\n'),
                 currentLocation,
                 currentTime,
@@ -451,7 +565,10 @@ export async function runMapEvolutionPass({
             });
             results.push(siteResult);
             if (siteResult?.digestLine) digestLines.push(siteResult.digestLine);
-            if (siteResult?.ok) stampSiteFired(settings, site.siteRoot, currentTime);
+            if (siteResult?.ok) {
+                stampSiteFired(settings, site.siteRoot, currentTime);
+                stampReportOutcomes(settings, site.siteRoot, siteResult.reportOutcomes, currentTime);
+            }
         }
 
         persistMapEvolutionState();
@@ -482,22 +599,11 @@ export async function runMapEvolutionPass({
     }
 }
 
-/** Ground maps from a freshly written World Report. Sequential, filtered. */
-export async function groundMapsAfterWorldProgression(wpResult) {
-    if (!wpResult?.ok || !String(wpResult.reportContent || '').trim()) {
-        return { skipped: 'no_report' };
-    }
-    return runMapEvolutionPass({
-        trigger: 'world_progression',
-        worldReport: wpResult.reportContent,
-        periodLabel: wpResult.periodLabel || '',
-    });
-}
-
 /**
  * Interval restlessness for the configured map pool, plus one pass when the party just left a mapped site.
  */
 export async function maybeRunMapEvolution() {
+    hydrateWorldProgressionFromChatState();
     const settings = getSettings();
     if (settings.mapEvolutionEnabled === false) return { skipped: 'disabled' };
     if (!isLocationMappingEnabled(settings)) return { skipped: 'location_mapping_off' };

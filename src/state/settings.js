@@ -866,7 +866,30 @@ function getSettingsInternal(extensionSettings) {
     s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
+    s.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, Number(s.mapEvolutionWorldReportLookback) || 5));
+    if (!s.mapEvolutionWorldReportApplications || typeof s.mapEvolutionWorldReportApplications !== 'object') {
+        s.mapEvolutionWorldReportApplications = {};
+    }
+    s.worldProgressionLocationsPerReport = Math.max(1, Math.min(12, Number(s.worldProgressionLocationsPerReport) || 3));
+    s.worldProgressionLocationRandomize = s.worldProgressionLocationRandomize !== false;
+    if (!s.worldProgressionLocationLastAdvanced || typeof s.worldProgressionLocationLastAdvanced !== 'object') {
+        s.worldProgressionLocationLastAdvanced = {};
+    }
 
+    // Replace only recognizable shipped entity-centric prompts. User-authored
+    // prompts remain intact and are still constrained by the runtime contract.
+    if (!s.locationCentricWorldProgressionMigrated) {
+        const prompt = String(s.worldProgressionSystemPrompt || '');
+        if (prompt.includes('Prioritize named ACTIVE WORLD LORE NPCs')
+            && prompt.includes('DESIGNATED ENTITIES FOR THIS PERIOD')) {
+            s.worldProgressionSystemPrompt = defaults.worldProgressionSystemPrompt;
+        }
+        s.worldProgressionRandomizeNPCs = false;
+        s.worldProgressionRandomizeLocations = false;
+        s.worldProgressionRandomizeFactions = false;
+        s.worldProgressionRandomizeConflicts = false;
+        s.locationCentricWorldProgressionMigrated = true;
+    }
     return extensionSettings[MODULE_NAME];
 }
 

@@ -12,7 +12,7 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
-import { groundMapsAfterWorldProgression, isMapEvolutionRunning, listMappedEvolutionSites, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
+import { isMapEvolutionRunning, listMappedEvolutionSites, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
@@ -1621,6 +1621,11 @@ function resetUnseenChatState(s) {
     s.worldProgressionLastFiredAtMinutes = -1;
     s.worldProgressionLastFiredPeriodLabel = '';
     s.worldProgressionSkeletonAtmosphereSummary = '';
+    s.worldProgressionLocationLastAdvanced = {};
+    s.mapEvolutionLastFiredBySite = {};
+    s.mapEvolutionLastSiteRoot = '';
+    s.mapEvolutionPendingExitRoot = '';
+    s.mapEvolutionWorldReportApplications = {};
     s.agentImmersionMode = false;
     resetImmersionSceneArtTracking();
     applyChatTimeFormatSettings(null);
@@ -1954,6 +1959,11 @@ function onChatChanged(newChatId) {
         s.worldProgressionLastFiredAtMinutes = -1;
         s.worldProgressionLastFiredPeriodLabel = '';
         s.worldProgressionSkeletonAtmosphereSummary = '';
+        s.worldProgressionLocationLastAdvanced = {};
+        s.mapEvolutionLastFiredBySite = {};
+        s.mapEvolutionLastSiteRoot = '';
+        s.mapEvolutionPendingExitRoot = '';
+        s.mapEvolutionWorldReportApplications = {};
         s.activeWorldKeys = [];
         s.quests = [];
         if (typeof globalThis._rpgLoadAdventureCompanionForChat === 'function') {
@@ -2717,6 +2727,9 @@ function loadProfile(name) {
     s.routerDirectPrompt = p.routerDirectPrompt || '';
     s.worldProgressionLookback = p.worldProgressionLookback ?? 20;
     s.worldProgressionHistoryLookback = p.worldProgressionHistoryLookback ?? 0;
+    s.worldProgressionLocationsPerReport = p.worldProgressionLocationsPerReport ?? 3;
+    s.worldProgressionLocationRandomize = p.worldProgressionLocationRandomize !== false;
+    s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(p.worldProgressionLocationLastAdvanced || {}));
     s.worldProgressionRandomizeNPCs = p.worldProgressionRandomizeNPCs ?? false;
     s.worldProgressionRandomSkeletonNPCCount = p.worldProgressionRandomSkeletonNPCCount ?? 2;
     s.worldProgressionRandomNarrativeNPCCount = p.worldProgressionRandomNarrativeNPCCount ?? 3;
@@ -2800,6 +2813,8 @@ function loadProfile(name) {
     s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(p.mapEvolutionLastFiredBySite || {}));
     s.mapEvolutionLastSiteRoot = p.mapEvolutionLastSiteRoot || '';
+    s.mapEvolutionWorldReportLookback = p.mapEvolutionWorldReportLookback ?? 5;
+    s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(p.mapEvolutionWorldReportApplications || {}));
 
     s.worldConnectionSource = p.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = p.worldConnectionProfileId || "";
@@ -2830,16 +2845,6 @@ function loadProfile(name) {
     s.characterCreationOpenaiModel = p.characterCreationOpenaiModel || "";
 
     // Update settings UI inputs if rendered
-    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-    $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
-    $('#rpg_world_progression_random_narrative_npc_count').val(s.worldProgressionRandomNarrativeNPCCount ?? 3);
-    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-    $('#rpg_world_progression_random_skeleton_location_count').val(s.worldProgressionRandomSkeletonLocationCount ?? 2);
-    $('#rpg_world_progression_random_narrative_location_count').val(s.worldProgressionRandomNarrativeLocationCount ?? 2);
-    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
-    $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
-    $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
     $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
@@ -2861,6 +2866,8 @@ function loadProfile(name) {
         void globalThis._rpgRefreshSkeletonLorebookList();
     }
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
@@ -2907,6 +2914,7 @@ function loadProfile(name) {
     $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
     $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 4);
     $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+    $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
     applyMapEvolutionTickSettingsToUi(s);
     $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
 
@@ -2946,13 +2954,6 @@ function loadProfile(name) {
     $('#rpg_gs_wizard_openai_group').toggle(s.gameSystemWizardConnectionSource === 'openai');
 
     // Toggle container visibilities
-    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
-    else $('#rpg_world_progression_random_npc_count_container').hide();
-    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
-    else $('#rpg_world_progression_random_location_count_container').hide();
-    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
-    else $('#rpg_world_progression_random_faction_count_container').hide();
-
     s.activeProfile = name;
     runtimeState.historyViewIndex = -1;
 
@@ -5287,6 +5288,11 @@ function organizeConnectionSettingsUI() {
         $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
             settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
             $(this).val(settings.mapEvolutionMaxTokens);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_world_report_lookback').val(settings.mapEvolutionWorldReportLookback ?? 5).on('change', function () {
+            settings.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, parseInt(String($(this).val()), 10) || 5));
+            $(this).val(settings.mapEvolutionWorldReportLookback);
             saveSettings();
         });
         applyMapEvolutionTickSettingsToUi(settings);
@@ -10369,19 +10375,6 @@ RULES:
         const $wpInterval = $('#rpg_world_progression_interval');
         const $wpKeepActive = $('#rpg_world_progression_keep_active');
         const $wpHistoryLookback = $('#rpg_world_progression_history_lookback');
-        const $wpRandomizeNPCs = $('#rpg_world_progression_randomize_npcs');
-        const $wpRandomSkeletonNPCCount = $('#rpg_world_progression_random_skeleton_npc_count');
-        const $wpRandomNarrativeNPCCount = $('#rpg_world_progression_random_narrative_npc_count');
-        const $wpRandomNPCCountContainer = $('#rpg_world_progression_random_npc_count_container');
-        const $wpRandomizeLocations = $('#rpg_world_progression_randomize_locations');
-        const $wpRandomSkeletonLocationCount = $('#rpg_world_progression_random_skeleton_location_count');
-        const $wpRandomNarrativeLocationCount = $('#rpg_world_progression_random_narrative_location_count');
-        const $wpRandomLocationCountContainer = $('#rpg_world_progression_random_location_count_container');
-        const $wpRandomizeFactions = $('#rpg_world_progression_randomize_factions');
-        const $wpRandomSkeletonFactionCount = $('#rpg_world_progression_random_skeleton_faction_count');
-        const $wpRandomNarrativeFactionCount = $('#rpg_world_progression_random_narrative_faction_count');
-        const $wpRandomFactionCountContainer = $('#rpg_world_progression_random_faction_count_container');
-
         const $wpLookback = $('#rpg_world_progression_lookback');
         const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
         const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
@@ -10389,6 +10382,8 @@ RULES:
         const $wpLastReportVal = $('#rpg_world_progression_last_report_val');
         const $wpNextReportVal = $('#rpg_world_progression_next_report_val');
         const $wpGenerateNow = $('#rpg_world_progression_generate_now');
+        const $wpLocationsPerReport = $('#rpg_world_progression_locations_per_report');
+        const $wpLocationRandomize = $('#rpg_world_progression_location_randomize');
 
         /** Refreshes the "Last generated:" read-only display. */
         function updateWorldProgressionLastFiredDisplay() {
@@ -10445,6 +10440,15 @@ RULES:
             getSettings().worldProgressionHistoryLookback = parseInt(String($(this).val() || '')) || 0;
             saveSettings();
         });
+        $wpLocationsPerReport.val(settings.worldProgressionLocationsPerReport ?? 3).on('change', function () {
+            getSettings().worldProgressionLocationsPerReport = Math.max(1, Math.min(12, parseInt(String($(this).val()), 10) || 3));
+            $(this).val(getSettings().worldProgressionLocationsPerReport);
+            saveSettings();
+        });
+        $wpLocationRandomize.prop('checked', settings.worldProgressionLocationRandomize !== false).on('change', function () {
+            getSettings().worldProgressionLocationRandomize = !!$(this).prop('checked');
+            saveSettings();
+        });
 
         const $wpConsolidateEnabled = $('#rpg_world_progression_consolidate_enabled');
         const $wpConsolidateInterval = $('#rpg_world_progression_consolidate_interval');
@@ -10468,77 +10472,6 @@ RULES:
             saveSettings();
         });
         updateConsolidateVisibility();
-
-        function updateRandomizersVisibility() {
-            if ($wpRandomizeNPCs.prop('checked')) {
-                $wpRandomNPCCountContainer.show();
-            } else {
-                $wpRandomNPCCountContainer.hide();
-            }
-            if ($wpRandomizeLocations.prop('checked')) {
-                $wpRandomLocationCountContainer.show();
-            } else {
-                $wpRandomLocationCountContainer.hide();
-            }
-            if ($wpRandomizeFactions.prop('checked')) {
-                $wpRandomFactionCountContainer.show();
-            } else {
-                $wpRandomFactionCountContainer.hide();
-            }
-
-        }
-
-        $wpRandomizeNPCs.prop('checked', !!settings.worldProgressionRandomizeNPCs).on('change', function () {
-            getSettings().worldProgressionRandomizeNPCs = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonNPCCount.val(settings.worldProgressionRandomSkeletonNPCCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonNPCCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeNPCCount.val(settings.worldProgressionRandomNarrativeNPCCount ?? 3).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeNPCCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomizeLocations.prop('checked', !!settings.worldProgressionRandomizeLocations).on('change', function () {
-            getSettings().worldProgressionRandomizeLocations = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonLocationCount.val(settings.worldProgressionRandomSkeletonLocationCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonLocationCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeLocationCount.val(settings.worldProgressionRandomNarrativeLocationCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeLocationCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomizeFactions.prop('checked', !!settings.worldProgressionRandomizeFactions).on('change', function () {
-            getSettings().worldProgressionRandomizeFactions = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonFactionCount.val(settings.worldProgressionRandomSkeletonFactionCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonFactionCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeFactionCount.val(settings.worldProgressionRandomNarrativeFactionCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeFactionCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-
-
-        updateRandomizersVisibility();
 
         $wpLookback.val(settings.worldProgressionLookback ?? 0).on('input', function () {
             getSettings().worldProgressionLookback = parseInt(String($(this).val() || '')) || 0;
@@ -10654,8 +10587,7 @@ RULES:
             s.worldProgressionLastFiredAtMinutes = -1;
             $wpGenerateNow.prop('disabled', true).text('Generating…');
             try {
-                const result = await rwp(timeStr, currentMinutes);
-                await groundMapsAfterWorldProgression(result);
+                await rwp(timeStr, currentMinutes);
                 updateWorldProgressionLastFiredDisplay();
                 toastr['success']('World Progression report generated.', 'World Progression');
             } catch (e) {
@@ -10707,8 +10639,7 @@ RULES:
             s.worldProgressionLastFiredAtMinutes = -1;
             $wpFireWithInstructions.prop('disabled', true).text('Generating…');
             try {
-                const result = await rwp(timeStr, currentMinutes, extraInstructions);
-                await groundMapsAfterWorldProgression(result);
+                await rwp(timeStr, currentMinutes, extraInstructions);
                 updateWorldProgressionLastFiredDisplay();
                 toastr['success']('World Progression report generated.', 'World Progression');
             } catch (e) {
@@ -10863,7 +10794,7 @@ RULES:
                     ? `${count} skeleton entries in "${skeletonBookName}" (NPC: ${npcCount}, LOC: ${locCount}, FAC: ${facCount})`
                     : 'No skeleton generated.');
 
-                // Update pool-count spans in the Focus Randomization section
+                // Legacy pool-count spans may exist in older cached settings markup.
                 $('#rpg_world_progression_skeleton_npc_pool_count').text(npcCount);
                 $('#rpg_world_progression_skeleton_location_pool_count').text(locCount);
                 $('#rpg_world_progression_skeleton_faction_pool_count').text(facCount);
@@ -11376,9 +11307,8 @@ RULES:
 
             // World Progression
             $('#rpg_world_progression_enabled').prop('checked', !!s.worldProgressionEnabled);
-            $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-            $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-            $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
+            $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+            $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
             $('#rpg_world_progression_skeleton_use_existing').prop('checked', !!s.worldProgressionSkeletonUseExisting);
             $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
             $('#rpg_world_progression_skeleton_lorebook_filter_group').toggle(!!s.worldProgressionSkeletonUseLorebooks);

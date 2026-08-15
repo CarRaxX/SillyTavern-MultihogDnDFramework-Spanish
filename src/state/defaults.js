@@ -10,6 +10,7 @@ import { adjustPromptTimestamps } from './router-utils.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
+import { DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT } from '../../world-progression-prompt.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -765,27 +766,35 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionInjectionRole: 0,         // System
 
-        worldProgressionRandomizeNPCs: false,            // toggle to randomize NPC pool
+        worldProgressionLocationsPerReport: 3,   // oldest-unadvanced location dossiers per report
 
-        worldProgressionRandomSkeletonNPCCount: 2,        // skeleton NPCs to spotlight per report
+        worldProgressionLocationRandomize: true, // randomize only equally-old rotation cohorts
 
-        worldProgressionRandomNarrativeNPCCount: 3,       // narrative NPCs to spotlight per report
+        worldProgressionLocationLastAdvanced: {}, // per-location macro simulation watermark
 
-        worldProgressionRandomizeLocations: false,        // toggle to randomize locations
+        // Legacy entity-focus keys retained for profile/settings compatibility;
+        // location-centric World Progression ignores them.
+        worldProgressionRandomizeNPCs: false,
 
-        worldProgressionRandomSkeletonLocationCount: 2,   // skeleton locations to spotlight per report
+        worldProgressionRandomSkeletonNPCCount: 2,        // legacy, unused
 
-        worldProgressionRandomNarrativeLocationCount: 2,  // narrative locations to spotlight per report
+        worldProgressionRandomNarrativeNPCCount: 3,       // legacy, unused
 
-        worldProgressionRandomizeFactions: false,         // toggle to randomize factions
+        worldProgressionRandomizeLocations: false,        // legacy, unused
 
-        worldProgressionRandomSkeletonFactionCount: 2,    // skeleton factions to spotlight per report
+        worldProgressionRandomSkeletonLocationCount: 2,   // legacy, unused
 
-        worldProgressionRandomNarrativeFactionCount: 2,   // narrative factions to spotlight per report
+        worldProgressionRandomNarrativeLocationCount: 2,  // legacy, unused
 
-        worldProgressionRandomizeConflicts: false,        // toggle to randomize conflicts
+        worldProgressionRandomizeFactions: false,         // legacy, unused
 
-        worldProgressionRandomConflictCount: 3,           // number of conflicts to incorporate
+        worldProgressionRandomSkeletonFactionCount: 2,    // legacy, unused
+
+        worldProgressionRandomNarrativeFactionCount: 2,   // legacy, unused
+
+        worldProgressionRandomizeConflicts: false,        // legacy, unused
+
+        worldProgressionRandomConflictCount: 3,           // legacy, unused
 
         worldProgressionSkeletonFactions: 4,       // number of factions in skeleton
 
@@ -803,39 +812,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionConsolidateInterval: 7,            // number of raw reports before consolidation fires
 
-        worldProgressionSystemPrompt: `You are the World Progression Engine — a living simulation of the game world's off-screen activity. Simulate political scheming, faction moves, economic shifts, environmental changes, creature activity, rival actors pursuing independent agendas, weather events, and emergent consequences of prior world state.
-
-
-
-The report covers the in-world period: **{periodLabel}**
-
-
-
-## RULES
-
-1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.
-
-2. QUESTS and EVENTS are historical records for context only — they are NOT simulatable entities. Never generate entries that describe a quest advancing, stalling, succeeding, or failing. If a quest appears in the designated entities block, ignore it entirely.
-
-3. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects. However, if the ## DESIGNATED ENTITIES FOR THIS PERIOD block is present, you MUST strictly follow it and only change the status, advance the timeline, or create new narrative beats for these designated entities. You are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.
-
-4. Tracked party members currently in [PARTY] are never eligible for this report — they are with {{user}} right now and are handled upstream, not by this rule. For any OTHER NPC who was physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, private thoughts/opinions, off-screen communications. Do not relocate them.
-
-5. Format as 15 bullet-pointed entries (using "- "), with a blank line (newline) between each world event. Dense, no filler, no markdown. Each entry must be exactly 1 sentence. Do NOT prefix the lines with the period or time label.
-
-6. Output ONLY the report content. No preamble, no tags, no meta-commentary.
-
-7. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s). If designated entities are provided, strictly limit your active scope to those, obeying the passive referencing rule for other entities.
-
-8. DO NOT write a cumulative report, stacking old entries in the same report. Only write new events, not a recap of the previous ones; they are preserved in their own file.
-
-9. Cross-category entity bleeding is desirable; often have designated NPCs, locations, factions, and conflicts collide or influence one another in the same narrative beat rather than treating them as isolated line items. However, only do this when it makes sense.
-
-10. You must strictly respect geographical and logistical boundaries to preserve spatial plausibility; isolated or distant entities cannot physically interact and must instead collide via informational, digital, or financial ripples (e.g., radio tracking, digital alerts, automated network scrapers, or news traveling from afar).
-
-11. Character vectors must take place only at or ripple through the designated locations provided for this period; if an active NPC cannot logically travel to a selected location within this time window, their connection must manifest purely as an off-screen reaction or informational dependency.`,
-
-        // ── World Skeleton ─────────────────────────────────────────────────────────
+        worldProgressionSystemPrompt: DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT,
 
         worldProgressionSkeletonAtmosphereSummary: '', // freeform Skeleton Source (legacy key retained for compatibility)
 
@@ -849,13 +826,7 @@ The report covers the in-world period: **{periodLabel}**
 
         worldProgressionSkeletonLorebookOnly: false, // never extrapolate beyond explicitly mentioned source entities
 
-        worldProgressionExclusionList: '',         // comma-separated list of lore entry titles or keys to exclude from focus randomization
-
-        // NOTE: active [PARTY] members are always, unconditionally excluded from World
-
-        // Progression (see router.js) — no setting needed. [BENCHED PARTY] members are
-
-        // eligible for simulation, also unconditionally.
+        worldProgressionExclusionList: '',         // comma-separated location titles or keys excluded from rotation
 
 
 
@@ -1431,6 +1402,10 @@ Rules:
         mapEvolutionLastSiteRoot: "",
 
         mapEvolutionPendingExitRoot: "",
+
+        mapEvolutionWorldReportLookback: 5,
+
+        mapEvolutionWorldReportApplications: {},
 
         worldConnectionSource: "default",
 

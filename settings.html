@@ -1453,11 +1453,11 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
-                                        Separate from occupancy. Advances mapped sites off-screen on in-world time, and grounds World Progression reports onto matching maps one site at a time. Interval ticks can cover the current map, N maps, every mapped site, or the checklist below. Run now and the play-menu picker are always available, independent of the interval setting. Never mixed into the Map Updater request. Uses the Map Updater &amp; Evolution connection.
+                                        Separate from occupancy. Advances mapped sites off-screen on in-world time. During an ordinary interval, site-exit, or manual pass, each map also interprets any relevant unconsumed World Report prose. Reports never trigger an immediate map fan-out. Uses the Map Updater &amp; Evolution connection.
                                     </div>
                                     <label class="checkbox_label">
                                         <input id="rpg_map_evolution_enabled" type="checkbox" checked />
-                                        <span>Evolve mapped sites automatically (interval restlessness + World Progression grounding)</span>
+                                        <span>Evolve mapped sites automatically (including lazy World Report realization)</span>
                                     </label>
                                     <div class="rpg-wp-status-card" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; margin-bottom: 4px;">
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82em; opacity: 0.85; margin-bottom: 10px;">
@@ -1483,14 +1483,17 @@
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                                         <label style="flex:1; min-width:140px;">Interval (in-world hours)
-                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" class="text_pole" title="How often a mapped site in the interval pool may restlessly evolve. World Progression grounding always runs after a report, independent of this timer." />
+                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" class="text_pole" title="How often a mapped site in the interval pool may evolve and consume relevant World Report pressure." />
                                         </label>
                                         <label style="flex:1; min-width:140px;">Max Output Tokens
                                             <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Maximum generation length for one Map Evolution site pass." />
                                         </label>
                                     </div>
+                                    <label style="font-size:0.85em;">World Report Lookback
+                                        <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="How many recent reports and latest reports explicitly targeted at this location each map checks for unconsumed prose." />
+                                    </label>
                                     <label>Maps per interval tick
-                                        <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Which mapped sites the automatic interval may evolve. World Progression grounding always uses report mentions, not this setting.">
+                                        <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Which mapped sites the automatic interval may evolve. Only maps selected by the normal pass can consume report pressure.">
                                             <option value="active">Current map only</option>
                                             <option value="count">N maps from every mapped site</option>
                                             <option value="all">Every due mapped site</option>
@@ -1524,7 +1527,7 @@
                                         <div id="rpg_map_evolution_selected_list" style="max-height:160px; overflow-y:auto; border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:5px;"></div>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
-                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Used only for off-screen map evolution and World Report grounding.</span>
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Used for off-screen evolution and agentic realization of report prose.</span>
                                         <button id="rpg_map_evolution_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to the shipped Map Evolution prompt"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
                                     </div>
                                     <textarea id="rpg_map_evolution_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Dedicated Map Evolution system prompt"></textarea>
@@ -1559,17 +1562,17 @@
                                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                             </div>
                             <div class="inline-drawer-content" style="padding: 10px; font-size: 0.82em; line-height: 1.45; background: rgba(0, 0, 0, 0.15);">
-                                <p style="margin: 0 0 10px; opacity: 0.85;">Creating a World Skeleton is optional but recommended — it gives World Progression content to work with (for Focus Randomization and generally), making the world bigger beyond the player. Without it, reports tend to stay limited to entities in the player's immediate bubble.</p>
+                                <p style="margin: 0 0 10px; opacity: 0.85;">Creating a World Skeleton is optional but recommended. It seeds places and wider-world premises beyond the player's immediate surroundings. World Progression later reads the full lore dossier for each selected location, but never receives its hidden map.</p>
                                 <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
                                     <li><b>Create the Skeleton Source</b>: Write anything from a short thematic seed to a granular world description. <i>Auto-Generate</i> safely extracts only a generalized world backdrop from recent chat, without carrying named story entities into the skeleton. You can also source existing lorebooks below.</li>
-                                    <li><b>Generate the Skeleton</b>: Click <i>Generate Skeleton</i>. This creates factions, locations, NPCs, and conflicts to simulate off-screen background activity, creating a Day 0 baseline. Remember that you can also add to the Skeleton Lorebook (after generation) yourself or edit the generated entities from the native SillyTavern Lorebook UI. This way, you can even have a fully granularly customized World Skeleton to base the World Reports on.</li>
-                                    <li><b>Set up Focus Randomization</b> (Optional but Recommended): Enable this to force diversity in report coverage, rather than focusing only on the player's immediate bubble. Without Focus Randomization, the World Report may end up repeatedly covering the same threads because it has nothing forcing it to deviate. Not necessarily bad per se, but Focus Randomization guarantees a variety of entities are simulated in subsequent World Reports. It turns it into a &ldquo;lottery.&rdquo;</li>
-                                    <li><b>Generate the First Report</b>: Trigger a report immediately using the <i>Generate Now</i> button, or let it fire automatically as the campaign progresses. If you run it later, it will incorporate entities that have organically accumulated in your adventure up to that point. Immediate generation is Skeleton-only. Generating a Skeleton-only report immediately can be a good way to start a campaign because it gives the adventure immediate world context.</li>
+                                    <li><b>Generate the Skeleton</b>: Click <i>Generate Skeleton</i>. Locations become potential macro-simulation subjects; factions and conflicts provide wider-world context. Named entities may inform a location dossier but are never advanced independently by World Progression.</li>
+                                    <li><b>Set up Location Rotation</b>: Choose how many locations a report covers. The oldest-unadvanced locations are selected first, with optional randomization only among equally old candidates.</li>
+                                    <li><b>Generate the First Report</b>: Trigger a report immediately using <i>Generate Now</i>, or let it fire automatically. Its prose biases the narrator immediately; relevant maps realize it later when their normal Map Evolution pass runs.</li>
                                 </ol>
                                 <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);">
                                     <div style="font-size: 0.78em; font-weight: bold; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Miscellaneous</div>
                                     <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; opacity: 0.9;">
-                                        <li>Remember that benched party members can also become part of World Reports. For example, if you leave a party member in the base as <code>[BENCHED]</code>, World Progression may generate background activity for them.</li>
+                                        <li>World Progression may read named people, buildings, and sublocations as constraints inside a location dossier, but does not advance those granular entities.</li>
                                         <li>24h seems to be a decent interval for World Report auto-generation, but you are encouraged to experiment with shorter intervals (or longer, for that matter).</li>
                                         <li>You can always also trigger World Progression manually whenever you like.</li>
                                         <li>Injection Position affects the prominence of World Reports (adjustable from <b>Context Injection Settings</b> below). The lower the report is positioned (closer to the most recent message), the more prominent the report will be to the narrator.</li>
@@ -1672,7 +1675,7 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; margin-bottom: 6px;">
-                                        The World Skeleton is a hidden database of background entities (factions, locations, NPCs, conflicts) that are never directly injected into the player's conversation. The AI simulates activity and developments for these off-screen entities, expanding the world beyond your immediate vicinity.
+                                        The World Skeleton is a hidden set of Day 0 premises. Location seeds can become macro-simulation subjects; factions and conflicts provide regional context. Skeleton NPC facts may constrain a location dossier, but World Progression does not advance them as entities.
                                     </div>
                                     
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; margin-bottom: 2px; flex-wrap: wrap; gap: 6px;">
@@ -1772,100 +1775,29 @@
                             </div>
                         </div>
 
-                        <!-- SUB-DRAWER: FOCUS RANDOMIZATION -->
+                        <!-- SUB-DRAWER: LOCATION ROTATION -->
                         <div class="inline-drawer">
                             <div class="inline-drawer-toggle inline-drawer-header">
                                 <i class="fa-solid fa-shuffle" style="opacity: 0.7; margin-right: 8px;"></i>
-                                <b>Focus Randomization</b>
+                                <b>Location Rotation</b>
                                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                             </div>
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.75em; opacity: 0.65; margin-bottom: 6px;">
-                                        Randomly spotlight a subset of lore entities in each report to prevent repetitive coverage and force AI diversity in reports.
+                                        World Progression advances location-scale conditions, not entity timelines. It selects the least recently covered location dossiers first.
                                     </div>
-
-                                    <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_npcs" type="checkbox" />
-                                        <span>Randomize NPC pool selection</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, World Progression randomly selects a set of NPCs from the active world lore and skeleton to explicitly focus on in the next report."></i>
+                                    <label style="font-size:0.85em; font-weight:bold;">Locations per report
+                                        <input id="rpg_world_progression_locations_per_report" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="12" class="text_pole" value="3" title="How many location dossiers receive their own section in each report." />
                                     </label>
-
-                                    <div id="rpg_world_progression_random_npc_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Skeleton pool: <span id="rpg_world_progression_skeleton_npc_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> available</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Skeleton NPCs
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of skeleton (off-screen) NPCs to spotlight per report. If the skeleton has fewer than this count, new NPCs are auto-generated."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_npc_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Skeleton NPCs to spotlight per report" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Narrative NPCs
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of active world lore (narrative-born) NPCs to spotlight per report."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_npc_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="3" style="max-width: 80px;" title="Narrative NPCs to spotlight per report" />
-                                            </div>
-                                        </div>
-                                    </div>
-
                                     <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_locations" type="checkbox" />
-                                        <span>Randomize Location pool selection</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, World Progression randomly selects locations from the active world lore and skeleton to focus on."></i>
+                                        <input id="rpg_world_progression_location_randomize" type="checkbox" checked />
+                                        <span>Randomize equally old locations</span>
                                     </label>
-
-                                    <div id="rpg_world_progression_random_location_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Skeleton pool: <span id="rpg_world_progression_skeleton_location_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> available</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Skeleton Locations
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of skeleton (off-screen) locations to spotlight per report."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_location_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Skeleton locations to spotlight per report" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Narrative Locations
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of active world lore locations to spotlight per report."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_location_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Narrative locations to spotlight per report" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_factions" type="checkbox" />
-                                        <span>Randomize Faction pool selection</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, World Progression randomly selects factions from the active world lore and skeleton to focus on."></i>
-                                    </label>
-
-                                    <div id="rpg_world_progression_random_faction_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Skeleton pool: <span id="rpg_world_progression_skeleton_faction_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> available</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Skeleton Factions
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of skeleton (off-screen) factions to spotlight per report."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_faction_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Skeleton factions to spotlight per report" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Narrative Factions
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of active world lore factions to spotlight per report."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_faction_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Narrative factions to spotlight per report" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div style="margin-top: 6px; font-size: 0.85em; opacity: 0.7;">
-                                        <i class="fa-solid fa-circle-info"></i> Party members currently in [PARTY] (active) are always excluded from World Progression automatically. Members in [BENCHED PARTY] are eligible for focus randomization like any other NPC — no toggle needed.
-                                    </div>
-
-                                    <div style="margin-top: 6px;">
-                                        <label style="font-size: 0.85em; font-weight: bold; display: block; margin-bottom: 2px;">World Report Exclusion List
-                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Comma-separated list of lore entry titles or keys to exclude from focus randomization (e.g. to exclude your own party members). Excluded entries are still sent as passive context to the LLM, but won't be explicitly selected/spotlighted as designated entities for a period."></i>
-                                        </label>
-                                        <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="e.g. gary, player_party, hero" title="Comma-separated list of entry titles/keys to exclude from focus selection" style="width: 100%; box-sizing: border-box;" />
+                                    <div style="font-size:0.75em; opacity:0.6;">Randomization never lets a recently covered location jump ahead of an older one.</div>
+                                    <div style="margin-top:6px;">
+                                        <label style="font-size:0.85em; font-weight:bold; display:block; margin-bottom:2px;">Location Exclusion List</label>
+                                        <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="e.g. tutorial island, dream realm" title="Comma-separated location titles or keys to exclude from World Progression rotation" style="width:100%; box-sizing:border-box;" />
                                     </div>
                                 </div>
                             </div>

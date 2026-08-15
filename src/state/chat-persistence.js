@@ -20,9 +20,10 @@ export function getActiveChatId() {
 }
 
 /**
- * When Chat Link is on, restore the WP timer label from chatStates if the live
- * field was cleared (e.g. after debounced settings reload) but the partition still has it.
- * @returns {boolean} true if a label was hydrated
+ * When Chat Link is on, restore World Progression / Map Evolution runtime
+ * watermarks from chatStates if a debounced settings reload cleared the live
+ * fields while the active partition still has them.
+ * @returns {boolean} true if any runtime state was hydrated
  */
 export function hydrateWorldProgressionFromChatState() {
     const s = getSettings();
@@ -30,10 +31,24 @@ export function hydrateWorldProgressionFromChatState() {
     const chatId = getActiveChatId();
     if (!chatId) return false;
     const stored = s.chatStates?.[chatId];
-    if (!stored?.worldProgressionLastFiredPeriodLabel) return false;
-    if (s.worldProgressionLastFiredPeriodLabel) return false;
-    s.worldProgressionLastFiredPeriodLabel = stored.worldProgressionLastFiredPeriodLabel;
-    return true;
+    if (!stored) return false;
+
+    let hydrated = false;
+    if (!s.worldProgressionLastFiredPeriodLabel && stored.worldProgressionLastFiredPeriodLabel) {
+        s.worldProgressionLastFiredPeriodLabel = stored.worldProgressionLastFiredPeriodLabel;
+        hydrated = true;
+    }
+    if (!Object.keys(s.worldProgressionLocationLastAdvanced || {}).length
+        && Object.keys(stored.worldProgressionLocationLastAdvanced || {}).length) {
+        s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(stored.worldProgressionLocationLastAdvanced));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionWorldReportApplications || {}).length
+        && Object.keys(stored.mapEvolutionWorldReportApplications || {}).length) {
+        s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(stored.mapEvolutionWorldReportApplications));
+        hydrated = true;
+    }
+    return hydrated;
 }
 
 /** Persist the WP timer to the active chat partition or global settings. */
@@ -376,6 +391,8 @@ export function saveChatState(chatId, opts = {}) {
         mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
         mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
         mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),
+        mapEvolutionWorldReportLookback: s.mapEvolutionWorldReportLookback ?? 5,
+        mapEvolutionWorldReportApplications: JSON.parse(JSON.stringify(s.mapEvolutionWorldReportApplications || {})),
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,
@@ -391,6 +408,9 @@ export function saveChatState(chatId, opts = {}) {
         worldProgressionInjectionPosition: s.worldProgressionInjectionPosition ?? 4,
         worldProgressionInjectionDepth: s.worldProgressionInjectionDepth ?? 3,
         worldProgressionInjectionRole: s.worldProgressionInjectionRole ?? 0,
+        worldProgressionLocationsPerReport: s.worldProgressionLocationsPerReport ?? 3,
+        worldProgressionLocationRandomize: s.worldProgressionLocationRandomize !== false,
+        worldProgressionLocationLastAdvanced: JSON.parse(JSON.stringify(s.worldProgressionLocationLastAdvanced || {})),
         worldProgressionRandomizeNPCs: s.worldProgressionRandomizeNPCs ?? false,
         worldProgressionRandomSkeletonNPCCount: s.worldProgressionRandomSkeletonNPCCount ?? 2,
         worldProgressionRandomNarrativeNPCCount: s.worldProgressionRandomNarrativeNPCCount ?? 3,

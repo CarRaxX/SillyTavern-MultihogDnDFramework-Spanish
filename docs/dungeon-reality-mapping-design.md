@@ -4,7 +4,7 @@
 
 **Related:** `<dungeon_reality_and_hidden_mapping>` narrator module, Map Architect, Map Updater, Map Evolution, World Progression, and Lorebook Agent
 
-**Updated:** 2026-08-14
+**Updated:** 2026-08-15
 
 ## Problem
 
@@ -16,7 +16,7 @@ An immutable initial map plus append-only room updates creates two competing fac
 
 - The narrator establishes immediate fiction and calls `CreateAreaMap` once before narrating entry into an unmapped high-risk interior (kind DUNGEON) or an unmapped town/city/village (kind SETTLEMENT). Occupancy on the attached map is maintained by the Map Updater on its own cadence (default: every turn); established story events override stale map states (a killed enemy stays dead even if still listed ACTIVE). The narrator must not rewind play or revive entities to match the lagging map. Settlement maps are district-scale: the narrator may invent granular interiors that do not contradict those districts.
 - Map Architect creates and validates the complete initial map, then writes it directly to the root Location entry.
-- Map Updater interprets established play and maintains occupancy on the active site. Map Evolution is a sibling pass: it advances mapped sites off-screen on in-world time and grounds World Progression reports onto matching maps, one site at a time. Lorebook Agent records NPCs, readable location lore, relationships, quests, and events on a separate cadence. World Progression stays map-blind (no room IDs); Evolution is the only writer that turns WP sentences into asset IDs.
+- Map Updater interprets established play and maintains occupancy on the active site. Map Evolution is a sibling pass: it advances mapped sites off-screen on their normal interval, site-exit, or manual cadence. During that pass it may interpret relevant unconsumed World Report prose. Lorebook Agent records NPCs, readable location lore, relationships, quests, and events separately. World Progression receives readable location dossiers with `[MAP]` stripped; Evolution is the only writer that turns macro pressure into map operations.
 - Player attempts become map facts only after narrator resolution.
 - Map Updater may make a constrained off-screen reaction only after an established trigger and only for an asset with an explicit behavior or route.
 - Speculation never mutates the map.
@@ -138,19 +138,19 @@ The two occupancy/lore cadences are independent: Map Updater defaults to every t
 
 ## Map Evolution
 
-Map Evolution is a dedicated module (`map-evolution.js`, own prompt) — never mixed into the occupancy request. Two triggers, one writer:
+Map Evolution is a dedicated module (`map-evolution.js`, own prompt) — never mixed into the occupancy request. Three ordinary triggers, one writer:
 
 | Trigger | When | Job |
 |---|---|---|
 | Interval restlessness | In-world hours (default 4) for the configured tick pool (current map, N due maps, all due maps, or a selected checklist). Runs even when the party is not inside a mapped site unless the scope is current-map-only. | Sparse local movement, restock, decay |
-| World Progression grounding | After every successful World Report | Match named entities onto prefiltered maps |
+| Site exit | When the party leaves a mapped site | Immediate local restock/decay for the departed site |
 | On-demand | Play-menu picker or settings **Run now** (always visible, independent of interval tick scope) | Same Evolution writer; skips the interval due-check |
 
-JavaScript prefilters sites (site-name hit, asset-name hit, faction hit) and calls Evolution **sequentially**, one site per request. Hosts (matched living assets) run first; destination sites follow. Cross-site continuity is a short **PRIOR EVOLUTION THIS PERIOD** digest (leave = FLEEING/REMOVE_ASSET; arrive = ADD_ASSET). All maps in the campaign stack are writable; occupancy stays active-site-only.
+World Reports never trigger a map pass. Each ordinary Evolution request loads only the recent report sections for that exact location plus **Wider Currents**, excluding report IDs that map has already considered. Evolution receives the prose with the current map, chooses its own concrete realization, and records `materialized`, `already_realized_by_play`, or `considered` bookkeeping. The bookkeeping is stripped before transaction validation. Cross-site continuity inside one multi-map pass remains a short **PRIOR EVOLUTION THIS PERIOD** digest.
 
-Authority: play/occupancy owns the player bubble and established deaths. Map Evolution owns off-screen map change. World Progression is optional macro flavor: named report hits are grounded when present, but Evolution does not wait for WP to restock, occupy, or stir a site. Interval restlessness must not undo a WP report from the same period. `DESTROYED` stays destroyed; add a new remnant instead of resurrecting. New assets are `UNREVEALED`. Dungeons may invent new local occupants (rival delvers, scavengers). Settlements may evolve as ordinary civic occupancy or unrest; neither is preferred. WP is not a permission gate. Every change must still make logical and narrative sense for the site.
+Authority: play/occupancy owns the player bubble and established deaths. Map Evolution owns off-screen map change. World Progression supplies directional macro pressure, not explicit deltas; Evolution decides how it manifests locally and avoids duplicating anything play or Map Updater already realized. Newer pressure may reverse, resolve, transform, or supersede an older trend while plausible aftermath remains. Evolution does not wait for WP to restock, occupy, or stir a site. `DESTROYED` stays destroyed; add a new remnant instead of resurrecting.
 
-Pipeline after each narrator reply: State Tracker → Map Updater (occupancy) → World Progression (if due) → Map Evolution (grounding and/or interval) → Lorebook Agent.
+Pipeline after each narrator reply: State Tracker → Map Updater (occupancy) → World Progression (if due; prose report only) → Map Evolution (ordinary cadence, with any pending report prose) → Lorebook Agent.
 
 ## Explicitly out of scope
 
@@ -160,11 +160,11 @@ Pipeline after each narrator reply: State Tracker → Map Updater (occupancy) �
 - Keyword-based map activation
 - GM-authored delta sidecars after initial creation
 - General-purpose whole-map rewrite tools
-- Teaching World Progression room IDs, or letting occupancy invent Evolution, or letting WP write `[MAP]`
+- Teaching World Progression room IDs, letting it simulate granular entities, or letting WP write `[MAP]`
 
 ## Verification
 
-Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, Map Updater occupancy updates, Map Evolution site selection/grounding/EVOLVED transaction rules, and Lorebook Agent map stripping.
+Tests cover Map Architect response parsing, strict connected-graph validation, hidden-wrapper compatibility, prose migration, structured storage, geometry/assets separation, movement, destruction, duplicate detection, strict schemas, semantic rejection without partial mutation, hierarchy activation, prompt filtering, narrator injection, dedicated settings/connection wiring, Map Updater occupancy updates, location-dossier map stripping, prose report routing, scheduled Map Evolution/EVOLVED transaction rules, and Lorebook Agent map stripping.
 
 ## Atomic map transaction
 

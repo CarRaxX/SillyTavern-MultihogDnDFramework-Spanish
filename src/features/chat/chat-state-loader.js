@@ -82,6 +82,8 @@ export function createChatStateLoader({
     s.mapEvolutionTickCount = saved.mapEvolutionTickCount ?? 1;
     s.mapEvolutionTickRandomize = saved.mapEvolutionTickRandomize !== false;
     s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(saved.mapEvolutionSelectedRoots || []));
+    s.mapEvolutionWorldReportLookback = saved.mapEvolutionWorldReportLookback ?? 5;
+    s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(saved.mapEvolutionWorldReportApplications || {}));
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;
@@ -89,6 +91,9 @@ export function createChatStateLoader({
     s.worldProgressionInjectionPosition = saved.worldProgressionInjectionPosition ?? 4;
     s.worldProgressionInjectionDepth = saved.worldProgressionInjectionDepth ?? 4;
     s.worldProgressionInjectionRole = saved.worldProgressionInjectionRole ?? 0;
+    s.worldProgressionLocationsPerReport = saved.worldProgressionLocationsPerReport ?? 3;
+    s.worldProgressionLocationRandomize = saved.worldProgressionLocationRandomize !== false;
+    s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(saved.worldProgressionLocationLastAdvanced || {}));
     s.worldProgressionRandomizeNPCs = saved.worldProgressionRandomizeNPCs ?? false;
     s.worldProgressionRandomSkeletonNPCCount = saved.worldProgressionRandomSkeletonNPCCount ?? 2;
     s.worldProgressionRandomNarrativeNPCCount = saved.worldProgressionRandomNarrativeNPCCount ?? 3;
@@ -132,16 +137,6 @@ export function createChatStateLoader({
     }
 
     // Update settings UI inputs if rendered
-    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-    $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
-    $('#rpg_world_progression_random_narrative_npc_count').val(s.worldProgressionRandomNarrativeNPCCount ?? 3);
-    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-    $('#rpg_world_progression_random_skeleton_location_count').val(s.worldProgressionRandomSkeletonLocationCount ?? 2);
-    $('#rpg_world_progression_random_narrative_location_count').val(s.worldProgressionRandomNarrativeLocationCount ?? 2);
-    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
-    $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
-    $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
     $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
@@ -166,6 +161,9 @@ export function createChatStateLoader({
         void globalThis._rpgRefreshSkeletonLorebookList();
     }
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
+    $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
@@ -240,14 +238,6 @@ export function createChatStateLoader({
     }
 
     // Toggle container visibilities
-    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
-    else $('#rpg_world_progression_random_npc_count_container').hide();
-    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
-    else $('#rpg_world_progression_random_location_count_container').hide();
-    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
-    else $('#rpg_world_progression_random_faction_count_container').hide();
-
-
     // Sync World Progression timing readouts for this chat
     {
         function _fmtWpMins(totalMins) {

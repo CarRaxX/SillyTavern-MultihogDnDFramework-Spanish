@@ -4,11 +4,8 @@ import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../map-evolution-prompt.js'
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
 import {
     filterSitesByRoots,
-    orderMappedSitesForEvolution,
     pickSitesForEvolutionTick,
-    reportMentionsLabel,
     resolvePlayerBubble,
-    selectMappedSitesForWorldReport,
     siteEvolutionDue,
     stampEvolutionLastFired,
     summarizeEvolutionDigest,
@@ -54,6 +51,9 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Do not ADD_AREA');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Local change is the default');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('not a permission gate');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('directional prose, not explicit map deltas');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('report_outcomes');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('already_realized_by_play');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('logical and narrative sense');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('neither is preferred');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('or larger unrest');
@@ -68,32 +68,6 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('World Report');
-    });
-
-    it('matches World Reports on site, asset, and faction names but not short area labels', () => {
-        expect(reportMentionsLabel('Odran fled toward the Hall of the Ember-Ancestors.', 'Odran')).toBe(true);
-        expect(reportMentionsLabel('Odran fled toward the Hall of the Ember-Ancestors.', 'Hall of the Ember-Ancestors')).toBe(true);
-        expect(selectMappedSitesForWorldReport([hall], 'The nave is quiet.')).toEqual([]);
-
-        const selected = selectMappedSitesForWorldReport(
-            [tomb, hall, docks],
-            'Odran fled the Forgotten Tomb for the Hall of the Ember-Ancestors. The Keepers of the Drowned Stone scattered.',
-        );
-        expect(selected.map(site => site.siteRoot)).toEqual(['Forgotten Tomb', 'Hall of the Ember-Ancestors']);
-        expect(selected.find(site => site.siteRoot === 'Forgotten Tomb').hostAssets).toEqual(['odran']);
-        expect(selected.find(site => site.siteRoot === 'Hall of the Ember-Ancestors').hostAssets).toEqual([]);
-        expect(selected.some(site => site.siteRoot === 'Morrowfen')).toBe(false);
-    });
-
-    it('orders host sites (matched living assets) before destination-only sites', () => {
-        const selected = selectMappedSitesForWorldReport(
-            [hall, tomb],
-            'Odran fled to the Hall of the Ember-Ancestors.',
-        );
-        expect(orderMappedSitesForEvolution(selected).map(site => site.siteRoot)).toEqual([
-            'Forgotten Tomb',
-            'Hall of the Ember-Ancestors',
-        ]);
     });
 
     it('summarizes a sequential digest without dumping operations JSON', () => {
@@ -254,15 +228,18 @@ describe('Map Evolution', () => {
         const panelMarkup = readFileSync(new URL('../src/ui/panel/panel-markup.js', import.meta.url), 'utf8');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 
-        expect(evolution).toContain("trigger === 'world_progression'");
+        expect(evolution).not.toContain("trigger === 'world_progression'");
         expect(evolution).toContain('restock and new occupants are expected');
-        expect(evolution).not.toContain('World Report is primary');
+        expect(evolution).toContain('directional prose, not explicit deltas');
+        expect(evolution).toContain('pendingWorldReportsForSite');
+        expect(evolution).toContain('mapEvolutionWorldReportApplications');
+        expect(evolution).toContain('delete transaction.report_outcomes');
         expect(evolution).toContain('siteRoots');
         expect(evolution).toContain('listMappedEvolutionSites');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
         expect(evolution).toContain('Field reminder: MOVE_ASSET uses "to"');
-        expect(evolution).toContain('export async function groundMapsAfterWorldProgression');
+        expect(evolution).not.toContain('groundMapsAfterWorldProgression');
         expect(evolution).toContain('export async function maybeRunMapEvolution');
         expect(evolution).toContain("from './map-evolution-lib.js'");
         expect(evolution).not.toContain("from './map-updater.js'");
@@ -274,13 +251,15 @@ describe('Map Evolution', () => {
         expect(hooks).toContain('await runMapUpdaterPass()');
         expect(hooks.indexOf('await runMapUpdaterPass()')).toBeLessThan(hooks.indexOf('await maybeRunWorldProgression()'));
         expect(hooks.indexOf('await maybeRunWorldProgression()')).toBeLessThan(hooks.indexOf('await maybeRunMapEvolution()'));
-        expect(hooks).toContain('groundMapsAfterWorldProgression(wpResult)');
+        expect(hooks).not.toContain('groundMapsAfterWorldProgression');
         expect(hooks).toContain('maybeRollbackMapEvolutionForSwipe');
         expect(hooks).toContain('stopMapEvolutionPass()');
 
         expect(settingsMarkup).toContain('<b>Map Evolution</b>');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_enabled"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_interval_hours"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_world_report_lookback"');
+        expect(settingsMarkup).toContain('Reports never trigger an immediate map fan-out');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_scope"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_count"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_randomize"');

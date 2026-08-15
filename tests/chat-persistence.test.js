@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { getSettings, saveChatState, snapshotStockPromptsForProfile } from '../state-manager.js';
+import { getSettings, hydrateWorldProgressionFromChatState, saveChatState, snapshotStockPromptsForProfile } from '../state-manager.js';
 import { testExtensionSettings } from './setup.js';
 
 describe('saveChatState', () => {
@@ -87,6 +87,47 @@ describe('saveChatState', () => {
 
         expect(s.chatStates['vitest-chat'].dungeonReality.sites['ember mine'].mapChunks)
             .toEqual(['Area: Lift']);
+    });
+
+    it('snapshots World Progression rotation and per-map report consumption independently', () => {
+        const s = getSettings();
+        s.worldProgressionLocationLastAdvanced = { morrowfen: 'Day 3, 08:00' };
+        s.mapEvolutionWorldReportApplications = {
+            morrowfen: { 'Campaign_World::7': { status: 'materialized' } },
+        };
+
+        saveChatState('world-chat', { skipDiskWrite: true });
+
+        const part = s.chatStates['world-chat'];
+        expect(part.worldProgressionLocationLastAdvanced).toEqual(s.worldProgressionLocationLastAdvanced);
+        expect(part.mapEvolutionWorldReportApplications).toEqual(s.mapEvolutionWorldReportApplications);
+        expect(part.worldProgressionLocationLastAdvanced).not.toBe(s.worldProgressionLocationLastAdvanced);
+        expect(part.mapEvolutionWorldReportApplications).not.toBe(s.mapEvolutionWorldReportApplications);
+    });
+
+    it('rehydrates World Progression and Map Evolution watermarks from the active chat partition', () => {
+        const s = getSettings();
+        s.chatLinkEnabled = true;
+        s.worldProgressionLastFiredPeriodLabel = '';
+        s.worldProgressionLocationLastAdvanced = {};
+        s.mapEvolutionWorldReportApplications = {};
+        s.chatStates['vitest-chat'] = {
+            worldProgressionLastFiredPeriodLabel: 'Day 3, 08:00',
+            worldProgressionLocationLastAdvanced: { morrowfen: 'Day 3, 08:00' },
+            mapEvolutionWorldReportApplications: {
+                morrowfen: { 'Campaign_World::7': { status: 'materialized' } },
+            },
+        };
+
+        expect(hydrateWorldProgressionFromChatState()).toBe(true);
+        expect(s.worldProgressionLastFiredPeriodLabel).toBe('Day 3, 08:00');
+        expect(s.worldProgressionLocationLastAdvanced).toEqual({ morrowfen: 'Day 3, 08:00' });
+        expect(s.mapEvolutionWorldReportApplications.morrowfen['Campaign_World::7'].status)
+            .toBe('materialized');
+        expect(s.worldProgressionLocationLastAdvanced)
+            .not.toBe(s.chatStates['vitest-chat'].worldProgressionLocationLastAdvanced);
+        expect(s.mapEvolutionWorldReportApplications)
+            .not.toBe(s.chatStates['vitest-chat'].mapEvolutionWorldReportApplications);
     });
 
     it('snapshots the full Control Room and tracker-module setup only when opted in', () => {
