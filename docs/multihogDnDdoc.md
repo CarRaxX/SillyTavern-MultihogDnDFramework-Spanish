@@ -586,8 +586,6 @@ Settings → **Persistent Maps** (left rail, just below Lorebook Agent): two con
 
 World Progression (WP) is the fourth major simulation pillar: a macroscopic backbone so the GM thinks beyond the player’s bubble.
 
-Using World Progression at the same time as **Persistent Maps** is not recommended until compatibility is added (soon). Pick one or the other for now.
-
 Every X **in-world** hours (default 24), WP injects a World Report into context (stored in `{prefix}_World`, injection every turn while active). Example flavor:
 
 > World  

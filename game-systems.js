@@ -377,7 +377,7 @@ const NARRATOR_TOGGLE_IDS = {
     dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
-const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges. Not recommended together with World Progression until compatibility is added.';
+const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges.';
 
 export function isSectionUnlocked(settings, tag) {
     return (settings.customSyspromptLibrary || []).some(p =>
