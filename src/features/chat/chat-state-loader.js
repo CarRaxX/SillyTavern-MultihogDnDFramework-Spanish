@@ -76,6 +76,7 @@ export function createChatStateLoader({
     s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
     s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(saved.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(saved.mapEvolutionBacklogBySite || {}));
     s.mapEvolutionLastSiteRoot = saved.mapEvolutionLastSiteRoot || '';
     s.mapEvolutionPendingExitRoot = saved.mapEvolutionPendingExitRoot || '';
     s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'active';
@@ -94,20 +95,8 @@ export function createChatStateLoader({
     s.worldProgressionLocationsPerReport = saved.worldProgressionLocationsPerReport ?? 3;
     s.worldProgressionLocationRandomize = saved.worldProgressionLocationRandomize !== false;
     s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(saved.worldProgressionLocationLastAdvanced || {}));
-    s.worldProgressionRandomizeNPCs = saved.worldProgressionRandomizeNPCs ?? false;
-    s.worldProgressionRandomSkeletonNPCCount = saved.worldProgressionRandomSkeletonNPCCount ?? 2;
-    s.worldProgressionRandomNarrativeNPCCount = saved.worldProgressionRandomNarrativeNPCCount ?? 3;
-    s.worldProgressionRandomizeLocations = saved.worldProgressionRandomizeLocations ?? false;
-    s.worldProgressionRandomSkeletonLocationCount = saved.worldProgressionRandomSkeletonLocationCount ?? 2;
-    s.worldProgressionRandomNarrativeLocationCount = saved.worldProgressionRandomNarrativeLocationCount ?? 2;
-    s.worldProgressionRandomizeFactions = saved.worldProgressionRandomizeFactions ?? false;
-    s.worldProgressionRandomSkeletonFactionCount = saved.worldProgressionRandomSkeletonFactionCount ?? 2;
-    s.worldProgressionRandomNarrativeFactionCount = saved.worldProgressionRandomNarrativeFactionCount ?? 2;
-    s.worldProgressionRandomizeConflicts = saved.worldProgressionRandomizeConflicts ?? false;
-    s.worldProgressionRandomConflictCount = saved.worldProgressionRandomConflictCount ?? 3;
     s.worldProgressionSkeletonFactions = saved.worldProgressionSkeletonFactions ?? 4;
     s.worldProgressionSkeletonLocations = saved.worldProgressionSkeletonLocations ?? 4;
-    s.worldProgressionSkeletonNPCs = saved.worldProgressionSkeletonNPCs ?? 0;
     s.worldProgressionSkeletonConflicts = saved.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionSkeletonAtmosphereSummary = saved.worldProgressionSkeletonAtmosphereSummary ?? '';
     s.worldProgressionSkeletonAtmosphereLookback = saved.worldProgressionSkeletonAtmosphereLookback ?? 30;
@@ -139,7 +128,6 @@ export function createChatStateLoader({
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
-    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
     $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
     $('#rpg_world_progression_skeleton_atmosphere').val(s.worldProgressionSkeletonAtmosphereSummary);
     $('#rpg_world_progression_skeleton_atmosphere_lookback').val(s.worldProgressionSkeletonAtmosphereLookback);

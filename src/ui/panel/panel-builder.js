@@ -10,8 +10,8 @@ import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
 import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
-import { renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
+import { openDungeonMapReadablePopup } from './dungeon-map-panel.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -615,34 +615,8 @@ export function createPanel(dependencies) {
             const map = extractDungeonMapSection(item?.content);
             if (!map) return;
             const mapDocument = parseDungeonMapDocument(map, item.label || '').document;
-            const ctx = SillyTavern.getContext();
-            if (!ctx.callGenericPopup) return;
-            const popupDom = document.createElement('div');
-            popupDom.className = 'rt-dungeon-map-popup';
-            popupDom.innerHTML = `
-                <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(mapDocument.site || item.label || 'Dungeon Map')} <small class="rt-dungeon-alpha-tag">ALPHA</small></div>
-                <div class="rt-dungeon-map-subtitle">Alpha private current state. Lorebook Agent reads the structured version while this site is active.</div>
-                <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Dungeon map view">
-                    <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Readable</button>
-                    <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false"><i class="fa-solid fa-code"></i> Raw JSON</button>
-                </div>
-                <div class="rt-dungeon-map-readable" data-map-panel="readable">${renderDungeonMapReadableHtml(mapDocument, { revealAll: true })}</div>
-                <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden>${escapeHtml(map)}</pre>`;
-            const setMapView = (view) => {
-                for (const button of popupDom.querySelectorAll('[data-map-view]')) {
-                    const active = button.dataset.mapView === view;
-                    button.classList.toggle('rt-dungeon-map-view-btn-active', active);
-                    button.setAttribute('aria-selected', String(active));
-                }
-                for (const panel of popupDom.querySelectorAll('[data-map-panel]')) {
-                    panel.hidden = panel.dataset.mapPanel !== view;
-                }
-            };
-            for (const button of popupDom.querySelectorAll('[data-map-view]')) {
-                button.addEventListener('click', () => setMapView(button.dataset.mapView));
-            }
-            await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
-                okButton: 'Close', cancelButton: false, wide: true, large: true,
+            await openDungeonMapReadablePopup(mapDocument, {
+                siteLabel: mapDocument.site || item.label || 'Dungeon Map',
             });
         };
 

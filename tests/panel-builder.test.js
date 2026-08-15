@@ -5,6 +5,7 @@ import {
     resolveInitialPanelContentMode,
     resolveModeAfterAgentAttach,
 } from '../src/ui/panel/panel-builder.js';
+import { renderMapEvolutionHistoryHtml } from '../src/ui/panel/dungeon-map-panel.js';
 import { runtimeState } from '../src/app/runtime-state.js';
 
 describe('panel builder', () => {
@@ -35,11 +36,9 @@ describe('panel builder', () => {
         expect(source).toContain('rt-dungeon-map-badge');
         expect(source).toContain('View private dungeon map (alpha) attached to this root Location');
         expect(source).toContain('openDungeonMapPopup');
-        expect(source).toContain('renderDungeonMapReadableHtml');
-        expect(source).toContain('revealAll: true');
-        expect(source).toContain('data-map-view="readable"');
-        expect(source).toContain('data-map-view="raw"');
-        expect(source).toContain('Raw JSON');
+        expect(source).toContain('openDungeonMapReadablePopup');
+        expect(source).not.toContain('renderDungeonMapReadableHtml');
+        expect(source).not.toContain('revealAll: true');
         expect(source).toContain('stripDungeonMapSection(item.content');
     });
 
@@ -58,10 +57,39 @@ describe('panel builder', () => {
         const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
         expect(source).toContain('bindDungeonMapPan');
         expect(source).toContain('openDungeonMapReadablePopup');
-        expect(source).toContain('Reveal all');
-        expect(source).toContain('playerFacing: true');
+        expect(source).toContain('Reveal All');
+        expect(source).toContain('Map Entries');
+        expect(source).toContain('Raw JSON');
+        expect(source).toContain('Map Evolution History');
+        expect(source).toContain('Map Evolution: Run Now');
+        expect(source).toContain("siteRoots: [site]");
+        expect(source).toContain('runtimeState.loadMappedEvolutionSiteRef(site)');
         expect(source).toContain('dataset.didPan');
         expect(source).toContain('rt-dungeon-map-details');
+    });
+
+    it('keeps material Evolution history private until Reveal All is enabled', () => {
+        const backlog = {
+            morrowfen: [
+                {
+                    kind: 'commit', at: 'Day 2, 08:00', elapsedMinutes: 60,
+                    operationId: 'evo-secret-riot', summary: 'Morrowfen: added hidden rioters in docks',
+                },
+                {
+                    kind: 'quiet', at: 'Day 2, 09:00', elapsedMinutes: 60, passes: 2,
+                    summary: '2 consecutive Map Evolution passes committed no material change.',
+                },
+            ],
+        };
+        const protectedHtml = renderMapEvolutionHistoryHtml(backlog, 'Morrowfen');
+        expect(protectedHtml).toContain('Material details hidden');
+        expect(protectedHtml).not.toContain('hidden rioters');
+        expect(protectedHtml).not.toContain('evo-secret-riot');
+        expect(protectedHtml).toContain('2 passes');
+
+        const revealedHtml = renderMapEvolutionHistoryHtml(backlog, 'Morrowfen', { revealAll: true });
+        expect(revealedHtml).toContain('hidden rioters');
+        expect(revealedHtml).toContain('evo-secret-riot');
     });
 
     it('expands Run Research Now into Lorebook Agent and Map Updater', () => {

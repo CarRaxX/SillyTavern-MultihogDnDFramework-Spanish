@@ -5114,6 +5114,34 @@ textarea.rt-cr-input {
     accent-color: #7dd3fc;
 }
 
+.rt-dungeon-map-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.rt-dungeon-map-toolbar .rt-dungeon-map-reveal-toggle {
+    margin: 0;
+}
+
+.rt-dungeon-map-evolve-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 11px;
+}
+
+.rt-dungeon-map-run-status {
+    min-height: 16px;
+    margin: -2px 0 8px;
+    color: var(--rt-text-muted);
+    font-size: 10px;
+}
+
 .rt-dungeon-map-view-switch {
     display: inline-flex;
     gap: 3px;
@@ -5146,10 +5174,86 @@ textarea.rt-cr-input {
     box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.28);
 }
 
+.rt-dungeon-map-view-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
 .rt-dungeon-map-readable,
 .rt-dungeon-map-raw {
-    max-height: 65vh;
+    max-height: 48vh;
     overflow: auto;
+}
+
+.rt-dungeon-map-evolution-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(125, 211, 252, 0.2);
+}
+
+.rt-dungeon-map-evolution-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #bae6fd;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.rt-dungeon-map-evolution-privacy {
+    margin: 3px 0 8px;
+    color: var(--rt-text-muted);
+    font-size: 10px;
+}
+
+.rt-dungeon-map-evolution-history {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-height: min(24vh, 230px);
+    overflow-y: auto;
+}
+
+.rt-dungeon-map-evolution-entry {
+    padding: 8px 9px;
+    border: 1px solid rgba(125, 211, 252, 0.16);
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.rt-dungeon-map-evolution-entry-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--rt-text);
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.rt-dungeon-map-evolution-entry-head time,
+.rt-dungeon-map-evolution-elapsed,
+.rt-dungeon-map-evolution-empty {
+    color: var(--rt-text-muted);
+    font-size: 10px;
+}
+
+.rt-dungeon-map-evolution-elapsed {
+    margin-top: 2px;
+}
+
+.rt-dungeon-map-evolution-summary {
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.rt-dungeon-map-evolution-entry code {
+    display: inline-block;
+    margin-top: 5px;
+    color: #7dd3fc;
+    font-size: 9px;
+    word-break: break-all;
 }
 
 .rt-dungeon-map-popup [hidden] {

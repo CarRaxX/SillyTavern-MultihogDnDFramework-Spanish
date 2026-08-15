@@ -867,6 +867,9 @@ function getSettingsInternal(extensionSettings) {
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
     s.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, Number(s.mapEvolutionWorldReportLookback) || 5));
+    if (!s.mapEvolutionBacklogBySite || typeof s.mapEvolutionBacklogBySite !== 'object' || Array.isArray(s.mapEvolutionBacklogBySite)) {
+        s.mapEvolutionBacklogBySite = {};
+    }
     if (!s.mapEvolutionWorldReportApplications || typeof s.mapEvolutionWorldReportApplications !== 'object') {
         s.mapEvolutionWorldReportApplications = {};
     }
@@ -884,11 +887,39 @@ function getSettingsInternal(extensionSettings) {
             && prompt.includes('DESIGNATED ENTITIES FOR THIS PERIOD')) {
             s.worldProgressionSystemPrompt = defaults.worldProgressionSystemPrompt;
         }
-        s.worldProgressionRandomizeNPCs = false;
-        s.worldProgressionRandomizeLocations = false;
-        s.worldProgressionRandomizeFactions = false;
-        s.worldProgressionRandomizeConflicts = false;
         s.locationCentricWorldProgressionMigrated = true;
+    }
+
+    // Retire the old entity-level World Skeleton. Recognizable shipped prompts
+    // move to the macro-only default; custom prompts remain editable but are
+    // constrained at runtime and their NPC output is rejected by the parser.
+    if (!s.macroOnlyWorldSkeletonMigrated) {
+        const prompt = String(s.worldProgressionSkeletonSystemPrompt || '');
+        if (prompt.includes('## NPCS')
+            && prompt.includes('{npcCount}')
+            && prompt.includes('Generate exactly {factionCount} factions')) {
+            s.worldProgressionSkeletonSystemPrompt = defaults.worldProgressionSkeletonSystemPrompt;
+        }
+        const retiredEntityFocusKeys = [
+            'worldProgressionSkeletonNPCs',
+            'worldProgressionRandomizeNPCs',
+            'worldProgressionRandomSkeletonNPCCount',
+            'worldProgressionRandomNarrativeNPCCount',
+            'worldProgressionRandomizeLocations',
+            'worldProgressionRandomSkeletonLocationCount',
+            'worldProgressionRandomNarrativeLocationCount',
+            'worldProgressionRandomizeFactions',
+            'worldProgressionRandomSkeletonFactionCount',
+            'worldProgressionRandomNarrativeFactionCount',
+            'worldProgressionRandomizeConflicts',
+            'worldProgressionRandomConflictCount',
+        ];
+        const targets = [s, ...Object.values(s.chatStates || {}), ...Object.values(s.profiles || {})];
+        for (const target of targets) {
+            if (!target || typeof target !== 'object') continue;
+            for (const key of retiredEntityFocusKeys) delete target[key];
+        }
+        s.macroOnlyWorldSkeletonMigrated = true;
     }
     return extensionSettings[MODULE_NAME];
 }

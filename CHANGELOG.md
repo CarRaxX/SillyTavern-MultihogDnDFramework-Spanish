@@ -8,9 +8,13 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 - **Location-centric World Progression**: WP now rotates through complete readable location dossiers and Wider Currents. It strips `[MAP]`, treats named entities as read-only constraints, and produces directional prose instead of entity timelines or structured deltas. Trend guidance explicitly supports persistence, plateau, transformation, resolution, backlash, and causal reversal rather than automatic escalation.
 - **Lazy report realization**: World Reports no longer trigger an immediate Map Evolution fan-out. Each map reads its relevant unconsumed location section plus Wider Currents during its next normal interval, site-exit, or manual pass. Evolution chooses the concrete manifestation and tracks whether each report was materialized, already realized through play, or merely considered, preventing duplicate realization.
 - **Location Rotation settings**: entity Focus Randomization is replaced in the UI by locations-per-report and equal-cohort randomization. Map Evolution adds a recent-report lookback setting.
+- **Macro-only World Skeleton**: skeleton generation now creates only locations, factions, and conflicts. The NPC count/output category, orphaned NPC generator and promotion path, plus the unused entity-focus randomizer state are removed. Legacy skeleton NPC entries remain on disk but are ignored by WP and append context.
+- **Per-location Evolution backlog**: every successful Map Evolution outcome now enters a bounded site ledger. Material commits retain compact operation summaries; consecutive no-op passes coalesce into one quiet checkpoint with their elapsed time and pass count. Evolution receives that trajectory alongside the latest time gap, so frequent short intervals accumulate instead of repeatedly resetting its judgment to “nothing happened.”
+- **Unified map inspector**: the MAP badge on Location lore and the Visuals/Map details button now open the same knowledge-filtered inspector. Both start with **Reveal All** off, keep raw JSON and material Evolution history private until it is enabled, show the per-site Evolution ledger, and provide **Map Evolution: Run Now** scoped to that exact map.
 
 ### Fixed
 - **World Progression map isolation**: hidden `[MAP]` JSON can no longer enter the World Progression prompt through raw Location lore.
+- **Map Evolution time scale**: every site evolution request now receives that map's own Last Evolved timestamp, current in-world time, and computed elapsed duration. Initial and correction prompts scale changes to the actual gap instead of implicitly treating every trigger as one configured interval.
 
 ## [7.86.2] - 2026-08-15
 

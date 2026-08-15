@@ -51,6 +51,7 @@ const books = {
             1: { comment: 'Morrowfen', content: 'An obsolete Day 0 seed.', extensions: { rpgCategory: 'LOC' } },
             2: { comment: 'Old Barrow', content: 'An isolated burial hill.', extensions: { rpgCategory: 'LOC' } },
             3: { comment: 'Captain Ilyra', content: 'An obsolete NPC seed in Morrowfen.', extensions: { rpgCategory: 'NPC' } },
+            4: { comment: 'Unrealized Envoy', content: 'A legacy named seed assigned to Morrowfen.', extensions: { rpgCategory: 'NPC' } },
         },
     },
     Campaign_World: {
@@ -72,6 +73,7 @@ describe('location-centric World Progression', () => {
         expect(morrowfen.text).not.toContain('harbor-watch');
         expect(morrowfen.text).not.toContain('obsolete Day 0 seed');
         expect(morrowfen.text).not.toContain('obsolete NPC seed');
+        expect(morrowfen.text).not.toContain('Unrealized Envoy');
         expect(morrowfen.hasNarrativeLore).toBe(true);
         expect(result.dossiers.some(dossier => dossier.name === 'Old Barrow')).toBe(true);
         expect(result.globalContext).toContain('Sun Court');

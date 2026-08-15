@@ -72,7 +72,7 @@ const KNOWN_PARTITION_KEYS = new Set([
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
     'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
-    'mapEvolutionLastFiredBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
+    'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
     'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
     'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
@@ -82,15 +82,8 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionInjectionDepth', 'worldProgressionInjectionRole',
     'worldProgressionLocationsPerReport', 'worldProgressionLocationRandomize',
     'worldProgressionLocationLastAdvanced',
-    'worldProgressionRandomizeNPCs', 'worldProgressionRandomSkeletonNPCCount',
-    'worldProgressionRandomNarrativeNPCCount', 'worldProgressionRandomizeLocations',
-    'worldProgressionRandomSkeletonLocationCount',
-    'worldProgressionRandomNarrativeLocationCount',
-    'worldProgressionRandomizeFactions', 'worldProgressionRandomSkeletonFactionCount',
-    'worldProgressionRandomNarrativeFactionCount',
-    'worldProgressionRandomizeConflicts', 'worldProgressionRandomConflictCount',
     'worldProgressionSkeletonFactions', 'worldProgressionSkeletonLocations',
-    'worldProgressionSkeletonNPCs', 'worldProgressionSkeletonConflicts',
+    'worldProgressionSkeletonConflicts',
     'worldProgressionLastFiredAtMinutes', 'worldProgressionLastFiredPeriodLabel',
     'worldProgressionSkeletonAtmosphereSummary',
     'worldProgressionSkeletonAtmosphereLookback',
@@ -132,6 +125,7 @@ export function partitionHasCampaignSubstance(p) {
         || hasMapEntries(p.npcRelationshipValues)
         || hasMapEntries(p.npcRelationshipLog)
         || hasMapEntries(p.mapEvolutionLastFiredBySite)
+        || hasMapEntries(p.mapEvolutionBacklogBySite)
         || hasMapEntries(p.mapEvolutionWorldReportApplications)
         || hasMapEntries(p.worldProgressionLocationLastAdvanced)
         || hasItems(p.mapEvolutionSelectedRoots)) return true;

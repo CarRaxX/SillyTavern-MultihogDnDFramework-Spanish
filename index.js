@@ -12,7 +12,7 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
-import { isMapEvolutionRunning, listMappedEvolutionSites, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
+import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
@@ -276,6 +276,9 @@ function applyMapEvolutionTickSettingsToUi(settings) {
 }
 
 runtimeState.updateMapEvolutionScheduleDisplayRef = updateMapEvolutionScheduleDisplay;
+runtimeState.runMapEvolutionPassRef = runMapEvolutionPass;
+runtimeState.loadMappedEvolutionSiteRef = loadMappedEvolutionSite;
+runtimeState.isLoreOrMapAgentBusyRef = () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning();
 
 function applyMapRuntimeConnectionSettingsToUi(settings) {
     const s = settings || getSettings();
@@ -1623,6 +1626,7 @@ function resetUnseenChatState(s) {
     s.worldProgressionSkeletonAtmosphereSummary = '';
     s.worldProgressionLocationLastAdvanced = {};
     s.mapEvolutionLastFiredBySite = {};
+    s.mapEvolutionBacklogBySite = {};
     s.mapEvolutionLastSiteRoot = '';
     s.mapEvolutionPendingExitRoot = '';
     s.mapEvolutionWorldReportApplications = {};
@@ -1961,6 +1965,7 @@ function onChatChanged(newChatId) {
         s.worldProgressionSkeletonAtmosphereSummary = '';
         s.worldProgressionLocationLastAdvanced = {};
         s.mapEvolutionLastFiredBySite = {};
+        s.mapEvolutionBacklogBySite = {};
         s.mapEvolutionLastSiteRoot = '';
         s.mapEvolutionPendingExitRoot = '';
         s.mapEvolutionWorldReportApplications = {};
@@ -2730,20 +2735,8 @@ function loadProfile(name) {
     s.worldProgressionLocationsPerReport = p.worldProgressionLocationsPerReport ?? 3;
     s.worldProgressionLocationRandomize = p.worldProgressionLocationRandomize !== false;
     s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(p.worldProgressionLocationLastAdvanced || {}));
-    s.worldProgressionRandomizeNPCs = p.worldProgressionRandomizeNPCs ?? false;
-    s.worldProgressionRandomSkeletonNPCCount = p.worldProgressionRandomSkeletonNPCCount ?? 2;
-    s.worldProgressionRandomNarrativeNPCCount = p.worldProgressionRandomNarrativeNPCCount ?? 3;
-    s.worldProgressionRandomizeLocations = p.worldProgressionRandomizeLocations ?? false;
-    s.worldProgressionRandomSkeletonLocationCount = p.worldProgressionRandomSkeletonLocationCount ?? 2;
-    s.worldProgressionRandomNarrativeLocationCount = p.worldProgressionRandomNarrativeLocationCount ?? 2;
-    s.worldProgressionRandomizeFactions = p.worldProgressionRandomizeFactions ?? false;
-    s.worldProgressionRandomSkeletonFactionCount = p.worldProgressionRandomSkeletonFactionCount ?? 2;
-    s.worldProgressionRandomNarrativeFactionCount = p.worldProgressionRandomNarrativeFactionCount ?? 2;
-    s.worldProgressionRandomizeConflicts = p.worldProgressionRandomizeConflicts ?? false;
-    s.worldProgressionRandomConflictCount = p.worldProgressionRandomConflictCount ?? 3;
     s.worldProgressionSkeletonFactions = p.worldProgressionSkeletonFactions ?? 4;
     s.worldProgressionSkeletonLocations = p.worldProgressionSkeletonLocations ?? 4;
-    s.worldProgressionSkeletonNPCs = p.worldProgressionSkeletonNPCs ?? 0;
     s.worldProgressionSkeletonConflicts = p.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionSkeletonUseLorebooks = p.worldProgressionSkeletonUseLorebooks ?? false;
     s.worldProgressionSkeletonLorebookFilter = JSON.parse(JSON.stringify(p.worldProgressionSkeletonLorebookFilter || []));
@@ -2812,6 +2805,7 @@ function loadProfile(name) {
     s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(p.mapEvolutionSelectedRoots || []));
     s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(p.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(p.mapEvolutionBacklogBySite || {}));
     s.mapEvolutionLastSiteRoot = p.mapEvolutionLastSiteRoot || '';
     s.mapEvolutionWorldReportLookback = p.mapEvolutionWorldReportLookback ?? 5;
     s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(p.mapEvolutionWorldReportApplications || {}));
@@ -2847,7 +2841,6 @@ function loadProfile(name) {
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
-    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
     $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
     $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
     $('#rpg_world_progression_skeleton_lorebook_filter_group').toggle(!!s.worldProgressionSkeletonUseLorebooks);
@@ -10702,7 +10695,6 @@ RULES:
         const $wpSkeletonUseExisting = $('#rpg_world_progression_skeleton_use_existing');
         const $wpSkeletonFactions = $('#rpg_world_progression_skeleton_factions');
         const $wpSkeletonLocations = $('#rpg_world_progression_skeleton_locations');
-        const $wpSkeletonNPCs = $('#rpg_world_progression_skeleton_npcs');
         const $wpSkeletonConflicts = $('#rpg_world_progression_skeleton_conflicts');
         const $wpSkeletonPrompt = $('#rpg_world_progression_skeleton_system_prompt');
         const $wpResetSkeletonPrompt = $('#rpg_world_progression_btn_reset_skeleton_prompt');
@@ -10783,26 +10775,18 @@ RULES:
             try {
                 const book = await ctx.loadWorldInfo(skeletonBookName);
                 const entries = book?.entries ? Object.values(book.entries) : [];
-                const count = entries.length;
-
-                // Per-category counts for pool display
-                const npcCount = entries.filter(e => e.extensions?.rpgCategory === 'NPC').length;
+                // Legacy NPC seeds remain on disk but are intentionally inert
+                // and absent from the macro-skeleton status.
                 const locCount = entries.filter(e => e.extensions?.rpgCategory === 'LOC').length;
                 const facCount = entries.filter(e => e.extensions?.rpgCategory === 'FAC').length;
+                const conflictCount = entries.filter(e => e.extensions?.rpgCategory === 'EVENT').length;
+                const count = locCount + facCount + conflictCount;
 
                 $wpSkeletonStatus.text(count > 0
-                    ? `${count} skeleton entries in "${skeletonBookName}" (NPC: ${npcCount}, LOC: ${locCount}, FAC: ${facCount})`
+                    ? `${count} macro skeleton entries in "${skeletonBookName}" (LOC: ${locCount}, FAC: ${facCount}, CONFLICT: ${conflictCount})`
                     : 'No skeleton generated.');
-
-                // Legacy pool-count spans may exist in older cached settings markup.
-                $('#rpg_world_progression_skeleton_npc_pool_count').text(npcCount);
-                $('#rpg_world_progression_skeleton_location_pool_count').text(locCount);
-                $('#rpg_world_progression_skeleton_faction_pool_count').text(facCount);
             } catch (_) {
                 $wpSkeletonStatus.text('No skeleton generated.');
-                $('#rpg_world_progression_skeleton_npc_pool_count').text('0');
-                $('#rpg_world_progression_skeleton_location_pool_count').text('0');
-                $('#rpg_world_progression_skeleton_faction_pool_count').text('0');
             }
         }
 
@@ -10868,11 +10852,6 @@ RULES:
 
         $wpSkeletonLocations.val(settings.worldProgressionSkeletonLocations ?? 4).on('input', function () {
             getSettings().worldProgressionSkeletonLocations = parseInt(String($(this).val() || '')) || 4;
-            saveSettings();
-        });
-
-        $wpSkeletonNPCs.val(settings.worldProgressionSkeletonNPCs ?? 0).on('input', function () {
-            getSettings().worldProgressionSkeletonNPCs = parseInt(String($(this).val() || '')) || 0;
             saveSettings();
         });
 

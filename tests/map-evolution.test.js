@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../map-evolution-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
 import {
+    appendEvolutionBacklogEntry,
+    describeEvolutionBacklog,
+    describeEvolutionTimeWindow,
     filterSitesByRoots,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
@@ -55,6 +58,8 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('report_outcomes');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('already_realized_by_play');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('logical and narrative sense');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ACCUMULATED EVOLUTION BACKLOG');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('frequent short intervals have not been treated as independent resets');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('neither is preferred');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('or larger unrest');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toMatch(/SETTLEMENT: restlessness/);
@@ -101,6 +106,90 @@ describe('Map Evolution', () => {
         expect(siteEvolutionDue(null, 8 * 60, 4)).toEqual({ due: false, baseline: true });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 3 * 60, 4)).toEqual({ due: false, baseline: false });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 4 * 60, 4)).toEqual({ due: true, baseline: false });
+    });
+
+    it('describes the model time window from this site\'s Last Evolved timestamp', () => {
+        expect(describeEvolutionTimeWindow('Day 2, 06:30', 'Day 3, 12:45')).toEqual({
+            lastEvolved: 'Day 2, 06:30',
+            currentTime: 'Day 3, 12:45',
+            elapsedMinutes: 1815,
+            elapsed: '1 day, 6 hours, 15 minutes (1815 in-world minutes total)',
+        });
+        expect(describeEvolutionTimeWindow('', 'Day 3, 12:45')).toEqual({
+            lastEvolved: 'Never',
+            currentTime: 'Day 3, 12:45',
+            elapsedMinutes: -1,
+            elapsed: 'Unknown — this site has no Last Evolved baseline.',
+        });
+        expect(describeEvolutionTimeWindow('Day 4, 00:00', 'Day 3, 12:00').elapsed)
+            .toContain('current time precedes Last Evolved');
+    });
+
+    it('accumulates frequent quiet checkpoints into one site trajectory', () => {
+        let backlog = {};
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'quiet', at: 'Day 2, 08:15', elapsedMinutes: 15,
+        });
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'quiet', at: 'Day 2, 08:30', elapsedMinutes: 15,
+        });
+        const context = describeEvolutionBacklog(backlog, 'Morrowfen', 15);
+
+        expect(context.entries.map(entry => entry.kind)).toEqual(['quiet']);
+        expect(context.entries[0].passes).toBe(2);
+        expect(context.representedMinutes).toBe(45);
+        expect(context.quietMinutes).toBe(45);
+        expect(context.quietElapsed).toContain('45 in-world minutes total');
+    });
+
+    it('coalesces a long no-op streak without losing accumulated time', () => {
+        let backlog = {};
+        for (let index = 1; index <= 50; index++) {
+            backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+                kind: 'quiet', at: `tick-${index}`, elapsedMinutes: 2,
+            });
+        }
+        const context = describeEvolutionBacklog(backlog, 'Morrowfen', 2);
+
+        expect(context.entries).toHaveLength(1);
+        expect(context.entries[0].passes).toBe(50);
+        expect(context.entries[0].elapsedMinutes).toBe(100);
+        expect(context.quietMinutes).toBe(102);
+    });
+
+    it('resets quiet accumulation at the latest material commit and de-duplicates retries', () => {
+        let backlog = {};
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'quiet', at: 'Day 2, 08:15', elapsedMinutes: 15,
+        });
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'commit', at: 'Day 2, 08:30', elapsedMinutes: 15,
+            operationId: 'evo-morrowfen-watch', summary: 'Morrowfen: harbor-watch changed rotation',
+        });
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'commit', at: 'Day 2, 08:30', elapsedMinutes: 15,
+            operationId: 'evo-morrowfen-watch', summary: 'duplicate retry',
+        });
+        backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+            kind: 'quiet', at: 'Day 2, 08:45', elapsedMinutes: 15,
+        });
+        const context = describeEvolutionBacklog(backlog, 'Morrowfen', 15);
+
+        expect(context.entries).toHaveLength(3);
+        expect(context.representedMinutes).toBe(60);
+        expect(context.quietMinutes).toBe(30);
+        expect(context.entries[1].summary).toContain('harbor-watch changed rotation');
+    });
+
+    it('bounds retained Evolution outcomes per site', () => {
+        let backlog = {};
+        for (let index = 0; index < 6; index++) {
+            backlog = appendEvolutionBacklogEntry(backlog, 'Morrowfen', {
+                kind: 'commit', at: `tick-${index}`, elapsedMinutes: 5,
+                operationId: `evo-${index}`,
+            }, { limit: 3 });
+        }
+        expect(backlog.morrowfen.map(entry => entry.at)).toEqual(['tick-3', 'tick-4', 'tick-5']);
     });
 
     it('summarizes last/next Evolution times like World Progression', () => {
@@ -231,6 +320,12 @@ describe('Map Evolution', () => {
         expect(evolution).not.toContain("trigger === 'world_progression'");
         expect(evolution).toContain('restock and new occupants are expected');
         expect(evolution).toContain('directional prose, not explicit deltas');
+        expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');
+        expect(evolution).toContain('ACCUMULATED EVOLUTION BACKLOG (THIS SITE)');
+        expect(evolution).toContain('Do not choose noop solely because the latest interval is short');
+        expect(evolution).toContain('settings.mapEvolutionLastFiredBySite?.[siteKey]');
+        expect(evolution).toContain('settings.mapEvolutionBacklogBySite');
+        expect(evolution).toContain('Never substitute the configured interval for the actual elapsed duration');
         expect(evolution).toContain('pendingWorldReportsForSite');
         expect(evolution).toContain('mapEvolutionWorldReportApplications');
         expect(evolution).toContain('delete transaction.report_outcomes');
@@ -241,6 +336,7 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Field reminder: MOVE_ASSET uses "to"');
         expect(evolution).not.toContain('groundMapsAfterWorldProgression');
         expect(evolution).toContain('export async function maybeRunMapEvolution');
+        expect(evolution).toContain('export async function loadMappedEvolutionSite');
         expect(evolution).toContain("from './map-evolution-lib.js'");
         expect(evolution).not.toContain("from './map-updater.js'");
 

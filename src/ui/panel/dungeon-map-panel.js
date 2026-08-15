@@ -3,6 +3,8 @@ import { runtimeState } from '../../app/runtime-state.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
+import { serializeDungeonMapDocument } from '../../../dungeon-reality.js';
+import { describeEvolutionBacklog, formatEvolutionElapsedMinutes } from '../../../map-evolution-lib.js';
 
 export const DUNGEON_MAP_DETACHED_KEY = 'rpg_tracker_dungeon_map_detached';
 export const DUNGEON_MAP_GEOMETRY_KEY = 'rpg_tracker_geometry_dungeon_map';
@@ -151,33 +153,152 @@ function escapePopupText(value) {
         .replace(/'/g, '&#039;');
 }
 
+/** Render the bounded per-site Evolution ledger without leaking material details while Reveal All is off. */
+export function renderMapEvolutionHistoryHtml(backlogBySite, siteRoot, { revealAll = false } = {}) {
+    const history = describeEvolutionBacklog(backlogBySite, siteRoot, -1, { lookback: 20 });
+    if (!history.entries.length) {
+        return '<div class="rt-dungeon-map-evolution-empty">No Map Evolution passes have been recorded for this site.</div>';
+    }
+    const rows = history.entries.map(entry => {
+        const material = entry.kind === 'commit';
+        const label = material ? 'Material commit' : 'Quiet checkpoint';
+        const icon = material ? 'fa-code-commit' : 'fa-pause';
+        const passes = !material && entry.passes > 1 ? ` · ${entry.passes} passes` : '';
+        const elapsed = entry.elapsedMinutes >= 0
+            ? formatEvolutionElapsedMinutes(entry.elapsedMinutes)
+            : 'Unknown elapsed time';
+        const details = material && !revealAll
+            ? 'Material details hidden. Turn on Reveal All to inspect this commit.'
+            : entry.summary;
+        const operation = material && revealAll && entry.operationId
+            ? `<code>${escapePopupText(entry.operationId)}</code>`
+            : '';
+        return `<div class="rt-dungeon-map-evolution-entry rt-dungeon-map-evolution-${entry.kind}">
+            <div class="rt-dungeon-map-evolution-entry-head">
+                <span><i class="fa-solid ${icon}"></i> ${label}${passes}</span>
+                <time>${escapePopupText(entry.at)}</time>
+            </div>
+            <div class="rt-dungeon-map-evolution-elapsed">${escapePopupText(elapsed)}</div>
+            <div class="rt-dungeon-map-evolution-summary">${escapePopupText(details)}</div>
+            ${operation}
+        </div>`;
+    });
+    return rows.join('');
+}
+
 /**
- * Player-facing readable inspector. UNREVEALED rooms/assets stay hidden unless Reveal all is on.
+ * Shared mapped-site inspector used by both Visuals/Map and Lorebook Location entries.
+ * UNREVEALED rooms/assets, raw JSON, and material Evolution details stay hidden
+ * unless Reveal All is on.
  * @param {object} mapDocument
- * @param {{ siteLabel?: string, playerFacing?: boolean }} [options]
+ * @param {{ siteLabel?: string }} [options]
  */
-export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '', playerFacing = true } = {}) {
+export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '' } = {}) {
     const ctx = globalThis.SillyTavern?.getContext?.();
     if (!ctx?.callGenericPopup || !mapDocument) return;
     const site = siteLabel || mapDocument.site || 'Site map';
-    let revealAll = !playerFacing;
+    let currentDocument = mapDocument;
+    let revealAll = false;
+    let currentView = 'readable';
     const popupDom = document.createElement('div');
     popupDom.className = 'rt-dungeon-map-popup';
     popupDom.innerHTML = `
         <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapePopupText(site)} <small class="rt-dungeon-alpha-tag">ALPHA</small></div>
-        <div class="rt-dungeon-map-subtitle">${playerFacing
-            ? 'Revealed rooms, routes, and known assets. Unrevealed areas stay hidden unless you turn on Reveal all.'
-            : 'Private current state for this mapped site.'}</div>
-        ${playerFacing ? '<label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"> Reveal all</label>' : ''}
-        <div class="rt-dungeon-map-readable"></div>`;
+        <div class="rt-dungeon-map-subtitle">Revealed rooms, routes, and known assets. Unrevealed map facts and material Evolution details stay hidden unless you turn on Reveal All.</div>
+        <div class="rt-dungeon-map-toolbar">
+            <label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"> Reveal All</label>
+            <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Map Evolution: Run Now</button>
+        </div>
+        <div class="rt-dungeon-map-run-status" role="status" aria-live="polite"></div>
+        <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Map view">
+            <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Map Entries</button>
+            <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" disabled title="Turn on Reveal All to inspect raw JSON"><i class="fa-solid fa-code"></i> Raw JSON</button>
+        </div>
+        <div class="rt-dungeon-map-readable" data-map-panel="readable"></div>
+        <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden></pre>
+        <section class="rt-dungeon-map-evolution-section">
+            <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
+            <div class="rt-dungeon-map-evolution-privacy">Material summaries follow Reveal All; quiet checkpoints never reveal hidden map contents.</div>
+            <div class="rt-dungeon-map-evolution-history"></div>
+        </section>`;
     const readable = popupDom.querySelector('.rt-dungeon-map-readable');
+    const raw = popupDom.querySelector('.rt-dungeon-map-raw');
+    const rawButton = popupDom.querySelector('[data-map-view="raw"]');
+    const history = popupDom.querySelector('.rt-dungeon-map-evolution-history');
+    const runButton = popupDom.querySelector('.rt-dungeon-map-evolve-now');
+    const runStatus = popupDom.querySelector('.rt-dungeon-map-run-status');
+    const setMapView = (view) => {
+        currentView = view === 'raw' && revealAll ? 'raw' : 'readable';
+        for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+            const active = button.dataset.mapView === currentView;
+            button.classList.toggle('rt-dungeon-map-view-btn-active', active);
+            button.setAttribute('aria-selected', String(active));
+        }
+        for (const panel of popupDom.querySelectorAll('[data-map-panel]')) {
+            panel.hidden = panel.dataset.mapPanel !== currentView;
+        }
+    };
     const paint = () => {
-        if (readable) readable.innerHTML = renderDungeonMapReadableHtml(mapDocument, { revealAll });
+        if (readable) readable.innerHTML = renderDungeonMapReadableHtml(currentDocument, { revealAll });
+        if (raw) raw.textContent = serializeDungeonMapDocument(currentDocument);
+        if (history) history.innerHTML = renderMapEvolutionHistoryHtml(
+            getSettings().mapEvolutionBacklogBySite,
+            site,
+            { revealAll },
+        );
+        if (rawButton) {
+            rawButton.disabled = !revealAll;
+            rawButton.title = revealAll ? 'Inspect raw map JSON' : 'Turn on Reveal All to inspect raw JSON';
+        }
+        if (!revealAll && currentView === 'raw') setMapView('readable');
     };
     paint();
     popupDom.querySelector('.rt-dungeon-map-reveal-all')?.addEventListener('change', (event) => {
         revealAll = !!event.target.checked;
         paint();
+    });
+    for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+        button.addEventListener('click', () => setMapView(button.dataset.mapView));
+    }
+    runButton?.addEventListener('click', async () => {
+        if (runtimeState.isLoreOrMapAgentBusyRef?.()) {
+            if (runStatus) runStatus.textContent = 'Another lore or map agent is already running.';
+            return;
+        }
+        if (typeof runtimeState.runMapEvolutionPassRef !== 'function') {
+            if (runStatus) runStatus.textContent = 'Map Evolution is not available yet.';
+            return;
+        }
+        runButton.disabled = true;
+        if (runStatus) runStatus.textContent = `Running Map Evolution for ${site}…`;
+        try {
+            const result = await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true, siteRoots: [site] });
+            if (result?.ok) {
+                const fresh = typeof runtimeState.loadMappedEvolutionSiteRef === 'function'
+                    ? await runtimeState.loadMappedEvolutionSiteRef(site)
+                    : null;
+                if (fresh?.document) currentDocument = fresh.document;
+                paint();
+                const applied = Number(result.applied) || 0;
+                const noops = Number(result.noops) || 0;
+                if (runStatus) runStatus.textContent = applied
+                    ? `Map Evolution committed ${applied} material update${applied === 1 ? '' : 's'} for ${site}.`
+                    : noops
+                        ? `Map Evolution considered ${site} and made no material change.`
+                        : `Map Evolution completed for ${site}.`;
+            } else {
+                const skipped = String(result?.skipped || '');
+                if (runStatus) runStatus.textContent = skipped === 'busy'
+                    ? 'Another lore or map agent is already running.'
+                    : skipped === 'location_mapping_off'
+                        ? 'Persistent Maps is off.'
+                        : `Map Evolution could not complete for ${site}.`;
+            }
+        } catch (error) {
+            if (runStatus) runStatus.textContent = `Map Evolution failed: ${String(error?.message || error)}`;
+        } finally {
+            runButton.disabled = false;
+        }
     });
     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
         okButton: 'Close', cancelButton: false, wide: true, large: true,
@@ -189,7 +310,6 @@ function openSceneMapDetails(scene) {
     if (!mapDocument) return;
     void openDungeonMapReadablePopup(mapDocument, {
         siteLabel: scene.dungeonMap?.siteRoot || mapDocument.site || '',
-        playerFacing: true,
     });
 }
 

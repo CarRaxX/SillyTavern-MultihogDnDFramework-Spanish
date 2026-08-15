@@ -19,7 +19,11 @@ import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import {
+    appendEvolutionBacklogEntry,
+    describeEvolutionBacklog,
+    describeEvolutionTimeWindow,
     filterSitesByRoots,
+    formatEvolutionElapsedMinutes,
     isEvolutionNoop,
     normalizeEvolutionTickScope,
     pickSitesForEvolutionTick,
@@ -42,7 +46,11 @@ import {
 } from './world-progression-lib.js';
 
 export {
+    appendEvolutionBacklogEntry,
+    describeEvolutionBacklog,
+    describeEvolutionTimeWindow,
     filterSitesByRoots,
+    formatEvolutionElapsedMinutes,
     normalizeEvolutionTickScope,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
@@ -163,6 +171,24 @@ function formatWorldReportPressures(reports) {
     ).join('\n\n');
 }
 
+function formatEvolutionBacklog(backlog) {
+    const lines = backlog.entries.map(entry => {
+        const outcome = entry.kind === 'commit' ? 'MATERIAL COMMIT' : 'QUIET CHECKPOINT';
+        const interval = entry.elapsedMinutes >= 0
+            ? formatEvolutionElapsedMinutes(entry.elapsedMinutes)
+            : 'Unknown interval';
+        const passes = entry.kind === 'quiet' && entry.passes > 1 ? ` across ${entry.passes} passes` : '';
+        const operation = entry.operationId ? ` [operation_id: ${entry.operationId}]` : '';
+        return `- ${entry.at} — ${outcome}${passes}${operation}; accumulated preceding time: ${interval}; ${entry.summary}`;
+    });
+    const history = lines.length
+        ? lines.join('\n')
+        : '(No prior Map Evolution checkpoints are retained for this site.)';
+    return `Recent trajectory represented, including the current gap: ${backlog.representedElapsed}
+Quiet time accumulated since the most recent material commit, including the current gap: ${backlog.quietElapsed}
+${backlog.truncated ? '(Only the most recent bounded portion of the trajectory is shown.)\n' : ''}${history}`;
+}
+
 function normalizeReportOutcomes(rawOutcomes, reports, fallbackStatus, digest = '') {
     const allowed = new Set(['materialized', 'already_realized_by_play', 'considered']);
     const supplied = new Map((Array.isArray(rawOutcomes) ? rawOutcomes : [])
@@ -213,7 +239,7 @@ function triggerHeadline(trigger) {
     return 'INTERVAL RESTLESSNESS';
 }
 
-function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere }) {
+function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog }) {
     const kind = normalizeMapSiteKind(site.document?.kind);
     const bubbleLine = bubble.area
         ? `${bubble.area.id} (${bubble.area.name})${bubble.combatActive ? ' — combat is active' : ''}`
@@ -224,6 +250,17 @@ function initialUserPrompt({ site, trigger, worldReports, digest, bubble, curren
 Exact site root: ${site.siteRoot}
 Kind: ${kind}
 ${kindPolicy(kind)}
+
+## EVOLUTION TIME WINDOW (AUTHORITATIVE)
+Last Evolved for this site: ${timeWindow.lastEvolved}
+Current in-world time: ${timeWindow.currentTime}
+Elapsed since Last Evolved: ${timeWindow.elapsed}
+Scale the amount and tempo of change to this elapsed duration. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
+
+## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
+${formatEvolutionBacklog(backlog)}
+
+Judge the latest interval together with this trajectory. A short latest interval limits what happened during that interval, but it does not erase accumulated quiet time or prior developments. Do not choose noop solely because the latest interval is short. Let repeated quiet checkpoints build enough opportunity for a meaningful change, and let prior commits continue, complicate, culminate, resolve, or reverse rather than mechanically repeating them.
 
 ## PLAYER BUBBLE (FROZEN)
 ${partyIsHere ? bubbleLine : '(Party is not inside this site. No freeze.)'}
@@ -246,7 +283,7 @@ ${digestBlock}
 Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer a durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
-function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, priorOutput, errors, attempt }) {
+function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, priorOutput, errors, attempt }) {
     return `CORRECTION PASS ${attempt}
 Your previous map evolution was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -260,7 +297,7 @@ Field reminder: MOVE_ASSET uses "to" and optional "from", never "location". SET_
 PREVIOUS OUTPUT
 ${priorOutput}
 
-${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere })}`;
+${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog })}`;
 }
 
 function swipeSnapshotKey(ctx, message, swipeId = message?.swipe_id ?? 0) {
@@ -294,6 +331,7 @@ export async function maybeRollbackMapEvolutionForSwipe(msg) {
         const settings = getSettings();
         settings.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(snapshot.lastFiredBySite || {}));
         settings.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(snapshot.reportApplications || {}));
+        settings.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(snapshot.backlogBySite || {}));
         persistMapEvolutionState();
     }
     return restored;
@@ -333,7 +371,24 @@ async function evolveOneSite({
         ? resolvePlayerBubble(site.document, currentLocation, { combatActive })
         : { frozenAreaIds: [], combatActive: false, area: null };
     const frozenAreaIds = bubble.frozenAreaIds;
+    const siteKey = normalizeDungeonLabel(site.siteRoot);
+    const timeWindow = describeEvolutionTimeWindow(
+        settings.mapEvolutionLastFiredBySite?.[siteKey],
+        currentTime,
+    );
+    const backlog = describeEvolutionBacklog(
+        settings.mapEvolutionBacklogBySite,
+        site.siteRoot,
+        timeWindow.elapsedMinutes,
+    );
     const systemPrompt = `${String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim()}
+
+AUTHORITATIVE TIME-SCALE CONTRACT
+- The supplied Last Evolved timestamp is the scheduler watermark for this exact site.
+- Use both the latest elapsed duration and the accumulated per-site Evolution backlog to calibrate magnitude, accumulation, decay, arrivals, and movement. A short latest gap permits only correspondingly small developments within that gap, but repeated short gaps and quiet checkpoints accumulate rather than resetting the site's trajectory.
+- Do not return noop solely because the latest interval is short. Consider cumulative quiet time and prior commits; a trajectory may continue, complicate, culminate, resolve, or reverse when plausible.
+- Manual and site-exit triggers do not imply a standard interval. Never substitute the configured interval for the actual elapsed duration.
+- If elapsed time is unknown, remain conservative and do not invent a long unattended period.
 
 AUTHORITATIVE WORLD REPORT CONTRACT
 - World Report excerpts are directional macro pressure, never pre-decided map deltas.
@@ -342,7 +397,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
 - Newer pressure may reverse, resolve, transform, or supersede an older direction while plausible aftermath remains.
 - Return report_outcomes for every supplied report ID. This bookkeeping field is removed before transaction validation.`;
     let prompt = initialUserPrompt({
-        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
     });
     let lastIssues = [];
     let lastOutput = '';
@@ -366,7 +421,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -374,6 +429,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             break;
         }
         if (isEvolutionNoop(parsed.value)) {
+            stampTriggerMessage(ctx, snapshot);
             return {
                 ok: true,
                 noop: true,
@@ -383,6 +439,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
                     worldReports,
                     'considered',
                 ),
+                timeWindow,
             };
         }
         const rawReportOutcomes = parsed.value.report_outcomes;
@@ -393,7 +450,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             lastIssues = validation.errors || [];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -411,7 +468,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -432,6 +489,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             result: mapResult,
             transaction,
             digestLine: summarizeEvolutionDigest(site.siteRoot, transaction),
+            timeWindow,
             reportOutcomes: normalizeReportOutcomes(
                 rawReportOutcomes,
                 worldReports,
@@ -499,6 +557,7 @@ export async function runMapEvolutionPass({
     isManual = false,
     siteRoots = null,
 } = {}) {
+    hydrateWorldProgressionFromChatState();
     const settings = getSettings();
     if (settings.mapEvolutionEnabled === false && !isManual) return { skipped: 'disabled' };
     if (!isLocationMappingEnabled(settings)) return { skipped: 'location_mapping_off' };
@@ -539,6 +598,7 @@ export async function runMapEvolutionPass({
             locationsBook: await snapshotCampaignLocationsBook(),
             lastFiredBySite: JSON.parse(JSON.stringify(settings.mapEvolutionLastFiredBySite || {})),
             reportApplications: JSON.parse(JSON.stringify(settings.mapEvolutionWorldReportApplications || {})),
+            backlogBySite: JSON.parse(JSON.stringify(settings.mapEvolutionBacklogBySite || {})),
         };
         const digestLines = [];
         const results = [];
@@ -566,6 +626,24 @@ export async function runMapEvolutionPass({
             results.push(siteResult);
             if (siteResult?.digestLine) digestLines.push(siteResult.digestLine);
             if (siteResult?.ok) {
+                settings.mapEvolutionBacklogBySite = appendEvolutionBacklogEntry(
+                    settings.mapEvolutionBacklogBySite,
+                    site.siteRoot,
+                    siteResult.noop
+                        ? {
+                            kind: 'quiet',
+                            at: currentTime,
+                            elapsedMinutes: siteResult.timeWindow?.elapsedMinutes,
+                            summary: 'Map Evolution considered the site and committed no material change.',
+                        }
+                        : {
+                            kind: 'commit',
+                            at: currentTime,
+                            elapsedMinutes: siteResult.timeWindow?.elapsedMinutes,
+                            operationId: siteResult.transaction?.operation_id,
+                            summary: siteResult.digestLine,
+                        },
+                );
                 stampSiteFired(settings, site.siteRoot, currentTime);
                 stampReportOutcomes(settings, site.siteRoot, siteResult.reportOutcomes, currentTime);
             }
@@ -649,4 +727,19 @@ export async function listMappedEvolutionSites() {
             current: here,
         };
     });
+}
+
+/** Reload one mapped site after an on-demand Evolution pass. */
+export async function loadMappedEvolutionSite(siteRoot) {
+    if (!isLocationMappingEnabled(getSettings())) return null;
+    const wanted = normalizeDungeonLabel(siteRoot);
+    if (!wanted) return null;
+    const loaded = await loadAllMappedSiteContexts();
+    const site = (loaded?.sites || []).find(candidate => normalizeDungeonLabel(candidate.siteRoot) === wanted);
+    if (!site) return null;
+    return {
+        siteRoot: site.siteRoot,
+        kind: normalizeMapSiteKind(site.document?.kind),
+        document: site.document,
+    };
 }

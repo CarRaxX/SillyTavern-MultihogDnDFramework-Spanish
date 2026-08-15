@@ -95,14 +95,19 @@ describe('saveChatState', () => {
         s.mapEvolutionWorldReportApplications = {
             morrowfen: { 'Campaign_World::7': { status: 'materialized' } },
         };
+        s.mapEvolutionBacklogBySite = {
+            morrowfen: [{ kind: 'quiet', at: 'Day 3, 08:00', elapsedMinutes: 15 }],
+        };
 
         saveChatState('world-chat', { skipDiskWrite: true });
 
         const part = s.chatStates['world-chat'];
         expect(part.worldProgressionLocationLastAdvanced).toEqual(s.worldProgressionLocationLastAdvanced);
         expect(part.mapEvolutionWorldReportApplications).toEqual(s.mapEvolutionWorldReportApplications);
+        expect(part.mapEvolutionBacklogBySite).toEqual(s.mapEvolutionBacklogBySite);
         expect(part.worldProgressionLocationLastAdvanced).not.toBe(s.worldProgressionLocationLastAdvanced);
         expect(part.mapEvolutionWorldReportApplications).not.toBe(s.mapEvolutionWorldReportApplications);
+        expect(part.mapEvolutionBacklogBySite).not.toBe(s.mapEvolutionBacklogBySite);
     });
 
     it('rehydrates World Progression and Map Evolution watermarks from the active chat partition', () => {
@@ -110,10 +115,16 @@ describe('saveChatState', () => {
         s.chatLinkEnabled = true;
         s.worldProgressionLastFiredPeriodLabel = '';
         s.worldProgressionLocationLastAdvanced = {};
+        s.mapEvolutionLastFiredBySite = {};
+        s.mapEvolutionBacklogBySite = {};
         s.mapEvolutionWorldReportApplications = {};
         s.chatStates['vitest-chat'] = {
             worldProgressionLastFiredPeriodLabel: 'Day 3, 08:00',
             worldProgressionLocationLastAdvanced: { morrowfen: 'Day 3, 08:00' },
+            mapEvolutionLastFiredBySite: { morrowfen: 'Day 2, 16:00' },
+            mapEvolutionBacklogBySite: {
+                morrowfen: [{ kind: 'commit', at: 'Day 2, 16:00', operationId: 'evo-watch' }],
+            },
             mapEvolutionWorldReportApplications: {
                 morrowfen: { 'Campaign_World::7': { status: 'materialized' } },
             },
@@ -122,10 +133,16 @@ describe('saveChatState', () => {
         expect(hydrateWorldProgressionFromChatState()).toBe(true);
         expect(s.worldProgressionLastFiredPeriodLabel).toBe('Day 3, 08:00');
         expect(s.worldProgressionLocationLastAdvanced).toEqual({ morrowfen: 'Day 3, 08:00' });
+        expect(s.mapEvolutionLastFiredBySite).toEqual({ morrowfen: 'Day 2, 16:00' });
+        expect(s.mapEvolutionBacklogBySite.morrowfen[0].operationId).toBe('evo-watch');
         expect(s.mapEvolutionWorldReportApplications.morrowfen['Campaign_World::7'].status)
             .toBe('materialized');
         expect(s.worldProgressionLocationLastAdvanced)
             .not.toBe(s.chatStates['vitest-chat'].worldProgressionLocationLastAdvanced);
+        expect(s.mapEvolutionLastFiredBySite)
+            .not.toBe(s.chatStates['vitest-chat'].mapEvolutionLastFiredBySite);
+        expect(s.mapEvolutionBacklogBySite)
+            .not.toBe(s.chatStates['vitest-chat'].mapEvolutionBacklogBySite);
         expect(s.mapEvolutionWorldReportApplications)
             .not.toBe(s.chatStates['vitest-chat'].mapEvolutionWorldReportApplications);
     });

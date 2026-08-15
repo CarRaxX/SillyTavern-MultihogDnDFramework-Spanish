@@ -43,6 +43,16 @@ export function hydrateWorldProgressionFromChatState() {
         s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(stored.worldProgressionLocationLastAdvanced));
         hydrated = true;
     }
+    if (!Object.keys(s.mapEvolutionLastFiredBySite || {}).length
+        && Object.keys(stored.mapEvolutionLastFiredBySite || {}).length) {
+        s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(stored.mapEvolutionLastFiredBySite));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionBacklogBySite || {}).length
+        && Object.keys(stored.mapEvolutionBacklogBySite || {}).length) {
+        s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(stored.mapEvolutionBacklogBySite));
+        hydrated = true;
+    }
     if (!Object.keys(s.mapEvolutionWorldReportApplications || {}).length
         && Object.keys(stored.mapEvolutionWorldReportApplications || {}).length) {
         s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(stored.mapEvolutionWorldReportApplications));
@@ -385,6 +395,7 @@ export function saveChatState(chatId, opts = {}) {
         mapUpdaterLastRunChatLength: s.mapUpdaterLastRunChatLength ?? 0,
         mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
         mapEvolutionLastFiredBySite: JSON.parse(JSON.stringify(s.mapEvolutionLastFiredBySite || {})),
+        mapEvolutionBacklogBySite: JSON.parse(JSON.stringify(s.mapEvolutionBacklogBySite || {})),
         mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
         mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
         mapEvolutionTickScope: s.mapEvolutionTickScope || 'active',
@@ -411,20 +422,8 @@ export function saveChatState(chatId, opts = {}) {
         worldProgressionLocationsPerReport: s.worldProgressionLocationsPerReport ?? 3,
         worldProgressionLocationRandomize: s.worldProgressionLocationRandomize !== false,
         worldProgressionLocationLastAdvanced: JSON.parse(JSON.stringify(s.worldProgressionLocationLastAdvanced || {})),
-        worldProgressionRandomizeNPCs: s.worldProgressionRandomizeNPCs ?? false,
-        worldProgressionRandomSkeletonNPCCount: s.worldProgressionRandomSkeletonNPCCount ?? 2,
-        worldProgressionRandomNarrativeNPCCount: s.worldProgressionRandomNarrativeNPCCount ?? 3,
-        worldProgressionRandomizeLocations: s.worldProgressionRandomizeLocations ?? false,
-        worldProgressionRandomSkeletonLocationCount: s.worldProgressionRandomSkeletonLocationCount ?? 2,
-        worldProgressionRandomNarrativeLocationCount: s.worldProgressionRandomNarrativeLocationCount ?? 2,
-        worldProgressionRandomizeFactions: s.worldProgressionRandomizeFactions ?? false,
-        worldProgressionRandomSkeletonFactionCount: s.worldProgressionRandomSkeletonFactionCount ?? 2,
-        worldProgressionRandomNarrativeFactionCount: s.worldProgressionRandomNarrativeFactionCount ?? 2,
-        worldProgressionRandomizeConflicts: s.worldProgressionRandomizeConflicts ?? false,
-        worldProgressionRandomConflictCount: s.worldProgressionRandomConflictCount ?? 3,
         worldProgressionSkeletonFactions: s.worldProgressionSkeletonFactions ?? 4,
         worldProgressionSkeletonLocations: s.worldProgressionSkeletonLocations ?? 4,
-        worldProgressionSkeletonNPCs: s.worldProgressionSkeletonNPCs ?? 0,
         worldProgressionSkeletonConflicts: s.worldProgressionSkeletonConflicts ?? 3,
         // World Progression per-chat time tracking
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,

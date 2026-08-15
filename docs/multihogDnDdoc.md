@@ -173,7 +173,7 @@ On generation end (skipped for quiet/impersonate, while a pass is already runnin
 4. Dynamic RNG prompt sync (Hybrid mode combat boundary).
 5. **Map Updater** occupancy (if Persistent Maps is on and its run-every threshold is met).
 6. **World Progression** TIME check (deterministic; see that section).
-7. **Map Evolution** — grounds a new World Report onto matching maps, and/or interval restlessness for the configured map pool (current map, N maps, all mapped sites, or a selected checklist).
+7. **Map Evolution** — checks the normal interval/site-exit cadence for the configured map pool (current map, N maps, all mapped sites, or a selected checklist), lazily interpreting relevant unconsumed World Report prose when a map actually evolves.
 8. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
 
 Important: the State Tracker runs **after** the reply. The memo injected on the *next* turn is what was updated from the *previous* reply.
@@ -542,7 +542,9 @@ The Adventure Companion cannot flip the Components checkbox or open Visuals/Map 
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 
-New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Updater & Evolution connection. **Map Evolution** is a separate pass on that same connection: it advances mapped sites off-screen on normal interval, site-exit, or manual passes. Each selected map also receives any relevant unconsumed World Report prose and decides how to realize it locally. A report never launches an immediate all-map reconciliation. Lorebook Agent continues NPC/location/relationship records on a separate cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Updater & Evolution connection. **Map Evolution** is a separate pass on that same connection: it advances mapped sites off-screen on normal interval, site-exit, or manual passes. Each request receives that site's Last Evolved timestamp, current in-world time, exact elapsed duration, and a bounded backlog of its prior material commits and quiet checkpoints. Consecutive no-op passes accumulate their elapsed time, so very frequent Evolution cannot keep resetting the model to “not enough time; do nothing.” Each selected map also receives any relevant unconsumed World Report prose and decides how to realize it locally. A report never launches an immediate all-map reconciliation. Lorebook Agent continues NPC/location/relationship records on a separate cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+
+The blue **MAP** badge on a root Location record and the details button in **Visuals/Map** open one shared inspector. **Reveal All** is off initially in both entry paths. Until enabled, unrevealed map entries, raw JSON, and the content of material Evolution commits remain hidden. The same inspector lists that location's Evolution history and provides **Map Evolution: Run Now**, always scoped to only the map being viewed.
 
 Repeated `CreateAreaMap` calls do not replace an already attached map.
 
@@ -576,7 +578,7 @@ The Visuals/Map tab does **not** require Real-Time Visualization or location sce
 
 ### Map Architect settings
 
-Settings → **Persistent Maps** (left rail, just below Lorebook Agent): two connections (Map Architect vs shared Map Updater & Evolution), then nested drawers for **Map Architect** (story lookback, output budget, architect prompt), **Map Updater** (run every N messages, occupancy prompt), and **Map Evolution** (last/next in-world schedule with Override and Reset Timeline, in-world interval, maps per tick, always-available **Run now** checklist, evolution prompt). Connection profile, model, and preset are under **Connections & Models**, with shortcuts on the Persistent Maps tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent**, **Map Updater**, or **Map Evolution** (the last opens a picker so any mapped site can be evolved now).
+Settings → **Persistent Maps** (left rail, just below Lorebook Agent): two connections (Map Architect vs shared Map Updater & Evolution), then nested drawers for **Map Architect** (story lookback, output budget, architect prompt), **Map Updater** (run every N messages, occupancy prompt), and **Map Evolution** (last/next in-world schedule with Override and Reset Timeline, in-world interval, maps per tick, always-available **Run now** checklist, evolution prompt). The displayed schedule summarizes the per-site Last Evolved clocks; every actual request uses the selected map's own clock to compute elapsed time and combines it with that map's retained Evolution trajectory. Connection profile, model, and preset are under **Connections & Models**, with shortcuts on the Persistent Maps tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent**, **Map Updater**, or **Map Evolution** (the last opens a picker so any mapped site can be evolved now).
 
 ---
 
@@ -602,7 +604,7 @@ Previous trends are causal state, not a command to escalate. WP may intensify, p
 ### Quick Start Guide
 
 1. **Skeleton Source** — this replaces the former Atmosphere Summary and can be a short thematic seed or a detailed description of what you want the world and skeleton to be. Auto-Generate remains intentionally conservative: it derives a generalized backdrop from recent chat without copying named characters, party members, locations, factions, or plot events.
-2. **Generate Skeleton** — locations become potential macro-simulation subjects; factions and conflicts provide regional context. NPC seeds may inform dossiers but WP never advances them independently.
+2. **Generate Skeleton** — locations become potential macro-simulation subjects; factions and conflicts provide regional context. The skeleton never creates named NPCs; established ordinary NPC lore may still constrain a location dossier.
 3. **Location Rotation** — choose how many locations each report covers. The oldest-unadvanced dossiers go first; optional randomization only breaks ties among equally old locations.
 4. **Generate the First Report** — Generate Now or wait for the interval. The report enters narrator context immediately and becomes lazy input to later Map Evolution passes.
 

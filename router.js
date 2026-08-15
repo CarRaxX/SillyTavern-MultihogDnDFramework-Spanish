@@ -4815,8 +4815,8 @@ ${historicalDump}`;
 // -- World Skeleton ------------------------------------------------------------------
 
 /**
- * Parses the raw LLM output from the skeleton generation pass into individual
- * lore records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
+ * Parses the raw LLM output from the skeleton generation pass into macro
+ * premise records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
  * Returns an array of { label, content, category } objects.
  * @param {string} rawText
  * @returns {Array<{label: string, content: string, category: string}>}
@@ -4827,8 +4827,6 @@ function parseSkeletonOutput(rawText) {
         'FACTION': 'FAC',
         'LOCATIONS': 'LOC',
         'LOCATION': 'LOC',
-        'NPCS': 'NPC',
-        'NPC': 'NPC',
         'CONFLICTS': 'EVENT',
         'CONFLICT': 'EVENT',
         'EVENTS': 'EVENT',
@@ -4837,7 +4835,7 @@ function parseSkeletonOutput(rawText) {
     const records = [];
     const lines = rawText.split('\n');
     
-    let currentCategory = 'NPC';
+    let currentCategory = null;
     let currentItem = null;
 
     const sectionRegex = /^##\s+([A-Z]+)/i;
@@ -4857,9 +4855,13 @@ function parseSkeletonOutput(rawText) {
                 currentItem = null;
             }
             const key = secMatch[1].toUpperCase();
-            currentCategory = categoryMap[key] || 'NPC';
+            currentCategory = categoryMap[key] || null;
             continue;
         }
+
+        // Unknown sections — notably the retired NPC/NPCS category emitted by
+        // an old custom prompt — are intentionally ignored.
+        if (!currentCategory) continue;
 
         // 2. Check for ### Sub-header
         const subMatch = line.match(subHeaderRegex);
@@ -4921,130 +4923,12 @@ function parseSkeletonOutput(rawText) {
         }
     }
 
-    return records.filter(r => r.label && r.content);
-}
-
-/**
- * Auto-generates skeleton NPCs when the pool is below the requested count.
- * Operates in informational isolation — receives only the skeleton theme, atmosphere
- * summary, and existing skeleton faction/location/conflict names.
- * Never sees narrative content, active NPC stats, quest details, or player logs.
- *
- * @param {number} missingCount  Number of NPCs to generate
- * @param {string} atmosphere    Skeleton Source material used as the generation foundation
- * @param {Array}  factionDescs  Array of {name, desc} from skeleton factions
- * @param {Array}  conflictNames Skeleton conflict/event names (names only)
- * @param {Array}  locationDescs Array of {name, desc} from skeleton locations
- * @param {Object} archiveBooks  Loaded lorebook map for writing back to skeleton
- * @returns {Promise<string[]>}  Names of newly created skeleton NPCs
- */
-async function runSkeletonGeneratorAgent(missingCount, atmosphere, factionDescs, conflictNames, locationDescs, archiveBooks) {
-    const settings = getSettings();
-    const prefix = getLivePrefix();
-    const skeletonBookName = prefix ? `${prefix}_Skeleton` : 'World_Skeleton';
-
-    const factionContext = factionDescs.length > 0
-        ? factionDescs.map(f => `- ${f.name}: ${f.desc}`).join('\n')
-        : '(none defined yet)';
-    const locationContext = locationDescs.length > 0
-        ? locationDescs.map(l => `- ${l.name}: ${l.desc}`).join('\n')
-        : '(none defined yet)';
-    const conflictContext = conflictNames.length > 0
-        ? conflictNames.map(n => `- ${n}`).join('\n')
-        : '(none defined yet)';
-
-    const systemPrompt =
-`You are a World Architect. Generate background skeleton NPCs for an RPG campaign simulation.
-These NPCs are undiscovered background characters — they have never appeared in the narrative.
-Do NOT reference any player characters, recent events, or narrative content.
-Output ONLY structured content:
-
-## NPCS
-### [Name]
-[Role in the world. Current situation or agenda in 1-2 sentences.]`;
-
-    let userPrompt = `## SKELETON SOURCE\n${atmosphere || '(No written Skeleton Source provided)'}\n\n`;
-    userPrompt +=
-`## EXISTING SKELETON CONTEXT (for thematic consistency — do not replicate)
-### Factions
-${factionContext}
-
-### Locations
-${locationContext}
-
-### Active Conflicts
-${conflictContext}
-
-Generate exactly ${missingCount} new skeleton NPC(s). Each must be unique, thematically consistent, and not affiliated with or named after any player character.`;
-
-    const routerSettings = {
-        connectionSource: settings.worldConnectionSource || 'default',
-        connectionProfileId: settings.worldConnectionProfileId,
-        completionPresetId: settings.worldCompletionPresetId,
-        ollamaUrl: settings.worldOllamaUrl,
-        ollamaModel: settings.worldOllamaModel,
-        openaiUrl: settings.worldOpenaiUrl,
-        openaiKey: settings.worldOpenaiKey,
-        openaiModel: settings.worldOpenaiModel,
-    };
-
-    const rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
-    if (!rawOutput?.trim()) throw new Error('Skeleton generator agent returned empty response');
-
-    const records = parseSkeletonOutput(rawOutput).filter(r => r.category === 'NPC');
-    if (records.length === 0) throw new Error('Skeleton generator: no NPC records parsed from output');
-
-    // Load or reuse the skeleton book
-    let skeletonBook = (archiveBooks && archiveBooks[skeletonBookName]) || null;
-    if (!skeletonBook || !skeletonBook.entries) {
-        const ctx = SillyTavern.getContext();
-        try { skeletonBook = await ctx.loadWorldInfo(skeletonBookName); } catch (_) {}
-        if (!skeletonBook || !skeletonBook.entries) {
-            skeletonBook = { entries: {}, name: skeletonBookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
-        }
-    }
-
-    const existingUids = Object.keys(skeletonBook.entries).map(Number).filter(n => !isNaN(n));
-    let nextUid = existingUids.length > 0 ? Math.max(...existingUids) + 1 : 0;
-
-    const newNames = [];
-    for (const rec of records) {
-        skeletonBook.entries[nextUid] = {
-            uid: nextUid,
-            key: [],
-            keysecondary: [],
-            comment: `NPC: ${rec.label}`,
-            content: `[Day 0 Baseline — Auto-generated]\n${rec.content}`,
-            constant: false, selective: false, selectiveLogic: 0, addMemo: true,
-            order: 100, position: 0,
-            disable: true,
-            probability: 100, useProbability: false,
-            depth: 4, group: '', groupOverride: false, groupWeight: 100,
-            extensions: { rpgCategory: 'NPC', rpgSkeleton: true },
-        };
-        newNames.push(rec.label);
-        nextUid++;
-    }
-
-    const saveRes = await fetch('/api/worldinfo/edit', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name: skeletonBookName, data: skeletonBook })
-    });
-    if (!saveRes.ok) throw new Error(`Skeleton generator save failed: HTTP ${saveRes.status}`);
-
-    const ctx = SillyTavern.getContext();
-    try { await ctx.saveWorldInfo(skeletonBookName, skeletonBook); } catch (_) {}
-
-    if (archiveBooks) archiveBooks[skeletonBookName] = skeletonBook;
-
-    broadcastStep('thought', `\uD83E\uDDEC Skeleton Generator: ${newNames.length} NPC(s) created (${newNames.join(', ')}).`);
-    return newNames;
+    return records.filter(r => r.label && r.content && ['FAC', 'LOC', 'EVENT'].includes(r.category));
 }
 
 /**
  * Generates the World Skeleton: a hidden lorebook of foundational undiscovered
- * entities (factions, locations, NPCs, conflicts) seeded from the user's Skeleton Source.
+ * macro premises (factions, locations, conflicts) seeded from the user's Skeleton Source.
  * Saves all entries to [CampaignPrefix]_Skeleton. Overwrites any existing skeleton.
  *
  * @param {string} atmosphereSummary - User-provided Skeleton Source material (legacy setting name retained)
@@ -5070,15 +4954,19 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
 
     const factionCount = settings.worldProgressionSkeletonFactions ?? 4;
     const locationCount = settings.worldProgressionSkeletonLocations ?? 4;
-    const npcCount = settings.worldProgressionSkeletonNPCs ?? 0;
     const conflictCount = settings.worldProgressionSkeletonConflicts ?? 3;
     const atmosphere = (atmosphereSummary || settings.worldProgressionSkeletonAtmosphereSummary || '').trim();
 
     let systemPrompt = (settings.worldProgressionSkeletonSystemPrompt || '')
         .replace(/\{factionCount\}/g, String(factionCount))
         .replace(/\{locationCount\}/g, String(locationCount))
-        .replace(/\{npcCount\}/g, String(npcCount))
         .replace(/\{conflictCount\}/g, String(conflictCount));
+
+    systemPrompt += `\n\n## MACRO-ONLY SKELETON CONTRACT (AUTHORITATIVE)
+- The World Skeleton contains only FACTIONS, LOCATIONS, and CONFLICTS/EVENTS.
+- Never create an NPC/NPCS section or a named-individual skeleton entry.
+- Named individuals in source material are canon constraints only. Do not extract, duplicate, or transform them into skeleton entries.
+- World Progression advances locations and wider currents; ordinary NPC lore is created by the GM and Lorebook Agent when an individual becomes real in play.`;
 
     let sourceLorebooksStr = '';
     if (settings.worldProgressionSkeletonUseLorebooks) {
@@ -5098,7 +4986,7 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
                 throw new Error('Lorebook-only mode is enabled, but the selected source lorebooks contain no usable entries.');
             }
             systemPrompt += `\n\n## LOREBOOK-ONLY MODE — OVERRIDES EXACT COUNTS
-Only output entities explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate entities. Ignore the requested faction, location, NPC, and conflict counts; output the eligible entities established by the source material, and omit an empty category section.`;
+Only output factions, locations, and conflicts explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate premises. Ignore the requested category counts; output the eligible macro premises established by the source material, and omit an empty category section. Never output named individuals.`;
         }
     }
 
@@ -5106,13 +4994,13 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
     let existingEntitiesStr = '';
     if (append && useExisting && skeletonBook.entries) {
         const entries = Object.values(skeletonBook.entries)
-            .filter(e => e.comment && e.content);
+            .filter(e => e.comment && e.content && ['FAC', 'LOC', 'EVENT'].includes(e.extensions?.rpgCategory));
         if (entries.length > 0) {
             const formattedEntries = entries.map(e => {
                 const cleanContent = e.content.replace(/^\[Day 0 Baseline\]\n?/i, '').trim();
                 return `### ${e.comment}\n${cleanContent}`;
             }).join('\n\n');
-            existingEntitiesStr = `Avoid duplicating these or generating similar entities. Build on top of or expand this context with new, unique entities:\n\n${formattedEntries}`;
+            existingEntitiesStr = `Avoid duplicating these or generating similar premises. Build on top of or expand this context with new, unique macro premises:\n\n${formattedEntries}`;
         }
     }
 
@@ -5121,9 +5009,9 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
         userPrompt += `${sourceLorebooksStr}\n\n`;
     }
     if (existingEntitiesStr) {
-        userPrompt += `## EXISTING SKELETON ENTITIES\n${existingEntitiesStr}\n\n`;
+        userPrompt += `## EXISTING SKELETON PREMISES\n${existingEntitiesStr}\n\n`;
     }
-    userPrompt += `Generate ${append ? 'additional' : 'the'} world skeleton ${append ? 'entities' : ''} now.`;
+    userPrompt += `Generate ${append ? 'additional' : 'the'} world skeleton ${append ? 'premises' : ''} now.`;
 
     const routerSettings = {
         connectionSource: settings.worldConnectionSource || 'default',
@@ -5164,7 +5052,7 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
     }
 
     for (const rec of records) {
-        const prefixMap = { 'FAC': 'FACTION', 'LOC': 'LOCATION', 'NPC': 'NPC', 'EVENT': 'CONFLICT' };
+        const prefixMap = { 'FAC': 'FACTION', 'LOC': 'LOCATION', 'EVENT': 'CONFLICT' };
         const typePrefix = prefixMap[rec.category] || 'ENTITY';
         const typePrefixedLabel = `${typePrefix}: ${rec.label}`;
 
@@ -5237,101 +5125,6 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
 
     broadcastStep('finish', `\uD83D\uDDE6 World Skeleton: ${records.length} entries generated and saved to "${skeletonBookName}".`);
     return records.length;
-}
-
-/**
- * Promotes a skeleton entity to the active lorebook when the player discovers it.
- * Scans Historical World Reports for references to the entity and performs a merge
- * LLM pass to synthesize a cohesive, up-to-date lore entry incorporating both
- * the Day 0 stub and any off-screen history accumulated since then.
- *
- * @param {string} skeletonId     - "BookName::uid" of the skeleton entry to promote
- * @param {string} newLabel       - Label of the newly discovered entry (from Lorebook Agent)
- * @param {string} newContent     - Content of the newly discovered entry
- * @param {Object} archiveBooks   - Loaded lorebook map (from runWorldProgressionPass or applyAction)
- * @returns {Promise<{label: string, content: string, category: string}|null>}
- */
-export async function promoteSkeletonEntity(skeletonId, newLabel, newContent, archiveBooks) {
-    const [skeletonBookName, uid] = skeletonId.split('::');
-    const skeletonBook = archiveBooks[skeletonBookName];
-    if (!skeletonBook?.entries?.[uid]) return null;
-
-    const skeletonEntry = skeletonBook.entries[uid];
-    const skeletonContent = (skeletonEntry.content || '').trim();
-    const category = skeletonEntry.extensions?.rpgCategory || 'NPC';
-
-    // Gather historical world report references to this entity
-    const nameLower = newLabel.toLowerCase();
-    const historySnippets = [];
-    for (const [bookName, book] of Object.entries(archiveBooks)) {
-        if (!bookName.toLowerCase().endsWith('_world') && bookName.toLowerCase() !== 'world') continue;
-        const sorted = Object.entries(book.entries).sort(([a], [b]) => Number(a) - Number(b));
-        for (const [, entry] of sorted) {
-            if ((entry.content || '').toLowerCase().includes(nameLower)) {
-                const reportLabel = entry.comment || '(unknown period)';
-                historySnippets.push(`[${reportLabel}] ${(entry.content || '').trim()}`);
-            }
-        }
-    }
-
-    if (historySnippets.length === 0) {
-        // No off-screen history — simple merge of stub + scene entry
-        const merged = skeletonContent && newContent
-            ? `${newContent}\n\n[Prior State]\n${skeletonContent}`
-            : (newContent || skeletonContent);
-        // Delete skeleton entry
-        await deleteLorebookEntry(skeletonId);
-        return { label: newLabel, content: merged, category };
-    }
-
-    // Run merge LLM pass to synthesize a complete up-to-date entry
-    const settings = getSettings();
-    const systemPrompt = `You are a Lore Synthesizer. You will be given three pieces of information about an entity:
-1. Their original Day 0 background stub (how they were at campaign start)
-2. Their off-screen activity history extracted from World Progression reports
-3. A new scene-based description written after the player has encountered them
-
-Synthesize these into a single, cohesive, up-to-date lore entry. Write in third person.
-Preserve all specific names, facts, and events. Do not invent new information.
-Output ONLY the final lore entry text. No preamble, no labels, no meta-commentary.`;
-
-    const userPrompt = `## ENTITY: ${newLabel}
-
-## DAY 0 SKELETON STUB
-${skeletonContent}
-
-## OFF-SCREEN HISTORY (from World Progression reports)
-${historySnippets.join('\n\n---\n\n')}
-
-## NEW SCENE-BASED DESCRIPTION (player has now encountered this entity)
-${newContent}
-
-Synthesize the above into one complete, up-to-date lore entry.`;
-
-    const routerSettings = {
-        connectionSource: settings.worldConnectionSource || 'default',
-        connectionProfileId: settings.worldConnectionProfileId,
-        completionPresetId: settings.worldCompletionPresetId,
-        ollamaUrl: settings.worldOllamaUrl,
-        ollamaModel: settings.worldOllamaModel,
-        openaiUrl: settings.worldOpenaiUrl,
-        openaiKey: settings.worldOpenaiKey,
-        openaiModel: settings.worldOpenaiModel,
-    };
-
-    let mergedContent;
-    try {
-        mergedContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
-    } catch (_) {
-        // Merge failed — fall back to simple concatenation
-        mergedContent = `${newContent}\n\n[Off-screen history]\n${historySnippets.join('\n\n')}`;
-    }
-
-    // Delete skeleton entry
-    await deleteLorebookEntry(skeletonId);
-
-    broadcastStep('thought', `\uD83D\uDDE6 Skeleton Promotion: "${newLabel}" promoted with ${historySnippets.length} history reference(s).`);
-    return { label: newLabel, content: (mergedContent || '').trim(), category };
 }
 
 /**

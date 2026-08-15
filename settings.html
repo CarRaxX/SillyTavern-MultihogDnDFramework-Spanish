@@ -1675,12 +1675,12 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; margin-bottom: 6px;">
-                                        The World Skeleton is a hidden set of Day 0 premises. Location seeds can become macro-simulation subjects; factions and conflicts provide regional context. Skeleton NPC facts may constrain a location dossier, but World Progression does not advance them as entities.
+                                        The World Skeleton is a hidden set of Day 0 macro premises. Location seeds become simulation subjects; factions, institutions, and conflicts provide regional context. Named individuals belong in ordinary NPC lore once established through play, never in the skeleton.
                                     </div>
                                     
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; margin-bottom: 2px; flex-wrap: wrap; gap: 6px;">
                                         <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin: 0; display: flex; align-items: center;">Skeleton Source
-                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Describe the world at any level of detail: atmosphere, cultures, history, factions, locations, named characters, conflicts, technology, magic, or other established facts. A short thematic seed or a granular world description both work. Auto-Generate remains conservative and produces a generalized backdrop without named story entities. Optional when existing lorebook or skeleton entries provide the source."></i>
+                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Describe the world's atmosphere, cultures, history, factions, locations, conflicts, technology, magic, or other macro facts. Named individuals in source material remain canon constraints but are not extracted into the skeleton. Optional when existing lorebook or skeleton entries provide the source."></i>
                                         </label>
                                         <div style="display: flex; align-items: center; gap: 4px;">
                                             <span style="font-size: 0.75em; opacity: 0.7;">Lookback:</span>
@@ -1721,12 +1721,6 @@
                                             <input id="rpg_world_progression_skeleton_locations" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="4" style="width: 100%; text-align: center;" />
                                         </div>
                                         <div>
-                                            <label style="font-size: 0.75em; font-weight: bold; opacity: 0.8; display: block; margin-bottom: 2px;">NPCs
-                                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7;" title="Number of starting NPCs in the skeleton. Macro: {npcCount}"></i>
-                                            </label>
-                                            <input id="rpg_world_progression_skeleton_npcs" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="0" style="width: 100%; text-align: center;" />
-                                        </div>
-                                        <div>
                                             <label style="font-size: 0.75em; font-weight: bold; opacity: 0.8; display: block; margin-bottom: 2px;">Conflicts
                                                 <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7;" title="Number of starting conflicts in the skeleton. Macro: {conflictCount}"></i>
                                             </label>
@@ -1747,7 +1741,7 @@
                                             <i class="fa-solid fa-arrow-rotate-left"></i> Reset
                                         </button>
                                     </div>
-                                    <div style="font-size: 0.72em; opacity: 0.5; margin-bottom: 3px;">Available tokens: <code>{factionCount}</code>, <code>{locationCount}</code>, <code>{npcCount}</code>, <code>{conflictCount}</code></div>
+                                    <div style="font-size: 0.72em; opacity: 0.5; margin-bottom: 3px;">Available tokens: <code>{factionCount}</code>, <code>{locationCount}</code>, <code>{conflictCount}</code></div>
                                     <textarea id="rpg_world_progression_skeleton_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; background:rgba(0,0,0,0.3); color:var(--SmartThemeBodyColor); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:6px; box-sizing:border-box; margin-bottom: 6px;" placeholder="System prompt for generating the World Skeleton…"></textarea>
 
                                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top: 4px;">

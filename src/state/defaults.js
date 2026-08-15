@@ -772,35 +772,9 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionLocationLastAdvanced: {}, // per-location macro simulation watermark
 
-        // Legacy entity-focus keys retained for profile/settings compatibility;
-        // location-centric World Progression ignores them.
-        worldProgressionRandomizeNPCs: false,
-
-        worldProgressionRandomSkeletonNPCCount: 2,        // legacy, unused
-
-        worldProgressionRandomNarrativeNPCCount: 3,       // legacy, unused
-
-        worldProgressionRandomizeLocations: false,        // legacy, unused
-
-        worldProgressionRandomSkeletonLocationCount: 2,   // legacy, unused
-
-        worldProgressionRandomNarrativeLocationCount: 2,  // legacy, unused
-
-        worldProgressionRandomizeFactions: false,         // legacy, unused
-
-        worldProgressionRandomSkeletonFactionCount: 2,    // legacy, unused
-
-        worldProgressionRandomNarrativeFactionCount: 2,   // legacy, unused
-
-        worldProgressionRandomizeConflicts: false,        // legacy, unused
-
-        worldProgressionRandomConflictCount: 3,           // legacy, unused
-
         worldProgressionSkeletonFactions: 4,       // number of factions in skeleton
 
         worldProgressionSkeletonLocations: 4,      // number of locations in skeleton
-
-        worldProgressionSkeletonNPCs: 0,           // number of NPCs in skeleton
 
         worldProgressionSkeletonConflicts: 3,      // number of conflicts in skeleton
 
@@ -833,7 +807,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given world source material, generate a sparse foundational skeleton for an RPG campaign simulation.
 
 ## OUTPUT FORMAT — MANDATORY
-Use exactly one section header followed by one level-three heading per entity:
+Use exactly one section header followed by one level-three heading per premise:
 
 ## FACTIONS
 ### Faction Name
@@ -843,24 +817,18 @@ One or two sentences covering its nature and current tension.
 ### Location Name
 One or two sentences covering its description and current state.
 
-## NPCS
-### NPC Name
-One or two sentences covering their role and current state.
-
 ## CONFLICTS
 ### Conflict Name
 One or two sentences covering the involved parties and current state.
 
-Generate exactly {factionCount} factions, {locationCount} locations, {npcCount} NPCs, and {conflictCount} conflicts. Omit the NPCS section entirely when its count is 0.
+Generate exactly {factionCount} factions, {locationCount} locations, and {conflictCount} conflicts.
 
 ## RULES
 - The line beginning with \`###\` is the title only. Never put a description, parties involved, labels, or metadata on that line.
 - Put all descriptive text on the following line(s). In conflicts, state the parties naturally in the prose; never use a \`Parties involved:\` subheading.
 - Do not use bold text, bullet lists, tables, JSON, or any headings other than the required \`##\` sections and \`###\` titles.
-- Keep every entity consistent with the provided source material. No player-character references or placeholder names.
-- Maximum two sentences per entity. Output only the structured content.
-
-${NEW_NPC_NAMING_RULE}`,
+- Keep every premise consistent with the provided source material. Named individuals may constrain the result but must never become skeleton entries.
+- Maximum two sentences per premise. Output only the structured content.`,
 
 
         routerSystemPromptTemplate: prepareShippedLorebookPromptTemplate(`<basic_instructions>
@@ -1398,6 +1366,8 @@ Rules:
         mapEvolutionSystemPrompt: DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT,
 
         mapEvolutionLastFiredBySite: {},
+
+        mapEvolutionBacklogBySite: {},
 
         mapEvolutionLastSiteRoot: "",
 

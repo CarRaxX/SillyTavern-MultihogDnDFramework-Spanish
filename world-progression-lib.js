@@ -56,7 +56,7 @@ function isLocationRecord(bookName, entry, prefix) {
 }
 
 function isNpcRecord(bookName, entry, prefix) {
-    if (isSkeletonBookName(bookName)) return entry?.extensions?.rpgCategory === 'NPC';
+    if (isSkeletonBookName(bookName)) return false;
     const category = bookCategory(bookName, prefix);
     return category === 'NPC' || category === 'NPCS' || String(bookName || '').toLowerCase().includes('npc');
 }
@@ -124,6 +124,9 @@ export function buildWorldProgressionLocationDossiers(archiveBooks, {
         if (isWorldBookName(bookName) || !book?.entries) continue;
         const skeleton = isSkeletonBookName(bookName);
         for (const [uid, entry] of Object.entries(book.entries)) {
+            // Legacy named-individual seeds belong to the retired entity-level
+            // skeleton design. Preserve them on disk, but never expose them to WP.
+            if (skeleton && String(entry?.extensions?.rpgCategory || '').toUpperCase() === 'NPC') continue;
             const label = entryLabel(entry);
             const content = stripDungeonMapSection(String(entry?.content || '')).trim();
             if (!label || !content) continue;

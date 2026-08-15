@@ -114,6 +114,7 @@ describe('chat rename migration helpers', () => {
         ['world progression timer', { worldProgressionLastFiredAtMinutes: 60 }],
         ['world progression location rotation', { worldProgressionLocationLastAdvanced: { morrowfen: 'Day 2, 08:00' } }],
         ['map report application', { mapEvolutionWorldReportApplications: { morrowfen: { 'World::1': { status: 'considered' } } } }],
+        ['map evolution backlog', { mapEvolutionBacklogBySite: { morrowfen: [{ kind: 'quiet', elapsedMinutes: 15 }] } }],
         ['future schema field', { futureCampaignPayload: {} }],
     ])('treats %s data as campaign substance', (_label, partition) => {
         expect(partitionHasCampaignSubstance(partition)).toBe(true);
