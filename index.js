@@ -2941,6 +2941,8 @@ async function showComponentsExplanation() {
         `Al obtener botín, se realizan tiradas de dados para determinar su calidad (común, raro, valioso). Añade variedad y recompensas significativas.`
     )}
                 ${card('🌍', 'Eventos Aleatorios',
+        `Se lanzan eventos aleatorios cuando pasa el tiempo o durante viajes. Un encuentro fortuito, un cambio de clima o una emboscada: situaciones que ocurren de forma dinámica y mantienen el mundo vivo.`
+    )}
                 ${card('💤', 'Descanso',
         `El descanso está limitado a una vez cada 9 horas de tiempo en el juego. Evita abusar del descanso para curarse tras cada combate.`
     )}
