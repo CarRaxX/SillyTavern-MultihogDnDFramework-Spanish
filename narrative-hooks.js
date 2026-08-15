@@ -543,7 +543,7 @@ export function registerMapArchitectTool() {
     }
 }
 
-/** Unregister CreateAreaMap and abort Map Updater / Map Evolution when Location Mapping is off. */
+/** Unregister CreateAreaMap and abort Map Updater / Map Evolution when Persistent Maps is off. */
 export function syncLocationMappingRuntime() {
     registerMapArchitectTool();
     if (isLocationMappingEnabled(getSettings())) return;

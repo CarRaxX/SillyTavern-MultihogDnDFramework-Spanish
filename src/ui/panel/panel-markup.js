@@ -165,11 +165,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             </div>
                             <div style="flex: 1;" title="Max Active Keys: The maximum number of lore entries the agent can keep in Active Memory. Once reached, it must deactivate old entries to add new ones.">
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted);">Max Active Keys:</div>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-max-activations" value="${settings.routerMaxActivations || 8}" min="1" max="20" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-max-activations" value="${settings.routerMaxActivations || 12}" min="1" max="20" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
                             </div>
-                            <div style="flex: 1;" title="Keyword Overflow Cap: max keyword-triggered entries allowed above Max Active Keys (0 = no cap). When exceeded, the oldest keyword entries are evicted first. Example: Max Active=8, Cap=4 → hard ceiling of 12 total.">
+                            <div style="flex: 1;" title="Keyword Overflow Cap: max keyword-triggered entries allowed above Max Active Keys (0 = no cap). When exceeded, the oldest keyword entries are evicted first. Example: Max Active=12, Cap=6 → hard ceiling of 18 total.">
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted); line-height: 1.2;">Keyword Overflow Cap<br><span style="font-size: 0.75em; opacity: 0.5; font-weight: normal;">(0 = no cap)</span>:</div>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-kw-overflow-cap" value="${settings.routerMaxKeywordOverflow ?? 0}" min="0" max="50" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-kw-overflow-cap" value="${settings.routerMaxKeywordOverflow ?? 6}" min="0" max="50" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
                             </div>
                         </div>
                         

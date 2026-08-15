@@ -405,7 +405,7 @@ function syncNarratorToggleUi(tag, settings) {
     const unlocked = isSectionUnlocked(settings, tag);
     el.checked = isEffectiveSectionEnabled(tag, settings);
     const label = el.closest('label');
-    // Location Mapping stays a live kill switch even when the sysprompt section is unlocked.
+    // Persistent Maps stays a live kill switch even when the sysprompt section is unlocked.
     if (tag === LOCATION_MAPPING_SECTION_TAG) {
         el.disabled = false;
         if (label) label.title = LOCATION_MAPPING_TOGGLE_TITLE;

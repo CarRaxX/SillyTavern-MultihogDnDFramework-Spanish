@@ -38,7 +38,7 @@ describe('effective system-prompt section state', () => {
         expect(editorSource).toMatch(/event\.key !== 'Enter' && event\.key !== ' '/);
     });
 
-    it('treats Location Mapping as a kill switch even when the unlocked override disagrees', () => {
+    it('treats Persistent Maps as a kill switch even when the unlocked override disagrees', () => {
         const settings = {
             enabled: true,
             syspromptModules: { [LOCATION_MAPPING_SECTION_TAG]: false },
@@ -63,15 +63,16 @@ describe('effective system-prompt section state', () => {
         expect(isLocationMappingEnabled(settings)).toBe(true);
     });
 
-    it('keeps the Components Location Mapping checkbox as a live kill switch', () => {
+    it('keeps the Components Persistent Maps checkbox as a live kill switch', () => {
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         const gameSystemsSource = readFileSync(new URL('../game-systems.js', import.meta.url), 'utf8');
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         const onboarding = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
 
-        expect(settingsMarkup).toContain('Location Mapping (Alpha) — function calling MUST be enabled');
+        expect(settingsMarkup).toContain('Persistent Maps (Alpha) — function calling MUST be enabled');
+        expect(settingsMarkup).not.toContain('Location Mapping (Alpha)');
         expect(settingsMarkup).not.toContain('Dungeon Reality Mapping (Alpha)');
-        expect(onboarding).toContain('Location Mapping (Alpha)');
+        expect(onboarding).toContain('Persistent Maps (Alpha)');
         expect(indexSource).toContain('setLocationMappingEnabled(checked, fresh)');
         expect(indexSource).toContain('syncLocationMappingRuntime()');
         expect(indexSource).toMatch(/function scheduleAutoApply\(\) \{\s*syncLocationMappingRuntime\(\);/s);

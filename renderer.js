@@ -2467,7 +2467,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
-                            <span>🗺️ Location Mapping (Alpha)</span>
+                            <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />

@@ -241,7 +241,7 @@ export async function maybeRollbackMapUpdaterForSwipe(msg) {
 
 /**
  * One occupancy-maintenance pass for the currently mapped site.
- * Skips when Location Mapping is off, no map is active, Lorebook Agent is busy, or auto-updates are disabled.
+ * Skips when Persistent Maps is off, no map is active, Lorebook Agent is busy, or auto-updates are disabled.
  * @param {{ isManual?: boolean, lookback?: number|null }} [options]
  */
 export async function runMapUpdaterPass({ isManual = false, lookback = null } = {}) {

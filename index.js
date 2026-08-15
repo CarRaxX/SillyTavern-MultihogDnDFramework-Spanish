@@ -190,7 +190,7 @@ export async function refreshAgentManifestNow() {
 
 function notifyMapEvolutionPassResult(result) {
     const skipped = result?.skipped;
-    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Evolution');
+    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Evolution');
     else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites' || skipped === 'no_selection') toastr.warning('No mapped site to evolve.', 'Map Evolution');
     else if (skipped === 'disabled') toastr.warning('Map Evolution is disabled.', 'Map Evolution');
     else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Evolution');
@@ -3086,7 +3086,7 @@ async function showComponentsExplanation() {
                 ${card('⛺', 'Benched Party',
         `Tracks party members who are temporarily away from you — hospitalized, scouting ahead, captured, sent on a side task, etc. — in a separate [BENCHED PARTY] roster while reunion remains plausible. The GM is told what this means so it won't narrate them back at your side until the story brings them back on-screen. Benched members become eligible for off-screen simulation updates via World Reports (🌍), allowing the simulator to advance their individual subplots in the background. Turn off if you don't want temporary separations tracked separately from your active party.`
     )}
-                ${card('🗺️', 'Location Mapping (Alpha)',
+                ${card('🗺️', 'Persistent Maps (Alpha)',
         `When you enter a mapped site — dungeon, ruin, stronghold, lair, town, or city — a dedicated Map Architect builds a hidden objective map (room-scale for interiors, district-scale for settlements). The GM may invent shops and interiors against that skeleton. Alpha: expect sharp edges. Function calling must be enabled.`
     )}
                 ${card('🧭', 'CYOA Mode',
@@ -10043,12 +10043,12 @@ RULES:
             saveSettings();
         });
         $('#rpg_tracker_router_max_activations').val(settings.routerMaxActivations).on('input', function () {
-            const val = parseInt(String($(this).val() || '')) || 8;
+            const val = parseInt(String($(this).val() || '')) || 12;
             settings.routerMaxActivations = val;
             $('#rt-agent-router-max-activations').val(settings.routerMaxActivations);
             saveSettings();
         });
-        $('#rpg_tracker_router_max_keyword_overflow').val(settings.routerMaxKeywordOverflow ?? 0).on('input', function () {
+        $('#rpg_tracker_router_max_keyword_overflow').val(settings.routerMaxKeywordOverflow ?? 6).on('input', function () {
             settings.routerMaxKeywordOverflow = parseInt(String($(this).val() || '')) || 0;
             $('#rt-agent-router-kw-overflow-cap').val(settings.routerMaxKeywordOverflow);
             saveSettings();

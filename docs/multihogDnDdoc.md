@@ -97,7 +97,7 @@ For the narrator, I'd recommend trying at least the following:
 
 2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Location Mapping** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
+3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Persistent Maps** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
 
 It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
@@ -171,7 +171,7 @@ On generation end (skipped for quiet/impersonate, while a pass is already runnin
 2. **State Tracker** pass (throttled by “run every N”; default every turn) — parses the new narrative and updates the memo.
 3. **Combat API Override** sync (switch/restore narrator profile if combat started/ended).
 4. Dynamic RNG prompt sync (Hybrid mode combat boundary).
-5. **Map Updater** occupancy (if Location Mapping is on and its run-every threshold is met).
+5. **Map Updater** occupancy (if Persistent Maps is on and its run-every threshold is met).
 6. **World Progression** TIME check (deterministic; see that section).
 7. **Map Evolution** — grounds a new World Report onto matching maps, and/or interval restlessness for the configured map pool (current map, N maps, all mapped sites, or a selected checklist).
 8. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
@@ -511,7 +511,7 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 
 - Portraits via SillyTavern Image Generation **or** Pollinations.ai.
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
-- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Location Mapping** below.
+- **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Persistent Maps** below.
 - Real-time scene-art triggers: on location enter/change and/or every N outputs.
 
 ### Slash command
@@ -527,9 +527,9 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ---
 
-## Location Mapping (Alpha)
+## Persistent Maps (Alpha)
 
-Location Mapping is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Location Mapping (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
+Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
 
 It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
@@ -673,7 +673,7 @@ Configurable narrator-side behaviors include:
 - **Narrative Pacing** modes: Normal (no length instructions), Shorter Outputs (modest length), High-Agency, and Downtime
 - **Benched Party** handling (ties into WP eligibility)
 - **Relationship Tracking** sections in the GM prompt
-- **Location Mapping** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); requires function calling for `CreateAreaMap`
+- **Persistent Maps** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); requires function calling for `CreateAreaMap`
 - **CYOA** choice presentation
 - End-of-output footer reminders so the GM closes turns in the format ST expects
 
@@ -715,14 +715,14 @@ The framework’s backbone is still **time + memo + optional lore/world layers**
 | Wrong campaign data or setup in a new chat | Check that Chat-Linked Mode and **Lock Control Room & Modules to each chat** are enabled. GLOBAL items intentionally share activation; CHAT-BOUND items restore that chat's saved setup. Lock-off mode is a temporary carry-over bypass. |
 | Tracker formatting broken after paste | Use 💬 Direct Prompt: “Reformat this sheet to stock module layout.” |
 | Modules disappear / drift on a local or small tracker model | Enable **Full Review Mode** (State Tracker & Modules, below Enable State Tracker). Delta-only updates are hard for weaker models; Full Review dumps every enabled module each pass. Also raise response length. |
-| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Location Mapping** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
+| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Persistent Maps** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
 | CreateAreaMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry (`DUNGEON` or `SETTLEMENT`); Map Architect failures are real errors and must not be retried in the same turn. |
 
 ---
 
 ## Mental Model (one paragraph)
 
-The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Location Mapping** (alpha) stores an objective hidden map for dangerous interiors and settlements, and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
+The **System Prompt** teaches the narrator how to simulate. **Hybrid RNG** supplies unbiased randomness. The **State Tracker** audits each reply into a memo that is re-injected next turn. The **Lorebook Agent** keeps long-horizon people/places/events available despite summarization. **Persistent Maps** (alpha) stores an objective hidden map for dangerous interiors and settlements, and shows a player-facing graph in Visuals/Map. **World Progression** advances the off-screen world on the in-world clock. Everything else — quests, CYOA, portraits, cartridges, themes — is optional depth on that spine.
 
 These are recommendations, not rules — experiment. Different models shine for different styles of play.
 

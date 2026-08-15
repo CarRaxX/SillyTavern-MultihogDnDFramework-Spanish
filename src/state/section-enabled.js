@@ -1,4 +1,4 @@
-/** Stable sysprompt tag. UI copy says Location Mapping; do not rename this key. */
+/** Stable sysprompt tag. UI copy says Persistent Maps; do not rename this key. */
 export const LOCATION_MAPPING_SECTION_TAG = 'dungeon_reality_and_hidden_mapping';
 
 /** Whether a built-in (non-unlocked) base section is currently enabled. */

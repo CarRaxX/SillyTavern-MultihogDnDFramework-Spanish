@@ -4501,7 +4501,7 @@ ${namingRule}`;
         if (maxAct) {
             maxAct.addEventListener('input', () => {
                 const s = getSettings();
-                const val = parseInt(maxAct.value) || 8;
+                const val = parseInt(maxAct.value) || 12;
                 s.routerMaxActivations = val;
                 $('#rpg_tracker_router_max_activations').val(s.routerMaxActivations);
                 saveSettings();
@@ -4756,7 +4756,7 @@ ${namingRule}`;
                 const result = await runMapUpdaterPass({ isManual: true, lookback: s.routerLookback || 4 });
                 updateAgentStatusIndicator(isRouterRunning());
                 const skipped = result?.skipped;
-                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Updater');
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Updater');
                 else if (skipped === 'no_active_map') toastr.warning('No active dungeon or settlement map.', 'Map Updater');
                 else if (skipped === 'disabled') toastr.warning('Map Updater is disabled.', 'Map Updater');
                 else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Updater');
@@ -4788,7 +4788,7 @@ ${namingRule}`;
                 const result = await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots });
                 updateAgentStatusIndicator(isRouterRunning());
                 const skipped = result?.skipped;
-                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Location Mapping is off.', 'Map Evolution');
+                if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Evolution');
                 else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites') toastr.warning('No mapped site to evolve.', 'Map Evolution');
                 else if (skipped === 'disabled') toastr.warning('Map Evolution is disabled.', 'Map Evolution');
                 else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Evolution');

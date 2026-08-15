@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.86.1] - 2026-08-15
+
+### Changed
+- **Persistent Maps (Alpha)**: the Components toggle is renamed from Location Mapping (Alpha). The internal `<dungeon_reality_and_hidden_mapping>` tag is unchanged.
+- **Keyword Overflow Cap**: default is now 6 (was 0 / no cap). Existing chats still at 0 are raised once; you can set 0 again afterward for no cap.
+- **Max Active Keys**: default is now 12 (was 8). Existing chats still at 8 are raised once; you can set 8 again afterward.
+
 ## [7.86.0] - 2026-08-15
 
 ### Changed
