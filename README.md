@@ -42,6 +42,7 @@ I know it says "D&D Framework," but in addition to fantasy, the system works jus
    - Tool Call RNG: Enables a commitment logic where the AI must declare a DC before seeing the result, completely preventing sycophancy.
 3. 🤖 **Lorebook Agent** - Automatically creates, activates/deactivates, updates, consolidates, etc, lorebook entries, ensuring long-term memory despite summarization.
 4. 🌍 **World Progression** - A location-centric macro simulator that creates daily (or more frequent) prose reports from readable location lore and an optional world skeleton. Reports steer the narrator immediately and are realized lazily by Map Evolution; granular entities and hidden maps remain outside WP authority.
+5. 🗺️ **Map Evolution** - Dungeons and settlements evolve autonomously. Enemies may repopulate or set up ambushes, third-party scavengers may enter, etc.
 
 Together they solve the four core problems of LLM tabletop RP: the AI forgetting your inventory/spells, the AI forgetting long-term context, you always winning (aka. plot armor), and the world being static outside of the immediate player's bubble. I have high confidence in the system's reliability—you can just play and not worry about tinkering with much of anything.
 
