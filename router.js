@@ -1168,7 +1168,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         // or consume the agent's activation slots.
         const budgetActiveKeys = (settings.activeRouterKeys || []).filter(id => id !== activeDungeonEntryId);
         const activeCount = computeUnpinnedActiveCount(budgetActiveKeys, settings.pinnedRouterKeys);
-        const maxActive = settings.routerMaxActivations || 8;
+        const maxActive = settings.routerMaxActivations || 12;
         const overflow = activeCount - maxActive;
         const budgetLine = `Active entries: ${activeCount} / ${maxActive}`;
         const overflowInstruction = overflow > 0
@@ -1658,7 +1658,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             // Runtime-dependent fragments (combat guidance, pass restrictions, etc.) are
             // expanded from editable settings templates — see defaults.js.
             const basicRawTemplate = settings.routerBasicSystemPromptTemplate || '';
-            const maxActNum = settings.routerMaxActivations || 8;
+            const maxActNum = settings.routerMaxActivations || 12;
             const basicSystemPrompt = adjustPromptTimestamps(
                 expandLorebookPromptTemplate(
                     basicRawTemplate
@@ -1922,7 +1922,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             const agentRelSection = settings.npcRelationshipBars
                 ? buildNpcRelationshipInstruction(getNpcRelationshipMax(settings), settings).trim()
                 : '';
-            const maxActNumAgent = settings.routerMaxActivations || 8;
+            const maxActNumAgent = settings.routerMaxActivations || 12;
             const sharedContext = adjustPromptTimestamps(
                 expandLorebookPromptTemplate(
                     agentRawTemplate
@@ -3829,7 +3829,7 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     {
         const kwOverflowCap = settings.routerMaxKeywordOverflow || 0;
         if (kwOverflowCap > 0) {
-            const maxActive   = settings.routerMaxActivations || 8;
+            const maxActive   = settings.routerMaxActivations || 12;
             const hardCeiling = maxActive + kwOverflowCap;
             const totalActive = currentActive.size;
             if (totalActive > hardCeiling) {
