@@ -513,7 +513,7 @@ function getSettingsInternal(extensionSettings) {
         if (s.routerSystemPromptTemplate.includes('<formatting>')) {
             s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
                 'When recording a new entry, keep the lorebook category separate from the entity label.',
-                'When recording a new entry, keep the lorebook category separate from the entity label.\n\n- **REQUIRED category field:** Every `record` item MUST include `"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.\n- Location labels may use `" :: "` hierarchy AND must still set `"category": "LOC"`. NPC people get `"category": "NPC"` with a plain name label (no `::`).'
+                'When recording a new entry, keep the lorebook category separate from the entity label.\n\n- **REQUIRED category field:** Every `record` item MUST use one of the exact values in the runtime **AVAILABLE RECORD CATEGORIES** section. That authoritative list contains the enabled stock modules and all custom tags for the current pass. Disabled stock categories are not available.\n- When LOC is enabled, location labels may use `" :: "` hierarchy and must still set `"category": "LOC"`. When NPC is enabled, NPC people get `"category": "NPC"` with a plain name label (no `::`).'
             );
             if (!s.routerSystemPromptTemplate.includes('MISSING required "category": "NPC"')) {
                 s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
