@@ -1408,7 +1408,6 @@ function ensureChatShell(panel) {
                     <strong>MODO TUTORIAL</strong>
                     <span>Inyecta la documentación en Markdown de Multihog en cada solicitud del Acompañante de Aventura. Es excelente mientras aprendes el sistema, pero los veteranos pueden desactivarlo para ahorrar algunos miles de tokens. Ese costo adicional suele ser insignificante con un modelo recomendado como Gemini Flash-Lite, Flash o modelos locales en llama.cpp.</span>
                 </div>
-                </div>
             </div>
             <div class="rt-chat-gear-wrap">
                 <button type="button" class="rpg-tracker-icon-btn rt-chat-gear-btn" id="rt-chat-gear-btn" title="Opciones de CHAT" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear"></i></button>

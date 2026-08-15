@@ -172,10 +172,7 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted); line-height: 1.2;">${t('agent.keywordOverflowCap', 'Límite de Desbordamiento de Claves')}<br><span style="font-size: 0.75em; opacity: 0.5; font-weight: normal;">${t('agent.noCap', '(0 = sin límite)')}</span>:</div>
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-kw-overflow-cap" value="${settings.routerMaxKeywordOverflow ?? 6}" min="0" max="50" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
                             </div>
-                            </div>
                         </div>
-                        
-
 
                     </div>
 
