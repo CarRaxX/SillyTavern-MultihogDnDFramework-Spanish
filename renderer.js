@@ -2465,7 +2465,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
                             <span>⛺ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled.">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled. Not recommended together with World Progression until compatibility is added.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
                             <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>
