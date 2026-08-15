@@ -1,4 +1,4 @@
-### New: Persistent maps. The framework now generates persistent maps that are automatically updated and even evolved offscreen. Explore a dungeon or a town, leave, come back later, and continue. Dungeons are no longer hallucinated but skill checks actually matter.
+### 📢 New: Persistent maps. The framework now generates persistent maps that are automatically updated and even evolved offscreen. Explore a dungeon or a town, leave, come back later, and continue. Dungeons are no longer hallucinated but skill checks actually matter.
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/9f5e6fec-9ea6-45fb-b514-9a89ee882d4c" width="100%" alt="Combat in progress" />
