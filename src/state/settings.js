@@ -819,26 +819,27 @@ function getSettingsInternal(extensionSettings) {
     // stream is killed. Treat it as unset so existing chats pick up 25000.
     if (Number(s.mapUpdaterMaxTokens) === 2500) s.mapUpdaterMaxTokens = 25000;
     if (Number(s.mapEvolutionMaxTokens) === 2500) s.mapEvolutionMaxTokens = 25000;
-    // Old shipped default was 0 (no cap). Raise existing 0s once to 6; after the
-    // flag is set, 0 stays a valid "no cap" choice.
-    if (!s.keywordOverflowDefaultedTo6) {
+    // Old shipped default was 0 (no cap). Raise existing 0s once to 6.
+    // The flag must NOT live in defaults: seeding it true skipped this for everyone
+    // who already had 0 saved. After this flag is persisted, 0 stays a valid choice.
+    if (!s.keywordOverflowMigratedTo6) {
         if (Number(s.routerMaxKeywordOverflow) === 0) s.routerMaxKeywordOverflow = 6;
         for (const snapshot of Object.values(s.chatStates || {})) {
             if (!snapshot || typeof snapshot !== 'object') continue;
             if (Number(snapshot.routerMaxKeywordOverflow) === 0) snapshot.routerMaxKeywordOverflow = 6;
         }
-        s.keywordOverflowDefaultedTo6 = true;
+        s.keywordOverflowMigratedTo6 = true;
     }
 
-    // Old shipped default was 8. Raise existing 8s once to 12; after the flag
-    // is set, 8 stays a valid explicit choice.
-    if (!s.maxActiveKeysDefaultedTo12) {
+    // Old shipped default was 8. Raise existing 8s once to 12. Same: flag is
+    // persisted only after this pass, so it cannot skip the first upgrade.
+    if (!s.maxActiveKeysMigratedTo12) {
         if (Number(s.routerMaxActivations) === 8) s.routerMaxActivations = 12;
         for (const snapshot of Object.values(s.chatStates || {})) {
             if (!snapshot || typeof snapshot !== 'object') continue;
             if (Number(snapshot.routerMaxActivations) === 8) snapshot.routerMaxActivations = 12;
         }
-        s.maxActiveKeysDefaultedTo12 = true;
+        s.maxActiveKeysMigratedTo12 = true;
     }
 
     // One-time floor so old saved 6000/etc. pick up 25000. After this flag is set,
@@ -1052,8 +1053,8 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitOpenaiUrl',
     'portraitOpenaiKey',
     'portraitOpenaiModel',
-    'keywordOverflowDefaultedTo6',
-    'maxActiveKeysDefaultedTo12',
+    'keywordOverflowMigratedTo6',
+    'maxActiveKeysMigratedTo12',
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
     'mapArchitectMaxTokensFloored',

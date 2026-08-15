@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.86.2] - 2026-08-15
+
+### Fixed
+- **Keyword Overflow / Max Active Keys upgrade**: the one-time 0→6 and 8→12 raises now actually run for existing chats. The previous flags were seeded `true` from defaults, so saved 0/8 never changed. After this pass, setting 0 or 8 again is kept.
+
 ## [7.86.1] - 2026-08-15
 
 ### Changed
