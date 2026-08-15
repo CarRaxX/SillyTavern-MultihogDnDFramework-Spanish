@@ -971,7 +971,7 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 
-- **REQUIRED category field:** Every \`record\` item MUST include \`"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"\` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.
+- **REQUIRED category field:** Every \`record\` item MUST use one of the exact values in the runtime **AVAILABLE RECORD CATEGORIES** section. That authoritative list contains the enabled stock modules and all custom tags for the current pass. Disabled stock categories are not available.
 
 - Use the "category" field for the type. Never rely on the label, \`::\` hierarchy, or [CORE] content to imply the book — those do not route.
 
@@ -985,7 +985,7 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 
-Correct examples:
+Correct field-shape examples (use a category only when it appears in **AVAILABLE RECORD CATEGORIES**):
 
 - {"label": "Lissa", "category": "NPC", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: …\\n[/CORE]"}
 
@@ -1242,9 +1242,9 @@ World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for Wo
 Campaign Root: "{{campaignRoot}}"
   NPCs -> "{{campaignNpcBook}}"
   Locations -> "{{campaignLocBook}}" (etc.)
-**Routing:** every new \`record\` MUST set \`"category"\` to match the target book above (\`NPC\` → NPCs book, \`LOC\` → Locations, etc.). Labels and \`::\` paths do NOT choose the book — only \`category\` does.
-Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with \`"category": "LOC"\`.
-NPC people use a plain name label and \`"category": "NPC"\` (never put people under a \`::\` path).
+**Routing:** every new \`record\` MUST use an exact category from the runtime **AVAILABLE RECORD CATEGORIES** section. Labels and \`::\` paths do NOT choose the book — only \`category\` does.
+When LOC is enabled, location hierarchy uses the " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with \`"category": "LOC"\`.
+When NPC is enabled, NPC people use a plain name label and \`"category": "NPC"\` (never put people under a \`::\` path).
 Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names (e.g. keys: ["The Guilded Anvil", "Khelt", "Rust-Lantern District", "tavern"]).
 **Keyword cap: maximum 6 per entry.** Keep only the most essential trigger words.
 

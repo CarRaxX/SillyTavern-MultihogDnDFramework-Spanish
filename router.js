@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate, resolveRecordCategoryTag } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
@@ -1156,6 +1156,19 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             }
         }
 
+        // One authoritative runtime list drives schemas, text-mode instructions,
+        // routing, and diagnostics. Disabled stock modules must not leak into a
+        // custom-only setup merely because their category names are built in.
+        const categoryEnum = getEnabledRouterCategoryTags(settings);
+        const categoryChoiceText = categoryEnum.map(tag => `"${tag}"`).join(' | ');
+        const categoryExampleValue = JSON.stringify(categoryEnum[0] || '');
+        const categoryRouteText = categoryEnum
+            .map(tag => `"${tag}" -> "${prefix ? `${prefix}_` : ''}${getRouterCategoryBookSuffix(tag)}"`)
+            .join(', ');
+        const recordCategoryGuidance = categoryEnum.length
+            ? `## AVAILABLE RECORD CATEGORIES (AUTHORITATIVE FOR THIS PASS)\nThe only valid \`record[].category\` values are: ${categoryChoiceText}.\nRoutes: ${categoryRouteText}.\nUse one of these exact values for every new record. Categories not listed here are disabled and must not be used.`
+            : `## AVAILABLE RECORD CATEGORIES (AUTHORITATIVE FOR THIS PASS)\nNo record categories are enabled. Do not create new records this pass.`;
+
         const sysTemplate = adjustPromptTimestamps(settings.routerSystemPromptTemplate || 'You are the Lorebook Agent. Maintain narrative consistency and manage lorebooks.', settings);
         const basePrompt = sysTemplate
             .replace(/\{\{campaignRoot\}\}/g, prefix || 'World Chronicle')
@@ -1658,16 +1671,9 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
         } else {
             // -- Agent Mode (native tool calling, multi-turn messages) ----------
 
-            // Build the commit tool's category enum from enabled modules + custom tags
-            const validCategories = [
-                ...Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => m.tag.toUpperCase()),
-                ...(settings.routerCustomTags || []).map(t => t.tag.toUpperCase()),
-            ];
-            const categoryEnum = validCategories.length ? validCategories : ['NPC', 'LOC', 'QUEST', 'FAC', 'EVENT'];
-
             // Dynamically build the commit tool parameters based on settings
             const commitProperties = {
-                record: {
+                ...(categoryEnum.length ? { record: {
                     type: 'array',
                     description: 'Creates a BRAND-NEW entry only. Never use this for a name that already appears in ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, or the ARCHIVE INDEX — that would duplicate their [CORE] block. For an existing entity, use "core" (identity/Combat Profile fields) or "update" (chronicle text) instead.',
                     items: {
@@ -1675,12 +1681,12 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                         properties: {
                             label: { type: 'string', description: 'Entity name only. NO tag prefix (e.g. "Iron Syndicate", NOT "FAC: Iron Syndicate"). Do NOT record the player character under any name (including "Player" or their roleplay character name/alias like "Dave Davidson").' },
                             keys:  { type: 'array', items: { type: 'string' }, description: 'Search keywords. Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names.' },
-                            content:  { type: 'string', description: `Full entry body. NPC: structured [CORE] with ${sectionNamesList}. LOC: plain [CORE] with 1–2 sentences (no field headers). FAC: plain [CORE] wrapping permanent history, ideology, schemes. QUEST/EVENT: no [CORE]; use chronicle format.` },
-                            category: { type: 'string', enum: categoryEnum, description: 'REQUIRED. Chooses the lorebook book: NPC→…_NPCs, LOC→…_Locations, FAC→…_Factions, QUEST→…_Quests, EVENT→…_Events. Labels and "::" paths do NOT choose the book — omit this and the record is skipped.' }
+                            content:  { type: 'string', description: `Full entry body. Follow the FIELD INSTRUCTIONS for the selected enabled category. Stock-category formatting, when enabled: NPC uses structured [CORE] with ${sectionNamesList}; LOC/FAC use plain [CORE]; QUEST/EVENT use chronicle format.` },
+                            category: { type: 'string', enum: categoryEnum, description: `REQUIRED. Use exactly one category enabled for this pass: ${categoryChoiceText || '(none)'}. ${categoryRouteText ? `Routes: ${categoryRouteText}. ` : ''}Labels and "::" paths do not choose the book.` }
                         },
                         required: ['label', 'keys', 'content', 'category']
                     }
-                },
+                } } : {}),
                 update: {
                     type: 'array',
                     description: 'Append new information to existing entries.',
@@ -1893,7 +1899,8 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             );
 
             const commitFieldNames = [
-                '"record": [...]', '"update": [...]', '"rename": [...]', '"activate": [...]',
+                ...(categoryEnum.length ? ['"record": [...]'] : []),
+                '"update": [...]', '"rename": [...]', '"activate": [...]',
                 '"deactivate": [...]', '"delete_ids": [...]',
                 ...(settings.npcRelationshipBars ? ['"rel": [...]'] : []),
                 '"appearance": [...]', '"equipment": [...]', '"core": [...]',
@@ -1913,7 +1920,8 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 You are a lorebook research agent. Maintain the campaign lorebook using the provided tools.
 ${LORE_EXISTENCE_RULE}
 When research is complete, call commit once to write all changes. Stop immediately after.
-${adjustedSharedContext}`
+${adjustedSharedContext}
+${recordCategoryGuidance}`
                 // Text-format prompt for profile/default ? model outputs Action:/Observation: text
                 : `${basePrompt}
 
@@ -1932,7 +1940,9 @@ Available actions:
 - read_entry({"uid": "Book::0"}) — read full body of an archived entry already on ARCHIVE INDEX
 - commit({${commitFieldNames}}) ? write all changes and finish
 
-commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"} — category is REQUIRED on every record (NPC people → "NPC", places with optional " :: " paths → "LOC"). Omitting category skips the record.
+${categoryEnum.length
+    ? `commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": ${categoryExampleValue}} — category is REQUIRED and must use one of these enabled values: ${categoryChoiceText}.`
+    : `commit record items: unavailable because no record categories are enabled.`}
 commit update items: {"id": "Book::UID", "content": "new text to append"}
 commit rename items: {"id": "Book::UID", "label": "New Name (optional)", "keys": ["kw1","kw2"] (optional, max 6)}${commitRelDescription}
 commit appearance items: {"id": "Book::UID or NPC Name or {{user}}", "content": "new body text"} — surgically updates Body (NPC [CORE] or linked PC card)
@@ -1940,9 +1950,11 @@ commit equipment items: {"id": "Book::UID or NPC Name or {{user}}", "content": "
 commit core items: {"id": "Book::UID or NPC Name", "field": "${eligibleCoreFields.join('|')}", "content": "new field content"} — surgically updates an eligible [CORE] field on NPC entries only (Body/Equipment use commit.appearance/commit.equipment; automatic passes = Combat Profile only)
 
 ## EXAMPLE
-Thought: Lissa and The Handler's Rest are not in ACTIVE MEMORY or ARCHIVE INDEX, so they do not exist yet. I will record both with explicit categories.
-Action: commit({"record": [{"label": "Lissa", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: Human\\n[/CORE]", "category": "NPC"}, {"label": "Kalvermoor :: The Handler's Rest", "keys": ["The Handler's Rest", "Kalvermoor", "tavern"], "content": "[CORE]\\nA weathered tavern.\\n[/CORE]", "category": "LOC"}]})
-${adjustedSharedContext}`;
+${categoryEnum.length
+    ? `Thought: New Entity is not in ACTIVE MEMORY or ARCHIVE INDEX, so it does not exist yet. I will record it with an enabled category.\nAction: commit({"record": [{"label": "New Entity", "keys": ["New Entity"], "content": "Persistent details about the entity.", "category": "${categoryEnum[0]}"}]})`
+    : `Thought: No record categories are enabled, so I will not create a record.\nAction: commit({})`}
+${adjustedSharedContext}
+${recordCategoryGuidance}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockA = questMatchA ? `[QUESTS]${questMatchA[1].trim()}[/QUESTS]` : 'None';
@@ -2427,22 +2439,22 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const recordedIds = [];
 
     // -- Phase A: Route each record to its target book --
-    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events', 'WORLD': 'World' };
-    // Extend with user-defined custom tags so they get their own books (e.g. WEATHER ? prefix_Weather)
-    for (const ct of (settings.routerCustomTags || [])) {
-        const t = ct.tag.toUpperCase();
-        if (!catMap[t]) catMap[t] = t.charAt(0) + t.slice(1).toLowerCase();
-    }
+    const writableCategoryMap = buildRouterCategoryMap(settings);
+    // WORLD is an internal World Progression target, not an implicit Agent category.
+    const catMap = { ...writableCategoryMap, WORLD: 'World' };
     /** @type {Map<string, Array>} */
     const bookQueue = new Map();
 
     const knownBookNames = Object.keys(allBooks);
     const knownCatTags = Object.keys(catMap);
+    const writableCatTags = Object.keys(writableCategoryMap);
+    const unambiguousFallbackTag = writableCatTags.length === 1 ? writableCatTags[0] : null;
     for (const rec of records) {
-        const resolved = resolveRecordCategoryTag(rec, knownCatTags);
+        const resolved = resolveRecordCategoryTag(rec, knownCatTags, unambiguousFallbackTag);
         if (!resolved.tag) {
             const who = rec.label || '(untitled)';
-            errors.push(`Skipped record "${who}": missing required category (NPC|LOC|FAC|QUEST|EVENT). Re-commit with "category" set.`);
+            const expected = writableCatTags.length ? writableCatTags.join('|') : '(no record categories enabled)';
+            errors.push(`Skipped record "${who}": missing or unrecognized category. Expected ${expected}. Re-commit with "category" set.`);
             continue;
         }
         if (resolved.inferred) {

@@ -75,6 +75,69 @@ export function computeUnpinnedActiveCount(activeKeys, pinnedKeys) {
 /** Structured NPC [CORE] field headers used to infer category when the model omits it. */
 const NPC_CORE_FIELD_HINT = /\b(Species|Personality|Brief Background|Habits\s*\/\s*Behaviors|Habits & Behaviors|Strengths|Flaws|Worn Equipment|Combat Profile)\s*:/i;
 
+/** Canonical lorebook suffixes for the stock Lorebook Agent categories. */
+const STOCK_ROUTER_CATEGORY_BOOKS = Object.freeze({
+    NPC: 'NPCs',
+    LOC: 'Locations',
+    QUEST: 'Quests',
+    FAC: 'Factions',
+    EVENT: 'Events',
+    WORLD: 'World',
+});
+
+/** @param {unknown} value */
+function normalizeRouterCategoryTag(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+/**
+ * Return the lorebook suffix used when routing a category tag.
+ * Custom tags intentionally retain the router's legacy naming rule.
+ * @param {string} tag
+ * @returns {string}
+ */
+export function getRouterCategoryBookSuffix(tag) {
+    const normalized = normalizeRouterCategoryTag(tag);
+    if (!normalized) return '';
+    return STOCK_ROUTER_CATEGORY_BOOKS[normalized]
+        || (normalized.charAt(0) + normalized.slice(1).toLowerCase());
+}
+
+/**
+ * Categories the Lorebook Agent may use for new records this pass.
+ * Disabled stock modules are deliberately excluded; custom tags are always enabled.
+ * @param {{routerModules?: Record<string, {enabled?: boolean, tag?: string}>, routerCustomTags?: Array<{tag?: string}>}} settings
+ * @returns {string[]}
+ */
+export function getEnabledRouterCategoryTags(settings = {}) {
+    const tags = [];
+    const add = (raw) => {
+        const tag = normalizeRouterCategoryTag(raw);
+        if (tag && !tags.includes(tag)) tags.push(tag);
+    };
+
+    for (const module of Object.values(settings.routerModules || {})) {
+        if (module?.enabled) add(module.tag);
+    }
+    for (const custom of (settings.routerCustomTags || [])) {
+        add(custom?.tag);
+    }
+    return tags;
+}
+
+/**
+ * Build the writable category-to-lorebook map from the current configuration.
+ * @param {{routerModules?: Record<string, {enabled?: boolean, tag?: string}>, routerCustomTags?: Array<{tag?: string}>}} settings
+ * @returns {Record<string, string>}
+ */
+export function buildRouterCategoryMap(settings = {}) {
+    const map = {};
+    for (const tag of getEnabledRouterCategoryTags(settings)) {
+        map[tag] = getRouterCategoryBookSuffix(tag);
+    }
+    return map;
+}
+
 /**
  * Infer lorebook category for a commit.record item when the model omitted/misspelled `category`.
  * Conservative: only returns a tag when the signal is strong.
@@ -103,9 +166,10 @@ export function inferRecordCategory(rec) {
  * Prefers an explicit/recognized category, then comment if it matches a known tag, then inference.
  * @param {{label?: string, content?: string, category?: string, comment?: string}} rec
  * @param {string[]} knownTags Uppercase category tags (NPC, LOC, … plus custom)
+ * @param {string|null} fallbackTag Unambiguous category to use when the model omitted it
  * @returns {{tag: string|null, inferred: boolean}}
  */
-export function resolveRecordCategoryTag(rec, knownTags = []) {
+export function resolveRecordCategoryTag(rec, knownTags = [], fallbackTag = null) {
     const tags = (Array.isArray(knownTags) ? knownTags : [])
         .map(t => String(t || '').toUpperCase())
         .filter(Boolean);
@@ -124,6 +188,14 @@ export function resolveRecordCategoryTag(rec, knownTags = []) {
     const inferred = inferRecordCategory(rec);
     if (inferred && (!tags.length || tags.includes(inferred))) {
         return { tag: inferred, inferred: true };
+    }
+
+    // A custom-only setup commonly has exactly one writable category. If an older
+    // customized prompt makes the model omit the field or echo a disabled stock
+    // category, routing is still unambiguous and should not produce a warning.
+    const fallback = matchKnown(fallbackTag);
+    if (fallback) {
+        return { tag: fallback, inferred: true };
     }
     return { tag: null, inferred: false };
 }
