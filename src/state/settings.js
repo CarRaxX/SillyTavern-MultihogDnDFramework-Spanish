@@ -826,6 +826,17 @@ function getSettingsInternal(extensionSettings) {
         s.keywordOverflowDefaultedTo6 = true;
     }
 
+    // Old shipped default was 8. Raise existing 8s once to 12; after the flag
+    // is set, 8 stays a valid explicit choice.
+    if (!s.maxActiveKeysDefaultedTo12) {
+        if (Number(s.routerMaxActivations) === 8) s.routerMaxActivations = 12;
+        for (const snapshot of Object.values(s.chatStates || {})) {
+            if (!snapshot || typeof snapshot !== 'object') continue;
+            if (Number(snapshot.routerMaxActivations) === 8) snapshot.routerMaxActivations = 12;
+        }
+        s.maxActiveKeysDefaultedTo12 = true;
+    }
+
     return extensionSettings[MODULE_NAME];
 }
 
@@ -1013,6 +1024,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitOpenaiKey',
     'portraitOpenaiModel',
     'keywordOverflowDefaultedTo6',
+    'maxActiveKeysDefaultedTo12',
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
     'mapArchitectSystemPrompt',

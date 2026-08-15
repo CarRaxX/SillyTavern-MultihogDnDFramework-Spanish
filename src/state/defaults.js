@@ -672,7 +672,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         routerMaxTurns: 5,
 
-        routerMaxActivations: 8,
+        routerMaxActivations: 12,
+        maxActiveKeysDefaultedTo12: true,
 
         routerMaxKeywordOverflow: 6,   // 0 = unlimited; N = max extra keyword-activated entries above routerMaxActivations
         keywordOverflowDefaultedTo6: true,

@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [7.82.3] - 2026-08-15
+
+### Changed
+- **Max Active Keys**: default is now 12 (was 8). Existing chats still at 8 are raised once; you can set 8 again afterward.
+
 ## [7.82.2] - 2026-08-15
 
 ### Changed

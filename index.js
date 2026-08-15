@@ -9750,7 +9750,7 @@ RULES:
             saveSettings();
         });
         $('#rpg_tracker_router_max_activations').val(settings.routerMaxActivations).on('input', function () {
-            const val = parseInt(String($(this).val() || '')) || 8;
+            const val = parseInt(String($(this).val() || '')) || 12;
             settings.routerMaxActivations = val;
             $('#rt-agent-router-max-activations').val(settings.routerMaxActivations);
             saveSettings();

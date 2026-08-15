@@ -4426,7 +4426,7 @@ ${namingRule}`;
         if (maxAct) {
             maxAct.addEventListener('input', () => {
                 const s = getSettings();
-                const val = parseInt(maxAct.value) || 8;
+                const val = parseInt(maxAct.value) || 12;
                 s.routerMaxActivations = val;
                 $('#rpg_tracker_router_max_activations').val(s.routerMaxActivations);
                 saveSettings();
