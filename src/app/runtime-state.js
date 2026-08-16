@@ -21,6 +21,7 @@ export const runtimeState = {
     updateAgentWorldStatusRef: null,
     updateWorldProgressionLastFiredDisplayRef: null,
     updateMapEvolutionScheduleDisplayRef: null,
+    refreshTrackerViewRef: null,
     runMapEvolutionPassRef: null,
     loadMappedEvolutionSiteRef: null,
     isLoreOrMapAgentBusyRef: null,

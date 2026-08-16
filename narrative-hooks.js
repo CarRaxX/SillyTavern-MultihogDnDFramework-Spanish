@@ -18,6 +18,7 @@ import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, format
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
 import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
+import { formatNarratorSiteActivity } from './map-evolution-lib.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
@@ -1055,7 +1056,13 @@ export function installInterceptor() {
             const currentLocation = findLatestDungeonLocation(_rbChat);
             const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation);
             if (activeSite) {
-                dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation);
+                dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation, {
+                    activityText: formatNarratorSiteActivity(
+                        settings.mapEvolutionThreadsBySite,
+                        settings.mapEvolutionBacklogBySite,
+                        activeSite.siteRoot,
+                    ),
+                });
                 dungeonMissingMapWarnings.delete(`${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`);
             } else if (currentLocation && looksLikeDungeonSite(currentLocation)) {
                 const warningKey = `${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`;

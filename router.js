@@ -956,7 +956,7 @@ export async function applyDungeonMapCommit(transaction, expectedContext, allBoo
 
     const mapBody = extractDungeonMapSection(rootEntry.content);
     const parsed = parseDungeonMapDocument(mapBody, liveContext.siteRoot);
-    const applied = applyDungeonMapTransaction(parsed.document, transaction, { frozenAreaIds });
+    const applied = applyDungeonMapTransaction(parsed.document, transaction, { frozenAreaIds, currentTime });
     if (!applied.ok) return applied;
 
     const timestampRegex = /(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;

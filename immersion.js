@@ -6,7 +6,7 @@ import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location
 import { scanRecentOutputForPresentNpcs } from './router.js';
 import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
 import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
-import { isDungeonMapDetached } from './src/ui/panel/dungeon-map-panel.js';
+import { isDungeonMapDetached, isDungeonMapRevealAll } from './src/ui/panel/dungeon-map-panel.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { runtimeState } from './src/app/runtime-state.js';
 
@@ -321,7 +321,7 @@ export function renderImmersionViewHtml(scene) {
     let mapHtml = '';
     if (scene.dungeonMap?.document) {
         const graph = buildDungeonMapGraph(scene.dungeonMap.document, {
-            playerFacing: true,
+            playerFacing: !isDungeonMapRevealAll(),
             currentLocation: rawLocationText || resolvedPath || '',
         });
         mapHtml = renderDungeonMapEmbedHtml(graph, {

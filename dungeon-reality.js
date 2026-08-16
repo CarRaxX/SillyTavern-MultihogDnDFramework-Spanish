@@ -58,14 +58,83 @@ const CONNECTION_STATES = ['OPEN', 'CLOSED', 'LOCKED', 'BLOCKED', 'DESTROYED', '
 const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS', 'EVOLVED'];
 const MAP_OPERATIONS = ['ADD_AREA', 'SET_AREA', 'ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION'];
 const EVOLVED_OPERATIONS = ['ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION', 'SET_AREA'];
+const MAP_THREAD_STATUSES = ['open', 'resolved', 'transformed'];
+const KILL_STATES = ['DEAD', 'DESTROYED'];
+const CAUSAL_OPERATION_FIELDS = ['cause', 'actor', 'thread_status'];
+const MAX_CAUSE_LENGTH = 240;
+const MAX_ACTOR_LENGTH = 120;
+const MAX_ASSET_COUNT = 99;
 /** Outcomes established by play. Map Evolution may not reverse them. */
 export const PLAY_CANON_LOCKED_STATES = [
     'DEAD', 'DESTROYED', 'DISARMED', 'TAKEN', 'CLEARED', 'REMOVED', 'EXPIRED', 'DISMISSED',
 ];
 export const MAP_SITE_KINDS = ['DUNGEON', 'SETTLEMENT'];
+export const MAP_KILL_STATES = KILL_STATES;
+export const MAP_ASSET_KINDS = ASSET_KINDS;
+
+export function isKillState(state) {
+    return KILL_STATES.includes(String(state || '').toUpperCase());
+}
 
 export function isPlayCanonLockedState(state) {
     return PLAY_CANON_LOCKED_STATES.includes(String(state || '').toUpperCase());
+}
+
+function normalizeThreadStatus(value) {
+    const status = String(value || '').trim().toLowerCase();
+    return MAP_THREAD_STATUSES.includes(status) ? status : '';
+}
+
+function readCausalCause(operation, path, errors) {
+    const cause = String(operation?.cause || '').trim();
+    if (!cause) {
+        errors.push(mapError('MISSING_CAUSE', `${path}.cause`, operation?.cause, 'Supply a concise in-world cause so later Map Evolution can continue this thread.'));
+        return '';
+    }
+    if (cause.length > MAX_CAUSE_LENGTH) {
+        errors.push(mapError('CAUSE_TOO_LONG', `${path}.cause`, cause, `Keep cause to ${MAX_CAUSE_LENGTH} characters.`));
+        return cause.slice(0, MAX_CAUSE_LENGTH);
+    }
+    return cause;
+}
+
+function readCausalActor(operation, path, errors, { required = false } = {}) {
+    const actor = String(operation?.actor || '').trim();
+    if (required && !actor) {
+        errors.push(mapError('MISSING_ACTOR', `${path}.actor`, operation?.actor, 'DEAD/DESTROYED requires actor: "party", an existing asset id, or a short off-map name such as a rival pack or collapse.'));
+        return '';
+    }
+    if (actor.length > MAX_ACTOR_LENGTH) {
+        errors.push(mapError('ACTOR_TOO_LONG', `${path}.actor`, actor, `Keep actor to ${MAX_ACTOR_LENGTH} characters.`));
+        return actor.slice(0, MAX_ACTOR_LENGTH);
+    }
+    return actor;
+}
+
+function readAssetCount(value, path, errors) {
+    if (value == null || value === '') return null;
+    const parsed = Math.floor(Number(value));
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_ASSET_COUNT) {
+        errors.push(mapError('INVALID_COUNT', path, value, `count is living members of this one asset (1-${MAX_ASSET_COUNT}). Packs stay one GROUP with count; use DESTROYED/DEAD instead of 0.`));
+        return null;
+    }
+    return parsed;
+}
+
+function applyAssetCount(target, value, path, errors) {
+    const count = readAssetCount(value, path, errors);
+    if (count != null) target.count = count;
+}
+
+function stampCausalFields(target, operation, path, errors, currentTime, { requireActor = false } = {}) {
+    if (!target || typeof target !== 'object') return;
+    const cause = readCausalCause(operation, path, errors);
+    if (cause) target.cause = cause;
+    const actor = readCausalActor(operation, path, errors, { required: requireActor });
+    if (actor) target.actor = actor;
+    else if (requireActor) delete target.actor;
+    const stamp = String(currentTime || '').trim();
+    if (stamp) target.changed_at = stamp;
 }
 
 function mapSlug(value, fallback = 'item') {
@@ -404,10 +473,12 @@ export function normalizeDungeonMapDocument(raw, siteFallback = '') {
         if (lastLocation) normalized.last_location = lastLocation;
         const behavior = String(asset?.behavior || '').trim();
         if (behavior) normalized.behavior = behavior;
-        for (const field of ['faction', 'owner', 'duration']) {
+        for (const field of ['faction', 'owner', 'duration', 'cause', 'actor', 'changed_at']) {
             const value = String(asset?.[field] || '').trim();
             if (value) normalized[field] = value;
         }
+        const count = Math.floor(Number(asset?.count));
+        if (Number.isFinite(count) && count >= 1 && count <= MAX_ASSET_COUNT) normalized.count = count;
         const route = cleanStringList(asset?.route).map(resolveArea).filter(Boolean);
         if (route.length) normalized.route = [...new Set(route)];
         return normalized;
@@ -561,7 +632,7 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
     }
 
     const assetIds = new Set();
-    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration']);
+    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'cause', 'actor', 'changed_at']);
     for (let index = 0; index < (Array.isArray(raw.assets) ? raw.assets.length : 0); index++) {
         const asset = raw.assets[index];
         const path = `$.assets[${index}]`;
@@ -583,9 +654,15 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
         if (!areaIds.has(asset.location)) errors.push(architectureError('UNKNOWN_ASSET_LOCATION', `${path}.location`, asset.location, 'Place every initial asset in an existing area.'));
         if (typeof asset.detail !== 'string') errors.push(architectureError('INVALID_ASSET_DETAIL', `${path}.detail`, asset.detail, 'Supply a concise string; use "" when no detail is needed.'));
         if (asset.origin !== 'INITIAL_MAP') errors.push(architectureError('INVALID_ASSET_ORIGIN', `${path}.origin`, asset.origin, 'Initial Map Architect assets must use origin "INITIAL_MAP".'));
-        for (const field of ['behavior', 'faction', 'owner', 'duration']) {
+        for (const field of ['behavior', 'faction', 'owner', 'duration', 'cause', 'actor', 'changed_at']) {
             if (asset[field] !== undefined && (typeof asset[field] !== 'string' || !asset[field].trim())) {
                 errors.push(architectureError('INVALID_ASSET_METADATA', `${path}.${field}`, asset[field], `Optional ${field} must be a non-empty string when present.`));
+            }
+        }
+        if (asset.count !== undefined) {
+            const count = Math.floor(Number(asset.count));
+            if (!Number.isFinite(count) || count < 1 || count > MAX_ASSET_COUNT) {
+                errors.push(architectureError('INVALID_COUNT', `${path}.count`, asset.count, `count is living members of this one asset (1-${MAX_ASSET_COUNT}). Packs stay one GROUP with count; use DESTROYED/DEAD instead of 0.`));
             }
         }
         if (asset.route !== undefined) {
@@ -618,8 +695,10 @@ export function serializeDungeonMapDocument(document) {
 
 function formatMapAsset(asset, areasById) {
     const tags = [asset.kind, asset.state, asset.knowledge].filter(Boolean).join(' / ');
-    const lines = [`- ${asset.name} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
+    const countLabel = Number.isInteger(asset.count) ? ` ×${asset.count}` : '';
+    const lines = [`- ${asset.name}${countLabel} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
     const metadata = [];
+    if (Number.isInteger(asset.count)) metadata.push(`Count: ${asset.count}`);
     if (asset.behavior) metadata.push(`Behavior: ${asset.behavior}`);
     if (asset.route?.length) {
         metadata.push(`Route: ${asset.route.map(id => areasById.get(id)?.name || id).join(' -> ')}`);
@@ -627,6 +706,9 @@ function formatMapAsset(asset, areasById) {
     if (asset.faction) metadata.push(`Faction: ${asset.faction}`);
     if (asset.owner) metadata.push(`Owner: ${asset.owner}`);
     if (asset.duration) metadata.push(`Duration: ${asset.duration}`);
+    if (asset.actor) metadata.push(`Actor: ${asset.actor}`);
+    if (asset.cause) metadata.push(`Cause: ${asset.cause}`);
+    if (asset.changed_at) metadata.push(`Since: ${asset.changed_at}`);
     if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`Origin: ${asset.origin}`);
     if (asset.last_location) metadata.push(`Last location: ${areasById.get(asset.last_location)?.name || asset.last_location}`);
     if (metadata.length) lines.push(`  ${metadata.join('; ')}`);
@@ -1238,13 +1320,13 @@ function validateOperationShape(operation, index, errors) {
         return null;
     }
     const op = validateEnumField(operation.op, MAP_OPERATIONS, `${path}.op`, errors, true);
-    const common = ['op', 'evidence'];
+    const common = ['op', 'evidence', ...CAUSAL_OPERATION_FIELDS];
     const byOperation = {
         ADD_AREA: ['name', 'knowledge', 'geometry', 'connections'],
         SET_AREA: ['area_id', 'knowledge', 'geometry_append', 'geometry_replace'],
-        ADD_ASSET: ['name', 'kind', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'distinct_from'],
+        ADD_ASSET: ['name', 'kind', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'distinct_from'],
         MOVE_ASSET: ['asset_id', 'to', 'from', 'state', 'knowledge', 'detail'],
-        SET_ASSET: ['asset_id', 'name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'],
+        SET_ASSET: ['asset_id', 'name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration', 'count'],
         REMOVE_ASSET: ['asset_id', 'knowledge', 'detail'],
         SET_CONNECTION: ['from', 'to', 'state', 'detail', 'bidirectional'],
     };
@@ -1277,6 +1359,7 @@ function addOrUpdateConnection(area, to, state, detail) {
  */
 export function applyDungeonMapTransaction(document, transaction, options = {}) {
     const frozenAreaIds = Array.isArray(options?.frozenAreaIds) ? options.frozenAreaIds : [];
+    const currentTime = String(options?.currentTime || '').trim();
     const current = normalizeDungeonMapDocument(clone(document), document?.site);
     const errors = [];
     if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
@@ -1351,6 +1434,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                 addOrUpdateConnection(area, resolved.area.id, 'OPEN', '');
                 addOrUpdateConnection(resolved.area, area.id, 'OPEN', '');
             }
+            readCausalCause(operation, path, errors);
             continue;
         }
 
@@ -1385,6 +1469,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                     }
                 }
             }
+            readCausalCause(operation, path, errors);
             continue;
         }
 
@@ -1418,6 +1503,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                 const value = String(operation[field] || '').trim();
                 if (value) asset[field] = value;
             }
+            applyAssetCount(asset, operation.count, `${path}.count`, errors);
             if (operation.route != null) {
                 if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
                 else {
@@ -1432,6 +1518,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
             }
             working.assets.push(asset);
             createdAssets.push({ id: asset.id, name: asset.name });
+            stampCausalFields(asset, operation, path, errors, currentTime, { requireActor: isKillState(state) });
             continue;
         }
 
@@ -1442,6 +1529,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                 continue;
             }
             const asset = assetResult.asset;
+            const previousState = asset.state;
             if (evidence === 'AUTONOMOUS' && !asset.behavior && !asset.route?.length) {
                 errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, 'Autonomous asset changes require an explicit behavior or route on the existing asset.'));
                 continue;
@@ -1484,6 +1572,9 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                     if (knowledge) asset.knowledge = knowledge;
                 }
                 if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                stampCausalFields(asset, operation, path, errors, currentTime, {
+                    requireActor: isKillState(operation.state) && !isKillState(previousState),
+                });
                 continue;
             }
             if (op === 'REMOVE_ASSET') {
@@ -1495,10 +1586,11 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                     if (knowledge) asset.knowledge = knowledge;
                 }
                 if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                stampCausalFields(asset, operation, path, errors, currentTime);
                 continue;
             }
 
-            const mutableFields = ['name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'];
+            const mutableFields = ['name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'cause', 'actor'];
             if (!mutableFields.some(field => operation[field] != null)) {
                 errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_ASSET must change at least one mutable field.'));
                 continue;
@@ -1523,6 +1615,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
             for (const field of ['faction', 'owner', 'duration']) {
                 if (operation[field] != null) asset[field] = String(operation[field] || '').trim();
             }
+            if (operation.count != null) applyAssetCount(asset, operation.count, `${path}.count`, errors);
             if (operation.route != null) {
                 if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
                 else {
@@ -1535,6 +1628,9 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
                     asset.route = [...new Set(route)];
                 }
             }
+            stampCausalFields(asset, operation, path, errors, currentTime, {
+                requireActor: isKillState(operation.state) && !isKillState(previousState),
+            });
             continue;
         }
 
@@ -1552,6 +1648,7 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
             const detail = String(operation.detail || '').trim();
             addOrUpdateConnection(from.area, to.area.id, state, detail);
             if (operation.bidirectional !== false) addOrUpdateConnection(to.area, from.area.id, state, detail);
+            readCausalCause(operation, path, errors);
         }
     }
 
@@ -1593,47 +1690,50 @@ export function applyDungeonMapTransaction(document, transaction, options = {}) 
 
 const ASSET_DETAIL_SCHEMA = {
     type: 'string',
-    description: 'Durable occupancy or lasting condition only (remaining count, destroyed remains, what is guarded). Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
+    description: 'Durable occupancy or lasting condition only (what remains, destroyed remains, what is guarded). Numeric remaining members belong in count, not here. Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
 };
 
 /** Strict JSON Schema fragment added to commit only while a mapped site is active. */
 export function buildDungeonMapCommitSchema() {
     const evidence = { type: 'string', enum: MAP_EVIDENCE };
+    const cause = { type: 'string', minLength: 1, maxLength: 240, description: 'Concise in-world reason for this change. Required. For deaths use killed-by, e.g. "Killed by the party on the landing" or "Killed by Salt-Road Delvers over spoils".' };
+    const actor = { type: 'string', minLength: 1, maxLength: 120, description: 'Who caused this change: "party", an existing asset id, or a short off-map name. Required when state is DEAD or DESTROYED.' };
+    const thread_status = { type: 'string', enum: MAP_THREAD_STATUSES, description: 'open (default), resolved, or transformed. Use resolved/transformed when this change ends or turns a prior thread for the same subject.' };
     const operationVariants = [
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_AREA'] }, evidence, name: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry: { type: 'array', items: { type: 'string' } }, connections: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'name', 'knowledge'],
+            properties: { op: { type: 'string', enum: ['ADD_AREA'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry: { type: 'array', items: { type: 'string' } }, connections: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'knowledge', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_AREA'] }, evidence, area_id: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry_append: { type: 'array', items: { type: 'string' } }, geometry_replace: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'area_id'],
+            properties: { op: { type: 'string', enum: ['SET_AREA'] }, evidence, cause, actor, thread_status, area_id: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry_append: { type: 'array', items: { type: 'string' } }, geometry_replace: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'area_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, distinct_from: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge'],
+            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1. Never 0 — use DESTROYED/DEAD.' }, distinct_from: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
-            required: ['op', 'evidence', 'asset_id', 'to'],
+            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id', 'to', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' } },
-            required: ['op', 'evidence', 'asset_id'],
+            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Updated living members of this one asset. Reduce count for attrition; DESTROYED/DEAD only when none remain. Do not split a pack into singleton CREATUREs.' } },
+            required: ['op', 'evidence', 'asset_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
-            required: ['op', 'evidence', 'asset_id'],
+            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_CONNECTION'] }, evidence, from: { type: 'string' }, to: { type: 'string' }, state: { type: 'string', enum: CONNECTION_STATES }, detail: { type: 'string' }, bidirectional: { type: 'boolean' } },
-            required: ['op', 'evidence', 'from', 'to', 'state'],
+            properties: { op: { type: 'string', enum: ['SET_CONNECTION'] }, evidence, cause, actor, thread_status, from: { type: 'string' }, to: { type: 'string' }, state: { type: 'string', enum: CONNECTION_STATES }, detail: { type: 'string' }, bidirectional: { type: 'boolean' } },
+            required: ['op', 'evidence', 'from', 'to', 'state', 'cause'],
         },
     ];
     return {
@@ -1707,9 +1807,13 @@ export function formatDungeonMapForUpdater(document, currentLocation = '', optio
     });
     const assetLines = (map.assets || []).map(asset => {
         const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location}`, asset.state, asset.knowledge];
+        if (Number.isInteger(asset.count)) bits.push(`count=${asset.count}`);
         if (asset.faction) bits.push(`faction=${asset.faction}`);
         if (asset.behavior) bits.push(`behavior=${asset.behavior}`);
         if (Array.isArray(asset.route) && asset.route.length) bits.push(`route=${asset.route.join('>')}`);
+        if (asset.actor) bits.push(`actor=${asset.actor}`);
+        if (asset.changed_at) bits.push(`since=${asset.changed_at}`);
+        if (asset.cause) bits.push(`cause=${asset.cause}`);
         if (asset.detail) bits.push(asset.detail);
         return bits.join(' | ');
     });
@@ -1739,10 +1843,40 @@ export function formatDungeonMapForUpdater(document, currentLocation = '', optio
 
 /** Compact occupancy snapshot for Map Evolution: no occupancy interior hints, no current-room geometry dump. */
 export function formatDungeonMapForEvolution(document, currentLocation = '') {
-    return formatDungeonMapForUpdater(document, currentLocation, {
+    const snapshot = formatDungeonMapForUpdater(document, currentLocation, {
         includeCurrentGeometry: false,
         occupancyHints: false,
     });
+    const living = formatLivingOccupantsForEvolution(document);
+    return living ? `${snapshot}\n\n${living}` : snapshot;
+}
+
+function formatLivingOccupantsForEvolution(document) {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    const inert = new Set([...PLAY_CANON_LOCKED_STATES, 'CAPTURED']);
+    const living = (map.assets || []).filter(asset =>
+        (asset.kind === 'CREATURE' || asset.kind === 'GROUP') && !inert.has(asset.state),
+    );
+    if (!living.length) return '';
+    const byLocation = new Map();
+    for (const asset of living) {
+        const loc = asset.location || '(unplaced)';
+        if (!byLocation.has(loc)) byLocation.set(loc, []);
+        byLocation.get(loc).push(asset.id);
+    }
+    const lines = living.map(asset => {
+        const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location || '—'}`, asset.state];
+        if (Number.isInteger(asset.count)) bits.push(`count=${asset.count}`);
+        const roommates = (byLocation.get(asset.location || '(unplaced)') || []).filter(id => id !== asset.id);
+        if (roommates.length) bits.push(`same-room=${roommates.join(',')}`);
+        return bits.join(' | ');
+    });
+    return [
+        '## LIVING OCCUPANTS',
+        'Consider each independently. Hours elapsed: several may act in this one transaction. One patrol MOVE is not enough when more than one row exists. same-room means crowding or competing groups that should interact rather than ignore each other.',
+        'id | kind | name | location | state | notes',
+        ...lines,
+    ].join('\n');
 }
 
 function normalizeChunkForComparison(chunk) {
@@ -2208,7 +2342,7 @@ function extractPlayerObservableChronicle(content) {
 }
 
 /** Build the correctness-critical system block injected while inside the site. */
-export function buildDungeonRealityInjection(site, currentLocation) {
+export function buildDungeonRealityInjection(site, currentLocation, { activityText = '' } = {}) {
     if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) return '';
     const chunks = site.mapChunks
         .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${formatDungeonMapForNarrator(chunk, site.siteRoot)}`)
@@ -2225,7 +2359,11 @@ export function buildDungeonRealityInjection(site, currentLocation) {
     const kindCanon = mapKind === 'SETTLEMENT'
         ? 'This attached map is district-scale settlement canon. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).'
         : 'This attached map is room-scale interior canon. Prefer it for layout and occupancy; you may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.';
-    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. ${kindCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
+    const activity = String(activityText || '').trim();
+    const activityBlock = activity
+        ? `\n\n### Recent site activity\n${activity}`
+        : '';
+    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. ${kindCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). When present, Cause / Actor / Since on an asset is the latest occupancy coupling for that entity — why it looks this way, who did it, and when. Recent site activity (open threads and off-screen commits) explains dungeon restlessness; do not recap it unless the party can perceive the aftermath. Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}${activityBlock}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
 }
 
 /** Heuristic used only to emit a loud missing-map diagnostic. */

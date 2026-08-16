@@ -65,6 +65,7 @@ import { replacePromptArray, stripSupersededChoicesFromChatPrompt, stripSupersed
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 
 export { RENDERING_TAGS_LIBRARY };
 export { bindRenderedCardEvents };
@@ -279,6 +280,12 @@ function applyMapEvolutionTickSettingsToUi(settings) {
 }
 
 runtimeState.updateMapEvolutionScheduleDisplayRef = updateMapEvolutionScheduleDisplay;
+runtimeState.refreshTrackerViewRef = () => {
+    const s = getSettings();
+    updateUIMemo(s.currentMemo);
+    refreshRenderedView();
+    updateMapEvolutionScheduleDisplay();
+};
 runtimeState.applyMapEvolutionTickSettingsToUiRef = applyMapEvolutionTickSettingsToUi;
 runtimeState.runMapEvolutionPassRef = runMapEvolutionPass;
 runtimeState.loadMappedEvolutionSiteRef = loadMappedEvolutionSite;
@@ -1631,6 +1638,8 @@ function resetUnseenChatState(s) {
     s.worldProgressionLocationLastAdvanced = {};
     s.mapEvolutionLastFiredBySite = {};
     s.mapEvolutionBacklogBySite = {};
+    s.mapEvolutionThreadsBySite = {};
+    s.dungeonMapRevealAll = false;
     s.mapEvolutionLastSiteRoot = '';
     s.mapEvolutionPendingExitRoot = '';
     s.mapEvolutionWorldReportApplications = {};
@@ -1970,6 +1979,8 @@ function onChatChanged(newChatId) {
         s.worldProgressionLocationLastAdvanced = {};
         s.mapEvolutionLastFiredBySite = {};
         s.mapEvolutionBacklogBySite = {};
+        s.mapEvolutionThreadsBySite = {};
+        s.dungeonMapRevealAll = false;
         s.mapEvolutionLastSiteRoot = '';
         s.mapEvolutionPendingExitRoot = '';
         s.mapEvolutionWorldReportApplications = {};
@@ -2800,6 +2811,12 @@ function loadProfile(name) {
     s.mapEvolutionEnabled = p.mapEvolutionEnabled !== false;
     s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 12);
     s.mapEvolutionMaxTokens = p.mapEvolutionMaxTokens ?? 25000;
+    s.mapEvolutionCompressEnabled = p.mapEvolutionCompressEnabled !== false;
+    s.mapEvolutionCompressThreshold = (() => {
+        const n = Math.floor(Number(p.mapEvolutionCompressThreshold));
+        return Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
+    })();
+    s.mapEvolutionCompressSystemPrompt = p.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT;
     s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'all';
     s.mapEvolutionTickCount = (() => {
         const n = Number(p.mapEvolutionTickCount);
@@ -2810,6 +2827,8 @@ function loadProfile(name) {
     s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(p.mapEvolutionLastFiredBySite || {}));
     s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(p.mapEvolutionBacklogBySite || {}));
+    s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(p.mapEvolutionThreadsBySite || {}));
+    s.dungeonMapRevealAll = !!p.dungeonMapRevealAll;
     s.mapEvolutionLastSiteRoot = p.mapEvolutionLastSiteRoot || '';
     s.mapEvolutionWorldReportLookback = p.mapEvolutionWorldReportLookback ?? 5;
     s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(p.mapEvolutionWorldReportApplications || {}));
@@ -2911,9 +2930,12 @@ function loadProfile(name) {
     $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
     $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
     $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+    $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
+    $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
     $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
     applyMapEvolutionTickSettingsToUi(s);
     $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
+    $('#rpg_map_evolution_compress_prompt').val(s.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT);
 
     // Sync world progression connection settings UI
     $('#rpg_world_connection_source').val(s.worldConnectionSource || 'default');
@@ -5293,6 +5315,16 @@ function organizeConnectionSettingsUI() {
             $(this).val(settings.mapEvolutionMaxTokens);
             saveSettings();
         });
+        $('#rpg_map_evolution_compress_enabled').prop('checked', settings.mapEvolutionCompressEnabled !== false).on('change', function () {
+            settings.mapEvolutionCompressEnabled = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_compress_threshold').val(settings.mapEvolutionCompressThreshold ?? 10000).on('change', function () {
+            const n = Math.floor(parseInt(String($(this).val()), 10));
+            settings.mapEvolutionCompressThreshold = Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
+            $(this).val(settings.mapEvolutionCompressThreshold);
+            saveSettings();
+        });
         $('#rpg_map_evolution_world_report_lookback').val(settings.mapEvolutionWorldReportLookback ?? 5).on('change', function () {
             settings.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, parseInt(String($(this).val()), 10) || 5));
             $(this).val(settings.mapEvolutionWorldReportLookback);
@@ -5419,6 +5451,10 @@ function organizeConnectionSettingsUI() {
             updateMapEvolutionScheduleDisplay();
             toastr['info']('Map Evolution timeline reset. Next interval starts from the current time.', 'Map Evolution');
         });
+        $('#rpg_map_evolution_testing_ground').on('click', async function () {
+            const { openMapEvolutionTestingGround } = await import('./src/ui/panel/panel-map-evolution-debug.js');
+            await openMapEvolutionTestingGround();
+        });
         $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).on('input', function () {
             settings.mapEvolutionSystemPrompt = String($(this).val() || '');
             saveSettings();
@@ -5428,6 +5464,16 @@ function organizeConnectionSettingsUI() {
             $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt);
             saveSettings();
             toastr['success']('Map Evolution prompt reset.');
+        });
+        $('#rpg_map_evolution_compress_prompt').val(settings.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).on('input', function () {
+            settings.mapEvolutionCompressSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_reset_compress_prompt').on('click', function () {
+            settings.mapEvolutionCompressSystemPrompt = DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT;
+            $('#rpg_map_evolution_compress_prompt').val(settings.mapEvolutionCompressSystemPrompt);
+            saveSettings();
+            toastr['success']('Map Evolution history compression prompt reset.');
         });
 
 
@@ -5998,6 +6044,7 @@ function organizeConnectionSettingsUI() {
                                         delete extensionSettings[MODULE_NAME].mapArchitectSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].mapUpdaterSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].mapEvolutionSystemPrompt;
+                                        delete extensionSettings[MODULE_NAME].mapEvolutionCompressSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
                                     }
@@ -6013,6 +6060,10 @@ function organizeConnectionSettingsUI() {
                                     const $mapEvolutionPromptEl = $('#rpg_map_evolution_system_prompt');
                                     if ($mapEvolutionPromptEl.length) {
                                         $mapEvolutionPromptEl.val(sTemp.mapEvolutionSystemPrompt).trigger('input');
+                                    }
+                                    const $mapEvolutionCompressPromptEl = $('#rpg_map_evolution_compress_prompt');
+                                    if ($mapEvolutionCompressPromptEl.length) {
+                                        $mapEvolutionCompressPromptEl.val(sTemp.mapEvolutionCompressSystemPrompt).trigger('input');
                                     }
                                     const $wpPromptEl = $('#rpg_world_progression_system_prompt');
                                     if ($wpPromptEl.length) {
@@ -11248,8 +11299,11 @@ RULES:
             $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
             $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
             $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+            $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
+            $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
             applyMapEvolutionTickSettingsToUi(s);
             $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
+            $('#rpg_map_evolution_compress_prompt').val(s.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT);
 
             // Inventory/Core Prompt
             $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');

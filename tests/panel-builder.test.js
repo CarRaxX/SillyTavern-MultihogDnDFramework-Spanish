@@ -49,6 +49,8 @@ describe('panel builder', () => {
         expect(source).toContain('void Promise.resolve(refreshManifest()).then(() => {');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         expect(indexSource).toContain('Still probe the mapped site so Visuals/Map is ready on first open.');
+        const immersion = readFileSync(new URL('../immersion.js', import.meta.url), 'utf8');
+        expect(immersion).toContain('playerFacing: !isDungeonMapRevealAll()');
         expect(indexSource).toContain('applyDungeonMapForHistoryView');
         expect(indexSource).toContain('captureActiveDungeonMapHistory');
     });
@@ -56,12 +58,25 @@ describe('panel builder', () => {
     it('opens a knowledge-filtered site inspector from Visuals/Map', () => {
         const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
         expect(source).toContain('bindDungeonMapPan');
+        expect(source).toContain("root.classList.contains('rt-dungeon-graph-scroll')");
         expect(source).toContain('openDungeonMapReadablePopup');
         expect(source).toContain('Reveal All');
         expect(source).toContain('Map Entries');
         expect(source).toContain('Raw JSON');
+        expect(source).toContain('class="rt-dungeon-map-raw"');
+        const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+        expect(css).toMatch(/\.rt-dungeon-map-popup\s*\{[^}]*text-align:\s*left;/);
+        expect(css).toMatch(/\.rt-dungeon-map-raw\s*\{[\s\S]*?text-align:\s*left;[\s\S]*?white-space:\s*pre;/);
         expect(source).toContain('Map Evolution History');
         expect(source).toContain('Map Evolution: Run Now');
+        expect(source).toContain('Testing Ground');
+        expect(source).toContain('data-map-graph');
+        expect(source).toContain('persistDungeonMapRevealAll');
+        expect(source).toContain('isDungeonMapRevealAll');
+        expect(source).toContain('playerFacing: !revealAll');
+        expect(source).toContain('openMapEvolutionTestingGround');
+        expect(source).toContain('reloadInspectorFromLiveMap');
+        expect(source).toContain('await reloadInspectorFromLiveMap()');
         expect(source).toContain("siteRoots: [site]");
         expect(source).toContain('runtimeState.loadMappedEvolutionSiteRef(site)');
         expect(source).toContain('dataset.didPan');

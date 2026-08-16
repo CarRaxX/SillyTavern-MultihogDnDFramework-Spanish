@@ -77,6 +77,8 @@ export function createChatStateLoader({
     s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(saved.mapEvolutionLastFiredBySite || {}));
     s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(saved.mapEvolutionBacklogBySite || {}));
+    s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(saved.mapEvolutionThreadsBySite || {}));
+    s.dungeonMapRevealAll = !!saved.dungeonMapRevealAll;
     s.mapEvolutionLastSiteRoot = saved.mapEvolutionLastSiteRoot || '';
     s.mapEvolutionPendingExitRoot = saved.mapEvolutionPendingExitRoot || '';
     s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'all';

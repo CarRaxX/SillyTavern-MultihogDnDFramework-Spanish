@@ -18,18 +18,29 @@ import {
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 import {
     appendEvolutionBacklogEntry,
+    appendEvolutionThreads,
+    applyCompressedThreadDigests,
     describeEvolutionBacklog,
+    describeEvolutionThreads,
     describeEvolutionTimeWindow,
+    estimateMapHistoryTokens,
     filterSitesByRoots,
+    formatClosedThreadsForCompression,
     formatEvolutionElapsedMinutes,
+    formatEvolutionThreadLine,
     isEvolutionNoop,
     normalizeEvolutionTickScope,
+    normalizeMapEvolutionCompressThreshold,
+    partitionCompressibleThreads,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
     siteEvolutionDue,
+    storedEvolutionThreads,
     summarizeEvolutionDigest,
+    threadsFromMapTransaction,
 } from './map-evolution-lib.js';
 import {
     applyDungeonMapCommit,
@@ -47,7 +58,9 @@ import {
 
 export {
     appendEvolutionBacklogEntry,
+    appendEvolutionThreads,
     describeEvolutionBacklog,
+    describeEvolutionThreads,
     describeEvolutionTimeWindow,
     filterSitesByRoots,
     formatEvolutionElapsedMinutes,
@@ -56,6 +69,7 @@ export {
     resolvePlayerBubble,
     siteEvolutionDue,
     summarizeEvolutionDigest,
+    threadsFromMapTransaction,
 };
 
 const MAX_CORRECTION_ATTEMPTS = 2;
@@ -171,6 +185,106 @@ function formatWorldReportPressures(reports) {
     ).join('\n\n');
 }
 
+function formatEvolutionThreads(threads) {
+    const openLines = (threads.open || []).map(entry => formatEvolutionThreadLine({ ...entry, status: 'open', compressed: false }));
+    const recentLines = (threads.entries || []).map(entry => formatEvolutionThreadLine(entry));
+    const open = openLines.length
+        ? openLines.join('\n')
+        : '(No open causal threads are retained for this site.)';
+    const recent = recentLines.length
+        ? recentLines.join('\n')
+        : '(No attributed map changes are retained as threads yet.)';
+    return `Open threads (latest per subject):
+${open}
+${threads.truncated ? '(Only the most recent bounded portion of the thread ledger is shown.)\n' : ''}Recent attributed events (DIGEST lines are already-compressed closed history; do not treat them as live open plots):
+${recent}`;
+}
+
+function parseCompressionDigests(raw) {
+    const parsed = parseMapArchitectResponse(raw);
+    const value = parsed.value;
+    if (!value) return { ok: false, error: parsed.error || 'No JSON object was found.' };
+    let rows = [];
+    if (Array.isArray(value.digests)) rows = value.digests;
+    else if (Array.isArray(value)) rows = value;
+    else if (typeof value.summary === 'string') rows = [value];
+    const digests = rows.map(row => {
+        if (typeof row === 'string') return { at: 'Compressed history', summary: row };
+        return {
+            at: String(row?.at || row?.span || '').trim(),
+            summary: String(row?.summary || row?.cause || '').trim(),
+        };
+    }).filter(row => row.summary);
+    if (!digests.length) return { ok: false, error: 'No digests' };
+    return { ok: true, digests: digests.slice(0, 6) };
+}
+
+async function maybeCompressSiteThreads(settings, siteRoot, signal) {
+    if (settings.mapEvolutionCompressEnabled === false) return { skipped: 'disabled' };
+    const threshold = normalizeMapEvolutionCompressThreshold(settings.mapEvolutionCompressThreshold);
+    const stored = storedEvolutionThreads(settings.mapEvolutionThreadsBySite, siteRoot);
+    const { open, closed } = partitionCompressibleThreads(stored);
+    if (closed.length < 2) return { skipped: 'too_few_closed' };
+    const tokens = estimateMapHistoryTokens(formatClosedThreadsForCompression(closed));
+    if (tokens < threshold) return { skipped: 'under_threshold', tokens, threshold };
+
+    const systemPrompt = String(settings.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).trim();
+    const openText = open.length
+        ? open.map(entry => formatEvolutionThreadLine({ ...entry, status: 'open', compressed: false })).join('\n')
+        : '(No currently open threads.)';
+    const closedText = formatClosedThreadsForCompression(closed);
+    const userPrompt = `SITE: ${siteRoot}
+
+OPEN THREADS — keep these verbatim. Do not rewrite, omit, merge, or fold them into digests.
+${openText}
+
+CLOSED / RESOLVED / TRANSFORMED EVENTS AND PRIOR DIGESTS — this is the only compressible pool (${tokens} estimated tokens; threshold ${threshold}):
+${closedText}
+
+Return JSON only.`;
+    const req = {
+        ...requestSettings(settings),
+        maxTokens: Math.max(1000, Math.min(8000, Number(settings.mapEvolutionMaxTokens) || 4000)),
+    };
+    let lastError = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (signal.aborted) {
+            const abortError = new Error('The operation was aborted.');
+            abortError.name = 'AbortError';
+            throw abortError;
+        }
+        broadcastStep('thought', `${siteRoot}: compressing evolution history (${tokens} tokens ≥ ${threshold})...`);
+        const output = await sendStateRequest(
+            req,
+            attempt ? `${systemPrompt}\n\nPrevious output was not valid digest JSON. ${lastError}` : systemPrompt,
+            userPrompt,
+            signal,
+        );
+        const parsed = parseCompressionDigests(output);
+        if (parsed.ok) {
+            settings.mapEvolutionThreadsBySite = applyCompressedThreadDigests(
+                settings.mapEvolutionThreadsBySite,
+                siteRoot,
+                parsed.digests,
+            );
+            broadcastStep('finish', `${siteRoot}: compressed closed-thread history into ${parsed.digests.length} digest${parsed.digests.length === 1 ? '' : 's'}.`);
+            return { ok: true, tokens, threshold, digests: parsed.digests.length };
+        }
+        lastError = parsed.error || 'Invalid JSON';
+    }
+    console.warn('[RPG Tracker] Map Evolution history compression failed for', siteRoot, lastError);
+    broadcastStep('thought', `${siteRoot}: history compression skipped (${lastError}).`);
+    return { ok: false, error: lastError };
+}
+
+function recordSiteThreads(settings, siteRoot, transaction, createdAssets, at) {
+    settings.mapEvolutionThreadsBySite = appendEvolutionThreads(
+        settings.mapEvolutionThreadsBySite,
+        siteRoot,
+        threadsFromMapTransaction(transaction, { at, createdAssets }),
+    );
+}
+
 function formatEvolutionBacklog(backlog) {
     const lines = backlog.entries.map(entry => {
         const outcome = entry.kind === 'commit' ? 'MATERIAL COMMIT' : 'QUIET CHECKPOINT';
@@ -229,8 +343,8 @@ function formatFailure(errors) {
 
 function kindPolicy(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
-        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
+        ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Several districts or groups may change in the same tick. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
+        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Living CREATURE/GROUP assets should keep acting independently each tick — patrol, forage, rest, fortify, clash. Hours elapsed with several living groups means several operations in this transaction, not one patrol MOVE. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
 }
 
 function triggerHeadline(trigger) {
@@ -239,7 +353,7 @@ function triggerHeadline(trigger) {
     return 'INTERVAL RESTLESSNESS';
 }
 
-function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog }) {
+function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads }) {
     const kind = normalizeMapSiteKind(site.document?.kind);
     const bubbleLine = bubble.area
         ? `${bubble.area.id} (${bubble.area.name})${bubble.combatActive ? ' — combat is active' : ''}`
@@ -255,12 +369,17 @@ ${kindPolicy(kind)}
 Last Evolved for this site: ${timeWindow.lastEvolved}
 Current in-world time: ${timeWindow.currentTime}
 Elapsed since Last Evolved: ${timeWindow.elapsed}
-Scale the amount and tempo of change to this elapsed duration. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
+Scale both the amount and the breadth of change to this elapsed duration. Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this one transaction is the expected default. Do not use a single asset's patrol as the entire result. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
 
 ## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
 ${formatEvolutionBacklog(backlog)}
 
 Judge the latest interval together with this trajectory. A short latest interval limits what happened during that interval, but it does not erase accumulated quiet time or prior developments. Do not choose noop solely because the latest interval is short. Let repeated quiet checkpoints build enough opportunity for a meaningful change, and let prior commits continue, complicate, culminate, resolve, or reverse rather than mechanically repeating them.
+
+## OPEN CAUSAL THREADS (THIS SITE)
+${formatEvolutionThreads(threads || { open: [], entries: [] })}
+
+Continue, complicate, culminate, resolve, or transform these threads when plausible. A DESTROYED/DEAD asset with actor is a killed-by fact you may build on. Do not invent a killer for unknown actors. Mark thread_status resolved or transformed when a change ends or turns a prior thread for that subject. Do not leave an open thread hanging while the whole tick is an unrelated singleton MOVE.
 
 ## PLAYER BUBBLE (FROZEN)
 ${partyIsHere ? bubbleLine : '(Party is not inside this site. No freeze.)'}
@@ -280,10 +399,10 @@ These reports are directional prose, not explicit deltas. Decide the best concre
 ## PRIOR EVOLUTION THIS PERIOD
 ${digestBlock}
 
-Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer a durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Use {"noop":true} only when this site would not plausibly stir.`;
+Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Hours plus several living occupants should usually yield several operations, not one. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
-function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, priorOutput, errors, attempt }) {
+function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads, priorOutput, errors, attempt }) {
     return `CORRECTION PASS ${attempt}
 Your previous map evolution was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -292,12 +411,12 @@ Requested site: ${site.siteRoot}
 VALIDATION ERRORS
 ${formatFailure(errors)}
 
-Field reminder: MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
+Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations in this transaction, not one patrol MOVE. Co-located competing groups should interact. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
 
 PREVIOUS OUTPUT
 ${priorOutput}
 
-${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog })}`;
+${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads })}`;
 }
 
 function swipeSnapshotKey(ctx, message, swipeId = message?.swipe_id ?? 0) {
@@ -332,6 +451,7 @@ export async function maybeRollbackMapEvolutionForSwipe(msg) {
         settings.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(snapshot.lastFiredBySite || {}));
         settings.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(snapshot.reportApplications || {}));
         settings.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(snapshot.backlogBySite || {}));
+        settings.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(snapshot.threadsBySite || {}));
         persistMapEvolutionState();
     }
     return restored;
@@ -381,11 +501,17 @@ async function evolveOneSite({
         site.siteRoot,
         timeWindow.elapsedMinutes,
     );
+    const threads = describeEvolutionThreads(
+        settings.mapEvolutionThreadsBySite,
+        site.siteRoot,
+    );
     const systemPrompt = `${String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim()}
 
 AUTHORITATIVE TIME-SCALE CONTRACT
 - The supplied Last Evolved timestamp is the scheduler watermark for this exact site.
-- Use both the latest elapsed duration and the accumulated per-site Evolution backlog to calibrate magnitude, accumulation, decay, arrivals, and movement. A short latest gap permits only correspondingly small developments within that gap, but repeated short gaps and quiet checkpoints accumulate rather than resetting the site's trajectory.
+- Use both the latest elapsed duration and the accumulated per-site Evolution backlog to calibrate amount and breadth: accumulation, decay, arrivals, movement, and how many living groups act. A short latest gap permits only correspondingly small developments within that gap, but repeated short gaps and quiet checkpoints accumulate rather than resetting the site's trajectory.
+- Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this same transaction is the expected default. Do not spend the whole tick moving a single patrol.
+- Co-located competing groups should interact rather than ignore each other. Continue open threads.
 - Do not return noop solely because the latest interval is short. Consider cumulative quiet time and prior commits; a trajectory may continue, complicate, culminate, resolve, or reverse when plausible.
 - Manual and site-exit triggers do not imply a standard interval. Never substitute the configured interval for the actual elapsed duration.
 - If elapsed time is unknown, remain conservative and do not invent a long unattended period.
@@ -395,9 +521,14 @@ AUTHORITATIVE WORLD REPORT CONTRACT
 - Choose the concrete local realization yourself from the current map state.
 - Do not duplicate pressure already realized through play or Map Updater; preserve it and mark already_realized_by_play.
 - Newer pressure may reverse, resolve, transform, or supersede an older direction while plausible aftermath remains.
-- Return report_outcomes for every supplied report ID. This bookkeeping field is removed before transaction validation.`;
+- Return report_outcomes for every supplied report ID. This bookkeeping field is removed before transaction validation.
+
+AUTHORITATIVE CAUSAL THREAD CONTRACT
+- Every material operation needs cause. DEAD/DESTROYED also needs actor.
+- Open threads are plots you may continue. Do not invent a killer when actor is unknown.
+- Third-party killing is allowed when it makes logical and narrative sense.`;
     let prompt = initialUserPrompt({
-        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
+        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
     });
     let lastIssues = [];
     let lastOutput = '';
@@ -421,7 +552,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -445,12 +576,12 @@ AUTHORITATIVE WORLD REPORT CONTRACT
         const rawReportOutcomes = parsed.value.report_outcomes;
         const transaction = { ...parsed.value };
         delete transaction.report_outcomes;
-        const validation = applyDungeonMapTransaction(site.document, transaction, { frozenAreaIds });
+        const validation = applyDungeonMapTransaction(site.document, transaction, { frozenAreaIds, currentTime });
         if (!validation.ok) {
             lastIssues = validation.errors || [];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -468,7 +599,7 @@ AUTHORITATIVE WORLD REPORT CONTRACT
             lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
                     priorOutput: output, errors: lastIssues, attempt: attempt + 1,
                 });
                 continue;
@@ -599,6 +730,7 @@ export async function runMapEvolutionPass({
             lastFiredBySite: JSON.parse(JSON.stringify(settings.mapEvolutionLastFiredBySite || {})),
             reportApplications: JSON.parse(JSON.stringify(settings.mapEvolutionWorldReportApplications || {})),
             backlogBySite: JSON.parse(JSON.stringify(settings.mapEvolutionBacklogBySite || {})),
+            threadsBySite: JSON.parse(JSON.stringify(settings.mapEvolutionThreadsBySite || {})),
         };
         const digestLines = [];
         const results = [];
@@ -644,8 +776,18 @@ export async function runMapEvolutionPass({
                             summary: siteResult.digestLine,
                         },
                 );
+                if (!siteResult.noop && siteResult.transaction) {
+                    recordSiteThreads(
+                        settings,
+                        site.siteRoot,
+                        siteResult.transaction,
+                        siteResult.result?.createdAssets || [],
+                        currentTime,
+                    );
+                }
                 stampSiteFired(settings, site.siteRoot, currentTime);
                 stampReportOutcomes(settings, site.siteRoot, siteResult.reportOutcomes, currentTime);
+                await maybeCompressSiteThreads(settings, site.siteRoot, signal);
             }
         }
 

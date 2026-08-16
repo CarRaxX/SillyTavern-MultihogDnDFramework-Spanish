@@ -155,6 +155,33 @@ export function extractCurrentTimeStr(timeBlockContent) {
     return timeLine.replace(/^(?:current\s+)?time:\s*/i, '').trim();
 }
 
+/** Replace the current-time line inside a [TIME] block, preserving Last Rest. */
+export function replaceMemoCurrentTime(memo, timeLabel) {
+    const label = String(timeLabel || '').trim();
+    const source = String(memo || '');
+    if (!label) return source;
+    if (!/\[TIME\]/i.test(source)) {
+        return `${source.trimEnd()}${source.trim() ? '\n\n' : ''}[TIME]\n${label}\n[/TIME]\n`;
+    }
+    return source.replace(/\[TIME\]([\s\S]*?)\[\/TIME\]/i, (_, inner) => {
+        const lines = inner.split('\n');
+        let replaced = false;
+        const next = lines.map(line => {
+            if (!replaced && line.trim() && !/^\s*last rest:/i.test(line)) {
+                replaced = true;
+                const prefix = line.match(/^\s*/)?.[0] || '';
+                return `${prefix}${label}`;
+            }
+            return line;
+        });
+        if (!replaced) {
+            const insertAt = next[0] === '' ? 1 : 0;
+            next.splice(insertAt, 0, label);
+        }
+        return `[TIME]${next.join('\n')}[/TIME]`;
+    });
+}
+
 /**
  * True when Last Rest has no real timestamp (new character, never rested, etc.).
  * @param {string} str

@@ -98,6 +98,9 @@ describe('saveChatState', () => {
         s.mapEvolutionBacklogBySite = {
             morrowfen: [{ kind: 'quiet', at: 'Day 3, 08:00', elapsedMinutes: 15 }],
         };
+        s.mapEvolutionThreadsBySite = {
+            morrowfen: [{ id: 'kill:0', at: 'Day 3, 08:00', status: 'open', cause: 'Killed by the party.', actor: 'party', subjectId: 'ghoul' }],
+        };
 
         saveChatState('world-chat', { skipDiskWrite: true });
 
@@ -105,9 +108,11 @@ describe('saveChatState', () => {
         expect(part.worldProgressionLocationLastAdvanced).toEqual(s.worldProgressionLocationLastAdvanced);
         expect(part.mapEvolutionWorldReportApplications).toEqual(s.mapEvolutionWorldReportApplications);
         expect(part.mapEvolutionBacklogBySite).toEqual(s.mapEvolutionBacklogBySite);
+        expect(part.mapEvolutionThreadsBySite).toEqual(s.mapEvolutionThreadsBySite);
         expect(part.worldProgressionLocationLastAdvanced).not.toBe(s.worldProgressionLocationLastAdvanced);
         expect(part.mapEvolutionWorldReportApplications).not.toBe(s.mapEvolutionWorldReportApplications);
         expect(part.mapEvolutionBacklogBySite).not.toBe(s.mapEvolutionBacklogBySite);
+        expect(part.mapEvolutionThreadsBySite).not.toBe(s.mapEvolutionThreadsBySite);
     });
 
     it('rehydrates World Progression and Map Evolution watermarks from the active chat partition', () => {
@@ -117,6 +122,7 @@ describe('saveChatState', () => {
         s.worldProgressionLocationLastAdvanced = {};
         s.mapEvolutionLastFiredBySite = {};
         s.mapEvolutionBacklogBySite = {};
+        s.mapEvolutionThreadsBySite = {};
         s.mapEvolutionWorldReportApplications = {};
         s.chatStates['vitest-chat'] = {
             worldProgressionLastFiredPeriodLabel: 'Day 3, 08:00',
@@ -124,6 +130,9 @@ describe('saveChatState', () => {
             mapEvolutionLastFiredBySite: { morrowfen: 'Day 2, 16:00' },
             mapEvolutionBacklogBySite: {
                 morrowfen: [{ kind: 'commit', at: 'Day 2, 16:00', operationId: 'evo-watch' }],
+            },
+            mapEvolutionThreadsBySite: {
+                morrowfen: [{ id: 'kill:0', at: 'Day 2, 16:00', status: 'open', cause: 'Killed by the party.', actor: 'party', subjectId: 'ghoul' }],
             },
             mapEvolutionWorldReportApplications: {
                 morrowfen: { 'Campaign_World::7': { status: 'materialized' } },
@@ -135,6 +144,7 @@ describe('saveChatState', () => {
         expect(s.worldProgressionLocationLastAdvanced).toEqual({ morrowfen: 'Day 3, 08:00' });
         expect(s.mapEvolutionLastFiredBySite).toEqual({ morrowfen: 'Day 2, 16:00' });
         expect(s.mapEvolutionBacklogBySite.morrowfen[0].operationId).toBe('evo-watch');
+        expect(s.mapEvolutionThreadsBySite.morrowfen[0].actor).toBe('party');
         expect(s.mapEvolutionWorldReportApplications.morrowfen['Campaign_World::7'].status)
             .toBe('materialized');
         expect(s.worldProgressionLocationLastAdvanced)
@@ -143,6 +153,8 @@ describe('saveChatState', () => {
             .not.toBe(s.chatStates['vitest-chat'].mapEvolutionLastFiredBySite);
         expect(s.mapEvolutionBacklogBySite)
             .not.toBe(s.chatStates['vitest-chat'].mapEvolutionBacklogBySite);
+        expect(s.mapEvolutionThreadsBySite)
+            .not.toBe(s.chatStates['vitest-chat'].mapEvolutionThreadsBySite);
         expect(s.mapEvolutionWorldReportApplications)
             .not.toBe(s.chatStates['vitest-chat'].mapEvolutionWorldReportApplications);
     });

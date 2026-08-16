@@ -5111,6 +5111,7 @@ textarea.rt-cr-input {
 /* Dungeon map viewer */
 .rt-dungeon-map-popup {
     color: var(--rt-text);
+    text-align: left;
 }
 
 .rt-dungeon-map-title {
@@ -5219,8 +5220,12 @@ textarea.rt-cr-input {
     cursor: not-allowed;
 }
 
-.rt-dungeon-map-readable,
-.rt-dungeon-map-raw {
+.rt-dungeon-map-popup .rt-dungeon-map-popup-graph {
+    max-height: min(36vh, 340px);
+    margin: 0 0 12px;
+}
+
+.rt-dungeon-map-readable {
     max-height: 48vh;
     overflow: auto;
 }
@@ -5270,6 +5275,312 @@ textarea.rt-cr-input {
     background: rgba(0, 0, 0, 0.18);
 }
 
+.rt-map-evo-debug {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: min(820px, 94vw);
+    text-align: left;
+    color: var(--SmartThemeBodyColorText, #eee);
+}
+
+.rt-map-evo-debug-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05em;
+    font-weight: 700;
+    color: #7dd3fc;
+}
+
+.rt-map-evo-debug-lead {
+    margin: 0;
+    font-size: 0.85em;
+    line-height: 1.4;
+    opacity: 0.75;
+}
+
+.rt-map-evo-debug-site {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.82em;
+}
+
+.rt-map-evo-debug-site select {
+    width: 100%;
+    min-width: 0;
+}
+
+.rt-map-evo-debug-stats {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(220px, 1.6fr);
+    gap: 8px;
+}
+
+.rt-map-evo-debug-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    align-items: end;
+}
+
+.rt-map-evo-debug-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(125, 211, 252, 0.15);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.rt-map-evo-debug-stat span {
+    font-size: 0.72em;
+    opacity: 0.55;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.rt-map-evo-debug-stat strong {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
+.rt-map-evo-debug-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+}
+
+.rt-map-evo-debug .menu_button {
+    width: auto;
+    min-width: max-content;
+    height: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    gap: 6px;
+}
+
+.rt-map-evo-debug-row .text_pole[type="text"] {
+    flex: 1 1 220px;
+    min-width: 180px;
+}
+
+.rt-map-evo-debug-row .text_pole[type="number"] {
+    width: 4.75em;
+    flex: 0 0 auto;
+}
+
+.rt-map-evo-debug-form-grid .text_pole,
+.rt-map-evo-debug-form-grid select {
+    min-width: 0;
+    width: 100%;
+}
+
+.rt-map-evo-debug-status {
+    min-height: 1.2em;
+    font-size: 0.82em;
+    color: #bae6fd;
+}
+
+.rt-map-evo-debug-form {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.rt-map-evo-debug-form summary {
+    cursor: pointer;
+    font-weight: 650;
+    font-size: 0.88em;
+}
+
+.rt-map-evo-debug-form .rt-map-evo-debug-row {
+    margin-top: 8px;
+}
+
+.popup-content:has(.rt-map-evo-debug) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    text-align: left;
+}
+
+.rt-map-evo-debug-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.rt-map-evo-debug-columns > section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.rt-map-evo-debug-pane {
+    overflow: visible;
+}
+
+.rt-map-evo-debug-subtitle {
+    font-size: 0.78em;
+    font-weight: 700;
+    opacity: 0.7;
+    margin: 6px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.rt-map-evo-debug-pane > .rt-map-evo-debug-subtitle:first-child {
+    margin-top: 0;
+}
+
+.rt-map-evo-debug-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.8em;
+    line-height: 1.45;
+}
+
+.rt-map-evo-debug-list time {
+    opacity: 0.55;
+    font-size: 0.92em;
+}
+
+.rt-map-evo-debug-empty {
+    font-size: 0.8em;
+    opacity: 0.55;
+    font-style: italic;
+}
+
+.rt-map-evo-debug-open,
+.rt-map-evo-debug-resolved,
+.rt-map-evo-debug-transformed,
+.rt-map-evo-debug-compressed {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.rt-map-evo-debug-open { color: #86efac; }
+.rt-map-evo-debug-resolved { color: #93c5fd; }
+.rt-map-evo-debug-transformed { color: #fcd34d; }
+.rt-map-evo-debug-compressed { color: #c4b5fd; }
+
+.rt-map-evo-debug-asset {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 1px 4px;
+    margin-left: -4px;
+}
+
+.rt-map-evo-debug-asset:hover,
+.rt-map-evo-debug-asset.is-selected {
+    background: rgba(125, 211, 252, 0.12);
+}
+
+.rt-map-evo-debug-asset.is-selected {
+    outline: 1px solid rgba(125, 211, 252, 0.35);
+}
+
+.rt-map-evo-debug-arc {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(125, 211, 252, 0.15);
+    border-radius: 8px;
+}
+
+.rt-map-evo-debug-arc-now {
+    font-size: 0.82em;
+    line-height: 1.4;
+}
+
+.rt-map-evo-debug-arc-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.8em;
+    line-height: 1.5;
+}
+
+.rt-map-evo-debug-arc-list time {
+    opacity: 0.55;
+    font-size: 0.92em;
+}
+
+.rt-map-evo-debug-arc-role {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7dd3fc;
+    opacity: 0.85;
+}
+
+.rt-map-evo-debug-memory-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 8px;
+}
+
+.rt-map-evo-debug-memory-bar.is-over .rt-map-evo-debug-stat:first-child {
+    border-color: rgba(252, 211, 77, 0.45);
+}
+
+.rt-map-evo-debug-memory-bar.is-over .rt-map-evo-debug-stat:first-child strong {
+    color: #fcd34d;
+}
+
+.rt-map-evo-debug-memory-status {
+    margin: 0;
+    font-size: 0.8em;
+    opacity: 0.8;
+}
+
+.rt-map-evo-debug-memory {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.rt-map-evo-debug-memory-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.rt-map-evo-debug-memory-pre {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 48vh;
+    overflow: auto;
+    font-size: 0.75em;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (max-width: 720px) {
+    .rt-map-evo-debug-stats,
+    .rt-map-evo-debug-columns,
+    .rt-map-evo-debug-memory-bar,
+    .rt-map-evo-debug-memory-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .rt-dungeon-map-evolution-entry-head {
     display: flex;
     align-items: center;
@@ -5311,16 +5622,23 @@ textarea.rt-cr-input {
 
 .rt-dungeon-map-raw {
     box-sizing: border-box;
+    display: block;
     width: 100%;
+    max-width: 100%;
+    max-height: 48vh;
     margin: 0;
-    padding: 14px;
-    white-space: pre-wrap;
-    word-break: break-word;
+    padding: 12px 14px;
+    overflow: auto;
+    text-align: left;
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+    tab-size: 2;
     border: 1px solid rgba(125, 211, 252, 0.28);
     border-radius: 8px;
     background: rgba(0, 0, 0, 0.32);
     color: var(--rt-text);
-    font: 12px/1.55 var(--rt-font-mono, monospace);
+    font: 12px/1.5 var(--rt-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
 .rt-dungeon-map-summary {

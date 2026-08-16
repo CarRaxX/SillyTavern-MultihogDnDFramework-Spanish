@@ -26,6 +26,7 @@ describe('panel markup', () => {
         expect(markup).toContain('<b>Map Updater</b>');
         expect(markup).toContain('<b>Map Evolution</b>');
         expect(markup).toContain('id="rt-agent-map-evo-header"');
+        expect(markup).toContain('id="rt-agent-map-evo-testing-ground"');
         expect(markup).toContain('id="rt-agent-map-evo-drawer"');
         expect(markup).toContain('id="rt-agent-map-evo-tick-scope"');
         expect(markup).toContain('id="rt-agent-world-locations"');

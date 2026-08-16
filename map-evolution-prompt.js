@@ -12,16 +12,21 @@ OUTPUT CONTRACT
 - When report IDs are supplied, report_outcomes lists each one exactly once as {"report_id":"exact-id","status":"materialized|already_realized_by_play|considered"}. This is bookkeeping only; it is removed before the map transaction is validated.
 - operation_id: 3-120 characters, letters/numbers/dot/underscore/colon/hyphen, e.g. evo-day3-1200-hall.
 - Reuse the same operation_id on a correction retry.
-- operations: 1 to 24 items. Every operation MUST use evidence "EVOLVED".
+- operations: 1 to 24 items. Every operation MUST use evidence "EVOLVED". One operation is for a short gap (minutes) or a nearly empty site. Hours elapsed with several living CREATURE/GROUP assets should usually emit several operations in this same transaction. Independent occupants may all act. Do not spend the whole tick moving a single patrol back and forth.
+- Every operation MUST include cause: a concise in-world reason (who/what and why). Occupancy detail is the current fact; cause is why it became true.
+- DEAD or DESTROYED also requires actor: "party", an existing asset id on THIS map, or a short off-map name (rival pack, collapse, wildlife). Third-party killing is allowed and expected when it makes sense. Never DESTROY without saying who did it.
+- thread_status is optional: open (default), resolved, or transformed. Use resolved/transformed when this change ends or turns a prior thread for the same subject.
 - chronicles: omit them. Off-screen evolution is not player-observable history.
 
 AUTHORITY
-- Treat EVOLUTION TIME WINDOW and ACCUMULATED EVOLUTION BACKLOG as authoritative together. Scale accumulation, decay, arrivals, movement, and overall magnitude to both the latest interval and the retained trajectory. A short latest interval constrains that interval, but repeated short intervals and quiet checkpoints accumulate rather than resetting the site to “nothing happened.” Do not choose noop solely because the latest interval is short. A manual or site-exit trigger is not evidence that a full configured interval passed. If elapsed time is unknown, do not invent a long unattended period.
+- Treat EVOLUTION TIME WINDOW and ACCUMULATED EVOLUTION BACKLOG as authoritative together. Scale both the amount and the breadth of change to the latest interval and the retained trajectory. Minutes: one local reaction can be enough. Hours: several living groups should typically stir in this one transaction. A short latest interval constrains that interval, but repeated short intervals and quiet checkpoints accumulate rather than resetting the site to “nothing happened.” Do not choose noop solely because the latest interval is short. A manual or site-exit trigger is not evidence that a full configured interval passed. If elapsed time is unknown, do not invent a long unattended period.
 - Use prior material commits as trajectory, not a command to repeat them. Continue, complicate, culminate, resolve, or reverse them when plausible, and avoid re-applying changes already present on the current map.
 - Play-established DESTROYED/DEAD/DISARMED/TAKEN/CLEARED/REMOVED entities stay that way. Never revive them. If the World Report still treats a destroyed force as active, ADD_ASSET a new distinct remnant (use distinct_from) instead of resurrecting the old ID.
+- Killed-by is operational truth. Continue threads from actor and cause: a party kill can attract scavengers; a third-party kill can start a feud, succession, or occupation. Missing actor on an old corpse is unknown — do not invent a killer after the fact.
 - Never treat report prose as an already-decided outcome. Translate applicable pressure with MOVE_ASSET, SET_ASSET, REMOVE_ASSET, ADD_ASSET, SET_AREA, or SET_CONNECTION according to the map's actual state.
 - Names that are not on THIS map: ignore them for biography. If someone arrived here from another mapped site, ADD_ASSET them (CREATURE/GROUP) with origin MAP_EVOLUTION.
-- Prefer a durable local change and interesting dynamism over noop whenever in-world time has passed. Dungeons: patrols, decay, barred or reopened routes, restock, new occupants, rival delvers, scavengers, opportunistic squatters. Settlements: any plausible district or OBJECT change that fits — ordinary civic occupancy or unrest. Do not wait for a World Report to invent them. Do not limit restock to the site's original factions. Invented arrivals and restock must still fit this place — a sealed tomb does not suddenly host a market; rival delvers need a way in.
+- Prefer durable local change and interesting dynamism over noop whenever in-world time has passed. When hours have passed and several living groups exist, emit several operations — one MOVE of a single patrol is not enough. Independent occupants may all act. Co-located competing groups should interact (fight, flee, bargain, drive off, attrition), not ignore each other. Continue open threads rather than leaving them hanging while an unrelated singleton move is the whole result. Dungeons: patrols, decay, barred or reopened routes, restock, new occupants, rival delvers, scavengers, opportunistic squatters. Settlements: any plausible district or OBJECT change that fits — ordinary civic occupancy or unrest. Do not wait for a World Report to invent them. Do not limit restock to the site's original factions. Invented arrivals and restock must still fit this place — a sealed tomb does not suddenly host a market; rival delvers need a way in.
+- Static BARRIER/HAZARD/OBJECT/TRAP/LOOT usually stay put unless someone uses, damages, or takes them. Living CREATURE/GROUP assets are what must keep acting.
 - noop only when the site is already consistent and nothing would plausibly stir even after considering accumulated quiet time (sealed, empty of opportunity, or only the frozen bubble would change).
 - Never mutate the PLAYER BUBBLE area (current room / combat). No MOVE/ADD/SET there.
 - New assets are UNREVEALED unless the party already knew that person.
@@ -31,12 +36,13 @@ AUTHORITY
 - asset.detail is a lasting occupancy note, never a combat beat.
 
 KIND
-- DUNGEON: restlessness is the job, but only when it still makes logical and narrative sense. Vacated rooms restock. New occupants may be original dwellers, rival adventurers, scavengers, wildlife, a cult moving in, or anyone the site could plausibly attract. Applicable World Report pressure informs this restlessness without dictating an exact delta.
-- SETTLEMENT: evolve at district and OBJECT scale in any way that makes logical and narrative sense. That can be ordinary civic life (watch rotations, trade, travelers, inns) or larger unrest (riots, occupation, barred gates, coups) — neither is preferred. Invent unnamed local groups and interiors when they fit this place. Realize applicable realm-scale pressure locally; do not wait for WP to let a district change.
+- DUNGEON: restlessness is the job, but only when it still makes logical and narrative sense. Vacated rooms restock. Living groups keep acting independently: patrol, forage, rest, fortify, clash. New occupants may be original dwellers, rival adventurers, scavengers, wildlife, a cult moving in, or anyone the site could plausibly attract. Applicable World Report pressure informs this restlessness without dictating an exact delta.
+- SETTLEMENT: evolve at district and OBJECT scale in any way that makes logical and narrative sense. Several districts or groups may change in the same tick. That can be ordinary civic life (watch rotations, trade, travelers, inns) or larger unrest (riots, occupation, barred gates, coups) — neither is preferred. Invent unnamed local groups and interiors when they fit this place. Realize applicable realm-scale pressure locally; do not wait for WP to let a district change.
 
 OPERATIONS
 - Flat objects with op, not type. Do not nest fields under asset.
 - People are CREATURE or GROUP, never kind NPC.
+- Packs vs individuals: a named unique being is CREATURE (omit count or count:1). A patrol, garrison, swarm, pack, rival party, or unnamed band is ONE GROUP with count (2-99). Prefer one GROUP with count over many identical singleton CREATUREs. SET_ASSET count for attrition or reinforcement; DESTROYED/DEAD only when none remain. Never use count 0.
 - ADD_ASSET uses location (the destination area ID).
 - MOVE_ASSET uses to (required) and from (optional, the asset's current area). Never location — that field is rejected on MOVE_ASSET.
 - SET_AREA geometry_append is an array of strings, never a bare string.
@@ -44,18 +50,29 @@ OPERATIONS
 - Arriving from another site (see PRIOR EVOLUTION digest): ADD_ASSET here.
 
 EXAMPLES
+The one-operation objects below are field syntax. Do not treat a single operation as the default when hours have passed and several living occupants exist.
+
 No change:
 {"noop":true}
 
 Realize a reported departure:
-{"operation_id":"evo-day2-0800-odran-fled","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"FLEEING","knowledge":"KNOWN","detail":"Departed for the Hall of the Ember-Ancestors."}]}
+{"operation_id":"evo-day2-0800-odran-fled","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"FLEEING","knowledge":"KNOWN","detail":"Departed for the Hall of the Ember-Ancestors.","cause":"Fled after the ossuary pack was destroyed by the party.","actor":"party"}]}
 
 Move an existing occupant along an OPEN route (to/from, not location):
-{"operation_id":"evo-day3-scavengers-forge","operations":[{"op":"MOVE_ASSET","evidence":"EVOLVED","asset_id":"ember-scavengers","from":"the-ashen-ossuary","to":"the-forge-of-dormant-embers","detail":"Picked the ossuary clean and moved into the forge."}]}
+{"operation_id":"evo-day3-scavengers-forge","operations":[{"op":"MOVE_ASSET","evidence":"EVOLVED","asset_id":"ember-scavengers","from":"the-ashen-ossuary","to":"the-forge-of-dormant-embers","detail":"Picked the ossuary clean and moved into the forge.","cause":"Moved into the forge after picking the ossuary clean.","actor":"ember-scavengers","thread_status":"transformed"}]}
 
 Rival delvers occupying a vacated unrevealed room (destroyed original stays dead):
-{"operation_id":"evo-day2-0800-ossuary-looters","operations":[{"op":"ADD_ASSET","evidence":"EVOLVED","name":"Salt-Road Delvers","kind":"GROUP","location":"the-ashen-ossuary","state":"ACTIVE","knowledge":"UNREVEALED","origin":"MAP_EVOLUTION","faction":"Independent","detail":"A small rival party picking through the ossuary after the previous occupants fell.","distinct_from":["crawling-dead-pack"]}]}
+{"operation_id":"evo-day2-0800-ossuary-looters","operations":[{"op":"ADD_ASSET","evidence":"EVOLVED","name":"Salt-Road Delvers","kind":"GROUP","location":"the-ashen-ossuary","state":"ACTIVE","knowledge":"UNREVEALED","origin":"MAP_EVOLUTION","faction":"Independent","count":4,"detail":"A small rival party picking through the ossuary after the previous occupants fell.","distinct_from":["crawling-dead-pack"],"cause":"Entered the emptied ossuary after the crawling-dead-pack was killed by the party.","actor":"party"}]}
+
+Third-party kill (actor is the killer, not the party):
+{"operation_id":"evo-day3-delvers-kill-remnant","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"ash-wight","state":"DESTROYED","detail":"Broken remains after a brief fight over spoils.","cause":"Killed by Salt-Road Delvers over ossuary spoils.","actor":"salt-road-delvers"}]}
+
+Pack attrition (same GROUP, reduced count; do not mint leftover singletons):
+{"operation_id":"evo-day3-patrol-attrition","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"ember-scavengers","count":3,"detail":"Three scavengers remain after a fight over the forge spoils.","cause":"Lost members fighting a remnant wight in the forge.","actor":"ash-wight"}]}
+
+Hours elapsed with several living groups — several operations in ONE transaction, not one patrol MOVE:
+{"operation_id":"evo-day3-1200-ossuary-hours","operations":[{"op":"MOVE_ASSET","evidence":"EVOLVED","asset_id":"ember-scavengers","from":"the-ashen-ossuary","to":"the-forge-of-dormant-embers","detail":"Picked the ossuary clean and moved into the forge.","cause":"Moved into the forge after picking the ossuary clean.","actor":"ember-scavengers","thread_status":"transformed"},{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"ash-wight","state":"DESTROYED","detail":"Broken remains after a fight over spoils.","cause":"Killed by Salt-Road Delvers over ossuary spoils.","actor":"salt-road-delvers"},{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"salt-road-delvers","count":3,"state":"ALERT","detail":"Three remain; one fell to the wight before it was destroyed.","cause":"Lost a member killing the remnant ash-wight.","actor":"ash-wight"},{"op":"MOVE_ASSET","evidence":"EVOLVED","asset_id":"crawling-rats","from":"drainage-crypt","to":"the-ashen-ossuary","detail":"Drawn to leftover blood and scrap in the emptied ossuary.","cause":"Foraged into the vacated ossuary after the fighting died down.","actor":"crawling-rats"}]}
 
 Never write MOVE_ASSET with "location". Never write SET_AREA geometry_append as a string.
 
-Before answering, silently verify: valid JSON; evidence EVOLVED; exact existing IDs unless ADD_ASSET; MOVE_ASSET uses to/from not location; SET_AREA geometry_append is an array; player bubble untouched; no revivals; magnitude matches the latest interval and accumulated backlog; frequent short intervals have not been treated as independent resets; prefer a real change over noop when cumulative time supports one; that change still makes logical and narrative sense for this site.`;
+Before answering, silently verify: valid JSON; evidence EVOLVED; exact existing IDs unless ADD_ASSET; every operation has cause; DEAD/DESTROYED has actor; packs are one GROUP with count not many singleton CREATUREs; MOVE_ASSET uses to/from not location; SET_AREA geometry_append is an array; player bubble untouched; no revivals; magnitude matches the latest interval and accumulated backlog; hours plus several living groups produced several operations, not one; co-located competing groups interacted instead of ignoring each other; open threads were not ignored; one asset's commute was not the entire result; frequent short intervals have not been treated as independent resets; prefer real change over noop when cumulative time supports it; that change still makes logical and narrative sense for this site.`;

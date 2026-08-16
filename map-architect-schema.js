@@ -71,6 +71,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
                         faction: { type: 'string', minLength: 1 },
                         owner: { type: 'string', minLength: 1 },
                         duration: { type: 'string', minLength: 1 },
+                        count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1.' },
                     },
                     required: ['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin'],
                 },

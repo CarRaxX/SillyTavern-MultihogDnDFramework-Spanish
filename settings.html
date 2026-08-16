@@ -1480,6 +1480,9 @@
                                         <button id="rpg_map_evolution_reset_timeline" class="menu_button interactable" title="Clears per-site last-evolved timestamps so Map Evolution starts fresh from the current time" style="margin: 0; background: rgba(234, 67, 53, 0.08); border-color: rgba(234, 67, 53, 0.3); color: rgba(234,67,53,0.8); font-size: 0.8em; font-weight: bold; width: 100%;">
                                             <i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> Reset Timeline
                                         </button>
+                                        <button id="rpg_map_evolution_testing_ground" class="menu_button interactable" title="Open the Map Evolution sandbox: advance time, spawn entities, and run ticks without playing" style="margin: 6px 0 0; width: 100%; font-size: 0.8em; font-weight: bold;">
+                                            <i class="fa-solid fa-flask" style="margin-right: 5px;"></i> Testing Ground
+                                        </button>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                                         <label style="flex:1; min-width:140px;">Interval (in-world hours)
@@ -1489,6 +1492,13 @@
                                             <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Maximum generation length for one Map Evolution site pass." />
                                         </label>
                                     </div>
+                                    <label class="checkbox_label">
+                                        <input id="rpg_map_evolution_compress_enabled" type="checkbox" checked />
+                                        <span>Compress closed-thread history when it exceeds the token threshold</span>
+                                    </label>
+                                    <label>History token threshold
+                                        <input id="rpg_map_evolution_compress_threshold" type="text" inputmode="numeric" pattern="[0-9]*" min="500" max="100000" value="10000" class="text_pole" title="After each Evolution pass, if closed-thread history exceeds this many tokens (~4 characters each), compress it. Open threads are kept verbatim. Default 10000." />
+                                    </label>
                                     <label style="font-size:0.85em;">World Report Lookback
                                         <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="How many recent reports and latest reports explicitly targeted at this location each map checks for unconsumed prose." />
                                     </label>
@@ -1531,6 +1541,11 @@
                                         <button id="rpg_map_evolution_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to the shipped Map Evolution prompt"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
                                     </div>
                                     <textarea id="rpg_map_evolution_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Dedicated Map Evolution system prompt"></textarea>
+                                    <div class="flex-container gap-1" style="align-items:center; margin:8px 0 4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Used only when closed-thread history exceeds the token threshold. Open threads are never compressed.</span>
+                                        <button id="rpg_map_evolution_reset_compress_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to the shipped history-compression prompt"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
+                                    </div>
+                                    <textarea id="rpg_map_evolution_compress_prompt" class="text_pole" rows="6" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Dedicated Map Evolution history-compression system prompt"></textarea>
                                 </div>
                             </div>
                         </div>

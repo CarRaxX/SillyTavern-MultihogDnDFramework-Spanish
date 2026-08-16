@@ -72,7 +72,8 @@ const KNOWN_PARTITION_KEYS = new Set([
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
     'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
-    'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
+    'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionThreadsBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
+    'dungeonMapRevealAll',
     'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
     'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
@@ -126,6 +127,7 @@ export function partitionHasCampaignSubstance(p) {
         || hasMapEntries(p.npcRelationshipLog)
         || hasMapEntries(p.mapEvolutionLastFiredBySite)
         || hasMapEntries(p.mapEvolutionBacklogBySite)
+        || hasMapEntries(p.mapEvolutionThreadsBySite)
         || hasMapEntries(p.mapEvolutionWorldReportApplications)
         || hasMapEntries(p.worldProgressionLocationLastAdvanced)
         || hasItems(p.mapEvolutionSelectedRoots)) return true;

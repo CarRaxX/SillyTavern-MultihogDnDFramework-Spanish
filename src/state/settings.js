@@ -824,6 +824,11 @@ function getSettingsInternal(extensionSettings) {
     // stream is killed. Treat it as unset so existing chats pick up 25000.
     if (Number(s.mapUpdaterMaxTokens) === 2500) s.mapUpdaterMaxTokens = 25000;
     if (Number(s.mapEvolutionMaxTokens) === 2500) s.mapEvolutionMaxTokens = 25000;
+    s.mapEvolutionCompressEnabled = s.mapEvolutionCompressEnabled !== false;
+    const compressThreshold = Math.floor(Number(s.mapEvolutionCompressThreshold));
+    s.mapEvolutionCompressThreshold = Number.isFinite(compressThreshold)
+        ? Math.max(500, Math.min(100000, compressThreshold))
+        : 10000;
     // Old shipped default was 0 (no cap). Raise existing 0s once to 6.
     // The flag must NOT live in defaults: seeding it true skipped this for everyone
     // who already had 0 saved. After this flag is persisted, 0 stays a valid choice.
@@ -875,6 +880,10 @@ function getSettingsInternal(extensionSettings) {
     if (!s.mapEvolutionBacklogBySite || typeof s.mapEvolutionBacklogBySite !== 'object' || Array.isArray(s.mapEvolutionBacklogBySite)) {
         s.mapEvolutionBacklogBySite = {};
     }
+    if (!s.mapEvolutionThreadsBySite || typeof s.mapEvolutionThreadsBySite !== 'object' || Array.isArray(s.mapEvolutionThreadsBySite)) {
+        s.mapEvolutionThreadsBySite = {};
+    }
+    s.dungeonMapRevealAll = !!s.dungeonMapRevealAll;
     if (!s.mapEvolutionWorldReportApplications || typeof s.mapEvolutionWorldReportApplications !== 'object') {
         s.mapEvolutionWorldReportApplications = {};
     }
@@ -1142,6 +1151,9 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapEvolutionEnabled',
     'mapEvolutionIntervalHours',
     'mapEvolutionMaxTokens',
+    'mapEvolutionCompressEnabled',
+    'mapEvolutionCompressThreshold',
+    'mapEvolutionCompressSystemPrompt',
     'mapEvolutionTickScope',
     'mapEvolutionTickCount',
     'mapEvolutionTickRandomize',

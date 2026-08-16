@@ -53,6 +53,11 @@ export function hydrateWorldProgressionFromChatState() {
         s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(stored.mapEvolutionBacklogBySite));
         hydrated = true;
     }
+    if (!Object.keys(s.mapEvolutionThreadsBySite || {}).length
+        && Object.keys(stored.mapEvolutionThreadsBySite || {}).length) {
+        s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(stored.mapEvolutionThreadsBySite));
+        hydrated = true;
+    }
     if (!Object.keys(s.mapEvolutionWorldReportApplications || {}).length
         && Object.keys(stored.mapEvolutionWorldReportApplications || {}).length) {
         s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(stored.mapEvolutionWorldReportApplications));
@@ -396,6 +401,8 @@ export function saveChatState(chatId, opts = {}) {
         mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
         mapEvolutionLastFiredBySite: JSON.parse(JSON.stringify(s.mapEvolutionLastFiredBySite || {})),
         mapEvolutionBacklogBySite: JSON.parse(JSON.stringify(s.mapEvolutionBacklogBySite || {})),
+        mapEvolutionThreadsBySite: JSON.parse(JSON.stringify(s.mapEvolutionThreadsBySite || {})),
+        dungeonMapRevealAll: !!s.dungeonMapRevealAll,
         mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
         mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
         mapEvolutionTickScope: s.mapEvolutionTickScope || 'all',

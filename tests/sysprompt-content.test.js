@@ -84,6 +84,8 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).toContain('an external agent owns validated current-map updates');
             expect(source).toContain('Established story events override stale map states');
             expect(source).toContain('a killed enemy stays dead even if still listed ACTIVE');
+            expect(source).toContain('Cause / Actor / Since');
+            expect(source).toContain('Recent site activity');
             expect(source).not.toContain('use the latest DUNGEON_REALITY block and do not invent catch-up facts');
             expect(source).not.toContain('Lorebook Agent');
         }

@@ -10,6 +10,7 @@ import { adjustPromptTimestamps } from './router-utils.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from '../../map-evolution-compress-prompt.js';
 import { DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT } from '../../world-progression-prompt.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
@@ -1339,6 +1340,8 @@ Rules:
 
         mapUpdaterEnabled: true,
 
+        dungeonMapRevealAll: false,
+
         mapUpdaterRunEvery: 1,
 
         mapUpdaterMaxTokens: 25000,
@@ -1355,6 +1358,12 @@ Rules:
 
         mapEvolutionMaxTokens: 25000,
 
+        mapEvolutionCompressEnabled: true,
+
+        mapEvolutionCompressThreshold: 10000,
+
+        mapEvolutionCompressSystemPrompt: DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT,
+
         mapEvolutionTickScope: "all",
 
         mapEvolutionTickCount: 1,
@@ -1368,6 +1377,8 @@ Rules:
         mapEvolutionLastFiredBySite: {},
 
         mapEvolutionBacklogBySite: {},
+
+        mapEvolutionThreadsBySite: {},
 
         mapEvolutionLastSiteRoot: "",
 

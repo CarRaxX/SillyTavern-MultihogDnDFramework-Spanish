@@ -214,5 +214,13 @@ export function wireAgentMapEvolution({
         });
     }
 
+    const testingGroundBtn = agentPanel.querySelector('#rt-agent-map-evo-testing-ground');
+    if (testingGroundBtn) {
+        testingGroundBtn.addEventListener('click', async () => {
+            const { openMapEvolutionTestingGround } = await import('./panel-map-evolution-debug.js');
+            await openMapEvolutionTestingGround();
+        });
+    }
+
     return { updateStatus: updateAgentMapEvolutionStatus };
 }

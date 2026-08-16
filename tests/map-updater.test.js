@@ -119,6 +119,7 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"area_id":"shrine-quarter"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never ADD_ASSET the player or anyone listed in the supplied [PARTY] names');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never ADD_ASSET six identical ghouls');
         expect(updater).toContain('formatPartyRosterForMapUpdater');
         expect(updater).toContain('PARTY_MEMBER_NOT_AN_ASSET');
         expect(updater).toContain('mapRuntimeConnectionSource');

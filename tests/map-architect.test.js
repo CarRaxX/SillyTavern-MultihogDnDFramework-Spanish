@@ -90,5 +90,11 @@ describe('Map Architect component', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"state":"LOCKED"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never make a chapel, inn, shop, or house its own settlement area');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never use kind NPC');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('ONE GROUP asset with optional integer count');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"count":6');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never split a pack into many identical CREATURE assets');
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.properties.count).toMatchObject({
+            type: 'integer', minimum: 1, maximum: 99,
+        });
     });
 });

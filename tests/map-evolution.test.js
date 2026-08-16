@@ -4,16 +4,32 @@ import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../map-evolution-prompt.js'
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
 import {
     appendEvolutionBacklogEntry,
+    appendEvolutionThreads,
+    applyCompressedThreadDigests,
+    clearEvolutionHistoryForSite,
+    collectEvolutionArcSubjects,
+    DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD,
+    describeEvolutionAssetArc,
     describeEvolutionBacklog,
+    describeEvolutionMemoryUsage,
+    describeEvolutionThreads,
     describeEvolutionTimeWindow,
+    estimateMapHistoryTokens,
+    evolutionHistoryNeedsCompression,
     filterSitesByRoots,
+    formatNarratorSiteActivity,
+    normalizeMapEvolutionCompressThreshold,
+    partitionCompressibleThreads,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
     siteEvolutionDue,
     stampEvolutionLastFired,
     summarizeEvolutionDigest,
     summarizeMapEvolutionSchedule,
+    threadsFromMapTransaction,
 } from '../map-evolution-lib.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from '../map-evolution-compress-prompt.js';
+import { replaceMemoCurrentTime } from '../memo-processor.js';
 
 const tomb = {
     siteRoot: 'Forgotten Tomb',
@@ -67,10 +83,22 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Do not invent raids');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('own factions');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('WP is primary');
-        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Prefer a durable local change and interesting dynamism over noop whenever in-world time has passed');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Prefer durable local change and interesting dynamism over noop whenever in-world time has passed');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('one MOVE of a single patrol is not enough');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('several operations in ONE transaction');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Co-located competing groups should interact');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Never write MOVE_ASSET with "location"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('MOVE_ASSET uses to (required)');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Every operation MUST include cause');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('DEAD or DESTROYED also requires actor');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Third-party killing is allowed');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ONE GROUP with count');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"count":4');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Every operation MUST include cause');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ONE GROUP with count');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"count":5');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('actor: "party"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('World Report');
@@ -79,12 +107,13 @@ describe('Map Evolution', () => {
     it('summarizes a sequential digest without dumping operations JSON', () => {
         const line = summarizeEvolutionDigest('Forgotten Tomb', {
             operations: [
-                { op: 'SET_ASSET', asset_id: 'odran', state: 'FLEEING' },
-                { op: 'REMOVE_ASSET', asset_id: 'odran' },
+                { op: 'SET_ASSET', asset_id: 'odran', state: 'FLEEING', cause: 'Fled after the ossuary pack was destroyed.', actor: 'party' },
+                { op: 'REMOVE_ASSET', asset_id: 'odran', cause: 'Left for the Hall of the Ember-Ancestors.' },
             ],
         });
         expect(line).toContain('Forgotten Tomb:');
         expect(line).toContain('odran FLEEING');
+        expect(line).toContain('by party');
         expect(line).toContain('odran left the site');
         expect(line).not.toContain('"op"');
     });
@@ -191,6 +220,232 @@ describe('Map Evolution', () => {
             }, { limit: 3 });
         }
         expect(backlog.morrowfen.map(entry => entry.at)).toEqual(['tick-3', 'tick-4', 'tick-5']);
+    });
+
+    it('clears one site evolution history without touching other sites or the original bags', () => {
+        const backlog = {
+            morrowfen: [{ kind: 'commit', at: 'Day 2, 08:00', elapsedMinutes: 60, operationId: 'evo-1', summary: 'watch' }],
+            abbey: [{ kind: 'quiet', at: 'Day 2, 08:00', elapsedMinutes: 15, passes: 1, summary: 'quiet' }],
+        };
+        const threads = {
+            morrowfen: [{ id: 't1', subjectId: 'harbor-watch', status: 'open', cause: 'Rotated.', actor: 'harbor-watch', at: 'Day 2, 08:00', summary: 'rotated' }],
+            abbey: [{ id: 't2', subjectId: 'ghoul', status: 'open', cause: 'Killed.', actor: 'party', at: 'Day 1, 16:00', summary: 'killed' }],
+        };
+        const reports = {
+            morrowfen: { 'World::1': { status: 'considered' } },
+            abbey: { 'World::2': { status: 'materialized' } },
+        };
+        const cleared = clearEvolutionHistoryForSite({
+            backlogBySite: backlog,
+            threadsBySite: threads,
+            reportApplicationsBySite: reports,
+        }, 'Morrowfen');
+        expect(cleared.cleared).toBe(true);
+        expect(cleared.backlogBySite.morrowfen).toBeUndefined();
+        expect(cleared.backlogBySite.abbey).toEqual(backlog.abbey);
+        expect(cleared.threadsBySite.morrowfen).toBeUndefined();
+        expect(cleared.threadsBySite.abbey).toEqual(threads.abbey);
+        expect(cleared.reportApplicationsBySite.morrowfen).toBeUndefined();
+        expect(cleared.reportApplicationsBySite.abbey).toEqual(reports.abbey);
+        expect(backlog.morrowfen).toBeDefined();
+        expect(clearEvolutionHistoryForSite({ backlogBySite: backlog }, '').cleared).toBe(false);
+        expect(clearEvolutionHistoryForSite({ backlogBySite: backlog }, '').backlogBySite.morrowfen).toBeDefined();
+    });
+
+    it('derives a killed-by thread and keeps it open until resolved', () => {
+        const threads = threadsFromMapTransaction({
+            operation_id: 'day1-1602-ghoul-destroyed',
+            operations: [{
+                op: 'SET_ASSET', asset_id: 'crypt-ghoul', state: 'DESTROYED',
+                cause: 'Killed by the party on the landing.', actor: 'party',
+            }],
+        }, { at: 'Day 1, 16:02' });
+        expect(threads).toHaveLength(1);
+        expect(threads[0]).toMatchObject({
+            actor: 'party',
+            subjectId: 'crypt-ghoul',
+            status: 'open',
+            cause: 'Killed by the party on the landing.',
+        });
+        expect(threads[0].summary).toContain('DESTROYED by party');
+
+        let bySite = appendEvolutionThreads({}, 'Abbey Undercroft', threads);
+        const described = describeEvolutionThreads(bySite, 'Abbey Undercroft');
+        expect(described.open).toHaveLength(1);
+        expect(described.open[0].actor).toBe('party');
+
+        bySite = appendEvolutionThreads(bySite, 'Abbey Undercroft', [{
+            id: 'evo-looters:0',
+            at: 'Day 2, 08:00',
+            status: 'transformed',
+            op: 'ADD_ASSET',
+            subjectId: 'crypt-ghoul',
+            actor: 'party',
+            cause: 'Salt-Road Delvers occupied the emptied ossuary.',
+            summary: 'vacuum transformed',
+        }]);
+        expect(describeEvolutionThreads(bySite, 'Abbey Undercroft').open).toHaveLength(0);
+    });
+
+    it('does not treat historical OPEN rows as currently open once transformed', () => {
+        const stored = [
+            { id: 'a:0', at: 'Day 1, 08:00', status: 'open', op: 'SET_ASSET', subjectId: 'chapel-latch', actor: 'bandits', cause: 'Bandits barred the chapel latch.' },
+            { id: 'b:0', at: 'Day 1, 12:00', status: 'open', op: 'MOVE_ASSET', subjectId: 'vermin-pack', cause: 'Vermin foraged the nave.' },
+            { id: 'c:0', at: 'Day 2, 08:00', status: 'transformed', op: 'SET_ASSET', subjectId: 'vermin-pack', actor: 'skeletal-guardians', cause: 'Guardians drove the vermin into the crypt.' },
+            { id: 'd:0', at: 'Day 2, 20:00', status: 'open', op: 'ADD_ASSET', subjectId: 'restless-spirits', actor: 'necromancer', cause: 'The necromancer woke the chapel dead.' },
+        ];
+        const { open, closed } = partitionCompressibleThreads(stored);
+        expect(open.map(entry => entry.subjectId).sort()).toEqual(['chapel-latch', 'restless-spirits']);
+        expect(closed.map(entry => entry.subjectId)).toEqual(['vermin-pack', 'vermin-pack']);
+
+        const next = applyCompressedThreadDigests({ ossuary: stored }, 'Ossuary', [{
+            at: 'Day 1 – Day 2',
+            summary: 'Vermin foraged then were driven into the crypt by skeletal guardians.',
+        }]);
+        const described = describeEvolutionThreads(next, 'Ossuary');
+        expect(described.open.map(entry => entry.subjectId).sort()).toEqual(['chapel-latch', 'restless-spirits']);
+        expect(described.entries.filter(entry => entry.compressed)).toHaveLength(1);
+        expect(described.entries.some(entry => entry.subjectId === 'vermin-pack')).toBe(false);
+    });
+
+    it('defaults the history-compression threshold to 10000 tokens', () => {
+        expect(DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD).toBe(10000);
+        expect(normalizeMapEvolutionCompressThreshold(undefined)).toBe(10000);
+        expect(normalizeMapEvolutionCompressThreshold('10000')).toBe(10000);
+        expect(estimateMapHistoryTokens('abcd')).toBe(1);
+        expect(evolutionHistoryNeedsCompression({}, 'Ossuary', 10000)).toBe(false);
+        const bulky = {};
+        bulky.ossuary = Array.from({ length: 400 }, (_, i) => ({
+            id: `closed:${i}`,
+            at: `Day ${i + 1}, 08:00`,
+            status: 'resolved',
+            op: 'MOVE_ASSET',
+            subjectId: `patrol-${i}`,
+            cause: 'The same patrol walked the corridor again, found nothing, and walked back to the gatehouse.',
+        }));
+        bulky.ossuary.push({
+            id: 'open:latch',
+            at: 'Day 41, 08:00',
+            status: 'open',
+            op: 'SET_ASSET',
+            subjectId: 'chapel-latch',
+            cause: 'The chapel latch is still barred from the inside.',
+        });
+        expect(evolutionHistoryNeedsCompression(bulky, 'Ossuary', 10000)).toBe(true);
+        expect(evolutionHistoryNeedsCompression(bulky, 'Ossuary', 50000)).toBe(false);
+    });
+
+    it('exposes stored thread/backlog memory and closed-thread token usage', () => {
+        const threadsBySite = {
+            ossuary: [
+                { id: 'a:0', at: 'Day 1, 08:00', status: 'open', op: 'SET_ASSET', subjectId: 'chapel-latch', cause: 'Bandits barred the chapel latch.' },
+                { id: 'b:0', at: 'Day 1, 12:00', status: 'resolved', op: 'SET_ASSET', subjectId: 'vermin-pack', cause: 'Guardians drove the vermin into the crypt.' },
+            ],
+        };
+        const backlogBySite = {
+            ossuary: [{
+                kind: 'commit',
+                at: 'Day 1, 12:00',
+                elapsedMinutes: 240,
+                operationId: 'evo-1',
+                summary: 'Guardians drove vermin into the crypt.',
+            }],
+        };
+        const memory = describeEvolutionMemoryUsage(threadsBySite, backlogBySite, 'Ossuary', { threshold: 10000 });
+        expect(memory.threshold).toBe(10000);
+        expect(memory.openCount).toBe(1);
+        expect(memory.closedCount).toBe(1);
+        expect(memory.backlogCount).toBe(1);
+        expect(memory.overThreshold).toBe(false);
+        expect(memory.storedThreads[0].subjectId).toBe('chapel-latch');
+        expect(memory.threadText).toContain('OPEN chapel-latch');
+        expect(memory.threadText).toContain('RESOLVED vermin-pack');
+        expect(memory.backlogText).toContain('MATERIAL COMMIT');
+        expect(memory.closedTokens).toBeGreaterThan(0);
+        expect(memory.totalTokens).toBe(memory.threadTokens + memory.backlogTokens);
+    });
+
+    it('filters a stored ledger into one asset arc, including actor and digest mentions', () => {
+        const stored = [
+            { id: 'a:0', at: 'Day 1, 08:00', status: 'open', op: 'ADD_ASSET', subjectId: 'vermin-pack', cause: 'Vermin nested in the nave.' },
+            { id: 'b:0', at: 'Day 1, 12:00', status: 'open', op: 'SET_ASSET', subjectId: 'crypt-ghoul', actor: 'vermin-pack', cause: 'The pack worried the ghoul until it fled.' },
+            { id: 'c:0', at: 'Day 2, 08:00', status: 'transformed', op: 'SET_ASSET', subjectId: 'vermin-pack', actor: 'skeletal-guardians', cause: 'Guardians drove the vermin into the crypt.' },
+            { id: 'd:0', at: 'Day 3, 08:00', status: 'transformed', op: 'DIGEST', compressed: true, cause: 'Vermin-pack foraged, then skeletal-guardians drove them down.', summary: 'Vermin-pack foraged, then skeletal-guardians drove them down.' },
+        ];
+        const document = {
+            assets: [
+                { id: 'vermin-pack', name: 'Vermin Pack', kind: 'GROUP', state: 'FLEEING', location: 'crypt' },
+                { id: 'crypt-ghoul', name: 'Crypt Ghoul', kind: 'CREATURE', state: 'FLEEING', location: 'nave' },
+            ],
+        };
+        const subjects = collectEvolutionArcSubjects(stored, document);
+        expect(subjects.map(row => row.id)).toEqual(['crypt-ghoul', 'vermin-pack', 'skeletal-guardians']);
+        const arc = describeEvolutionAssetArc(stored, 'vermin-pack', {
+            document,
+            storedBacklog: [{ at: 'Day 2, 08:00', kind: 'commit', summary: 'Ossuary: vermin-pack driven into the crypt' }],
+        });
+        expect(arc.events.map(entry => entry.role)).toEqual(['subject', 'actor', 'subject', 'digest']);
+        expect(arc.events[1].subjectId).toBe('crypt-ghoul');
+        expect(arc.backlogHits).toHaveLength(1);
+        expect(describeEvolutionAssetArc(stored, 'crypt-ghoul', { document }).events).toHaveLength(1);
+    });
+
+    it('briefs the narrator with open threads and material commits, not the full ledger', () => {
+        expect(formatNarratorSiteActivity({}, {}, 'Ossuary')).toBe('');
+        expect(formatNarratorSiteActivity({
+            ossuary: [{ id: 'q:0', at: 'Day 1, 08:00', status: 'open', op: 'SET_ASSET', subjectId: 'latch', cause: 'Barred.' }],
+        }, {
+            ossuary: [{ kind: 'quiet', at: 'Day 1, 08:00', elapsedMinutes: 15, summary: 'Nothing stirred.' }],
+        }, 'Ossuary')).toContain('OPEN latch');
+        expect(formatNarratorSiteActivity({
+            ossuary: [{ id: 'q:0', at: 'Day 1, 08:00', status: 'open', op: 'SET_ASSET', subjectId: 'latch', cause: 'Barred.' }],
+        }, {
+            ossuary: [{ kind: 'quiet', at: 'Day 1, 08:00', elapsedMinutes: 15, summary: 'Nothing stirred.' }],
+        }, 'Ossuary')).not.toContain('Nothing stirred.');
+
+        const threadsBySite = {
+            ossuary: [
+                { id: 'a:0', at: 'Day 1, 08:00', status: 'open', op: 'SET_ASSET', subjectId: 'chapel-latch', actor: 'bandits', cause: 'Bandits barred the chapel latch.' },
+                { id: 'b:0', at: 'Day 1, 12:00', status: 'resolved', op: 'MOVE_ASSET', subjectId: 'vermin-pack', cause: 'Vermin foraged the nave.' },
+                { id: 'c:0', at: 'Day 2, 08:00', status: 'transformed', op: 'DIGEST', compressed: true, cause: 'Vermin foraged, then guardians drove them into the crypt.', summary: 'Vermin foraged, then guardians drove them into the crypt.' },
+            ],
+        };
+        const backlogBySite = {
+            ossuary: [
+                { kind: 'quiet', at: 'Day 1, 16:00', elapsedMinutes: 15, summary: 'Quiet checkpoint.' },
+                { kind: 'commit', at: 'Day 2, 08:00', elapsedMinutes: 240, operationId: 'evo-1', summary: 'Guardians drove vermin into the crypt.' },
+            ],
+        };
+        const briefing = formatNarratorSiteActivity(threadsBySite, backlogBySite, 'Ossuary');
+        expect(briefing).toContain('OPEN chapel-latch by bandits: Bandits barred the chapel latch.');
+        expect(briefing).toContain('Guardians drove vermin into the crypt.');
+        expect(briefing).toContain('DIGEST');
+        expect(briefing).not.toContain('RESOLVED vermin-pack');
+        expect(briefing).not.toContain('Quiet checkpoint.');
+        expect(briefing).not.toContain('Vermin foraged the nave.');
+
+        const crowded = {};
+        crowded.ossuary = Array.from({ length: 10 }, (_, i) => ({
+            id: `open:${i}`,
+            at: `Day 1, ${String(8 + i).padStart(2, '0')}:00`,
+            status: 'open',
+            op: 'SET_ASSET',
+            subjectId: `patrol-${i}`,
+            cause: `Patrol ${i} is still walking the wall.`,
+        }));
+        const truncated = formatNarratorSiteActivity(crowded, {}, 'Ossuary');
+        expect(truncated).toContain('latest 8 of 10');
+        expect(truncated).toContain('OPEN patrol-9');
+        expect(truncated).toContain('OPEN patrol-2');
+        expect(truncated).not.toContain('OPEN patrol-1');
+        expect(truncated).not.toContain('OPEN patrol-0');
+    });
+
+    it('replaces the current [TIME] line without touching Last Rest', () => {
+        const next = replaceMemoCurrentTime('[TIME]\nDay 1, 08:00\nLast Rest: Day 1, 06:00\n[/TIME]', 'Day 2, 20:00');
+        expect(next).toContain('Day 2, 20:00');
+        expect(next).toContain('Last Rest: Day 1, 06:00');
+        expect(next).not.toContain('Day 1, 08:00');
     });
 
     it('summarizes last/next Evolution times like World Progression', () => {
@@ -317,9 +572,12 @@ describe('Map Evolution', () => {
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         const panelMarkup = readFileSync(new URL('../src/ui/panel/panel-markup.js', import.meta.url), 'utf8');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
 
         expect(evolution).not.toContain("trigger === 'world_progression'");
-        expect(evolution).toContain('restock and new occupants are expected');
+        expect(evolution).toContain('Hours elapsed with several living groups means several operations');
+        expect(evolution).toContain('several operations in this one transaction is the expected default');
+        expect(evolution).toContain('Do not spend the whole tick moving a single patrol');
         expect(evolution).toContain('directional prose, not explicit deltas');
         expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');
         expect(evolution).toContain('ACCUMULATED EVOLUTION BACKLOG (THIS SITE)');
@@ -334,7 +592,9 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('listMappedEvolutionSites');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
-        expect(evolution).toContain('Field reminder: MOVE_ASSET uses "to"');
+        expect(evolution).toContain('OPEN CAUSAL THREADS (THIS SITE)');
+        expect(evolution).toContain('settings.mapEvolutionThreadsBySite');
+        expect(evolution).toContain('Field reminder: Every operation needs cause');
         expect(evolution).not.toContain('groundMapsAfterWorldProgression');
         expect(evolution).toContain('export async function maybeRunMapEvolution');
         expect(evolution).toContain('holdExitBookkeeping');
@@ -367,18 +627,67 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_last_fired"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_next_report_val"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_btn_override_next"');
-        expect(settingsMarkup).toContain('id="rpg_map_evolution_reset_timeline"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_testing_ground"');
         expect(settingsMarkup).toContain('<b style="font-size:0.9em; flex:1;">Run now</b>');
         expect(settingsMarkup).toContain('does not require Selected maps');
         expect(indexSource).not.toContain("$('#rpg_map_evolution_selected_row').toggle(scope === 'selected')");
         expect(indexSource).toContain("$('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected')");
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_enabled"');
+        expect(settingsMarkup).toMatch(/id="rpg_map_evolution_compress_threshold"[^>]*value="10000"/);
+        expect(defaultsSource).toContain('mapEvolutionCompressThreshold: 10000');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_prompt"');
         expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
+        expect(evolution).toContain('maybeCompressSiteThreads');
+        expect(evolution).toContain('mapEvolutionCompressThreshold');
+        expect(evolution).toContain('compressing evolution history');
+        expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('You are Map Evolution History Compression');
+        expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('Open threads must survive unchanged');
+        expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('do not rewrite them');
         expect(evolution).toContain('mapRuntimeConnectionSource');
         expect(evolution).not.toContain('mapArchitectConnectionSource');
         expect(panelMarkup).toContain('id="rt-research-map-evolution"');
         expect(indexSource).toContain('rpg_map_evolution_evolve_now');
+        expect(indexSource).toContain('rpg_map_evolution_testing_ground');
         expect(indexSource).toContain('listMappedEvolutionSites');
         expect(indexSource).toContain('mapEvolutionTickScope');
+        expect(indexSource).toContain('refreshTrackerViewRef');
+
+        const debug = readFileSync(new URL('../map-evolution-debug.js', import.meta.url), 'utf8');
+        const debugUi = readFileSync(new URL('../src/ui/panel/panel-map-evolution-debug.js', import.meta.url), 'utf8');
+        const debugCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+        expect(debug).toContain('export async function debugSimulateTicks');
+        expect(debug).toContain('export function debugClearEvolutionHistory');
+        expect(debug).toContain("origin: 'DEBUG_SANDBOX'");
+        expect(debug).toContain('appendEvolutionBacklogEntry');
+        expect(debug).toContain('summarizeEvolutionDigest');
+        expect(debug).toContain('advanceCampaignTime');
+        expect(debug).toContain('lookback: MAX_MAP_EVOLUTION_THREADS');
+        expect(debug).toContain('describeEvolutionMemoryUsage');
+        expect(debugUi).toContain('allowVerticalScrolling: true');
+        expect(debugUi).not.toContain('slice(-8)');
+        expect(debugUi).toContain('rt-map-evo-debug-compressed');
+        expect(debugUi).toContain('DIGEST');
+        expect(debugUi).toContain('rt-map-evo-debug-memory-bar');
+        expect(debugUi).toContain('Closed-thread tokens');
+        expect(debugUi).toContain('Stored evolution memory');
+        expect(debugUi).toContain('data-debug="threads-json"');
+        expect(debugUi).toContain('data-debug="backlog-json"');
+        expect(debugUi).toContain('Causal threads as Evolution reads them');
+        expect(debugUi).toContain('Asset arc');
+        expect(debugUi).toContain('data-debug="arc-subject"');
+        expect(debugUi).toContain('data-debug-arc');
+        expect(debugUi).toContain('describeEvolutionAssetArc');
+        expect(debugUi).toContain('rt-map-evo-debug-site');
+        expect(debugUi).toContain('data-debug-action="clear-history"');
+        expect(debugUi).toContain('Clear evolution history');
+        expect(debugCss).toContain('.rt-map-evo-debug-pane');
+        expect(debugCss).not.toContain('max-height: 32vh');
+        expect(debugCss).toContain('.rt-map-evo-debug-compressed');
+        expect(debugCss).toContain('.rt-map-evo-debug-memory-bar');
+        expect(debugCss).toContain('.rt-map-evo-debug-memory-pre');
+        expect(debugCss).toContain('.rt-map-evo-debug-arc');
+        expect(debugCss).toContain('.rt-map-evo-debug-arc-list');
+        expect(panelMarkup).toContain('id="rt-agent-map-evo-testing-ground"');
     });
 });

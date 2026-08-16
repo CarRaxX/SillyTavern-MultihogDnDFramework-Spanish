@@ -3,6 +3,7 @@ import {
     getSettings,
     persistMapUpdaterLastRunTimestamp,
     persistMapUpdaterLastRunWatermark,
+    persistMapEvolutionState,
 } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import {
@@ -23,6 +24,10 @@ import {
     formatPartyRosterForMapUpdater,
     isPartyMemberAssetName,
 } from './map-updater-lib.js';
+import {
+    appendEvolutionThreads,
+    threadsFromMapTransaction,
+} from './map-evolution-lib.js';
 import {
     applyActiveDungeonMapCommit,
     isRouterRunning,
@@ -171,7 +176,7 @@ function formatFailure(errors) {
 
 function kindRule(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT interiors the party actually enters are OBJECT assets in the current district, not new areas. Named people are CREATURE or GROUP. If CURRENT LOCATION names a more specific interior after the district and that name is not already an OBJECT asset, ADD_ASSET it. The footer is sufficient even when RECENT STORY is empty.'
+        ? 'SETTLEMENT interiors the party actually enters are OBJECT assets in the current district, not new areas. Named people are CREATURE. Unnamed bands, watches, and crowds are one GROUP with count. If CURRENT LOCATION names a more specific interior after the district and that name is not already an OBJECT asset, ADD_ASSET it. The footer is sufficient even when RECENT STORY is empty.'
         : 'If the party enters a newly invented room the map lacks, ADD_AREA from the narrative.';
 }
 
@@ -342,7 +347,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
                 broadcastStep('finish', 'Noop — no durable map fact changed.');
                 return { ok: true, noop: true };
             }
-            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value);
+            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value, { currentTime: currentTimeFrom(settings, recentStory) });
             if (!validation.ok) {
                 lastIssues = validation.errors || [];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
@@ -371,6 +376,15 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             } else {
                 const n = Array.isArray(parsed.value.operations) ? parsed.value.operations.length : 0;
                 broadcastStep('finish', `Applied ${n} operation${n === 1 ? '' : 's'}.`);
+                settings.mapEvolutionThreadsBySite = appendEvolutionThreads(
+                    settings.mapEvolutionThreadsBySite,
+                    loaded.context.siteRoot,
+                    threadsFromMapTransaction(parsed.value, {
+                        at: currentTime,
+                        createdAssets: mapResult.createdAssets || [],
+                    }),
+                );
+                persistMapEvolutionState();
             }
             return { ok: true, result: mapResult };
         }

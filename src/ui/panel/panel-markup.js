@@ -276,6 +276,9 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                         <button id="rt-agent-map-evo-reset-timeline" title="Clears per-site last-evolved timestamps so Map Evolution starts fresh from now" style="width:100%; background:rgba(234,67,53,0.1); border:1px solid rgba(234,67,53,0.25); color:rgba(234,67,53,0.75); border-radius:4px; padding:4px; font-size:0.692em; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; margin-top:5px;">
                             <i class="fa-solid fa-clock-rotate-left"></i> Reset Timeline
                         </button>
+                        <button id="rt-agent-map-evo-testing-ground" title="Advance time, spawn entities, and run Evolution ticks without playing" style="width:100%; background:rgba(125,211,252,0.1); border:1px solid rgba(125,211,252,0.28); color:#7dd3fc; border-radius:4px; padding:4px; font-size:0.692em; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; margin-top:5px;">
+                            <i class="fa-solid fa-flask"></i> Testing Ground
+                        </button>
                     </div>
 
                     <!-- World Progression Collapsible Header -->

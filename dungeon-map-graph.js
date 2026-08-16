@@ -350,9 +350,13 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
             metadata.push(`<b>Route:</b> ${asset.route.map(id => escapeHtml(areaDisplayName(id, revealAll, visibleIds, areasById))).join(' &rarr; ')}`);
         }
         if (asset.faction) metadata.push(`<b>Faction:</b> ${escapeHtml(asset.faction)}`);
+        if (Number.isInteger(asset.count)) metadata.push(`<b>Count:</b> ${escapeHtml(String(asset.count))}`);
         if (asset.owner) metadata.push(`<b>Owner:</b> ${escapeHtml(asset.owner)}`);
         if (asset.duration) metadata.push(`<b>Duration:</b> ${escapeHtml(asset.duration)}`);
         if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origin:</b> ${escapeHtml(asset.origin)}`);
+        if (asset.actor) metadata.push(`<b>Actor:</b> ${escapeHtml(asset.actor)}`);
+        if (asset.cause) metadata.push(`<b>Cause:</b> ${escapeHtml(asset.cause)}`);
+        if (asset.changed_at) metadata.push(`<b>Since:</b> ${escapeHtml(asset.changed_at)}`);
         if (asset.last_location) {
             metadata.push(`<b>Last location:</b> ${escapeHtml(areaDisplayName(asset.last_location, revealAll, visibleIds, areasById))}`);
         }
