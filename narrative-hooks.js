@@ -1269,148 +1269,134 @@ export function installInterceptor() {
 
 
 
-        // Pre-generation keyword scan.
-        // This interceptor (manifest generate_interceptor) fires BEFORE addPromptManagerInterceptor
-        // in the ST pipeline. Running the keyword scan here ensures that any entries activated by
-        // the current user message land in activeRouterKeys before Path 1 reads it.
-        //
-        // In Path 1 (skipInjection=true): scan runs, activeRouterKeys is updated, text building
-        //   is skipped. Path 1 will pick up all activeRouterKeys (including newly triggered ones)
-        //   and inject them as a single system message at the configured depth.
-        //
-        // In Path 2 (skipInjection=false): scan runs and we also build lore text and inject it
-        //   directly into the user message (legacy path for old ST builds).
-        //
-        // Skipped entirely when routerNativeKeywordActivation is enabled (ST handles keywords).
-        if (settings.routerEnabled && !settings.routerNativeKeywordActivation) {
-            if (content) {
-                const t0 = performance.now().toFixed(1);
-                console.group(`[RPG|INTERCEPT] rpgTrackerInterceptor keyword pre-scan @ ${t0}ms`);
-                console.log('skipInjection (Path 1 active):', skipInjection);
-                console.log('activeRouterKeys BEFORE scan:', JSON.stringify(settings.activeRouterKeys || []));
-                const triggered = await scanAssistantOutputForKeywords(content, { sweepEnabled: false }).catch(() => []);
-                console.log('activeRouterKeys AFTER scan:', JSON.stringify(settings.activeRouterKeys || []));
-                console.log('newly triggered this scan:', triggered);
-                console.log(`scan finished @ ${performance.now().toFixed(1) }ms`);
+        // Keyword scan is extension-managed only. Native Keyword Activation leaves
+        // matching to SillyTavern. Agent-owned cards still inject below either way —
+        // otherwise [NPC_RELATIONS] can list an NPC whose card never appears (ST
+        // native WI only injects when the book is selected and keys match).
+        let triggered = [];
+        if (settings.routerEnabled && !settings.routerNativeKeywordActivation && content) {
+            const t0 = performance.now().toFixed(1);
+            console.group(`[RPG|INTERCEPT] rpgTrackerInterceptor keyword pre-scan @ ${t0}ms`);
+            console.log('skipInjection (Path 1 active):', skipInjection);
+            console.log('activeRouterKeys BEFORE scan:', JSON.stringify(settings.activeRouterKeys || []));
+            triggered = await scanAssistantOutputForKeywords(content, { sweepEnabled: false }).catch(() => []);
+            console.log('activeRouterKeys AFTER scan:', JSON.stringify(settings.activeRouterKeys || []));
+            console.log('newly triggered this scan:', triggered);
+            console.log(`scan finished @ ${performance.now().toFixed(1) }ms`);
 
-                // Trigger UI refresh so the Agent Panel updates immediately with yellow pills
-                if (triggered.length > 0 && typeof globalThis._rpgRenderRouterUI === 'function') {
-                    globalThis._rpgRenderRouterUI();
-                }
+            if (triggered.length > 0 && typeof globalThis._rpgRenderRouterUI === 'function') {
+                globalThis._rpgRenderRouterUI();
+            }
+            console.groupEnd();
+        }
 
-                // In Path 1, the scan above already updated activeRouterKeys.
-                // Path 1's addPromptManagerInterceptor will read activeRouterKeys and inject
-                // all entries (including the newly triggered ones) at the configured depth.
-                // No text building or user-message mutation needed here.
-                if (!skipInjection) {
-                    // Path 2: build lore text to inject directly into the user message.
-                    if (triggered.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let loreBlock = '';
-                            const bookCache = {};
-                            for (const id of triggered) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    loreBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (loreBlock) {
-                                loreInjections += `\n<font color="#d4a028">## NEWLY ACTIVATED LORE (KEYWORD MATCH)</font>\n${loreBlock.trim()}\n`;
-                                console.log(`[RPG|INTERCEPT] Same-turn lore injected for ${triggered.length} entries.`);
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Same-turn lore injection failed:', e);
-                        }
-                    }
-
-                    // Persistent keyword-activated entries
-                    const triggeredSet = new Set(triggered);
-                    const persistent = (settings.keywordActivatedKeys || []).filter(id => !triggeredSet.has(id));
-                    if (persistent.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let persistBlock = '';
-                            const bookCache = {};
-                            for (const id of persistent) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    persistBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (persistBlock) {
-                                loreInjections += `\n<font color="#d4a028">## ACTIVE LORE (KEYWORD)</font>\n${persistBlock.trim()}\n`;
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Persistent keyword lore re-injection failed:', e);
-                        }
-                    }
-
-                    // Agent-owned entries (not keyword-triggered)
-                    const alreadyInjected = new Set([...triggered, ...(settings.keywordActivatedKeys || [])]);
-                    const agentOwned = (settings.activeRouterKeys || [])
-                        .filter(id => !alreadyInjected.has(id))
-                        .filter(id => {
-                            const [bookName] = id.split('::');
-                            const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
-                            return !isWorld;
-                        });
-                    if (agentOwned.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let agentBlock = '';
-                            const bookCache = {};
-                            for (const id of agentOwned) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    agentBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (agentBlock) {
-                                loreInjections += `\n## ACTIVE LORE (AGENT)\n${agentBlock.trim()}\n`;
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Agent-owned lore injection failed:', e);
-                        }
-                    }
-
-                // World Progression reports injection
-                if (settings.worldProgressionEnabled && (settings.activeWorldKeys || []).length > 0) {
+        if (settings.routerEnabled && !skipInjection) {
+            if (!settings.routerNativeKeywordActivation) {
+                if (triggered.length > 0) {
                     try {
                         const ctx = SillyTavern.getContext();
-                        let worldBlock = '';
+                        let loreBlock = '';
                         const bookCache = {};
-                        const sortedKeys = [...settings.activeWorldKeys].sort((a, b) => {
-                            const [, uidA] = a.split('::');
-                            const [, uidB] = b.split('::');
-                            return Number(uidA) - Number(uidB);
-                        });
-                        for (const id of sortedKeys) {
+                        for (const id of triggered) {
                             const [bookName, uid] = id.split('::');
                             if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
                             const entry = bookCache[bookName]?.entries?.[uid];
                             if (entry?.content) {
-                                worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
+                                loreBlock += buildInjectedEntryText(id, entry, settings);
                             }
                         }
-                        if (worldBlock) {
-                            wpInjections = `\n## WORLD PROGRESSION REPORTS\n${worldBlock.trim()}\n`;
+                        if (loreBlock) {
+                            loreInjections += `\n<font color="#d4a028">## NEWLY ACTIVATED LORE (KEYWORD MATCH)</font>\n${loreBlock.trim()}\n`;
+                            console.log(`[RPG|INTERCEPT] Same-turn lore injected for ${triggered.length} entries.`);
                         }
                     } catch (e) {
-                        console.warn('[RPG Tracker] World progression injection failed:', e);
+                        console.warn('[RPG Tracker] Same-turn lore injection failed:', e);
+                    }
+                }
+
+                const triggeredSet = new Set(triggered);
+                const persistent = (settings.keywordActivatedKeys || []).filter(id => !triggeredSet.has(id));
+                if (persistent.length > 0) {
+                    try {
+                        const ctx = SillyTavern.getContext();
+                        let persistBlock = '';
+                        const bookCache = {};
+                        for (const id of persistent) {
+                            const [bookName, uid] = id.split('::');
+                            if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                            const entry = bookCache[bookName]?.entries?.[uid];
+                            if (entry?.content) {
+                                persistBlock += buildInjectedEntryText(id, entry, settings);
+                            }
+                        }
+                        if (persistBlock) {
+                            loreInjections += `\n<font color="#d4a028">## ACTIVE LORE (KEYWORD)</font>\n${persistBlock.trim()}\n`;
+                        }
+                    } catch (e) {
+                        console.warn('[RPG Tracker] Persistent keyword lore re-injection failed:', e);
                     }
                 }
             }
 
-            console.groupEnd();
+            // Agent-owned entries (not keyword-triggered). Always inject when the
+            // router is on — including native keyword mode and empty user messages.
+            const alreadyInjected = settings.routerNativeKeywordActivation
+                ? new Set()
+                : new Set([...triggered, ...(settings.keywordActivatedKeys || [])]);
+            const agentOwned = (settings.activeRouterKeys || [])
+                .filter(id => !alreadyInjected.has(id))
+                .filter(id => {
+                    const [bookName] = id.split('::');
+                    const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                    return !isWorld;
+                });
+            if (agentOwned.length > 0) {
+                try {
+                    const ctx = SillyTavern.getContext();
+                    let agentBlock = '';
+                    const bookCache = {};
+                    for (const id of agentOwned) {
+                        const [bookName, uid] = id.split('::');
+                        if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                        const entry = bookCache[bookName]?.entries?.[uid];
+                        if (entry?.content) {
+                            agentBlock += buildInjectedEntryText(id, entry, settings);
+                        }
+                    }
+                    if (agentBlock) {
+                        loreInjections += `\n## ACTIVE LORE (AGENT)\n${agentBlock.trim()}\n`;
+                    }
+                } catch (e) {
+                    console.warn('[RPG Tracker] Agent-owned lore injection failed:', e);
+                }
+            }
+
+            if (settings.worldProgressionEnabled && (settings.activeWorldKeys || []).length > 0) {
+                try {
+                    const ctx = SillyTavern.getContext();
+                    let worldBlock = '';
+                    const bookCache = {};
+                    const sortedKeys = [...settings.activeWorldKeys].sort((a, b) => {
+                        const [, uidA] = a.split('::');
+                        const [, uidB] = b.split('::');
+                        return Number(uidA) - Number(uidB);
+                    });
+                    for (const id of sortedKeys) {
+                        const [bookName, uid] = id.split('::');
+                        if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                        const entry = bookCache[bookName]?.entries?.[uid];
+                        if (entry?.content) {
+                            worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
+                        }
+                    }
+                    if (worldBlock) {
+                        wpInjections = `\n## WORLD PROGRESSION REPORTS\n${worldBlock.trim()}\n`;
+                    }
+                } catch (e) {
+                    console.warn('[RPG Tracker] World progression injection failed:', e);
+                }
+            }
         }
-    }
 
         if (settings.debugMode) console.groupEnd();
 

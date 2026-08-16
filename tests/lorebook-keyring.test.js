@@ -4,6 +4,7 @@ import {
     buildKeyringText,
     grepLoreInBooks,
     isConcatenatedNameDump,
+    resolveBooksToScan,
 } from '../src/state/lorebook-keyring.js';
 
 const books = {
@@ -49,6 +50,30 @@ describe('lorebook keyring', () => {
     it('still searches a single phrase in labels, keys, and bodies', () => {
         const hits = grepLoreInBooks(books, 'chaplain');
         expect(hits.some(hit => hit.includes('Campaign_NPCs::0'))).toBe(true);
+    });
+});
+
+describe('resolveBooksToScan', () => {
+    it('unions campaignBooks with in-memory registry names for the prefix', () => {
+        const scanned = resolveBooksToScan(
+            ['Camp_Locations'],
+            ['Camp_Locations', 'Camp_NPCs', 'OtherChat_NPCs'],
+            'Camp',
+        );
+        expect(scanned).toEqual(expect.arrayContaining(['Camp_Locations', 'Camp_NPCs']));
+        expect(scanned).not.toContain('OtherChat_NPCs');
+    });
+
+    it('drops skeleton books and names that do not belong to the prefix', () => {
+        const scanned = resolveBooksToScan(
+            ['Camp_Skeleton', 'Camp_NPCs'],
+            ['Unrelated', 'Camp_Events'],
+            'Camp',
+            ['Camp_NPCs'],
+        );
+        expect(scanned).toEqual(expect.arrayContaining(['Camp_NPCs', 'Camp_Events']));
+        expect(scanned).not.toContain('Camp_Skeleton');
+        expect(scanned).not.toContain('Unrelated');
     });
 });
 

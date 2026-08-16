@@ -1,6 +1,35 @@
+import { bookBelongsToCampaignPrefix } from './lorebook-history.js';
+
 /** World Skeleton lorebooks are hidden from Lorebook Agent tools and the keyring. */
 export function isSkeletonBookName(bookName) {
     return String(bookName || '').toLowerCase().endsWith('_skeleton');
+}
+
+/**
+ * Books the keyword / Present-Now scanners should open.
+ * `campaignBooks` is the fast ownership list, but it can lag behind a newly
+ * created NPCs book until the next Lorebook Agent pass. Union it with
+ * in-memory prefix-scoped names so a book that already exists in ST's
+ * registry is not skipped.
+ *
+ * @param {string[]} knownBooks campaignBooks for the active chat
+ * @param {string[]} registryNames in-memory (or probed) world-info names
+ * @param {string} prefix campaign prefix
+ * @param {string[]} [extraNames] e.g. books mentioned in routerLog
+ * @returns {string[]}
+ */
+export function resolveBooksToScan(knownBooks, registryNames, prefix, extraNames = []) {
+    const books = new Set();
+    const consider = (name) => {
+        if (!name) return;
+        if (!bookBelongsToCampaignPrefix(name, prefix)) return;
+        if (isSkeletonBookName(name)) return;
+        books.add(name);
+    };
+    for (const n of knownBooks || []) consider(n);
+    for (const n of registryNames || []) consider(n);
+    for (const n of extraNames || []) consider(n);
+    return [...books];
 }
 
 /**
