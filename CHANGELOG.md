@@ -4,12 +4,18 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.98.1] - 2026-08-16
+
+### Fixed
+- **Map Evolution History scrolling**: the site inspector popup now allows vertical scrolling, so the History list is no longer clipped by SillyTavern's `overflow: hidden` dialog body.
+- **GM Evolution commits are no longer mid-cut at 600 characters**: material-commit summaries keep every operation in the tick. The narrator briefing prefers fewer complete commits over three truncated ones.
+
 ## [7.98.0] - 2026-08-16
 
 ### Added
 - **Map causality**: every material map operation now requires a concise in-world `cause`. Transitioning an asset into `DEAD` or `DESTROYED` also requires `actor` (`party`, an existing asset id, or a short off-map name). The extension stamps `changed_at` from `[TIME]`. Occupancy `detail` stays the current fact; cause/actor/since are why, who, and when.
 - **Causal thread ledger**: attributed map writes become per-site open/resolved/transformed threads (`mapEvolutionThreadsBySite`). Map Evolution receives **OPEN CAUSAL THREADS** so third-party kills, party kills, and occupations can continue as plot rather than disappearing into occupancy notes.
-- **GM site-activity briefing**: while inside a mapped site, DUNGEON_REALITY includes a compact Recent site activity block (open causal threads, last few material Evolution commits, current DIGEST rows) so occupancy makes sense without dumping the Evolution ledger. Per-asset Cause / Actor / Since remain the latest coupling for that entity.
+- **GM site-activity briefing**: while inside a mapped site, DUNGEON_REALITY includes a compact Recent site activity block (open causal threads, recent complete material Evolution commits, current DIGEST rows) so occupancy makes sense without dumping the Evolution ledger. Per-asset Cause / Actor / Since remain the latest coupling for that entity.
 - **Evolution history compression**: after each Map Evolution pass, closed-thread history is measured (~4 characters per token). If it meets the **user-settable token threshold** (default **10,000**), a second API call compresses resolved/transformed events and prior digests into compact summaries. **Currently open threads stay verbatim.** Settings → Persistent Maps → Map Evolution: enable, threshold, and compression prompt.
 - **Asset `count`**: optional living-member integer (1–99) on map assets. Packs, patrols, garrisons, and swarms are one `GROUP` with `count`; named individuals stay `CREATURE`. `SET_ASSET` can reduce or restock count. `0` is invalid — use `DEAD`/`DESTROYED`.
 - **Map Evolution Testing Ground**: a sandbox (`map-evolution-debug.js`) for balancing without playing. Advance or set in-world time, spawn or kill entities with cause/actor, evolve one map, or simulate up to 20 ticks. Entry points: Settings → Persistent Maps → Map Evolution, the Lorebook Agent Map Evolution drawer, and the map inspector. Includes asset arcs, a memory inspector, Clear evolution history, and a scrolling threads/assets history.

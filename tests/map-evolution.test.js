@@ -20,6 +20,7 @@ import {
     formatNarratorSiteActivity,
     normalizeMapEvolutionCompressThreshold,
     partitionCompressibleThreads,
+    pickCompleteNarratorCommits,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
     siteEvolutionDue,
@@ -116,6 +117,17 @@ describe('Map Evolution', () => {
         expect(line).toContain('by party');
         expect(line).toContain('odran left the site');
         expect(line).not.toContain('"op"');
+
+        const many = summarizeEvolutionDigest('Hall', {
+            operations: Array.from({ length: 9 }, (_, i) => ({
+                op: 'MOVE_ASSET',
+                asset_id: `patrol-${i}`,
+                to: 'nave',
+                cause: `Patrol ${i} answered the alarm.`,
+            })),
+        });
+        expect(many).toContain('patrol-0 moved to nave');
+        expect(many).toContain('patrol-8 moved to nave');
     });
 
     it('freezes the current area as the player bubble', () => {
@@ -439,6 +451,39 @@ describe('Map Evolution', () => {
         expect(truncated).toContain('OPEN patrol-2');
         expect(truncated).not.toContain('OPEN patrol-1');
         expect(truncated).not.toContain('OPEN patrol-0');
+    });
+
+    it('feeds the narrator complete Evolution commits instead of 600-character slices', () => {
+        const longCause = 'The Ash-Born continued feeding the forge until the dormant embers woke and the scavengers fled the hearth.';
+        const full = `Hall of the Ember-Ancestors: ember-scavengers moved to the-hall-of-echoing-footsteps: Fled from the excavation team after their looting was exposed.; harl moved to the-hall-of-echoing-footsteps: Pursued the fleeing scavengers to reclaim the desecrated haul.; torvin moved to the-hall-of-echoing-footsteps: Joined the pursuit after the scavengers fled toward the threshold.; cinder-lantern-delvers moved to the-hall-of-echoing-footsteps: Investigated the disturbance after hearing movement deeper inside the barrow.; geometry the-forge-of-dormant-embers by the-ash-born: ${longCause}`;
+        expect(full.length).toBeGreaterThan(600);
+
+        const stored = appendEvolutionBacklogEntry({}, 'Hall of the Ember-Ancestors', {
+            kind: 'commit',
+            at: '02:35 PM, Day 1',
+            elapsedMinutes: -1,
+            operationId: 'evo-1',
+            summary: full,
+        });
+        expect(stored['hall of the ember ancestors'][0].summary).toBe(full);
+        expect(stored['hall of the ember ancestors'][0].summary).toContain('dormant embers woke');
+
+        const briefing = formatNarratorSiteActivity({}, stored, 'Hall of the Ember-Ancestors');
+        expect(briefing).toContain(full);
+        expect(briefing).not.toMatch(/continued feedi$/m);
+
+        const bulky = 'x'.repeat(1200);
+        const lines = pickCompleteNarratorCommits([
+            { kind: 'commit', at: 'Day 1, 08:00', summary: `old tick ${bulky}` },
+            { kind: 'commit', at: 'Day 1, 12:00', summary: `mid tick ${bulky}` },
+            { kind: 'commit', at: 'Day 1, 16:00', summary: `new tick ${bulky}` },
+        ]);
+        expect(lines).toHaveLength(2);
+        expect(lines[0]).toContain('mid tick');
+        expect(lines[1]).toContain('new tick');
+        expect(lines.join('\n')).not.toContain('old tick');
+        expect(lines[0]).toContain(bulky);
+        expect(lines[1]).toContain(bulky);
     });
 
     it('replaces the current [TIME] line without touching Last Rest', () => {

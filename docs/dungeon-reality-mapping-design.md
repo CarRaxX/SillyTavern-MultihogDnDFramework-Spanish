@@ -276,7 +276,7 @@ While the party is inside the site, the deterministic Dungeon Reality block cont
 
 - a compact prose conversion of the current `[MAP]` snapshot, never the raw JSON;
 - per-asset `Cause` / `Actor` / `Since` when present (the latest occupancy coupling for that entity, not a plot ledger);
-- a short **Recent site activity** briefing: currently open causal threads (capped), the last few material Evolution commits, and current DIGEST rows — never the full thread history; and
+- a short **Recent site activity** briefing: currently open causal threads (capped), recent **complete** material Evolution commits (never mid-cut; older ticks are dropped first if the briefing would overflow), and current DIGEST rows — never the full thread history; and
 - root/descendant Location entries as player-observable history.
 
 JSON remains the storage and Map Updater / Map Evolution transaction format. Narrator injection removes structural keys, braces, stable IDs, duplicate reciprocal routes, and child `[CORE]` prose already represented by the map while retaining geometry, asset kind/state/knowledge, connection state, optional behavior metadata, and non-CORE player-observable chronicles. This keeps adjudication context close to the original prose-map cost. The activity briefing exists so occupancy makes sense (a barred latch, a feud, a vacuum occupation) without dumping Evolution's 400-event ledger into the GM prompt.

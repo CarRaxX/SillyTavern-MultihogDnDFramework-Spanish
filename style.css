@@ -5114,6 +5114,12 @@ textarea.rt-cr-input {
     text-align: left;
 }
 
+.popup-content:has(.rt-dungeon-map-popup) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    text-align: left;
+}
+
 .rt-dungeon-map-title {
     display: flex;
     align-items: center;
@@ -5264,8 +5270,10 @@ textarea.rt-cr-input {
     display: flex;
     flex-direction: column;
     gap: 7px;
-    max-height: min(24vh, 230px);
+    min-height: 8rem;
+    max-height: min(36vh, 340px);
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .rt-dungeon-map-evolution-entry {

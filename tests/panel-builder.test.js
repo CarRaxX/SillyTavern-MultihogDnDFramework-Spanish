@@ -75,6 +75,9 @@ describe('panel builder', () => {
         expect(source).toContain('isDungeonMapRevealAll');
         expect(source).toContain('playerFacing: !revealAll');
         expect(source).toContain('openMapEvolutionTestingGround');
+        expect(source).toContain('allowVerticalScrolling: true');
+        expect(css).toContain('.popup-content:has(.rt-dungeon-map-popup)');
+        expect(css).toMatch(/\.rt-dungeon-map-evolution-history\s*\{[\s\S]*?overflow-y:\s*auto;/);
         expect(source).toContain('reloadInspectorFromLiveMap');
         expect(source).toContain('await reloadInspectorFromLiveMap()');
         expect(source).toContain("siteRoots: [site]");

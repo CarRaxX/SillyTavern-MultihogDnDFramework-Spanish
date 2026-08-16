@@ -378,6 +378,8 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
     });
     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
         okButton: 'Close', cancelButton: false, wide: true, large: true,
+        allowVerticalScrolling: true,
+        leftAlign: true,
     });
 }
 

@@ -23,7 +23,7 @@ function summarizeOperationCause(operation) {
 export function summarizeEvolutionDigest(siteRoot, transaction) {
     if (isEvolutionNoop(transaction)) return '';
     const ops = Array.isArray(transaction?.operations) ? transaction.operations : [];
-    const bits = ops.slice(0, 8).map(operation => {
+    const bits = ops.map(operation => {
         const op = String(operation?.op || '').trim();
         const why = summarizeOperationCause(operation);
         if (op === 'MOVE_ASSET') return `${operation.asset_id} moved to ${operation.to}${why}`;
@@ -91,7 +91,7 @@ function normalizeEvolutionBacklogEntry(value) {
         elapsedMinutes: Number.isFinite(elapsedValue) && elapsedValue >= 0 ? Math.floor(elapsedValue) : -1,
         passes: Math.max(1, Math.min(1000000, Math.floor(Number.isFinite(passesValue) ? passesValue : 1))),
         operationId: kind === 'commit' ? String(value.operationId || '').trim().slice(0, 120) : '',
-        summary: String(value.summary || '').trim().slice(0, 600)
+        summary: String(value.summary || '').trim()
             || (kind === 'commit' ? 'A material map change was committed.' : 'No material map change was committed.'),
     };
 }
@@ -642,6 +642,35 @@ export function describeEvolutionAssetArc(storedThreads, subjectId, {
 export const NARRATOR_SITE_ACTIVITY_OPEN = 8;
 export const NARRATOR_SITE_ACTIVITY_COMMITS = 3;
 export const NARRATOR_SITE_ACTIVITY_DIGESTS = 3;
+/** Soft cap for commit lines in the GM briefing. Never mid-cut a summary. */
+export const NARRATOR_SITE_ACTIVITY_COMMIT_CHARS = 3500;
+
+function formatNarratorCommitLine(entry) {
+    return `- ${entry.at} — ${entry.summary}`;
+}
+
+/**
+ * Newest material commits that fit without slicing a summary.
+ * A long latest tick is kept whole; older ticks are dropped first.
+ */
+export function pickCompleteNarratorCommits(commits, {
+    maxCount = NARRATOR_SITE_ACTIVITY_COMMITS,
+    maxChars = NARRATOR_SITE_ACTIVITY_COMMIT_CHARS,
+} = {}) {
+    const rows = (Array.isArray(commits) ? commits : []).filter(entry => entry?.kind === 'commit' && entry.summary);
+    const picked = [];
+    let total = 0;
+    const countCap = Math.max(1, Math.floor(Number(maxCount) || NARRATOR_SITE_ACTIVITY_COMMITS));
+    const charCap = Math.max(1, Math.floor(Number(maxChars) || NARRATOR_SITE_ACTIVITY_COMMIT_CHARS));
+    for (const entry of [...rows].reverse()) {
+        const line = formatNarratorCommitLine(entry);
+        if (picked.length >= countCap) break;
+        if (picked.length && total + line.length + 1 > charCap) break;
+        picked.unshift(line);
+        total += line.length + 1;
+    }
+    return picked;
+}
 
 /**
  * Compact off-screen activity briefing for the narrator. Not the full ledger:
@@ -658,10 +687,7 @@ export function formatNarratorSiteActivity(threadsBySite, backlogBySite, siteRoo
         .filter(entry => entry.compressed)
         .slice(-NARRATOR_SITE_ACTIVITY_DIGESTS)
         .map(formatEvolutionThreadLine);
-    const commits = storedEvolutionBacklog(backlogBySite, siteRoot)
-        .filter(entry => entry.kind === 'commit')
-        .slice(-NARRATOR_SITE_ACTIVITY_COMMITS)
-        .map(entry => `- ${entry.at} — ${entry.summary}`);
+    const commits = pickCompleteNarratorCommits(storedEvolutionBacklog(backlogBySite, siteRoot));
     if (!openLines.length && !digestLines.length && !commits.length) return '';
     const parts = [
         'Use this to understand why occupancy looks this way. Do not recap it to the player unless they can perceive the aftermath.',
