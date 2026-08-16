@@ -337,6 +337,8 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Field reminder: MOVE_ASSET uses "to"');
         expect(evolution).not.toContain('groundMapsAfterWorldProgression');
         expect(evolution).toContain('export async function maybeRunMapEvolution');
+        expect(evolution).toContain('holdExitBookkeeping');
+        expect(evolution).toContain("exitResult?.skipped === 'busy'");
         expect(evolution).toContain('export async function loadMappedEvolutionSite');
         expect(evolution).toContain("from './map-evolution-lib.js'");
         expect(evolution).not.toContain("from './map-updater.js'");
