@@ -693,16 +693,21 @@ export async function maybeRunMapEvolution() {
     const previousRoot = String(settings.mapEvolutionLastSiteRoot || '').trim();
 
     let exitResult = null;
+    let holdExitBookkeeping = false;
     if (previousRoot && !dungeonRootsEqual(previousRoot, currentRoot)) {
         const already = lastFiredMinutesForSite(settings, previousRoot);
         const now = parseInWorldMinutes(currentTimeFrom(settings));
         if (!(Number.isFinite(already) && already >= 0 && already === now)) {
             settings.mapEvolutionPendingExitRoot = previousRoot;
             exitResult = await runMapEvolutionPass({ trigger: 'site_exit' });
+            // Busy/stopped skips must keep the pending exit + lastSiteRoot so a
+            // later pass can still fire the site-exit restock/decay contract.
+            // Advancing bookkeeping here permanently drops that departure.
+            holdExitBookkeeping = exitResult?.skipped === 'busy' || exitResult?.skipped === 'stopped';
         }
-        settings.mapEvolutionPendingExitRoot = '';
+        if (!holdExitBookkeeping) settings.mapEvolutionPendingExitRoot = '';
     }
-    settings.mapEvolutionLastSiteRoot = currentRoot;
+    if (!holdExitBookkeeping) settings.mapEvolutionLastSiteRoot = currentRoot;
     persistMapEvolutionState();
 
     const scope = normalizeEvolutionTickScope(settings.mapEvolutionTickScope);

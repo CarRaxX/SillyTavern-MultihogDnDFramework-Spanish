@@ -94,6 +94,37 @@ describe('resolveRecordCategoryTag', () => {
             content: 'A custom crafting specialization.',
         }, ['HOMEBREW', 'WORLD'], 'HOMEBREW')).toEqual({ tag: 'HOMEBREW', inferred: true });
     });
+
+    it('does not let a custom substring tag steal an exact WORLD category', () => {
+        // applyAction appends WORLD after custom tags; first-match includes()
+        // previously routed World Progression reports into e.g. prefix_Or.
+        expect(resolveRecordCategoryTag({
+            label: 'Day 3 Morning',
+            category: 'WORLD',
+            content: '## Morrowfen\nPressure builds at the docks.',
+        }, ['OR', 'WORLD'])).toEqual({ tag: 'WORLD', inferred: false });
+        expect(resolveRecordCategoryTag({
+            label: 'Day 3 Morning',
+            category: 'WORLD',
+            content: '## Morrowfen\nPressure builds at the docks.',
+        }, ['WO', 'WORLD'])).toEqual({ tag: 'WORLD', inferred: false });
+    });
+
+    it('prefers an exact custom tag over an earlier substring custom tag', () => {
+        expect(resolveRecordCategoryTag({
+            label: 'Custom ritual',
+            category: 'HOMEBREW',
+            content: 'A local rite.',
+        }, ['ME', 'HOMEBREW'])).toEqual({ tag: 'HOMEBREW', inferred: false });
+    });
+
+    it('still fuzzy-matches LOCATION to LOC when no exact tag exists', () => {
+        expect(resolveRecordCategoryTag({
+            label: 'Kalvermoor :: The Ring',
+            category: 'LOCATION',
+            content: '[CORE]\nA ring.\n[/CORE]',
+        }, ['LOC', 'WORLD'])).toEqual({ tag: 'LOC', inferred: false });
+    });
 });
 
 describe('custom-only category configuration', () => {
