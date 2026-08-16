@@ -21,6 +21,7 @@ import {
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
 import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
+import { findMostRecentNarratorMessage } from './src/state/present-now.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
@@ -3966,33 +3967,29 @@ function getRecentlyRecordedNpcIds(settings) {
 }
 
 /**
- * Most recent single assistant/narrator message only (not the whole multi-message turn block).
+ * Most recent single assistant/narrator message only (not the whole multi-message
+ * turn block, and never a user input — Present Now must not empty between replies).
  * @param {boolean} [includeHidden]
  * @returns {string}
  */
 function getMostRecentNarrativeText(includeHidden = false) {
     const { chat } = SillyTavern.getContext();
-    if (!chat?.length) return '';
-    for (let i = chat.length - 1; i >= 0; i--) {
-        const msg = chat[i];
-        if (msg.is_user) break;
-        if (msg.is_system) continue;
-        if (!includeHidden && /** @type {any} */ (msg).is_hidden) continue;
-        if (msg.extra?.['summary'] || msg.extra?.['is_summary'] || msg.extra?.['summary_data']) continue;
-        const mes = cleanMessageContent(msg);
-        if (!mes) continue;
-        if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) continue;
-        return mes;
-    }
-    return '';
+    const msg = findMostRecentNarratorMessage(chat, { includeHidden });
+    if (!msg) return '';
+    const mes = cleanMessageContent(msg);
+    if (!mes) return '';
+    if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) return '';
+    return mes;
 }
 
 /**
  * Present-Now name scanner — separate from the Lorebook Agent keyword scanner.
  * Scans ONLY the latest single narrator message for NPC names (entry comment/label).
- * First/last name tokens are enough for established NPCs; NPCs the agent just
- * recorded this pass require a full-name match so loose tokens/keys do not
- * instantly populate Present Now. Lorebook key[] arrays are never scanned.
+ * User messages are never scanned: a player turn without explicit NPC names must
+ * not clear Present Now. First/last name tokens are enough for established NPCs;
+ * NPCs the agent just recorded this pass require a full-name match so loose
+ * tokens/keys do not instantly populate Present Now. Lorebook key[] arrays are
+ * never scanned.
  *
  * Call immediately before location scene image generation (and when building Present Now UI).
  *
