@@ -176,7 +176,16 @@ export function resolveRecordCategoryTag(rec, knownTags = [], fallbackTag = null
     const matchKnown = (raw) => {
         const cat = String(raw || '').toUpperCase().trim();
         if (!cat) return null;
-        return tags.find(k => cat === k || cat.includes(k)) || null;
+        // Exact match first. Fuzzy "cat includes tag" must never let a shorter
+        // custom tag (OR, ME, WO, …) steal an exact later tag such as WORLD or
+        // HOMEBREW — Object.keys order puts customs before the WORLD override.
+        const exact = tags.find(k => cat === k);
+        if (exact) return exact;
+        let best = null;
+        for (const k of tags) {
+            if (cat.includes(k) && (!best || k.length > best.length)) best = k;
+        }
+        return best;
     };
 
     const explicit = matchKnown(rec?.category);
