@@ -1873,7 +1873,7 @@ function formatLivingOccupantsForEvolution(document) {
     });
     return [
         '## LIVING OCCUPANTS',
-        'Consider each independently. Hours elapsed: several may act in this one transaction. One patrol MOVE is not enough when more than one row exists. same-room means crowding or competing groups that should interact rather than ignore each other.',
+        'Consider each independently. Hours elapsed: several may act in this one transaction. One patrol MOVE is not enough when more than one row exists. same-room means they share a space — they may talk, work, pursue a joint project, hang around, ignore each other, or fight. Do not assume they are enemies.',
         'id | kind | name | location | state | notes',
         ...lines,
     ].join('\n');

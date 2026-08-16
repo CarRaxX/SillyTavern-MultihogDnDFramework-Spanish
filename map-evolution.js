@@ -343,8 +343,8 @@ function formatFailure(errors) {
 
 function kindPolicy(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Several districts or groups may change in the same tick. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
-        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Living CREATURE/GROUP assets may act independently each tick — patrol, forage, rest, fortify, clash — or stay put when that makes sense. Hours elapsed with several living groups may mean several operations, not one patrol MOVE, but idle occupants are allowed. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
+        ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Several districts or groups may change in the same tick. Ordinary civic life (trade, harvest, conversation, civic projects) or unrest — neither is preferred. Co-located groups are not automatically enemies. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
+        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Living CREATURE/GROUP assets may act independently each tick — patrol, forage, rest, fortify, clash, talk, hang around, or pursue an archetype-fitting project — or stay put when that makes sense. Hostile kinds may cooperate or share downtime; same-room is not automatically a fight. Hours elapsed with several living groups may mean several operations, not one patrol MOVE, but idle occupants are allowed. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
 }
 
 function triggerHeadline(trigger) {
@@ -411,7 +411,7 @@ Requested site: ${site.siteRoot}
 VALIDATION ERRORS
 ${formatFailure(errors)}
 
-Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations when several would stir, not one patrol MOVE as the whole result; occupants may stay put. Co-located competing groups should interact. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
+Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations when several would stir, not one patrol MOVE as the whole result; occupants may stay put. same-room is not automatically a fight; in-place detail and archetype-fitting projects are valid activity. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
 
 PREVIOUS OUTPUT
 ${priorOutput}
@@ -511,7 +511,7 @@ AUTHORITATIVE TIME-SCALE CONTRACT
 - The supplied Last Evolved timestamp is the scheduler watermark for this exact site.
 - Use both the latest elapsed duration and the accumulated per-site Evolution backlog to calibrate amount and breadth: accumulation, decay, arrivals, movement, and how many living groups act. A short latest gap permits only correspondingly small developments within that gap, but repeated short gaps and quiet checkpoints accumulate rather than resetting the site's trajectory.
 - Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several occupants may act in this same transaction if that is plausible. Independent occupants may all act, but they do not necessarily act if it makes sense for them to stay where they were. Do not spend the whole tick moving a single patrol.
-- Co-located competing groups should interact rather than ignore each other. Continue open threads.
+- Co-located groups are not automatically enemies. same-room occupancy may be talk, shared work, a joint project, downtime, or a fight. Hostile kinds may hang around or cooperate on an archetype-fitting project. Continue open threads.
 - Do not return noop solely because the latest interval is short. Consider cumulative quiet time and prior commits; a trajectory may continue, complicate, culminate, resolve, or reverse when plausible.
 - Manual and site-exit triggers do not imply a standard interval. Never substitute the configured interval for the actual elapsed duration.
 - If elapsed time is unknown, remain conservative and do not invent a long unattended period.

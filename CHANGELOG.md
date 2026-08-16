@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.99.1] - 2026-08-17
+
+### Changed
+- **Map Evolution social life**: co-located groups are not assumed to be enemies. Hostile dungeon occupants may hang around, talk, or cooperate. Occupants may pursue ongoing *projects* that fit their archetype (a bone-ward, a warren shoring, a harvest). In-place `SET_ASSET` detail is real activity. Custom stored Evolution prompts lag until reset or the prompt-defaults dialog; the per-request time-scale contract and Living Occupants snapshot are live immediately.
+
 ## [7.99.0] - 2026-08-17
 
 ### Changed

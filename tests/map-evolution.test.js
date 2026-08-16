@@ -88,7 +88,11 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('a lone patrol commute as the entire result is usually too little');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('they do not necessarily act if it makes sense for them to stay');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('several operations in ONE transaction');
-        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Co-located competing groups should interact');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Co-located groups are not automatically enemies');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('civilizational activity');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ongoing *projects*');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evo-day3-ossuary-bonework');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Co-located competing groups should interact');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Never write MOVE_ASSET with "location"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('MOVE_ASSET uses to (required)');
@@ -624,6 +628,8 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Hours elapsed with several living groups may mean several operations');
         expect(evolution).toContain('they do not necessarily act if it makes sense for them to stay where they were');
         expect(evolution).toContain('Do not spend the whole tick moving a single patrol');
+        expect(evolution).toContain('Co-located groups are not automatically enemies');
+        expect(evolution).toContain('archetype-fitting project');
         expect(evolution).toContain('directional prose, not explicit deltas');
         expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');
         expect(evolution).toContain('ACCUMULATED EVOLUTION BACKLOG (THIS SITE)');

@@ -714,6 +714,9 @@ Area: Ossuary Behind Rotten Tapestry
         });
         expect(snapshot).toContain('## LIVING OCCUPANTS');
         expect(snapshot).toContain('several may act in this one transaction');
+        expect(snapshot).toContain('same-room means they share a space');
+        expect(snapshot).toContain('Do not assume they are enemies');
+        expect(snapshot).not.toContain('competing groups that should interact');
         expect(snapshot).toContain('outer-bandit-crew | GROUP | Marsh Road Bandit Crew | loc=ossuary | ACTIVE | count=5 | same-room=flood-passage-vermin');
         expect(snapshot).toContain('flood-passage-vermin | GROUP | Giant Marsh Rats | loc=ossuary | ACTIVE | count=4 | same-room=outer-bandit-crew');
         expect(snapshot).toContain('upper-crypt-skeletal-guardians | GROUP | Skeletal Crypt Guardians | loc=gallery | ACTIVE | count=8');
