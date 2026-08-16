@@ -20,7 +20,7 @@ import {
     isLoreRedoEntryForChat,
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
-import { buildKeyringText, grepLoreInBooks, isSkeletonBookName } from './src/state/lorebook-keyring.js';
+import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
@@ -344,6 +344,28 @@ function getRouterChatId(ctx = SillyTavern.getContext()) {
         || null;
 }
 
+/**
+ * Record a lorebook on the active chat's campaignBooks list so boot / chat-switch
+ * `/world state=on` and the keyword scanner's fast path can find it. Newly created
+ * NPCs books were previously omitted here, so ST native WI and the scanner both
+ * skipped them until a manual Activate Campaign Lorebooks.
+ * @param {string} bookName
+ * @param {object} [settings]
+ * @returns {boolean} true when the list changed
+ */
+export function rememberCampaignBook(bookName, settings = getSettings()) {
+    if (!bookName) return false;
+    const chatId = getRouterChatId();
+    if (!chatId) return false;
+    settings.chatStates = settings.chatStates || {};
+    settings.chatStates[chatId] = settings.chatStates[chatId] || {};
+    const existing = new Set(settings.chatStates[chatId].campaignBooks || []);
+    const before = existing.size;
+    existing.add(bookName);
+    settings.chatStates[chatId].campaignBooks = [...existing];
+    return existing.size !== before;
+}
+
 function buildRouterLoreState(settings, { prefix, chatId, bookSnapshots }) {
     const chatState = chatId ? settings.chatStates?.[chatId] : null;
     return {
@@ -396,7 +418,7 @@ async function evictWorldInfoCache(bookName) {
     }
 }
 
-async function updateWorldInfoCache(bookName, bookData) {
+export async function updateWorldInfoCache(bookName, bookData) {
     try {
         const { worldInfoCache } = await import('../../../world-info.js');
         if (typeof worldInfoCache?.set !== 'function') return false;
@@ -3578,7 +3600,11 @@ export async function getLorebookManifest(skipUpdate = false) {
     const loadedBooks = await Promise.all(booksToLoad.map(async (n) => {
         try {
             const b = skipUpdate ? await ctx.loadWorldInfo(n) : await loadWorldInfoFresh(n, ctx);
-            return b?.entries ? { bookName: n, entries: b.entries } : null;
+            if (!b?.entries) return null;
+            // Full refreshes read disk; write that back so the interceptor's
+            // ctx.loadWorldInfo() sees the same entries the Agent UI just showed.
+            if (!skipUpdate) await updateWorldInfoCache(n, b);
+            return { bookName: n, entries: b.entries };
         } catch (_) {
             return null;
         }
@@ -3725,38 +3751,17 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     const prefix = getLivePrefix();
     if (!prefix) return [];
 
-    // Fast Path: use the campaignBooks ownership list if available.
-    // This avoids calling updateWorldInfoList() — the same 90-second registry scan
-    // that was causing the chat-switch latency — on EVERY generation.
+    // Fast path: campaignBooks avoids a disk re-index on every send. Union it
+    // with the in-memory registry so a newly created NPCs book that is not yet
+    // on the ownership list is still scanned (the exclusive fast path used to
+    // skip those books until Activate / Refresh Manifest).
     const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
     const knownBooks = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
-
-    let booksToScan;
-    if (knownBooks.length > 0) {
-        // We know exactly which books belong to this campaign — no registry scan needed.
-        booksToScan = [...knownBooks];
-    } else {
-        // Fallback for first-time chats: discover books via in-memory registry.
-        // updateWorldInfoList() is intentionally NOT called here — it triggers a
-        // full disk re-index on every message send, causing multi-second latency
-        // for users whose chatStates.campaignBooks is empty (new campaigns, no
-        // lorebook entries yet). The routerLog fallback below already catches any
-        // books not yet visible in the in-memory registry at zero I/O cost.
-        // runRouterPass calls updateWorldInfoList() after actual book writes (line ~1298),
-        // so the registry is already current by the time the next scan fires.
-        const allNames = await getWorldInfoNamesSafe();
-        const scoped = allNames.filter(n => bookBelongsToPrefix(n, prefix));
-
-        // Also sweep books referenced in routerLog (catches books not yet re-indexed)
-        const logBookNames = (settings.routerLog || [])
-            .flatMap(e => [...(e.record || []), ...(e.activate || [])].map(id => id.split('::')[0]))
-            .filter(Boolean);
-        const scopedSet = new Set(scoped);
-        for (const n of logBookNames) {
-            if (bookBelongsToPrefix(n, prefix) && !isSkeletonBookName(n)) scopedSet.add(n);
-        }
-        booksToScan = [...scopedSet];
-    }
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: knownBooks.length === 0 });
+    const logBookNames = (settings.routerLog || [])
+        .flatMap(e => [...(e.record || []), ...(e.activate || [])].map(id => id.split('::')[0]))
+        .filter(Boolean);
+    const booksToScan = resolveBooksToScan(knownBooks, registryNames, prefix, logBookNames);
 
     // ── Forward pass: activate entries whose keywords appear in the new narrative ──
     // ── or in the recent history window (Retroactive Lookback).            ──
@@ -4007,16 +4012,9 @@ export async function scanRecentOutputForPresentNpcs(narrativeText) {
 
     const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
     const knownBooks = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
-
-    let booksToScan;
-    if (knownBooks.length > 0) {
-        booksToScan = knownBooks.filter(n => isNpcBookName(n) && !isSkeletonBookName(n));
-    } else {
-        const allNames = await getWorldInfoNamesSafe({ fullProbe: false });
-        booksToScan = allNames.filter(n =>
-            bookBelongsToPrefix(n, prefix) && isNpcBookName(n) && !isSkeletonBookName(n),
-        );
-    }
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: knownBooks.length === 0 });
+    const booksToScan = resolveBooksToScan(knownBooks, registryNames, prefix)
+        .filter(n => isNpcBookName(n));
     if (!booksToScan.length) return [];
 
     const recentlyRecordedNpcIds = getRecentlyRecordedNpcIds(settings);

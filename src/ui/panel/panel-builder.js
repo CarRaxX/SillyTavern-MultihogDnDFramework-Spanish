@@ -219,6 +219,8 @@ export function createPanel(dependencies) {
         updateAgentStatusIndicator,
         updateChatLinkUI,
         updateLorebookEntry,
+        updateWorldInfoCache,
+        rememberCampaignBook,
         updatePanelStatus,
     } = dependencies;
 
@@ -3269,20 +3271,17 @@ export function createPanel(dependencies) {
                 return false;
             }
 
-            // Sync in-memory cache
-            if (typeof ctx.saveWorldInfo === 'function') {
+            // Sync in-memory cache (HTTP edit bypasses ST's worldInfoCache).
+            const cacheUpdated = await updateWorldInfoCache(bookName, bookData);
+            if (!cacheUpdated && typeof ctx.saveWorldInfo === 'function') {
                 try { await ctx.saveWorldInfo(bookName, bookData); } catch (_) { }
             }
 
-            // Activate the book
-            if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
-                await new Promise(r => setTimeout(r, 300));
-                if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
-                await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
-            }
+            rememberCampaignBook(bookName, s);
 
             // Activate the new entry key
             const fullId = `${bookName}::${nextUid}`;
+            if (!Array.isArray(s.activeRouterKeys)) s.activeRouterKeys = [];
             if (!s.activeRouterKeys.includes(fullId)) {
                 s.activeRouterKeys.push(fullId);
             }
@@ -3291,6 +3290,16 @@ export function createPanel(dependencies) {
             if (!s.npcRelationshipValues) s.npcRelationshipValues = {};
             if (!s.npcRelationshipValues[fullId]) {
                 s.npcRelationshipValues[fullId] = { friendship: 0, affection: 0 };
+            }
+
+            void saveSettings();
+
+            // Select the book in ST so native WI (and /world-dependent paths) can see it.
+            if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+                if (typeof ctx.updateWorldInfoList === 'function') {
+                    try { await ctx.updateWorldInfoList(); } catch (_) {}
+                }
+                await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
             }
 
             // Embed avatar as portrait (use URL directly to retain original quality and prevent settings bloat)
