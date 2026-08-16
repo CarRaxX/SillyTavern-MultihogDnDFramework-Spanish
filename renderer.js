@@ -2345,13 +2345,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <b>NOTE:</b> Multihog D&amp;D Framework auto-applies its own system prompt. If you want to restore your old prompt, go to the extension settings: General &amp; Visuals -> Core -> Restore backup to Main.
                 </div>
 
-                <div class="rt-onboarding-chat-tip" role="note">
-                    <div class="rt-onboarding-chat-tip-title">Need help? Open <b>CHAT</b> in the State Tracker header</div>
-                    <div class="rt-onboarding-chat-tip-body">Talk to the <b>Adventure Companion</b> for help with Multihog or to discuss your story. Enable Tutorial Mode in CHAT when you want the full framework guide attached to every request. Or head to the Discord, under the Extensions subforum: <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">https://discord.gg/sillytavern</a>. Hell, head there anyway!</div>
-                    <div class="rt-onboarding-chat-tip-body" style="margin-top: 6px;">Here's a video on how to get started for good measure: <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=82Lt9pRYFS0</a></div>
-                </div>
-
-                <div style="font-size: 13px; opacity: 0.9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; line-height: 1.4;">
+                <div class="rt-onboarding-how-it-works">
                     <div><b style="color: var(--rt-accent);">Auto-Tracking:</b> As you roleplay, the extension intelligently parses assistant responses using natural language. It detects losses of HP, new loot, or combat triggers, running background passes to update the state.</div>
 
                     <div><b style="color: var(--rt-accent);">Prompt Injection:</b> The State Memo and RNG Queue are injected seamlessly into your outgoing prompt. It acts as the "source of truth," assuring the narrator/GM model accurately sees HP, inventory, and mechanical outcomes. Buffs/debuffs tick down automatically based on in-story real-time passed. It JUST WORKS™!</div>
@@ -2359,15 +2353,31 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div><b style="color: var(--rt-accent);">Lorebook Agent 🤖:</b> Open it from the <b>Lorebook Agent</b> tab at the top of the State Tracker panel and preferably detach it from the State Tracker UI. It autonomously manages your lorebook — creating, updating, activating, deactivating, and deleting entries as your story evolves. Click <b>?</b> inside the agent panel for full documentation.</div>
 
                     <div><b style="color: var(--rt-accent);">World Progression 🌍:</b> Simulates location-scale conditions and wider currents at regular in-world intervals. It reads complete location lore dossiers without hidden maps, rotates through the least recently covered places, and writes directional prose for the narrator and later Map Evolution passes. A World Skeleton can seed undiscovered locations and regional context. Backlog Consolidation compresses older reports. Configure these options inside World Progression in Extension Settings.</div>
+
+                    <div><b style="color: var(--rt-accent);">Map Evolution 🗺️:</b> Makes maps/locations dynamic. Dungeons and towns evolve and generate story threads autonomously in the background (or even as you're in the location). Cleared half a dungeon, left, and then came back? The opposition may have gotten reinforcements or set up ambushes. Can be configured to run more or less often in the Persistent Maps section of the settings.</div>
+                </div>
+
+                <div class="rt-onboarding-divider"><span>Need Help</span></div>
+
+                <div class="rt-onboarding-chat-tip" role="note">
+                    <div class="rt-onboarding-chat-tip-title">Need help? Try these:</div>
+                    <ol class="rt-onboarding-help-list">
+                        <li>Watch <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">this basic video walkthrough</a> to get started.</li>
+                        <li>Talk to the <button type="button" class="rt-onboarding-open-chat" id="rt-onboarding-open-chat">Adventure Companion</button> bot. It has access to a large document regarding the extension when Tutorial Mode is enabled.</li>
+                        <li>Join the <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">SillyTavern Discord</a> and head to the extensions subforum. You can ask me questions there directly.</li>
+                    </ol>
                 </div>
 
                 <div class="rt-onboarding-divider"><span>Setup Guide</span></div>
 
-                <div style="font-size: 13px; opacity: 0.9; flex-shrink: 0; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
-                    <b style="color: var(--rt-accent); font-size: 14px;">Initial Setup:</b><br><br>
-                    1. Create a character card for your "narrator" (e.g. Game Master). <b>Leave the card fields empty</b>, as the framework handles all logic via the system prompt.<br><br>
-                    2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.<br><br>
-                    3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure <b>function calling</b> is enabled. Otherwise the <b>RollTheDice</b> tool will not work.<br><br>
+                <div class="rt-onboarding-setup-guide">
+                    <b class="rt-onboarding-setup-title">Initial Setup:</b>
+                    <ol class="rt-onboarding-setup-list">
+                        <li>Ensure <b>Function Calling</b> is enabled in your Chat Completion preset. Otherwise Persistent Maps will not work. It's quite an important feature, so you're missing out if you don't have it. You <i>can</i> turn it off, though, in the Game Systems settings. Function calling is also required for Hybrid RNG (RollTheDice tool).</li>
+                        <li>Set up your connections in the extension's connection settings. I recommend a lightweight, relatively fast and cheap model for everything but the main narrator/GM. More on that below.</li>
+                        <li>Create a character card for your "narrator" (e.g. Game Master). Leave the card content empty, as the framework handles all logic via the system/Main ST prompt.</li>
+                        <li>Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to get started quicker.</li>
+                    </ol>
                     <div style="margin-top: 8px;">
                         🪙 <b>Token Optimization:</b> To reduce token costs, especially when in tool use mode, consider using a summarizer such as the <b>Summaryception</b> extension. Summarization combined with <b>Lorebook Agent</b> will guarantee the AI stays on track and keep token costs low.
                     </div>

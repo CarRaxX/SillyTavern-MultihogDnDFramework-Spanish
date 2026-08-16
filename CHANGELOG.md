@@ -4,6 +4,12 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.99.0] - 2026-08-17
+
+### Changed
+- **Onboarding help**: Need Help is its own section with a numbered list — embedded getting-started video, clickable Adventure Companion (opens CHAT), and SillyTavern Discord. How It Works now covers Auto-Tracking through Map Evolution without mixing in help copy.
+- **Onboarding Setup Guide**: Initial Setup now starts with Function Calling (Persistent Maps + Hybrid RNG), then connections, empty narrator card, and character creation.
+
 ## [7.98.2] - 2026-08-16
 
 ### Changed

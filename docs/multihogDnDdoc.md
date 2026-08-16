@@ -93,13 +93,15 @@ For the narrator, I'd recommend trying at least the following:
 
 ### Initial Setup
 
-1. Create a character card for your "narrator" (e.g. Game Master). Leave the card fields empty, as the framework handles all logic via the system prompt.
+1. Ensure **Function Calling** is enabled in your Chat Completion preset. Otherwise Persistent Maps will not work. It's quite an important feature, so you're missing out if you don't have it. You *can* turn it off, though, in the Game Systems settings. Function calling is also required for Hybrid RNG (`RollTheDice` tool).
 
-2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
+2. Set up your connections in the extension's connection settings. A lightweight, relatively fast and cheap model is recommended for everything but the main narrator/GM.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Persistent Maps** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
+3. Create a character card for your "narrator" (e.g. Game Master). Leave the card content empty, as the framework handles all logic via the system/Main ST prompt.
 
-It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
+4. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to get started quicker.
+
+The respective connection drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection). DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
 ### Narrator character
 

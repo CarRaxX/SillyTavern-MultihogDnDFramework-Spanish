@@ -2067,6 +2067,39 @@
     white-space: nowrap;
 }
 
+.rt-onboarding-setup-guide {
+    font-size: 13px;
+    opacity: 0.9;
+    flex-shrink: 0;
+    line-height: 1.4;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 12px;
+}
+
+.rt-onboarding-setup-title {
+    color: var(--rt-accent);
+    font-size: 14px;
+}
+
+.rt-onboarding-setup-list {
+    margin: 8px 0 0;
+    padding-left: 1.35em;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rt-onboarding-how-it-works {
+    font-size: 13px;
+    opacity: 0.9;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+
 .rt-onboarding-chat-tip {
     flex-shrink: 0;
     margin: 0 0 12px;
@@ -2086,12 +2119,37 @@
     letter-spacing: 0.01em;
 }
 
-.rt-onboarding-chat-tip-title b {
+.rt-onboarding-help-list {
+    margin: 8px 0 0;
+    padding-left: 1.35em;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--rt-text, #eee);
+}
+
+.rt-onboarding-help-list a,
+.rt-onboarding-open-chat {
+    color: #b8f5d8;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.rt-onboarding-help-list a:hover,
+.rt-onboarding-open-chat:hover {
     color: #fff;
-    background: rgba(80, 200, 160, 0.35);
-    padding: 1px 7px;
-    border-radius: 4px;
-    border: 1px solid rgba(120, 230, 180, 0.45);
+}
+
+.rt-onboarding-open-chat {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
 }
 
 .rt-onboarding-chat-tip-body {

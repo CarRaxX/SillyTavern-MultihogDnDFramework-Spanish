@@ -50,27 +50,57 @@ describe('onboarding Player Card and ST persona options', () => {
         );
     });
 
-    it('includes the Discord Extensions subforum in the onboarding help', () => {
+    it('includes numbered onboarding help with embedded video, Discord, and CHAT links', () => {
         const html = renderMemoAsCards('', null, {});
 
-        expect(html).toContain('Or head to the Discord, under the Extensions subforum:');
-        expect(html).toContain('href="https://discord.gg/sillytavern"');
-        expect(html).toContain('Hell, head there anyway!');
-        expect(html).toContain('Here\'s a video on how to get started for good measure:');
+        expect(html).toContain('Need help? Try these:');
+        expect(html).toContain('this basic video walkthrough');
         expect(html).toContain('href="https://www.youtube.com/watch?v=82Lt9pRYFS0"');
+        expect(html).toContain('id="rt-onboarding-open-chat"');
+        expect(html).toContain('Adventure Companion');
+        expect(html).toContain('href="https://discord.gg/sillytavern"');
+        expect(html).toContain('SillyTavern Discord');
+        expect(html).toContain('extensions subforum');
+        expect(html).not.toContain('Hell, head there anyway!');
+        expect(html).not.toContain('Need help? Open');
     });
 
-    it('places the Main prompt restoration note directly under How It Works', () => {
+    it('keeps How It Works as system explainers, separate from Need Help', () => {
         const html = renderMemoAsCards('', null, {});
         const headingIndex = html.indexOf('<span>How It Works</span>');
         const noteIndex = html.indexOf('class="rt-onboarding-prompt-backup-note"');
+        const howIndex = html.indexOf('class="rt-onboarding-how-it-works"');
+        const autoIndex = html.indexOf('Auto-Tracking:');
+        const mapEvoIndex = html.indexOf('Makes maps/locations dynamic');
+        const helpHeadingIndex = html.indexOf('<span>Need Help</span>');
         const helpIndex = html.indexOf('class="rt-onboarding-chat-tip"');
 
         expect(headingIndex).toBeGreaterThanOrEqual(0);
         expect(noteIndex).toBeGreaterThan(headingIndex);
-        expect(helpIndex).toBeGreaterThan(noteIndex);
+        expect(howIndex).toBeGreaterThan(noteIndex);
+        expect(autoIndex).toBeGreaterThan(howIndex);
+        expect(mapEvoIndex).toBeGreaterThan(autoIndex);
+        expect(helpHeadingIndex).toBeGreaterThan(mapEvoIndex);
+        expect(helpIndex).toBeGreaterThan(helpHeadingIndex);
+        expect(html).toContain('Persistent Maps section of the settings');
         expect(html).toContain('Multihog D&amp;D Framework auto-applies its own system prompt.');
         expect(html).toContain('General &amp; Visuals -> Core -> Restore backup to Main.');
+    });
+
+    it('lists Function Calling first in the Setup Guide', () => {
+        const html = renderMemoAsCards('', null, {});
+        const setupIndex = html.indexOf('<span>Setup Guide</span>');
+        const functionIndex = html.indexOf('Function Calling');
+        const narratorCardIndex = html.indexOf('Leave the card content empty');
+        const instantIndex = html.indexOf('Instant Action to get started quicker');
+
+        expect(setupIndex).toBeGreaterThanOrEqual(0);
+        expect(functionIndex).toBeGreaterThan(setupIndex);
+        expect(narratorCardIndex).toBeGreaterThan(functionIndex);
+        expect(instantIndex).toBeGreaterThan(narratorCardIndex);
+        expect(html).toContain('Persistent Maps will not work');
+        expect(html).toContain('connection settings');
+        expect(html).not.toContain('Leave the card fields empty');
     });
 
     it('links the startup welcome note to the GitHub releases page', () => {
