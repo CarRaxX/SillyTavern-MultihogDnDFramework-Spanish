@@ -4,8 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.95.4] - 2026-08-16
+
 ### Fixed
 - **New NPC cards missing from the prompt until Activate / Refresh Manifest**: Add NPC now records the book on `campaignBooks`, writes ST's world-info cache, and persists settings so the next generate can inject the card. Agent-owned lore injects even when Native Keyword Activation is on (or the user message has no extractable text), instead of listing the NPC only in `[NPC_RELATIONS]`. The keyword scanner unions the ownership list with the in-memory registry so a newly created NPCs book is not skipped. A full manifest refresh copies disk-fresh entries back into ST's cache.
+- **Present Now empties on user turns**: the Visualization Present Now list scans only the latest narrator/assistant message. Player inputs are skipped so a turn that does not name NPCs no longer clears the tiles between replies.
 
 ## [7.95.3] - 2026-08-16
 
