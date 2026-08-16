@@ -379,7 +379,7 @@ Judge the latest interval together with this trajectory. A short latest interval
 ## OPEN CAUSAL THREADS (THIS SITE)
 ${formatEvolutionThreads(threads || { open: [], entries: [] })}
 
-Continue, complicate, culminate, resolve, or transform these threads when plausible. A DESTROYED/DEAD asset with actor is a killed-by fact you may build on. Do not invent a killer for unknown actors. Mark thread_status resolved or transformed when a change ends or turns a prior thread for that subject. Do not leave an open thread hanging while the whole tick is an unrelated singleton MOVE.
+Continue, complicate, culminate, resolve, or transform these threads when plausible. A DESTROYED/DEAD asset with actor is a killed-by fact you may build on. Do not invent a killer for unknown actors. Mark thread_status resolved when this change ends the plot for that subject — including return to baseline (customary patrol, settled vigil, going home to forage after the disturbance is over). Mark transformed when the plot continues in a new shape. Omitted thread_status defaults to open, so set resolved/transformed explicitly. Do not leave restored routine as a new OPEN thread. Do not leave an open thread hanging while the whole tick is an unrelated singleton MOVE.
 
 ## PLAYER BUBBLE (FROZEN)
 ${partyIsHere ? bubbleLine : '(Party is not inside this site. No freeze.)'}
@@ -411,7 +411,7 @@ Requested site: ${site.siteRoot}
 VALIDATION ERRORS
 ${formatFailure(errors)}
 
-Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations when several would stir, not one patrol MOVE as the whole result; occupants may stay put. same-room is not automatically a fight; in-place detail and archetype-fitting projects are valid activity. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
+Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations when several would stir, not one patrol MOVE as the whole result; occupants may stay put. same-room is not automatically a fight; in-place detail and archetype-fitting projects are valid activity. Return to baseline is thread_status resolved, not a new open thread. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
 
 PREVIOUS OUTPUT
 ${priorOutput}
@@ -525,7 +525,9 @@ AUTHORITATIVE WORLD REPORT CONTRACT
 
 AUTHORITATIVE CAUSAL THREAD CONTRACT
 - Every material operation needs cause. DEAD/DESTROYED also needs actor.
-- Open threads are plots you may continue. Do not invent a killer when actor is unknown.
+- Open threads are unfinished plots you may continue. Return to baseline (customary patrol, settled vigil, going back to forage after the disturbance ends) is thread_status resolved, not a new open thread.
+- Omitted thread_status defaults to open — set resolved or transformed explicitly when the plot ends or changes shape.
+- Do not invent a killer when actor is unknown.
 - Third-party killing is allowed when it makes logical and narrative sense.`;
     let prompt = initialUserPrompt({
         site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,

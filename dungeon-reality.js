@@ -1698,7 +1698,7 @@ export function buildDungeonMapCommitSchema() {
     const evidence = { type: 'string', enum: MAP_EVIDENCE };
     const cause = { type: 'string', minLength: 1, maxLength: 240, description: 'Concise in-world reason for this change. Required. For deaths use killed-by, e.g. "Killed by the party on the landing" or "Killed by Salt-Road Delvers over spoils".' };
     const actor = { type: 'string', minLength: 1, maxLength: 120, description: 'Who caused this change: "party", an existing asset id, or a short off-map name. Required when state is DEAD or DESTROYED.' };
-    const thread_status = { type: 'string', enum: MAP_THREAD_STATUSES, description: 'open (default), resolved, or transformed. Use resolved/transformed when this change ends or turns a prior thread for the same subject.' };
+    const thread_status = { type: 'string', enum: MAP_THREAD_STATUSES, description: 'open (unfinished plot), resolved (plot ended, including return to baseline), or transformed (plot continues in a new shape). Omission defaults to open — set resolved/transformed explicitly when the plot ends or changes shape.' };
     const operationVariants = [
         {
             type: 'object', additionalProperties: false,

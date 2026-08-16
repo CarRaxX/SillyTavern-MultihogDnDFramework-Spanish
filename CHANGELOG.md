@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.99.2] - 2026-08-17
+
+### Changed
+- **Map Evolution thread closures**: return to baseline (customary patrol, settled vigil, going home to forage after a disturbance) is `resolved`, not a new OPEN thread. Omitted `thread_status` still defaults to open, so the prompt now requires setting resolved/transformed explicitly. Custom stored Evolution prompts lag until reset; the per-request causal-thread contract is live immediately.
+
 ## [7.99.1] - 2026-08-17
 
 ### Changed

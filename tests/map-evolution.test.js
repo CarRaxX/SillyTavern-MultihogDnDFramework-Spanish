@@ -92,6 +92,9 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('civilizational activity');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ongoing *projects*');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evo-day3-ossuary-bonework');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Return to baseline is resolved');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evo-day7-1900-guardians-home');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"thread_status":"resolved"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Co-located competing groups should interact');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Never write MOVE_ASSET with "location"');
@@ -302,6 +305,44 @@ describe('Map Evolution', () => {
             summary: 'vacuum transformed',
         }]);
         expect(describeEvolutionThreads(bySite, 'Abbey Undercroft').open).toHaveLength(0);
+    });
+
+    it('closes a subject when a later return-to-baseline op is resolved', () => {
+        let bySite = appendEvolutionThreads({}, 'Baronial Crypt', [{
+            id: 'evo-chase:0',
+            at: 'Day 7, 11:00 AM',
+            status: 'transformed',
+            op: 'MOVE_ASSET',
+            subjectId: 'upper-crypt-skeletal-guardians',
+            actor: 'upper-crypt-skeletal-guardians',
+            cause: 'Followed the pursuit downward.',
+        }]);
+        const homecoming = threadsFromMapTransaction({
+            operation_id: 'evo-day7-1900-guardians-home',
+            operations: [{
+                op: 'MOVE_ASSET',
+                asset_id: 'upper-crypt-skeletal-guardians',
+                to: 'the-upper-gallery',
+                cause: 'No living intruder remained; returned to defensive posts.',
+                actor: 'upper-crypt-skeletal-guardians',
+                thread_status: 'resolved',
+            }],
+        }, { at: 'Day 7, 07:00 PM' });
+        expect(homecoming[0].status).toBe('resolved');
+        bySite = appendEvolutionThreads(bySite, 'Baronial Crypt', homecoming);
+        expect(describeEvolutionThreads(bySite, 'Baronial Crypt').open).toHaveLength(0);
+
+        const omitted = threadsFromMapTransaction({
+            operation_id: 'evo-omit-status',
+            operations: [{
+                op: 'MOVE_ASSET',
+                asset_id: 'upper-crypt-skeletal-guardians',
+                to: 'the-upper-gallery',
+                cause: 'Returned to defensive posts.',
+                actor: 'upper-crypt-skeletal-guardians',
+            }],
+        }, { at: 'Day 7, 07:00 PM' });
+        expect(omitted[0].status).toBe('open');
     });
 
     it('does not treat historical OPEN rows as currently open once transformed', () => {
@@ -630,6 +671,8 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Do not spend the whole tick moving a single patrol');
         expect(evolution).toContain('Co-located groups are not automatically enemies');
         expect(evolution).toContain('archetype-fitting project');
+        expect(evolution).toContain('Return to baseline');
+        expect(evolution).toContain('Omitted thread_status defaults to open');
         expect(evolution).toContain('directional prose, not explicit deltas');
         expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');
         expect(evolution).toContain('ACCUMULATED EVOLUTION BACKLOG (THIS SITE)');
