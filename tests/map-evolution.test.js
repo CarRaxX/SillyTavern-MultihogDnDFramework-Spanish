@@ -85,7 +85,8 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('own factions');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('WP is primary');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Prefer durable local change and interesting dynamism over noop whenever in-world time has passed');
-        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('one MOVE of a single patrol is not enough');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('a lone patrol commute as the entire result is usually too little');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('they do not necessarily act if it makes sense for them to stay');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('several operations in ONE transaction');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('Co-located competing groups should interact');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"op":"MOVE_ASSET"');
@@ -620,8 +621,8 @@ describe('Map Evolution', () => {
         const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
 
         expect(evolution).not.toContain("trigger === 'world_progression'");
-        expect(evolution).toContain('Hours elapsed with several living groups means several operations');
-        expect(evolution).toContain('several operations in this one transaction is the expected default');
+        expect(evolution).toContain('Hours elapsed with several living groups may mean several operations');
+        expect(evolution).toContain('they do not necessarily act if it makes sense for them to stay where they were');
         expect(evolution).toContain('Do not spend the whole tick moving a single patrol');
         expect(evolution).toContain('directional prose, not explicit deltas');
         expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');

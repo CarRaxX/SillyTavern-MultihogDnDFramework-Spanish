@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.98.2] - 2026-08-16
+
+### Changed
+- **Map Evolution occupancy tempo**: independent occupants may all act, but they do not have to. Staying put is valid when that makes sense. A lone patrol commute as the entire tick is still discouraged. Custom stored Evolution prompts lag until reset or the prompt-defaults dialog; the per-request time-scale contract is live immediately.
+
 ## [7.98.1] - 2026-08-16
 
 ### Fixed

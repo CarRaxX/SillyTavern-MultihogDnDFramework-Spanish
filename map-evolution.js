@@ -344,7 +344,7 @@ function formatFailure(errors) {
 function kindPolicy(kind) {
     return kind === 'SETTLEMENT'
         ? 'SETTLEMENT: district and OBJECT change is expected when it makes logical and narrative sense. Several districts or groups may change in the same tick. Translate applicable macro pressure into a concrete local manifestation, while preserving any realization already established through play. Interiors are OBJECT assets in a district, not new areas.'
-        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Living CREATURE/GROUP assets should keep acting independently each tick — patrol, forage, rest, fortify, clash. Hours elapsed with several living groups means several operations in this transaction, not one patrol MOVE. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
+        : 'DUNGEON: restock and new occupants are expected when they make logical and narrative sense. Living CREATURE/GROUP assets may act independently each tick — patrol, forage, rest, fortify, clash — or stay put when that makes sense. Hours elapsed with several living groups may mean several operations, not one patrol MOVE, but idle occupants are allowed. Original factions, rival adventurers, scavengers, wildlife, or anyone the site could attract. Do not revive DESTROYED/DEAD assets.';
 }
 
 function triggerHeadline(trigger) {
@@ -369,7 +369,7 @@ ${kindPolicy(kind)}
 Last Evolved for this site: ${timeWindow.lastEvolved}
 Current in-world time: ${timeWindow.currentTime}
 Elapsed since Last Evolved: ${timeWindow.elapsed}
-Scale both the amount and the breadth of change to this elapsed duration. Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this one transaction is the expected default. Do not use a single asset's patrol as the entire result. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
+Scale both the amount and the breadth of change to this elapsed duration. Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this one transaction when several occupants would plausibly stir; staying put is valid. Do not use a single asset's patrol commute as the entire result. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
 
 ## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
 ${formatEvolutionBacklog(backlog)}
@@ -399,7 +399,7 @@ These reports are directional prose, not explicit deltas. Decide the best concre
 ## PRIOR EVOLUTION THIS PERIOD
 ${digestBlock}
 
-Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Hours plus several living occupants should usually yield several operations, not one. Use {"noop":true} only when this site would not plausibly stir.`;
+Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Hours plus several living occupants may yield several operations when several would stir; idle occupants may stay. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
 function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads, priorOutput, errors, attempt }) {
@@ -411,7 +411,7 @@ Requested site: ${site.siteRoot}
 VALIDATION ERRORS
 ${formatFailure(errors)}
 
-Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations in this transaction, not one patrol MOVE. Co-located competing groups should interact. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
+Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("party", an asset id, or a short off-map name). Packs are one GROUP with count (2-99), not many singleton CREATUREs. SET_ASSET count for attrition. Hours plus several living groups: several operations when several would stir, not one patrol MOVE as the whole result; occupants may stay put. Co-located competing groups should interact. MOVE_ASSET uses "to" and optional "from", never "location". SET_AREA geometry_append is an array of strings. ADD_ASSET uses "location" for the destination area.
 
 PREVIOUS OUTPUT
 ${priorOutput}
@@ -510,7 +510,7 @@ async function evolveOneSite({
 AUTHORITATIVE TIME-SCALE CONTRACT
 - The supplied Last Evolved timestamp is the scheduler watermark for this exact site.
 - Use both the latest elapsed duration and the accumulated per-site Evolution backlog to calibrate amount and breadth: accumulation, decay, arrivals, movement, and how many living groups act. A short latest gap permits only correspondingly small developments within that gap, but repeated short gaps and quiet checkpoints accumulate rather than resetting the site's trajectory.
-- Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this same transaction is the expected default. Do not spend the whole tick moving a single patrol.
+- Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several occupants may act in this same transaction if that is plausible. Independent occupants may all act, but they do not necessarily act if it makes sense for them to stay where they were. Do not spend the whole tick moving a single patrol.
 - Co-located competing groups should interact rather than ignore each other. Continue open threads.
 - Do not return noop solely because the latest interval is short. Consider cumulative quiet time and prior commits; a trajectory may continue, complicate, culminate, resolve, or reverse when plausible.
 - Manual and site-exit triggers do not imply a standard interval. Never substitute the configured interval for the actual elapsed duration.
