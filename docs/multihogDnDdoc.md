@@ -578,7 +578,7 @@ Activation uses **whole location segments**, not substring matches and not first
 | `Whispering Woods, Forgotten Tomb` | Forgotten Tomb on (region wrapping) |
 | `Forest Near the Hall of the Ember-Ancestors` | **off** (nearby mention only) |
 
-Leaving the site stops narrator injection without deleting the map; returning resumes it. While inside, the GM receives compact occupancy prose (including each asset's latest Cause / Actor / Since when present) plus a short Recent site activity briefing — open causal threads, recent material Evolution commits, and DIGEST rows — not the full Evolution ledger.
+Leaving the site stops narrator injection without deleting the map; returning resumes it. While inside, the GM receives compact occupancy prose (including each asset's latest Cause / Actor / Since when present) plus a short Recent site activity briefing — open causal threads, recent material Evolution commits up to a token ceiling (default 2000; never mid-cut), and DIGEST rows — not the full Evolution ledger. Commit lines omit the site name.
 
 ### Player vs GM views
 

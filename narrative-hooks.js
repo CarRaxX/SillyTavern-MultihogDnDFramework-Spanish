@@ -1076,6 +1076,7 @@ export function installInterceptor() {
                         settings.mapEvolutionThreadsBySite,
                         settings.mapEvolutionBacklogBySite,
                         activeSite.siteRoot,
+                        { maxTokens: settings.mapEvolutionNarratorCommitTokens },
                     ),
                 });
                 dungeonMissingMapWarnings.delete(`${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`);

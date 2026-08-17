@@ -10,6 +10,7 @@ import {
     clearEvolutionHistoryForSite,
     collectEvolutionArcSubjects,
     DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD,
+    DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS,
     describeEvolutionAssetArc,
     describeEvolutionBacklog,
     describeEvolutionMemoryUsage,
@@ -20,6 +21,7 @@ import {
     filterSitesByRoots,
     formatNarratorSiteActivity,
     normalizeMapEvolutionCompressThreshold,
+    normalizeMapEvolutionNarratorCommitTokens,
     partitionCompressibleThreads,
     pickCompleteNarratorCommits,
     pickSitesForEvolutionTick,
@@ -29,6 +31,7 @@ import {
     getSiteEvolutionIntervalOverride,
     siteEvolutionDue,
     stampEvolutionLastFired,
+    stripEvolutionDigestSitePrefix,
     summarizeEvolutionDigest,
     summarizeMapEvolutionSchedule,
     threadsFromMapTransaction,
@@ -124,7 +127,7 @@ describe('Map Evolution', () => {
                 { op: 'REMOVE_ASSET', asset_id: 'odran', cause: 'Left for the Hall of the Ember-Ancestors.' },
             ],
         });
-        expect(line).toContain('Forgotten Tomb:');
+        expect(line).not.toContain('Forgotten Tomb:');
         expect(line).toContain('odran FLEEING');
         expect(line).toContain('by party');
         expect(line).toContain('odran left the site');
@@ -405,6 +408,11 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD).toBe(10000);
         expect(normalizeMapEvolutionCompressThreshold(undefined)).toBe(10000);
         expect(normalizeMapEvolutionCompressThreshold('10000')).toBe(10000);
+        expect(DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS).toBe(2000);
+        expect(normalizeMapEvolutionNarratorCommitTokens(undefined)).toBe(2000);
+        expect(normalizeMapEvolutionNarratorCommitTokens('2000')).toBe(2000);
+        expect(normalizeMapEvolutionNarratorCommitTokens(50)).toBe(200);
+        expect(normalizeMapEvolutionNarratorCommitTokens(99999)).toBe(20000);
         expect(estimateMapHistoryTokens('abcd')).toBe(1);
         expect(evolutionHistoryNeedsCompression({}, 'Ossuary', 10000)).toBe(false);
         const bulky = {};
@@ -534,37 +542,85 @@ describe('Map Evolution', () => {
         expect(truncated).not.toContain('OPEN patrol-0');
     });
 
-    it('feeds the narrator complete Evolution commits instead of 600-character slices', () => {
+    it('feeds the narrator complete Evolution commits under a token ceiling', () => {
         const longCause = 'The Ash-Born continued feeding the forge until the dormant embers woke and the scavengers fled the hearth.';
-        const full = `Hall of the Ember-Ancestors: ember-scavengers moved to the-hall-of-echoing-footsteps: Fled from the excavation team after their looting was exposed.; harl moved to the-hall-of-echoing-footsteps: Pursued the fleeing scavengers to reclaim the desecrated haul.; torvin moved to the-hall-of-echoing-footsteps: Joined the pursuit after the scavengers fled toward the threshold.; cinder-lantern-delvers moved to the-hall-of-echoing-footsteps: Investigated the disturbance after hearing movement deeper inside the barrow.; geometry the-forge-of-dormant-embers by the-ash-born: ${longCause}`;
-        expect(full.length).toBeGreaterThan(600);
+        const body = `ember-scavengers moved to the-hall-of-echoing-footsteps: Fled from the excavation team after their looting was exposed.; harl moved to the-hall-of-echoing-footsteps: Pursued the fleeing scavengers to reclaim the desecrated haul.; torvin moved to the-hall-of-echoing-footsteps: Joined the pursuit after the scavengers fled toward the threshold.; cinder-lantern-delvers moved to the-hall-of-echoing-footsteps: Investigated the disturbance after hearing movement deeper inside the barrow.; geometry the-forge-of-dormant-embers by the-ash-born: ${longCause}`;
+        const storedLegacy = `Hall of the Ember-Ancestors: ${body}`;
+        expect(body.length).toBeGreaterThan(600);
 
         const stored = appendEvolutionBacklogEntry({}, 'Hall of the Ember-Ancestors', {
             kind: 'commit',
             at: '02:35 PM, Day 1',
             elapsedMinutes: -1,
             operationId: 'evo-1',
-            summary: full,
+            summary: storedLegacy,
         });
-        expect(stored['hall of the ember ancestors'][0].summary).toBe(full);
+        expect(stored['hall of the ember ancestors'][0].summary).toBe(storedLegacy);
         expect(stored['hall of the ember ancestors'][0].summary).toContain('dormant embers woke');
 
         const briefing = formatNarratorSiteActivity({}, stored, 'Hall of the Ember-Ancestors');
-        expect(briefing).toContain(full);
+        expect(briefing).toContain(body);
+        expect(briefing).not.toContain('Hall of the Ember-Ancestors:');
         expect(briefing).not.toMatch(/continued feedi$/m);
 
-        const bulky = 'x'.repeat(1200);
+        const bulky = 'x'.repeat(3000);
         const lines = pickCompleteNarratorCommits([
             { kind: 'commit', at: 'Day 1, 08:00', summary: `old tick ${bulky}` },
             { kind: 'commit', at: 'Day 1, 12:00', summary: `mid tick ${bulky}` },
             { kind: 'commit', at: 'Day 1, 16:00', summary: `new tick ${bulky}` },
-        ]);
+        ], { maxTokens: 2000 });
         expect(lines).toHaveLength(2);
         expect(lines[0]).toContain('mid tick');
         expect(lines[1]).toContain('new tick');
         expect(lines.join('\n')).not.toContain('old tick');
         expect(lines[0]).toContain(bulky);
         expect(lines[1]).toContain(bulky);
+
+        const manySmall = Array.from({ length: 6 }, (_, i) => ({
+            kind: 'commit',
+            at: `Day 1, ${String(8 + i).padStart(2, '0')}:00`,
+            summary: `tick ${i} patrol moved to nave`,
+        }));
+        expect(pickCompleteNarratorCommits(manySmall, { maxTokens: 2000 })).toHaveLength(6);
+
+        const huge = 'y'.repeat(12000);
+        const oversized = pickCompleteNarratorCommits([
+            { kind: 'commit', at: 'Day 1, 08:00', summary: 'old small' },
+            { kind: 'commit', at: 'Day 1, 16:00', summary: huge },
+        ], { maxTokens: 2000 });
+        expect(oversized).toHaveLength(1);
+        expect(oversized[0]).toContain(huge);
+        expect(oversized[0]).toContain('Day 1, 16:00');
+
+        const cappedBriefing = formatNarratorSiteActivity({}, {
+            ossuary: [
+                { kind: 'commit', at: 'Day 1, 08:00', summary: `old ${bulky}` },
+                { kind: 'commit', at: 'Day 1, 16:00', summary: `new ${bulky}` },
+            ],
+        }, 'Ossuary', { maxTokens: 800 });
+        expect(cappedBriefing).toContain('new ');
+        expect(cappedBriefing).not.toContain('old ');
+    });
+
+    it('omits the site label from material commits and strips it from stored headers', () => {
+        expect(stripEvolutionDigestSitePrefix(
+            'Bunker Theta: security-android-patrol ALERT by security-android-patrol: The surviving security routines detected recent movement.',
+            'Bunker Theta',
+        )).toBe('security-android-patrol ALERT by security-android-patrol: The surviving security routines detected recent movement.');
+        expect(stripEvolutionDigestSitePrefix('Hall of records: clerks copied the ledger.', 'Hall')).toBe('Hall of records: clerks copied the ledger.');
+        expect(stripEvolutionDigestSitePrefix('patrol moved to nave', 'Ossuary')).toBe('patrol moved to nave');
+
+        const stored = {
+            'bunker theta': [{
+                kind: 'commit',
+                at: 'Day 2, 08:00',
+                summary: 'Bunker Theta: security-android-patrol ALERT by security-android-patrol: The surviving security routines detected recent movement near the entrance and shifted from routine patrol to investigation.; maintenance-drone-swarm IDLE by maintenance-drone-swarm: Uneven emergency power has redirected the maintenance system toward stabilizing the junction before resuming broader repairs.',
+            }],
+        };
+        const briefing = formatNarratorSiteActivity({}, stored, 'Bunker Theta');
+        expect(briefing).toContain('security-android-patrol ALERT');
+        expect(briefing).toContain('maintenance-drone-swarm IDLE');
+        expect(briefing).not.toContain('Bunker Theta:');
     });
 
     it('replaces the current [TIME] line without touching Last Rest', () => {
@@ -833,7 +889,13 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
         expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_enabled"');
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_compress_threshold"[^>]*value="10000"/);
+        expect(settingsMarkup).toMatch(/id="rpg_map_evolution_narrator_commit_tokens"[^>]*value="2000"/);
+        expect(settingsMarkup).toContain('Map Evolution memory');
+        expect(settingsMarkup).toContain('transferred to the <b>narrator</b>');
         expect(defaultsSource).toContain('mapEvolutionCompressThreshold: 10000');
+        expect(defaultsSource).toContain('mapEvolutionNarratorCommitTokens: 2000');
+        expect(indexSource).toContain('rpg_map_evolution_narrator_commit_tokens');
+        expect(hooks).toContain('mapEvolutionNarratorCommitTokens');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_prompt"');
         expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
         expect(evolution).toContain('maybeCompressSiteThreads');

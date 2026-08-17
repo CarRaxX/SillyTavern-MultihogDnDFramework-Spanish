@@ -65,6 +65,7 @@ export function saveProfile(name) {
         mapEvolutionMaxTokens: s.mapEvolutionMaxTokens ?? 25000,
         mapEvolutionCompressEnabled: s.mapEvolutionCompressEnabled !== false,
         mapEvolutionCompressThreshold: s.mapEvolutionCompressThreshold ?? 10000,
+        mapEvolutionNarratorCommitTokens: s.mapEvolutionNarratorCommitTokens ?? 2000,
         mapEvolutionCompressSystemPrompt: s.mapEvolutionCompressSystemPrompt || "",
         mapEvolutionTickScope: s.mapEvolutionTickScope || "all",
         mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,

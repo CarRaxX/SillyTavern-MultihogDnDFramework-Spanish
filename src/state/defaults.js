@@ -1374,6 +1374,8 @@ Rules:
 
         mapEvolutionCompressThreshold: 10000,
 
+        mapEvolutionNarratorCommitTokens: 2000,
+
         mapEvolutionCompressSystemPrompt: DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT,
 
         mapEvolutionTickScope: "all",

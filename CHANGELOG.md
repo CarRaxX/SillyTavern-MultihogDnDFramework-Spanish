@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.1.2] - 2026-08-18
+
+### Changed
+- **Map Evolution GM briefing**: material commits are no longer capped at two or three. Settings → Persistent Maps → Map Evolution has a **GM material-commit ceiling** (default 2000 tokens, ~8000 characters) for how much Map Evolution memory — recent material commits for the current site — is transferred to the narrator. Newest complete commits fill that budget; the latest commit is never sliced. Commit summaries no longer repeat the site name — they are only shown inside that site.
+
 ## [8.1.1] - 2026-08-17
 
 ### Fixed

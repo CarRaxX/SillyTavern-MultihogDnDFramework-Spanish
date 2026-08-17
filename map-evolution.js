@@ -37,6 +37,7 @@ import {
     normalizeEvolutionTickScope,
     normalizeMapEvolutionCompressThreshold,
     partitionCompressibleThreads,
+    stripEvolutionDigestSitePrefix,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
     siteEvolutionDue,
@@ -289,7 +290,7 @@ function recordSiteThreads(settings, siteRoot, transaction, createdAssets, at) {
     );
 }
 
-function formatEvolutionBacklog(backlog) {
+function formatEvolutionBacklog(backlog, siteRoot = '') {
     const lines = backlog.entries.map(entry => {
         const outcome = entry.kind === 'commit' ? 'MATERIAL COMMIT' : 'QUIET CHECKPOINT';
         const interval = entry.elapsedMinutes >= 0
@@ -297,7 +298,8 @@ function formatEvolutionBacklog(backlog) {
             : 'Unknown interval';
         const passes = entry.kind === 'quiet' && entry.passes > 1 ? ` across ${entry.passes} passes` : '';
         const operation = entry.operationId ? ` [operation_id: ${entry.operationId}]` : '';
-        return `- ${entry.at} — ${outcome}${passes}${operation}; accumulated preceding time: ${interval}; ${entry.summary}`;
+        const summary = stripEvolutionDigestSitePrefix(entry.summary, siteRoot);
+        return `- ${entry.at} — ${outcome}${passes}${operation}; accumulated preceding time: ${interval}; ${summary}`;
     });
     const history = lines.length
         ? lines.join('\n')
@@ -364,7 +366,7 @@ Elapsed since Last Evolved: ${timeWindow.elapsed}
 Scale both the amount and the breadth of change to this elapsed duration. Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this one transaction when several occupants would plausibly stir; staying put is valid. Do not use a single asset's patrol commute as the entire result. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
 
 ## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
-${formatEvolutionBacklog(backlog)}
+${formatEvolutionBacklog(backlog, site.siteRoot)}
 
 Judge the latest interval together with this trajectory. A short latest interval limits what happened during that interval, but it does not erase accumulated quiet time or prior developments. Do not choose noop solely because the latest interval is short. Let repeated quiet checkpoints build enough opportunity for a meaningful change, and let prior commits continue, complicate, culminate, resolve, or reverse rather than mechanically repeating them.
 

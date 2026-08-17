@@ -47,7 +47,22 @@ function summarizeOperationCause(operation) {
     return `: ${cause}`;
 }
 
+/**
+ * Drop a leading "Site Name: " header from a stored Evolution digest.
+ * Commits are only shown inside that site, so the label is wasted tokens.
+ */
+export function stripEvolutionDigestSitePrefix(summary, siteRoot) {
+    const text = String(summary || '').trim();
+    const root = String(siteRoot || '').trim();
+    if (!text || !root) return text;
+    const escaped = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp(`^${escaped}\\s*:\\s*`), '');
+}
+
 export function summarizeEvolutionDigest(siteRoot, transaction) {
+    // siteRoot remains in the signature for call-site compatibility.
+    // Digests are only read inside that site, so the name is not prepended.
+    void siteRoot;
     if (isEvolutionNoop(transaction)) return '';
     const ops = Array.isArray(transaction?.operations) ? transaction.operations : [];
     const bits = ops.map(operation => {
@@ -61,7 +76,7 @@ export function summarizeEvolutionDigest(siteRoot, transaction) {
         if (op === 'SET_AREA') return `geometry ${operation.area_id}${why}`;
         return `${op || 'OP'}${why}`;
     });
-    return `${siteRoot}: ${bits.join('; ')}`;
+    return bits.join('; ');
 }
 
 export function resolvePlayerBubble(document, currentLocation, { combatActive = false } = {}) {
@@ -518,6 +533,8 @@ export const MAX_MAP_EVOLUTION_THREADS = 400;
 export const MAP_EVOLUTION_THREAD_PROMPT_ENTRIES = 400;
 export const MAP_THREAD_STATUSES = ['open', 'resolved', 'transformed'];
 export const DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD = 10000;
+/** GM/narrator briefing: token ceiling for complete material commits. ~4 chars/token. */
+export const DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS = 2000;
 
 function cloneJson(value, fallback) {
     try {
@@ -800,34 +817,28 @@ export function describeEvolutionAssetArc(storedThreads, subjectId, {
 }
 
 export const NARRATOR_SITE_ACTIVITY_OPEN = 8;
-export const NARRATOR_SITE_ACTIVITY_COMMITS = 3;
 export const NARRATOR_SITE_ACTIVITY_DIGESTS = 3;
-/** Soft cap for commit lines in the GM briefing. Never mid-cut a summary. */
-export const NARRATOR_SITE_ACTIVITY_COMMIT_CHARS = 3500;
 
-function formatNarratorCommitLine(entry) {
-    return `- ${entry.at} — ${entry.summary}`;
+function formatNarratorCommitLine(entry, siteRoot = '') {
+    return `- ${entry.at} — ${stripEvolutionDigestSitePrefix(entry.summary, siteRoot)}`;
 }
 
 /**
- * Newest material commits that fit without slicing a summary.
+ * Newest material commits that fit under a token ceiling without slicing a summary.
  * A long latest tick is kept whole; older ticks are dropped first.
  */
 export function pickCompleteNarratorCommits(commits, {
-    maxCount = NARRATOR_SITE_ACTIVITY_COMMITS,
-    maxChars = NARRATOR_SITE_ACTIVITY_COMMIT_CHARS,
+    maxTokens = DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS,
+    siteRoot = '',
 } = {}) {
     const rows = (Array.isArray(commits) ? commits : []).filter(entry => entry?.kind === 'commit' && entry.summary);
     const picked = [];
-    let total = 0;
-    const countCap = Math.max(1, Math.floor(Number(maxCount) || NARRATOR_SITE_ACTIVITY_COMMITS));
-    const charCap = Math.max(1, Math.floor(Number(maxChars) || NARRATOR_SITE_ACTIVITY_COMMIT_CHARS));
+    const tokenCap = normalizeMapEvolutionNarratorCommitTokens(maxTokens);
     for (const entry of [...rows].reverse()) {
-        const line = formatNarratorCommitLine(entry);
-        if (picked.length >= countCap) break;
-        if (picked.length && total + line.length + 1 > charCap) break;
+        const line = formatNarratorCommitLine(entry, siteRoot);
+        const candidate = picked.length ? `${line}\n${picked.join('\n')}` : line;
+        if (picked.length && estimateMapHistoryTokens(candidate) > tokenCap) break;
         picked.unshift(line);
-        total += line.length + 1;
     }
     return picked;
 }
@@ -836,7 +847,9 @@ export function pickCompleteNarratorCommits(commits, {
  * Compact off-screen activity briefing for the narrator. Not the full ledger:
  * open threads, recent material commits, and current DIGEST rows.
  */
-export function formatNarratorSiteActivity(threadsBySite, backlogBySite, siteRoot) {
+export function formatNarratorSiteActivity(threadsBySite, backlogBySite, siteRoot, {
+    maxTokens = DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS,
+} = {}) {
     const stored = storedEvolutionThreads(threadsBySite, siteRoot);
     const { open } = partitionCompressibleThreads(stored);
     const shownOpen = open.slice(-NARRATOR_SITE_ACTIVITY_OPEN);
@@ -847,7 +860,10 @@ export function formatNarratorSiteActivity(threadsBySite, backlogBySite, siteRoo
         .filter(entry => entry.compressed)
         .slice(-NARRATOR_SITE_ACTIVITY_DIGESTS)
         .map(formatEvolutionThreadLine);
-    const commits = pickCompleteNarratorCommits(storedEvolutionBacklog(backlogBySite, siteRoot));
+    const commits = pickCompleteNarratorCommits(storedEvolutionBacklog(backlogBySite, siteRoot), {
+        maxTokens,
+        siteRoot,
+    });
     if (!openLines.length && !digestLines.length && !commits.length) return '';
     const parts = [
         'Use this to understand why occupancy looks this way. Do not recap it to the player unless they can perceive the aftermath.',
@@ -901,6 +917,12 @@ export function normalizeMapEvolutionCompressThreshold(value) {
     return Math.max(500, Math.min(100000, n));
 }
 
+export function normalizeMapEvolutionNarratorCommitTokens(value) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return DEFAULT_MAP_EVOLUTION_NARRATOR_COMMIT_TOKENS;
+    return Math.max(200, Math.min(20000, n));
+}
+
 export function closedThreadHistoryTokens(threadsBySite, siteRoot) {
     const { closed } = partitionCompressibleThreads(storedEvolutionThreads(threadsBySite, siteRoot));
     return estimateMapHistoryTokens(formatClosedThreadsForCompression(closed));
@@ -919,11 +941,12 @@ export function storedEvolutionBacklog(backlogBySite, siteRoot) {
         .filter(Boolean);
 }
 
-function formatBacklogMemoryLine(entry) {
+function formatBacklogMemoryLine(entry, siteRoot = '') {
     const outcome = entry?.kind === 'commit' ? 'MATERIAL COMMIT' : 'QUIET CHECKPOINT';
     const passes = entry?.kind === 'quiet' && entry.passes > 1 ? ` across ${entry.passes} passes` : '';
     const operation = entry?.operationId ? ` [operation_id: ${entry.operationId}]` : '';
-    return `- ${entry?.at || 'Unknown'} — ${outcome}${passes}${operation}; ${entry?.summary || ''}`;
+    const summary = stripEvolutionDigestSitePrefix(entry?.summary || '', siteRoot);
+    return `- ${entry?.at || 'Unknown'} — ${outcome}${passes}${operation}; ${summary}`;
 }
 
 /**
@@ -944,7 +967,7 @@ export function describeEvolutionMemoryUsage(threadsBySite, backlogBySite, siteR
         compressed: false,
     })).join('\n');
     const threadText = storedThreads.map(formatEvolutionThreadLine).join('\n');
-    const backlogText = storedBacklog.map(formatBacklogMemoryLine).join('\n');
+    const backlogText = storedBacklog.map(entry => formatBacklogMemoryLine(entry, siteRoot)).join('\n');
     const closedTokens = estimateMapHistoryTokens(closedText);
     const openTokens = estimateMapHistoryTokens(openText);
     const threadTokens = estimateMapHistoryTokens(threadText);

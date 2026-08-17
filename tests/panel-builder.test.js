@@ -108,6 +108,7 @@ describe('panel builder', () => {
 
         const revealedHtml = renderMapEvolutionHistoryHtml(backlog, 'Morrowfen', { revealAll: true });
         expect(revealedHtml).toContain('hidden rioters');
+        expect(revealedHtml).not.toContain('Morrowfen:');
         expect(revealedHtml).toContain('evo-secret-riot');
     });
 

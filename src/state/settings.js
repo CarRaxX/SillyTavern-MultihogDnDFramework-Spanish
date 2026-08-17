@@ -829,6 +829,10 @@ function getSettingsInternal(extensionSettings) {
     s.mapEvolutionCompressThreshold = Number.isFinite(compressThreshold)
         ? Math.max(500, Math.min(100000, compressThreshold))
         : 10000;
+    const narratorCommitTokens = Math.floor(Number(s.mapEvolutionNarratorCommitTokens));
+    s.mapEvolutionNarratorCommitTokens = Number.isFinite(narratorCommitTokens)
+        ? Math.max(200, Math.min(20000, narratorCommitTokens))
+        : 2000;
     // Old shipped default was 0 (no cap). Raise existing 0s once to 6.
     // The flag must NOT live in defaults: seeding it true skipped this for everyone
     // who already had 0 saved. After this flag is persisted, 0 stays a valid choice.
@@ -1164,6 +1168,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapEvolutionMaxTokens',
     'mapEvolutionCompressEnabled',
     'mapEvolutionCompressThreshold',
+    'mapEvolutionNarratorCommitTokens',
     'mapEvolutionCompressSystemPrompt',
     'mapEvolutionTickScope',
     'mapEvolutionTickCount',

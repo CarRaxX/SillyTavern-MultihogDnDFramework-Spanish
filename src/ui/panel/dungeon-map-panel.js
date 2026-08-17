@@ -4,7 +4,7 @@ import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { serializeDungeonMapDocument } from '../../../dungeon-reality.js';
-import { describeEvolutionBacklog, formatEvolutionElapsedMinutes } from '../../../map-evolution-lib.js';
+import { describeEvolutionBacklog, formatEvolutionElapsedMinutes, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
 export const DUNGEON_MAP_DETACHED_KEY = 'rpg_tracker_dungeon_map_detached';
 export const DUNGEON_MAP_GEOMETRY_KEY = 'rpg_tracker_geometry_dungeon_map';
@@ -212,7 +212,7 @@ export function renderMapEvolutionHistoryHtml(backlogBySite, siteRoot, { revealA
             : 'Unknown elapsed time';
         const details = material && !revealAll
             ? 'Material details hidden. Turn on Reveal All to inspect this commit.'
-            : entry.summary;
+            : stripEvolutionDigestSitePrefix(entry.summary, siteRoot);
         const operation = material && revealAll && entry.operationId
             ? `<code>${escapePopupText(entry.operationId)}</code>`
             : '';

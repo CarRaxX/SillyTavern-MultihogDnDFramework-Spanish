@@ -13,7 +13,7 @@ import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
-import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
+import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -2914,6 +2914,7 @@ function loadProfile(name) {
         const n = Math.floor(Number(p.mapEvolutionCompressThreshold));
         return Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
     })();
+    s.mapEvolutionNarratorCommitTokens = normalizeMapEvolutionNarratorCommitTokens(p.mapEvolutionNarratorCommitTokens);
     s.mapEvolutionCompressSystemPrompt = p.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT;
     s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'all';
     s.mapEvolutionTickCount = (() => {
@@ -3033,6 +3034,7 @@ function loadProfile(name) {
     $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
     $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
     $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
+    $('#rpg_map_evolution_narrator_commit_tokens').val(s.mapEvolutionNarratorCommitTokens ?? 2000);
     $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
     applyMapEvolutionTickSettingsToUi(s);
     $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
@@ -5454,6 +5456,11 @@ function organizeConnectionSettingsUI() {
             const n = Math.floor(parseInt(String($(this).val()), 10));
             settings.mapEvolutionCompressThreshold = Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
             $(this).val(settings.mapEvolutionCompressThreshold);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_narrator_commit_tokens').val(settings.mapEvolutionNarratorCommitTokens ?? 2000).on('change', function () {
+            settings.mapEvolutionNarratorCommitTokens = normalizeMapEvolutionNarratorCommitTokens($(this).val());
+            $(this).val(settings.mapEvolutionNarratorCommitTokens);
             saveSettings();
         });
         $('#rpg_map_evolution_world_report_lookback').val(settings.mapEvolutionWorldReportLookback ?? 5).on('change', function () {
@@ -11459,6 +11466,7 @@ RULES:
             $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
             $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
             $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
+            $('#rpg_map_evolution_narrator_commit_tokens').val(s.mapEvolutionNarratorCommitTokens ?? 2000);
             applyMapEvolutionTickSettingsToUi(s);
             $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
             $('#rpg_map_evolution_compress_prompt').val(s.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT);

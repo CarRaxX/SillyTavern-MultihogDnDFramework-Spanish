@@ -14,7 +14,7 @@ import {
     peekTestingGroundLastPass,
     setCampaignTimeLabel,
 } from '../../../map-evolution-debug.js';
-import { collectEvolutionArcSubjects, describeEvolutionAssetArc } from '../../../map-evolution-lib.js';
+import { collectEvolutionArcSubjects, describeEvolutionAssetArc, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
 function escapeHtml(value) {
     return String(value || '')
@@ -185,11 +185,11 @@ function renderAssetArc(sandbox, selectedId) {
             <time>${escapeHtml(entry.at)}</time>
             <span class="${badgeClass}">${escapeHtml(label)}</span>
             <span class="rt-map-evo-debug-arc-role">${escapeHtml(role)}</span>
-            ${escapeHtml(entry.summary)}
+            ${escapeHtml(stripEvolutionDigestSitePrefix(entry.summary, sandbox?.siteRoot))}
         </li>`;
     }).join('');
     const backlog = (arc?.backlogHits || []).map(entry => (
-        `<li><time>${escapeHtml(entry.at)}</time> <span class="rt-map-evo-debug-transformed">BACKLOG</span> ${escapeHtml(entry.summary)}</li>`
+        `<li><time>${escapeHtml(entry.at)}</time> <span class="rt-map-evo-debug-transformed">BACKLOG</span> ${escapeHtml(stripEvolutionDigestSitePrefix(entry.summary, sandbox?.siteRoot))}</li>`
     )).join('');
     const empty = chosen && !events && !backlog
         ? '<div class="rt-map-evo-debug-empty">No stored events mention this asset yet.</div>'

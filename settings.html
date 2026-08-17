@@ -1528,6 +1528,12 @@
                                     <label>History token threshold
                                         <input id="rpg_map_evolution_compress_threshold" type="text" inputmode="numeric" pattern="[0-9]*" min="500" max="100000" value="10000" class="text_pole" title="After each Evolution pass, if closed-thread history exceeds this many tokens (~4 characters each), compress it. Open threads are kept verbatim. Default 10000." />
                                     </label>
+                                    <label>GM material-commit ceiling (tokens)
+                                        <input id="rpg_map_evolution_narrator_commit_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="200" max="20000" value="2000" class="text_pole" title="How much Map Evolution memory — recent material commits from this site — is transferred to the narrator while the party is inside. Count is unlimited; this is a token ceiling (~4 characters each, so 2000 ≈ 8000 characters). The latest commit is always kept whole. Default 2000." />
+                                    </label>
+                                    <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
+                                        Caps how much <b>Map Evolution memory</b> (recent material commits for the current site) is transferred to the <b>narrator</b> in the Recent site activity briefing. This does not limit Evolution’s own stored backlog or compression.
+                                    </div>
                                     <label style="font-size:0.85em;">World Report Lookback
                                         <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="How many recent reports and latest reports explicitly targeted at this location each map checks for unconsumed prose." />
                                     </label>
