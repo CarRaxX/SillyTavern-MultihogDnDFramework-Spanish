@@ -982,11 +982,14 @@ export function createPanel(dependencies) {
             const existing = findLibraryNpcByName(s, name);
             if (existing && !confirm(`"${name}" is already in the Library. Overwrite it?`)) return;
             try {
+                const campaignPortrait = resolvePortraitSrcForPlayerCharacter(s, name) || lookupCustomPortraitSrc(s, name) || '';
                 await saveNpcToLibrary(s, {
                     name,
                     content: extractLibraryIdentityContent(item.content || ''),
                     keys: item.keys || [name],
-                    portraitSrc: resolvePortraitSrcForPlayerCharacter(s, name) || lookupCustomPortraitSrc(s, name) || '',
+                    // Only pass portraitSrc when the campaign card has one — omitting
+                    // it preserves an existing library portrait on overwrite.
+                    ...(campaignPortrait ? { portraitSrc: campaignPortrait } : {}),
                 }, { overwriteId: existing?.id });
                 toastr['success'](`Saved "${name}" to the Library.`, 'Library');
             } catch (err) {

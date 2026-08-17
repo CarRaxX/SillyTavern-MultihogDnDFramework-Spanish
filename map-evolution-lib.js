@@ -11,6 +11,33 @@ export function isEvolutionNoop(value) {
     return Array.isArray(value.operations) && value.operations.length === 0;
 }
 
+/**
+ * Build per-report application stamps after a finished site pass.
+ *
+ * Bare noop (`{"noop":true}` with no report_outcomes) must not consume World
+ * Report pressure — otherwise a model that omits bookkeeping permanently drops
+ * pending pressures without materializing them. Explicit report_outcomes on a
+ * noop (or any material commit) still stamp every supplied report, defaulting
+ * missing IDs to `considered`.
+ *
+ * @param {unknown} rawOutcomes
+ * @param {Array<{ reportId: string }>} reports
+ * @param {{ noop?: boolean, digest?: string }} [options]
+ */
+export function buildReportOutcomeStamps(rawOutcomes, reports, { noop = false, digest = '' } = {}) {
+    const allowed = new Set(['materialized', 'already_realized_by_play', 'considered']);
+    const raw = Array.isArray(rawOutcomes) ? rawOutcomes : [];
+    if (noop && raw.length === 0) return [];
+    const supplied = new Map(raw
+        .map(outcome => [String(outcome?.report_id || '').trim(), String(outcome?.status || '').trim()])
+        .filter(([reportId, status]) => reportId && allowed.has(status)));
+    return (reports || []).map(report => ({
+        reportId: report.reportId,
+        status: supplied.get(report.reportId) || 'considered',
+        localDigest: String(digest || '').trim(),
+    }));
+}
+
 function summarizeOperationCause(operation) {
     const actor = String(operation?.actor || '').trim();
     const cause = String(operation?.cause || '').trim();

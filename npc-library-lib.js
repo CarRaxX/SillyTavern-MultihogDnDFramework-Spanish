@@ -147,6 +147,22 @@ export function removeLibraryNpcRecord(settings, id) {
     return removed || null;
 }
 
+/**
+ * Portrait update policy for library saves.
+ * - truthy `portraitSrc` → replace (caller persists a new file)
+ * - `''` → explicit clear
+ * - `undefined` / omitted → keep the existing library portrait
+ *
+ * @param {string} previousPath
+ * @param {string|undefined} portraitSrc
+ * @returns {{ kind: 'replace' } | { kind: 'set', path: string }}
+ */
+export function resolveLibraryPortraitUpdate(previousPath, portraitSrc) {
+    if (portraitSrc) return { kind: 'replace' };
+    if (portraitSrc === '') return { kind: 'set', path: '' };
+    return { kind: 'set', path: String(previousPath || '') };
+}
+
 export function portraitPayloadFromDataUrl(dataUrl) {
     const match = String(dataUrl || '').match(/^data:(image\/[\w+.-]+);base64,(.+)$/s);
     if (!match) return null;

@@ -6,6 +6,7 @@ import {
     appendEvolutionBacklogEntry,
     appendEvolutionThreads,
     applyCompressedThreadDigests,
+    buildReportOutcomeStamps,
     clearEvolutionHistoryForSite,
     collectEvolutionArcSubjects,
     DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD,
@@ -136,6 +137,35 @@ describe('Map Evolution', () => {
         });
         expect(many).toContain('patrol-0 moved to nave');
         expect(many).toContain('patrol-8 moved to nave');
+    });
+
+    it('does not burn World Report pressure on bare noop without report_outcomes', () => {
+        const reports = [
+            { reportId: 'World::1' },
+            { reportId: 'World::2' },
+        ];
+        expect(buildReportOutcomeStamps(undefined, reports, { noop: true })).toEqual([]);
+        expect(buildReportOutcomeStamps([], reports, { noop: true })).toEqual([]);
+
+        const explicit = buildReportOutcomeStamps(
+            [{ report_id: 'World::1', status: 'considered' }],
+            reports,
+            { noop: true },
+        );
+        expect(explicit).toEqual([
+            { reportId: 'World::1', status: 'considered', localDigest: '' },
+            { reportId: 'World::2', status: 'considered', localDigest: '' },
+        ]);
+
+        const material = buildReportOutcomeStamps(
+            [{ report_id: 'World::1', status: 'materialized' }],
+            reports,
+            { digest: 'site: moved' },
+        );
+        expect(material).toEqual([
+            { reportId: 'World::1', status: 'materialized', localDigest: 'site: moved' },
+            { reportId: 'World::2', status: 'considered', localDigest: 'site: moved' },
+        ]);
     });
 
     it('freezes the current area as the player bubble', () => {
@@ -695,9 +725,12 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('export async function maybeRunMapEvolution');
         expect(evolution).toContain('holdExitBookkeeping');
         expect(evolution).toContain("exitResult?.skipped === 'busy'");
+        expect(evolution).toContain('buildReportOutcomeStamps');
+        expect(evolution).toContain('try { persistMapEvolutionState(); } catch (_) { /* best-effort */ }');
         expect(evolution).toContain('export async function loadMappedEvolutionSite');
         expect(evolution).toContain("from './map-evolution-lib.js'");
         expect(evolution).not.toContain("from './map-updater.js'");
+        expect(evolution).not.toContain('normalizeReportOutcomes');
 
         expect(updater).toContain('isMapEvolutionRunning()');
         expect(updater).not.toContain('EVOLVED');
