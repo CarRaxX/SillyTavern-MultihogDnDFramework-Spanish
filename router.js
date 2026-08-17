@@ -1,7 +1,7 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, mergePreservedColorMarkup, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
+import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent, parseJsonWithColorRepair } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
@@ -259,7 +259,9 @@ function parseTextAction(text) {
             args = { [argNames[name] || 'value']: cleaned };
         } else {
             cleaned = cleaned.replace(/,\s*\}/g, '}').replace(/,\s*\]/g, ']');
-            args = JSON.parse(cleaned);
+            const parsed = parseJsonWithColorRepair(cleaned);
+            if (!parsed.ok) throw new Error(parsed.error || 'Invalid JSON');
+            args = parsed.value;
         }
     } catch (_) {
         return null;
@@ -1885,9 +1887,9 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 items: {
                     type: 'object',
                     properties: {
-                        id:      { type: 'string', description: 'Book::UID or plain NPC name (from ACTIVE MEMORY). Not used for the Player Character — PC Body/Equipment use commit.appearance/commit.equipment.' },
+                        id:      { type: 'string', description: 'Book::UID or plain NPC name from ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX. Not used for the Player Character — PC Body/Equipment use commit.appearance/commit.equipment.' },
                         field:   { type: 'string', enum: eligibleCoreFields, description: 'The exact eligible [CORE] field to update this pass.' },
-                        content: { type: 'string', description: 'New field content text.' }
+                        content: { type: 'string', description: 'New field content. To color text, write <font color=#RRGGBB>text</font> with an UNQUOTED hex (never color="#RRGGBB" — quotes break JSON). Preserve existing font/hex color markup.' }
                     },
                     required: ['id', 'field', 'content']
                 }
@@ -2144,7 +2146,7 @@ ${recordCategoryGuidance}`;
                         code: 'MALFORMED_JSON',
                         path: `${toolName}.arguments`,
                         received: effectiveArgumentError,
-                        hint: 'Retry the same action with strict JSON: double-quoted keys/strings, no comments, and no trailing commas. Nothing was written.',
+                        hint: 'Retry the same action with strict JSON: double-quoted keys/strings, no comments, and no trailing commas. For color markup write <font color=#RRGGBB>text</font> with UNQUOTED hex — never color="#RRGGBB". Nothing was written.',
                     }, null, 2);
                     retryRejectedJson = jsonCorrectionRetries <= MAX_JSON_CORRECTION_RETRIES;
                 } else if (toolName === 'commit') {
@@ -2673,10 +2675,21 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                     // delta ALSO contains a full [CORE] block, replace the old one in place
                     // (last write wins) rather than duplicating it, and only append whatever
                     // chronicle text (if any) remains outside that block.
-                    const newCoreMatch = delta.match(/\[CORE\][\s\S]*?\[\/CORE\]/i);
+                    const newCoreMatch = delta.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
                     const existingHasCore = /\[CORE\][\s\S]*?\[\/CORE\]/i.test(existing);
                     if (newCoreMatch && existingHasCore) {
-                        existing = existing.replace(/\[CORE\][\s\S]*?\[\/CORE\]/i, newCoreMatch[0]);
+                        const oldCoreMatch = existing.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
+                        const newCoreInner = newCoreMatch[1];
+                        const oldCoreInner = oldCoreMatch ? oldCoreMatch[1] : '';
+                        let extraHeaders = [];
+                        try {
+                            const coreSecs = (settings.npcCoreSections && Array.isArray(settings.npcCoreSections) && settings.npcCoreSections.length > 0)
+                                ? settings.npcCoreSections
+                                : DEFAULT_NPC_SECTIONS;
+                            extraHeaders = coreSecs.map(sec => sec.name).filter(Boolean);
+                        } catch (_) {}
+                        const mergedInner = mergePreservedColorMarkup(oldCoreInner, newCoreInner, { extraHeaders });
+                        existing = existing.replace(/\[CORE\][\s\S]*?\[\/CORE\]/i, `[CORE]${mergedInner}[/CORE]`);
                         delta = delta.replace(newCoreMatch[0], '').trim();
                         if (settings.debugMode) console.warn(`[RPG Tracker] Record targeted existing entry "${rec.label}" with a full [CORE] block — replaced in place instead of duplicating (agent should have used UPDATE_CORE/commit core).`);
                     }

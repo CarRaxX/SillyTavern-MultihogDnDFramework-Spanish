@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.1.1] - 2026-08-17
+
+### Fixed
+- **Lorebook Agent hex/font colors**: Full Audit no longer strips `<font color=#RRGGBB>` tags down to plain text. Chat cleaning keeps those tags, re-recorded `[CORE]` blocks restore color-bearing fields, and Direct Prompt JSON with `color="#hex"` is repaired so the commit is not dropped. NPC Full Cards render the font tags as color.
+
 ## [8.1.0] - 2026-08-17
 
 ### Added

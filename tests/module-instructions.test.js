@@ -58,6 +58,8 @@ describe('module instruction builders', () => {
         expect(text).toContain('<CORE_FORMAT — NPC only>');
         expect(text).toContain('{{user}}');
         expect(text).toContain('[CORE]');
+        expect(text).toContain('COLOR MARKUP');
+        expect(text).toContain('<font color=#RRGGBB>');
     });
 
     it('buildNpcInstruction uses overall exactly-N-words targets', () => {

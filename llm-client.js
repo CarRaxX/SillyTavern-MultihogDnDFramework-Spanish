@@ -9,9 +9,20 @@
 
 import { getSettings } from './state-manager.js';
 import { logTransaction } from './debug-viewer.js';
+import { parseJsonWithColorRepair } from './memo-processor.js';
 
 /** Placeholder that survives SillyTavern substituteParams() in generateRaw. */
 export const RT_USER_MACRO_SENTINEL = '__RT_USER_MACRO__';
+
+function parseToolCallArguments(rawArguments) {
+    if (typeof rawArguments !== 'string') {
+        return { args: rawArguments ?? {}, argumentError: null };
+    }
+    const parsed = parseJsonWithColorRepair(rawArguments);
+    return parsed.ok
+        ? { args: parsed.value, argumentError: null }
+        : { args: {}, argumentError: parsed.error };
+}
 
 /** Prevents {{user}} from being resolved to the active persona name before an LLM call. */
 export function shieldUserMacro(text) {
@@ -1059,10 +1070,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
             const rawArguments = tc.function.arguments;
-            let args;
-            let argumentError = null;
-            try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : (rawArguments ?? {}); }
-            catch (error) { args = {}; argumentError = String(error?.message || error); }
+            const { args, argumentError } = parseToolCallArguments(rawArguments);
             return { content: msg.content || '', reasoning: _reasoning, toolCall: { name: tc.function.name, args, id: tc.id, argumentError, rawArguments } };
         }
         const text = msg?.content ?? data.choices?.[0]?.text ?? '';
@@ -1103,12 +1111,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         if (msg?.tool_calls?.length) {
             const tc = msg.tool_calls[0];
             const rawArguments = tc.function?.arguments ?? {};
-            let args = rawArguments;
-            let argumentError = null;
-            if (typeof rawArguments === 'string') {
-                try { args = JSON.parse(rawArguments); }
-                catch (error) { args = {}; argumentError = String(error?.message || error); }
-            }
+            const { args, argumentError } = parseToolCallArguments(rawArguments);
             return { content: msg.content || '', toolCall: { name: tc.function.name, args, id: `call_${Date.now()}`, argumentError, rawArguments } };
         }
         return { content: msg?.content ?? '', toolCall: null };
@@ -1128,10 +1131,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             const tc = r?.choices?.[0]?.message?.tool_calls?.[0] ?? r?.tool_calls?.[0] ?? null;
             if (tc) {
                 const rawArguments = tc.function?.arguments ?? {};
-                let args;
-                let argumentError = null;
-                try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : rawArguments; }
-                catch (error) { args = {}; argumentError = String(error?.message || error); }
+                const { args, argumentError } = parseToolCallArguments(rawArguments);
                 return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}`, argumentError, rawArguments } };
             }
             let text = r?.content

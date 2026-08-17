@@ -7,6 +7,9 @@ import { DEFAULT_NPC_SECTIONS } from './schema-sections.js';
 import { getNpcRelationshipMax } from './relationship-math.js';
 import { buildNpcRelationshipInstruction } from './relationship-prompts.js';
 
+/** Passed as the Lorebook Agent Direct Prompt during Full Audit so color markup survives CORE rewrites. */
+export const LOREBOOK_FULL_AUDIT_INSTRUCTION = 'FULL AUDIT: Reconstruct lore from this history chunk. Preserve existing <font color=...> tags and hex color codes already stored in [CORE] (including custom color sections). When writing color markup, use unquoted hex only: <font color=#RRGGBB>text</font> — never color="#RRGGBB" (quoted attributes break JSON tool calls). Do not strip color markup down to plain text.';
+
 export function buildNpcInstruction(majorWords = 225, minorWords = 135, ignoreLimits = false, passedSettings = null) {
     let settings = passedSettings || {};
     if (!passedSettings) {
@@ -48,7 +51,8 @@ After the [/CORE] block, append timestamped narrative updates as usual ([${useDd
 - Combat Profile: use [[UPDATE_CORE: Book::UID or Name | Combat Profile | new text]] when ## ACTIVE COMBAT STATE provides updated stats.
 - Species, Personality, Brief Background, Habits/Behaviors, Strengths, Flaws: do NOT spontaneously rewrite these on an automatic pass. Only update them when the user gave an explicit Direct Prompt / instruction this turn (they require broader context than a two-message window provides). Species in particular should almost never change after an NPC is first recorded.
 Do NOT log core updates as normal event/update entries.
-For notable existing-NPC moments that do not change any [CORE] field, still append a timestamped chronicle/EVENT line so the beat is not lost.`;
+For notable existing-NPC moments that do not change any [CORE] field, still append a timestamped chronicle/EVENT line so the beat is not lost.
+COLOR MARKUP: If a [CORE] field uses <font color=#RRGGBB>text</font> or a dedicated hex/color section, preserve those tags exactly. Write unquoted hex attributes only (<font color=#RRGGBB>, never color="#RRGGBB"). Never strip color markup down to plain text.`;
 
     let enableRelBars = !!settings.npcRelationshipBars;
 

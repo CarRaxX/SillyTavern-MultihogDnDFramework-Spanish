@@ -143,6 +143,7 @@ export function createPanel(dependencies) {
         deleteLorebookEntry,
         deleteNpcFromLibrary,
         escapeHtml,
+        escapeHtmlWithColor,
         exportNpcToFile,
         extractCurrentTimeStr,
         fileToDataUrl,
@@ -683,7 +684,7 @@ export function createPanel(dependencies) {
 
                 if (!isNpcEntry && coreMatch) {
                     coreRead.style.display = 'block';
-                    coreRead.innerHTML = `<div class="rt-agent-core-label">Permanent</div><div class="rt-agent-core-text">${escapeHtml(substituteDisplayMacros(coreMatch[1].trim()))}</div>`;
+                    coreRead.innerHTML = `<div class="rt-agent-core-label">Permanent</div><div class="rt-agent-core-text">${escapeHtmlWithColor(substituteDisplayMacros(coreMatch[1].trim()))}</div>`;
                 } else {
                     coreRead.style.display = 'none';
                     coreRead.innerHTML = '';
@@ -1112,7 +1113,7 @@ export function createPanel(dependencies) {
                                 <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
                             </div>
                             <div style="font-size:15px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
-                                ${lines.map(l => escapeHtml(substituteDisplayMacros(l))).join('<br>')}
+                                ${lines.map(l => escapeHtmlWithColor(substituteDisplayMacros(l))).join('<br>')}
                             </div>
                         </div>`;
                 }
@@ -1123,9 +1124,9 @@ export function createPanel(dependencies) {
                 html += parsed.dynamic.map(line => {
                     const match = line.match(/^(\[.+?\])\s*(.*)/);
                     if (match) {
-                        return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtml(substituteDisplayMacros(match[2]))}</span></div>`;
+                        return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtmlWithColor(substituteDisplayMacros(match[2]))}</span></div>`;
                     }
-                    return `<div style="margin-bottom:8px;">${escapeHtml(substituteDisplayMacros(line))}</div>`;
+                    return `<div style="margin-bottom:8px;">${escapeHtmlWithColor(substituteDisplayMacros(line))}</div>`;
                 }).join('');
                 html += `</div>`;
             }

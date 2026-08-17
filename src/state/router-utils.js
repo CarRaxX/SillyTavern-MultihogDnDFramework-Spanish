@@ -385,6 +385,104 @@ export function patchLabeledSection(text, field, newContent, opts = {}) {
     return { ok: true, text: body.replace(targetSubstring, replacement) };
 }
 
+function fieldHasColorMarkup(value) {
+    const v = String(value || '');
+    return /<font\s+color/i.test(v) || /#[0-9a-fA-F]{3,8}\b/.test(v);
+}
+
+function stripMarkupToText(value) {
+    return String(value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractLabeledFieldMap(text) {
+    const map = new Map();
+    let current = null;
+    let buf = [];
+    const flush = () => {
+        if (current) map.set(current, buf.join('\n').trim());
+        buf = [];
+    };
+    for (const raw of String(text || '').split('\n')) {
+        const hm = raw.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:(.*)$/);
+        if (hm) {
+            flush();
+            current = hm[1].trim();
+            buf = [String(hm[2] || '').trim()];
+        } else if (current) {
+            buf.push(raw);
+        }
+    }
+    flush();
+    return map;
+}
+
+function findLabeledFieldValue(map, name) {
+    const target = String(name || '').trim().toLowerCase();
+    for (const [key, value] of map) {
+        if (String(key).trim().toLowerCase() === target) return value;
+    }
+    return undefined;
+}
+
+/**
+ * Re-wrap plain inner text with `<font color=...>` tags copied from older CORE markup.
+ * First occurrence only, and only when the inner phrase is at least 2 characters.
+ * @param {string} oldText
+ * @param {string} newText
+ */
+export function restoreFontColorWraps(oldText, newText) {
+    let result = String(newText || '');
+    const source = String(oldText || '');
+    if (!source || !result) return result;
+    const re = /<font\s+color\s*=\s*["']?(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)["']?>([\s\S]*?)<\/font>/gi;
+    let match;
+    while ((match = re.exec(source)) !== null) {
+        const full = match[0];
+        const inner = stripMarkupToText(match[2]);
+        if (inner.length < 2 || result.includes(full)) continue;
+        if (result.includes(inner)) result = result.replace(inner, full);
+    }
+    return result;
+}
+
+/**
+ * When the Lorebook Agent re-records an existing NPC and replaces [CORE], Full Audit
+ * often copies identity from HTML-stripped chat and drops `<font color>` / hex codes.
+ * Restore color-bearing fields (and matching font wraps) from the previous CORE.
+ * @param {string} oldCore
+ * @param {string} newCore
+ * @param {{ extraHeaders?: string[] }} [opts]
+ */
+export function mergePreservedColorMarkup(oldCore, newCore, opts = {}) {
+    const oldText = String(oldCore || '');
+    const newText = String(newCore || '');
+    if (!oldText || !newText || oldText === newText) return newText;
+
+    const extraHeaders = opts.extraHeaders || [];
+    const oldFields = extractLabeledFieldMap(oldText);
+    if (oldFields.size === 0) return restoreFontColorWraps(oldText, newText);
+
+    let merged = newText;
+    for (const [name, oldVal] of oldFields) {
+        if (!fieldHasColorMarkup(oldVal)) continue;
+        const newVal = findLabeledFieldValue(extractLabeledFieldMap(merged), name);
+        if (!newVal) {
+            const patched = patchLabeledSection(merged, name, oldVal, { extraHeaders });
+            if (patched.ok) merged = patched.text;
+            continue;
+        }
+        if (fieldHasColorMarkup(newVal)) continue;
+        const nextVal = stripMarkupToText(oldVal) === stripMarkupToText(newVal)
+            ? oldVal
+            : restoreFontColorWraps(oldVal, newVal);
+        if (nextVal !== newVal) {
+            const patched = patchLabeledSection(merged, name, nextVal, { extraHeaders });
+            if (patched.ok) merged = patched.text;
+        }
+    }
+    return merged;
+}
+
 /**
  * Strips the [CORE]/[/CORE] bookkeeping markers from a lorebook entry before it
  * reaches the GM/narrator. These tags exist purely so the Lorebook Agent knows

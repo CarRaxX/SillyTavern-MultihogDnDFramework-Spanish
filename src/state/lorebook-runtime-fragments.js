@@ -65,7 +65,7 @@ ${COMBAT_SCOPE_RULE}
 
 export const DEFAULT_ROUTER_AUTO_PASS_RESTRICTION = `- AUTOMATIC PASS RESTRICTION: Combat Profile is the only [CORE] field you may update this pass via UPDATE_CORE / commit.core. Do not modify Species, Personality, Background, Habits, Strengths, or Flaws unless the user gave an explicit instruction this turn (Direct Prompt). Body/Worn Equipment changes use UPDATE_APPEARANCE / UPDATE_EQUIPMENT instead.`;
 
-export const DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION = `- DIRECT PROMPT PASS: you may update any eligible [CORE] identity field ({{eligibleCoreFields}}) when the user's instruction warrants it. Body/Worn Equipment still use UPDATE_APPEARANCE / UPDATE_EQUIPMENT.`;
+export const DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION = `- DIRECT PROMPT PASS: you may update any eligible [CORE] identity field ({{eligibleCoreFields}}) when the user's instruction warrants it. Body/Worn Equipment still use UPDATE_APPEARANCE / UPDATE_EQUIPMENT. Preserve <font color=#RRGGBB>text</font> and hex color codes; write unquoted hex attributes (never color="#RRGGBB") so JSON tool calls stay valid.`;
 
 export const DEFAULT_ROUTER_EXISTING_NPC_NUDGE = `- For notable existing-NPC moments that do not change any [CORE] field, still append a timestamped chronicle/EVENT line so the beat is not lost.`;
 

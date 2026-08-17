@@ -20,12 +20,12 @@ describe('display-time macro substitution ({{user}} etc.)', () => {
 
     it('Lorebook Agent panel substitutes macros for read-only summaries/sections', () => {
         expect(panelBuilderSource).toContain('function substituteDisplayMacros(text)');
-        expect(panelBuilderSource).toContain('lines.map(l => escapeHtml(substituteDisplayMacros(l)))');
-        expect(panelBuilderSource).toContain('escapeHtml(substituteDisplayMacros(match[2]))');
+        expect(panelBuilderSource).toContain('lines.map(l => escapeHtmlWithColor(substituteDisplayMacros(l)))');
+        expect(panelBuilderSource).toContain('escapeHtmlWithColor(substituteDisplayMacros(match[2]))');
     });
 
     it('Lorebook Agent tree-view expanded entry (Permanent + campaign history) substitutes macros', () => {
-        expect(panelBuilderSource).toContain("coreRead.innerHTML = `<div class=\"rt-agent-core-label\">Permanent</div><div class=\"rt-agent-core-text\">${escapeHtml(substituteDisplayMacros(coreMatch[1].trim()))}</div>`;");
+        expect(panelBuilderSource).toContain("coreRead.innerHTML = `<div class=\"rt-agent-core-label\">Permanent</div><div class=\"rt-agent-core-text\">${escapeHtmlWithColor(substituteDisplayMacros(coreMatch[1].trim()))}</div>`;");
         expect(panelBuilderSource).toContain("contentRead.textContent = substituteDisplayMacros(dynamic) || '(No campaign history recorded yet)';");
         expect(panelBuilderSource).toContain('contentRead.textContent = substituteDisplayMacros(dynamic);');
         expect(panelBuilderSource).toContain("contentRead.textContent = substituteDisplayMacros(raw) || '(Empty)';");
