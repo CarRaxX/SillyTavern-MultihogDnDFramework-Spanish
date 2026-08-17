@@ -294,6 +294,8 @@ describe('dungeon map graph', () => {
         expect(html).toContain('separate window');
         expect(html).toContain('rt-dungeon-map-reattach');
         expect(html).toContain('rt-dungeon-map-details');
+        expect(html).toContain('Map Details');
+        expect(html).not.toContain('rt-dungeon-alpha-tag');
         expect(html).not.toContain('rt-dungeon-graph-svg');
     });
 
@@ -301,6 +303,8 @@ describe('dungeon map graph', () => {
         const graph = buildDungeonMapGraph(midExplorationMap, { playerFacing: true });
         const html = renderDungeonMapEmbedHtml(graph, { detached: false });
         expect(html).toContain('rt-dungeon-map-details');
+        expect(html).toContain('Map Details');
+        expect(html).not.toContain('rt-dungeon-alpha-tag');
         expect(html).toContain('rt-dungeon-graph-scroll');
     });
 

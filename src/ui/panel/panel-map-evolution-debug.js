@@ -5,10 +5,13 @@ import {
     currentCampaignTimeLabel,
     debugAddAsset,
     debugClearEvolutionHistory,
+    debugRedoLastEvolutionPass,
     debugRunEvolution,
     debugSetAsset,
     debugSimulateTicks,
+    debugUndoLastEvolutionPass,
     describeEvolutionSandbox,
+    peekTestingGroundLastPass,
     setCampaignTimeLabel,
 } from '../../../map-evolution-debug.js';
 import { collectEvolutionArcSubjects, describeEvolutionAssetArc } from '../../../map-evolution-lib.js';
@@ -229,9 +232,10 @@ export async function openMapEvolutionTestingGround({ siteRoot = '' } = {}) {
     const paint = () => {
         const areas = areaOptions(sandbox.document);
         const assets = assetOptions(sandbox.document);
+        const lastPass = peekTestingGroundLastPass();
         popup.innerHTML = `
             <div class="rt-map-evo-debug-title"><i class="fa-solid fa-flask"></i> Map Evolution Testing Ground</div>
-            <p class="rt-map-evo-debug-lead">Advance time, spawn or kill entities with causes, and run Evolution without playing through the campaign. Changes write to this chat's maps and [TIME] block. Clear evolution history before comparing prompts so prior ticks do not bias the next pass.</p>
+            <p class="rt-map-evo-debug-lead">Advance time, spawn or kill entities with causes, and run Evolution without playing through the campaign. Changes write to this chat's maps and [TIME] block. After a pass, Undo restores the map, [TIME], Last Evolved, and Evolution memory to immediately before that run so you can Redo the same pass. Clear evolution history before comparing prompts so prior ticks do not bias the next pass.</p>
             <label class="rt-map-evo-debug-site">Site
                 <select data-debug="site">${optionList(sandbox.sites.map(site => ({
                     id: site.siteRoot,
@@ -264,6 +268,8 @@ export async function openMapEvolutionTestingGround({ siteRoot = '' } = {}) {
                 <button type="button" class="menu_button" data-debug-action="evolve"><i class="fa-solid fa-wand-magic-sparkles"></i> Evolve this map now</button>
                 <input type="number" data-debug="ticks" class="text_pole" min="1" max="20" value="3" title="How many simulate ticks">
                 <button type="button" class="menu_button" data-debug-action="simulate"><i class="fa-solid fa-forward"></i> Simulate ticks</button>
+                <button type="button" class="menu_button" data-debug-action="undo-pass" title="Restore map, [TIME], Last Evolved, and Evolution memory to immediately before the last Evolve or Simulate run." ${!lastPass || lastPass.undone ? 'disabled' : ''}><i class="fa-solid fa-rotate-left"></i> Undo last pass</button>
+                <button type="button" class="menu_button" data-debug-action="redo-pass" title="Restore the pre-pass snapshot, then run that same Evolve or Simulate again." ${!lastPass ? 'disabled' : ''}><i class="fa-solid fa-rotate-right"></i> Redo last pass</button>
                 <button type="button" class="menu_button" data-debug-action="clear-history" title="Clears backlog and causal threads for this site. Does not change the map, [TIME], or Last Evolved."><i class="fa-solid fa-eraser"></i> Clear evolution history</button>
             </div>
             <div class="rt-map-evo-debug-status" data-debug="status" role="status"></div>
@@ -347,8 +353,8 @@ export async function openMapEvolutionTestingGround({ siteRoot = '' } = {}) {
             setStatus(`Running Map Evolution for ${sandbox.siteRoot}…`);
             const result = await debugRunEvolution(sandbox.siteRoot);
             if (result?.skipped === 'busy') setStatus('An agent is already running.');
-            else if (result?.ok && result?.applied) setStatus(`Evolution applied ${result.applied} material update(s).`);
-            else if (result?.ok) setStatus('Evolution ran; no material change.');
+            else if (result?.ok && result?.applied) setStatus(`Evolution applied ${result.applied} material update(s). Undo to rewind that pass.`);
+            else if (result?.ok) setStatus('Evolution ran; no material change. Undo to rewind that pass.');
             else setStatus(result?.error || 'Evolution failed.');
             await reload();
         });
@@ -365,7 +371,33 @@ export async function openMapEvolutionTestingGround({ siteRoot = '' } = {}) {
                 },
             });
             if (!result.ok) setStatus(result.error || 'Simulation stopped.');
-            else setStatus(`Simulated ${result.ticks} tick(s) of ${result.hoursPerTick}h.`);
+            else setStatus(`Simulated ${result.ticks} tick(s) of ${result.hoursPerTick}h. Undo to rewind that run.`);
+            await reload();
+        });
+        popup.querySelector('[data-debug-action="undo-pass"]')?.addEventListener('click', async () => {
+            setStatus('Restoring the pre-pass snapshot…');
+            const result = await debugUndoLastEvolutionPass();
+            if (result?.skipped === 'busy') setStatus('An agent is already running.');
+            else if (result.ok) {
+                const kind = result.action?.type === 'simulate' ? 'Simulate ticks' : 'Evolve';
+                setStatus(`Undid ${kind} on ${result.siteRoot}. Redo to run that same pass again.`);
+            } else setStatus(result.error || 'Undo failed.');
+            await reload();
+        });
+        popup.querySelector('[data-debug-action="redo-pass"]')?.addEventListener('click', async () => {
+            const prior = peekTestingGroundLastPass();
+            const kind = prior?.action?.type === 'simulate' ? 'Simulate ticks' : 'Evolve';
+            setStatus(`Redoing ${kind}…`);
+            const result = await debugRedoLastEvolutionPass({
+                onTick: ({ index, count, timeLabel, phase }) => {
+                    setStatus(`Redo tick ${index + 1}/${count} (${phase}) at ${timeLabel}…`);
+                },
+            });
+            if (result?.skipped === 'busy') setStatus('An agent is already running.');
+            else if (result?.ok && result?.action?.type === 'simulate') setStatus(`Redid Simulate: ${result.ticks} tick(s) of ${result.hoursPerTick}h.`);
+            else if (result?.ok && result?.applied) setStatus(`Redid Evolve: applied ${result.applied} material update(s).`);
+            else if (result?.ok) setStatus('Redid Evolve; no material change.');
+            else setStatus(result?.error || 'Redo failed.');
             await reload();
         });
         popup.querySelector('[data-debug-action="clear-history"]')?.addEventListener('click', async () => {

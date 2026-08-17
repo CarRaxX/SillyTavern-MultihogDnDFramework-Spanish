@@ -752,6 +752,11 @@ describe('Map Evolution', () => {
         const debugUi = readFileSync(new URL('../src/ui/panel/panel-map-evolution-debug.js', import.meta.url), 'utf8');
         const debugCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
         expect(debug).toContain('export async function debugSimulateTicks');
+        expect(debug).toContain('export async function debugUndoLastEvolutionPass');
+        expect(debug).toContain('export async function debugRedoLastEvolutionPass');
+        expect(debug).toContain('No Evolution pass to undo');
+        expect(debug).toContain('snapshotCampaignLocationsBook');
+        expect(debug).toContain('restoreCampaignLocationsBook');
         expect(debug).toContain('export function debugClearEvolutionHistory');
         expect(debug).toContain("origin: 'DEBUG_SANDBOX'");
         expect(debug).toContain('appendEvolutionBacklogEntry');
@@ -776,6 +781,10 @@ describe('Map Evolution', () => {
         expect(debugUi).toContain('rt-map-evo-debug-site');
         expect(debugUi).toContain('data-debug-action="clear-history"');
         expect(debugUi).toContain('Clear evolution history');
+        expect(debugUi).toContain('data-debug-action="undo-pass"');
+        expect(debugUi).toContain('Undo last pass');
+        expect(debugUi).toContain('data-debug-action="redo-pass"');
+        expect(debugUi).toContain('Redo last pass');
         expect(debugCss).toContain('.rt-map-evo-debug-pane');
         expect(debugCss).not.toContain('max-height: 32vh');
         expect(debugCss).toContain('.rt-map-evo-debug-compressed');

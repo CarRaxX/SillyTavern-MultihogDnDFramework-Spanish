@@ -4,6 +4,14 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [7.99.3] - 2026-08-17
+
+### Changed
+- **Visuals/Map details control**: the ALPHA note next to Site map is replaced with a labeled **Map Details** button that opens the site inspector.
+
+### Added
+- **Testing Ground undo/redo**: after Evolve this map now or Simulate ticks, Undo last pass restores the map, `[TIME]`, Last Evolved clocks, and Evolution memory to immediately before that run. Redo last pass restores that snapshot and runs the same pass again.
+
 ## [7.99.2] - 2026-08-17
 
 ### Changed

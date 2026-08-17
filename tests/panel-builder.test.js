@@ -84,6 +84,7 @@ describe('panel builder', () => {
         expect(source).toContain('runtimeState.loadMappedEvolutionSiteRef(site)');
         expect(source).toContain('dataset.didPan');
         expect(source).toContain('rt-dungeon-map-details');
+        expect(source).toContain('Map Details');
     });
 
     it('keeps material Evolution history private until Reveal All is enabled', () => {

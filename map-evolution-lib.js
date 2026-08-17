@@ -388,6 +388,35 @@ export const MAP_EVOLUTION_THREAD_PROMPT_ENTRIES = 400;
 export const MAP_THREAD_STATUSES = ['open', 'resolved', 'transformed'];
 export const DEFAULT_MAP_EVOLUTION_COMPRESS_THRESHOLD = 10000;
 
+function cloneJson(value, fallback) {
+    try {
+        return JSON.parse(JSON.stringify(value ?? fallback));
+    } catch {
+        return fallback;
+    }
+}
+
+/** Clocks, threads, backlog, and memo for Testing Ground undo/redo. Locations book is snapshotted separately. */
+export function cloneTestingGroundWorldState(settings) {
+    return {
+        lastFiredBySite: cloneJson(settings?.mapEvolutionLastFiredBySite, {}),
+        reportApplications: cloneJson(settings?.mapEvolutionWorldReportApplications, {}),
+        backlogBySite: cloneJson(settings?.mapEvolutionBacklogBySite, {}),
+        threadsBySite: cloneJson(settings?.mapEvolutionThreadsBySite, {}),
+        memo: String(settings?.currentMemo || ''),
+    };
+}
+
+export function applyTestingGroundWorldState(snapshot, settings) {
+    if (!snapshot || typeof snapshot !== 'object' || !settings || typeof settings !== 'object') return false;
+    settings.mapEvolutionLastFiredBySite = cloneJson(snapshot.lastFiredBySite, {});
+    settings.mapEvolutionWorldReportApplications = cloneJson(snapshot.reportApplications, {});
+    settings.mapEvolutionBacklogBySite = cloneJson(snapshot.backlogBySite, {});
+    settings.mapEvolutionThreadsBySite = cloneJson(snapshot.threadsBySite, {});
+    settings.currentMemo = String(snapshot.memo || '');
+    return true;
+}
+
 function normalizeThreadStatus(value) {
     const status = String(value || '').trim().toLowerCase();
     return MAP_THREAD_STATUSES.includes(status) ? status : 'open';

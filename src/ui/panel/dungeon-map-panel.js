@@ -407,10 +407,10 @@ export function ensureDetachedDungeonMapPanel(handlers = {}) {
     panel.innerHTML = `
         <div class="rpg-tracker-header rt-detached-header" id="rt-dungeon-map-detached-header">
             <div class="rpg-tracker-header-left">
-                <span><i class="fa-solid fa-map-location-dot"></i> Site map <small class="rt-dungeon-alpha-tag">ALPHA</small></span>
+                <span><i class="fa-solid fa-map-location-dot"></i> Site map</span>
             </div>
             <div class="rpg-tracker-header-right">
-                <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Open site details" aria-label="Open site details"><i class="fa-solid fa-list"></i></button>
+                <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
                 <button type="button" class="rpg-tracker-icon-btn rt-reattach-btn" title="Re-attach">✕</button>
             </div>
         </div>

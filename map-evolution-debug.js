@@ -32,11 +32,15 @@ import {
     MAX_MAP_EVOLUTION_THREADS,
     summarizeEvolutionDigest,
     threadsFromMapTransaction,
+    applyTestingGroundWorldState,
+    cloneTestingGroundWorldState,
 } from './map-evolution-lib.js';
 import {
     applyDungeonMapCommit,
     isRouterRunning,
     loadAllMappedSiteContexts,
+    restoreCampaignLocationsBook,
+    snapshotCampaignLocationsBook,
 } from './router.js';
 import {
     isMapEvolutionRunning,
@@ -46,6 +50,52 @@ import {
 import { isMapUpdaterRunning } from './map-updater.js';
 
 export { MAP_ASSET_KINDS, replaceMemoCurrentTime };
+
+/** Last Testing Ground Evolution/simulate pass. In-memory only; closing the popup keeps it until reload. */
+let lastTestingGroundPass = null;
+
+export function peekTestingGroundLastPass() {
+    if (!lastTestingGroundPass) return null;
+    return {
+        action: { ...lastTestingGroundPass.action },
+        undone: !!lastTestingGroundPass.undone,
+        siteRoot: lastTestingGroundPass.action?.siteRoot || '',
+    };
+}
+
+export function clearTestingGroundLastPass() {
+    lastTestingGroundPass = null;
+}
+
+export async function snapshotTestingGroundWorld() {
+    const world = cloneTestingGroundWorldState(getSettings());
+    world.locationsBook = await snapshotCampaignLocationsBook();
+    return world;
+}
+
+export async function restoreTestingGroundWorld(snapshot) {
+    if (!snapshot) return { ok: false, error: 'No snapshot to restore.' };
+    if (snapshot.locationsBook) {
+        const restored = await restoreCampaignLocationsBook(snapshot.locationsBook);
+        if (!restored) return { ok: false, error: 'Could not restore the Locations book.' };
+    }
+    applyTestingGroundWorldState(snapshot, getSettings());
+    persistMapEvolutionState();
+    persistMemo(snapshot.memo || getSettings().currentMemo || '');
+    if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
+        runtimeState.updateMapEvolutionScheduleDisplayRef();
+    }
+    return { ok: true };
+}
+
+async function captureTestingGroundCheckpoint(action) {
+    lastTestingGroundPass = {
+        action: { ...action },
+        snapshot: await snapshotTestingGroundWorld(),
+        undone: false,
+    };
+    return lastTestingGroundPass;
+}
 
 export function currentCampaignTimeLabel(memo = getSettings().currentMemo) {
     const match = String(memo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
@@ -277,14 +327,11 @@ export async function debugRunEvolution(siteRoot) {
     if (evolutionAgentsBusy()) return { ok: false, skipped: 'busy', error: 'An agent is already running.' };
     const root = String(siteRoot || '').trim();
     if (!root) return { ok: false, error: 'Pick a mapped site.' };
+    await captureTestingGroundCheckpoint({ type: 'evolve', siteRoot: root });
     return runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots: [root] });
 }
 
-/**
- * Advance in-world time by the configured interval (or a supplied hour count)
- * and run Map Evolution that many times. This is the simulation loop.
- */
-export async function debugSimulateTicks({
+async function runSimulateTicks({
     siteRoot,
     ticks = 1,
     hoursPerTick = 0,
@@ -314,6 +361,63 @@ export async function debugSimulateTicks({
         }
     }
     return { ok: true, ticks: count, hoursPerTick: hours, results };
+}
+
+/**
+ * Advance in-world time by the configured interval (or a supplied hour count)
+ * and run Map Evolution that many times. This is the simulation loop.
+ */
+export async function debugSimulateTicks({
+    siteRoot,
+    ticks = 1,
+    hoursPerTick = 0,
+    onTick = null,
+} = {}) {
+    const root = String(siteRoot || '').trim();
+    if (!root) return { ok: false, error: 'Pick a mapped site.' };
+    if (evolutionAgentsBusy()) return { ok: false, skipped: 'busy', error: 'An agent is already running.' };
+    const count = Math.max(1, Math.min(20, Math.floor(Number(ticks) || 1)));
+    const hours = Math.max(1, Math.floor(Number(hoursPerTick) || Number(getSettings().mapEvolutionIntervalHours) || 12));
+    await captureTestingGroundCheckpoint({
+        type: 'simulate',
+        siteRoot: root,
+        ticks: count,
+        hoursPerTick: hours,
+    });
+    return runSimulateTicks({ siteRoot: root, ticks: count, hoursPerTick: hours, onTick });
+}
+
+export async function debugUndoLastEvolutionPass() {
+    if (!lastTestingGroundPass) return { ok: false, error: 'No Evolution pass to undo. Run one first.' };
+    if (lastTestingGroundPass.undone) return { ok: false, error: 'Last pass is already undone. Redo it or run a new one.' };
+    if (evolutionAgentsBusy()) return { ok: false, skipped: 'busy', error: 'An agent is already running.' };
+    const restored = await restoreTestingGroundWorld(lastTestingGroundPass.snapshot);
+    if (!restored.ok) return restored;
+    lastTestingGroundPass.undone = true;
+    return {
+        ok: true,
+        undone: true,
+        siteRoot: lastTestingGroundPass.action.siteRoot,
+        action: { ...lastTestingGroundPass.action },
+    };
+}
+
+export async function debugRedoLastEvolutionPass({ onTick = null } = {}) {
+    if (!lastTestingGroundPass) return { ok: false, error: 'No Evolution pass to redo. Run one first.' };
+    if (evolutionAgentsBusy()) return { ok: false, skipped: 'busy', error: 'An agent is already running.' };
+    const restored = await restoreTestingGroundWorld(lastTestingGroundPass.snapshot);
+    if (!restored.ok) return restored;
+    const action = lastTestingGroundPass.action;
+    const result = action.type === 'simulate'
+        ? await runSimulateTicks({
+            siteRoot: action.siteRoot,
+            ticks: action.ticks,
+            hoursPerTick: action.hoursPerTick,
+            onTick,
+        })
+        : await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots: [action.siteRoot] });
+    lastTestingGroundPass.undone = false;
+    return { ...result, redone: true, action: { ...action } };
 }
 
 /**

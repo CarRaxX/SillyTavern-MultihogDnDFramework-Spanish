@@ -286,11 +286,11 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
     const site = escapeXml(graph.site || 'Mapped site');
     if (detached) {
         return `<div class="rt-immersion-map rt-immersion-map-popped">
-            <div class="rt-immersion-section-label"><span>Site map</span><small class="rt-dungeon-alpha-tag">ALPHA</small></div>
+            <div class="rt-immersion-section-label"><span>Site map</span></div>
             <div class="rt-immersion-map-popped-body">
                 <span>${site} is open in a separate window.</span>
                 <span class="rt-dungeon-map-label-actions">
-                    <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Open site details" aria-label="Open site details"><i class="fa-solid fa-list"></i></button>
+                    <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
                     <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reattach site map">Reattach</button>
                 </span>
             </div>
@@ -300,8 +300,7 @@ export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = 
         <div class="rt-immersion-section-label">
             <span>Site map</span>
             <span class="rt-dungeon-map-label-actions">
-                <small class="rt-dungeon-alpha-tag">ALPHA</small>
-                <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Open site details" aria-label="Open site details"><i class="fa-solid fa-list"></i></button>
+                <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
                 <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Open map in a separate window" aria-label="Open map in a separate window">⧉</button>
             </span>
         </div>
