@@ -3,9 +3,14 @@ import { getSettings } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import {
     dungeonSiteRootsMatch,
+    findLatestDungeonLocation,
     formatDungeonMapForNarrator,
     getDungeonMessageText,
+    locationContainsSiteRoot,
+    mapSiteFooterMismatchHint,
     normalizeMapSiteKind,
+    normalizeMapSiteThreat,
+    defaultMapSiteThreat,
     parseDungeonMapDocument,
     stripCapturedDungeonMapsFromPrompt,
     validateDungeonMapArchitecture,
@@ -83,15 +88,47 @@ function kindBrief(kind) {
         : 'DUNGEON = room-scale hidden interior; populate rooms fully.';
 }
 
-function initialUserPrompt(args, context) {
-    return `CREATE ONE PRIVATE MAP\nExact site root: ${args.site}\nEntrance area: ${args.entrance}\nKind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nEstablished premise: ${args.premise}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the required JSON object. Follow the ${args.kind} instruction set.`;
+function threatBrief(threat, kind) {
+    if (normalizeMapSiteKind(kind) === 'SETTLEMENT') {
+        return {
+            LOW: 'LOW = sleepy watch and civilian life; not a war zone.',
+            MODERATE: 'MODERATE = normal garrison or street crime.',
+            HIGH: 'HIGH = occupation, curfews, armed factions in several districts.',
+            DEADLY: 'DEADLY = active siege, massacre, or open war in the streets.',
+        }[threat] || 'Threat is site danger, not party level.';
+    }
+    return {
+        LOW: 'LOW = mostly empty/abandoned; sparse hostiles and traps.',
+        MODERATE: 'MODERATE = some occupancy; hostiles in a minority of rooms; a few traps on key routes.',
+        HIGH: 'HIGH = frequent hostiles, packs or patrols, traps on multiple routes.',
+        DEADLY: 'DEADLY = dense overlapping threats and layered traps; still traversable.',
+    }[threat] || 'Threat is site danger, not party level.';
+}
+
+function initialUserPrompt(args, context, currentLocation = '') {
+    return `CREATE ONE PRIVATE MAP
+Exact site root: ${args.site}
+Entrance area: ${args.entrance}
+Kind: ${args.kind} (${kindBrief(args.kind)})
+Scale: ${args.scale}
+Threat: ${args.threat} (${threatBrief(args.threat, args.kind)})
+Established premise: ${args.premise}
+Live location footer: ${currentLocation || '(none yet)'}
+
+LANGUAGE
+Copy Exact site root and Entrance area character-for-character. Write every human-readable name, geometry line, route detail, and asset label in that same language and script. Do not translate them into English. JSON keys, kebab-case IDs, and enums stay English.
+
+RECENT STORY CONTEXT
+${context || '(No additional recent context.)'}
+
+Output only the required JSON object. Follow the ${args.kind} instruction set.`;
 }
 
 function correctionPrompt(args, context, priorOutput, parseError, errors, attempt) {
     const issues = parseError
         ? [{ code: 'INVALID_JSON', path: '$', hint: parseError }]
         : errors.map(({ code, path, hint }) => ({ code, path, hint }));
-    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nPremise: ${args.premise}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
+    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
 }
 
 function existingResult(siteRecord) {
@@ -123,6 +160,7 @@ async function runMapArchitectOnce(rawArgs) {
         premise: String(rawArgs?.premise || '').trim(),
         kind: normalizeMapSiteKind(rawArgs?.kind),
         scale: String(rawArgs?.scale || 'MEDIUM').trim().toUpperCase(),
+        threat: normalizeMapSiteThreat(rawArgs?.threat, defaultMapSiteThreat(rawArgs?.kind)),
     };
     if (!args.site || !args.entrance || !args.premise) {
         throw mapArchitectFailure('site, entrance, and premise are required. Establish those facts before a later attempt.');
@@ -141,11 +179,16 @@ async function runMapArchitectOnce(rawArgs) {
     const existing = Object.values(current.sites || {}).find(record => dungeonSiteRootsMatch(record?.siteRoot, args.site));
     if (existing?.mapChunks?.length) return existingResult(existing);
 
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    if (currentLocation && !locationContainsSiteRoot(currentLocation, args.site)) {
+        throw mapArchitectFailure(mapSiteFooterMismatchHint(args.site, currentLocation));
+    }
+
     const configuredLookback = Number(settings.mapArchitectLookback);
     const lookback = Number.isFinite(configuredLookback) ? Math.max(0, configuredLookback) : 12;
     const context = recentStoryContext(ctx, lookback, current);
     const systemPrompt = String(settings.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).trim();
-    let prompt = initialUserPrompt(args, context);
+    let prompt = initialUserPrompt(args, context, currentLocation);
     let lastIssues = [];
 
     for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -158,7 +201,7 @@ async function runMapArchitectOnce(rawArgs) {
         );
         const parsed = parseMapArchitectResponse(output);
         const validation = parsed.value
-            ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale, kind: args.kind })
+            ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale, kind: args.kind, threat: args.threat })
             : { valid: false, errors: [] };
         if (validation.valid) {
             if (!isLocationMappingEnabled(getSettings())) {

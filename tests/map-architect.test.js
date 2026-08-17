@@ -46,13 +46,33 @@ describe('Map Architect component', () => {
     it('registers a hidden narrator tool and a dedicated connection path', () => {
         const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const architect = readFileSync(new URL('../map-architect.js', import.meta.url), 'utf8');
-        expect(hooks).toContain("name: 'CreateAreaMap'");
+        const router = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
+        expect(hooks).toContain('Copy the Location footer segment that names this mapped dungeon/settlement');
+        expect(architect).toContain('mapSiteFooterMismatchHint');
+        expect(architect).toContain('Live location footer:');
+        expect(router).toContain('mapSiteFooterMismatchHint(site, currentLocation)');
         expect(hooks).toContain("unregisterFunctionTool('CreateDungeonMap')");
+        expect(hooks).toContain("enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY']");
         expect(hooks).toContain("enum: ['DUNGEON', 'SETTLEMENT']");
         expect(hooks).toContain('Generating a location map for');
         expect(hooks).toContain('isMapArchitectTextOpener(settings)');
+        expect(hooks).toContain('applyMapArchitectTextOpenerCyoaCaveat');
         expect(hooks).toContain("ctx.generate('continue')");
+        expect(hooks).toContain('clearAssistantReasoning(message)');
+        expect(hooks).toContain('seedMapArchitectContinueText');
+        expect(hooks).toContain('buildMapArchitectContinueBrief');
+        expect(hooks).toContain('!narrationContinue');
         expect(hooks).toContain('maybeRunMapArchitectTextOpener');
+        expect(hooks).toContain('findCreateAreaMapCandidate');
+        expect(hooks).toContain('export async function onMapArchitectAssistantMessage');
+        expect(hooks).toContain("source: 'generation_ended'");
+        expect(hooks).toContain('if (dryRun === true)');
+        expect(hooks).toContain('cleanMessageContent(message)');
+        expect(hooks).toContain("logMapArchitectTextOpener('running'");
+        expect(hooks).toContain("['impersonate', 'quiet']");
+        expect(hooks).not.toContain("['swipe', 'regenerate', 'impersonate', 'quiet']");
+        const index = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        expect(index).toContain('onMapArchitectAssistantMessage');
         expect(hooks).toContain('export function syncLocationMappingRuntime()');
         expect(hooks).toContain('stopMapUpdaterPass()');
         expect(hooks).toContain('stopMapEvolutionPass()');
@@ -63,6 +83,7 @@ describe('Map Architect component', () => {
         expect(architect).not.toContain('mapRuntimeConnectionSource');
         expect(architect).toContain("{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' }");
         expect(architect).toContain('CreateAreaMap');
+        expect(architect).toContain('Threat: ${args.threat}');
         expect(architect).not.toContain('CreateDungeonMap');
         expect(architect).toContain('Location map ready for');
         expect(architect).toContain('Location map generation failed for');
@@ -75,11 +96,16 @@ describe('Map Architect component', () => {
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.areas.items.required).toContain('connections');
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.required).toContain('origin');
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.kind.enum).toEqual(['DUNGEON', 'SETTLEMENT']);
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.threat.enum).toEqual(['LOW', 'MODERATE', 'HIGH', 'DEADLY']);
     });
 
     it('tells the architect to populate incidental objects instead of leaving them for later', () => {
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not contradict established campaign facts');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('do not leave the map sparse for later invention');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Write every human-readable string in the same language and script');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not translate, transliterate, expand, or retitle them');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('human-readable strings in the campaign language');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Threat is a site fact, never matched to party level');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Scale is size, not danger');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"threat":"HIGH"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).not.toContain('need not pre-invent');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Occasional hub/nexus layouts are welcome');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('one area may have many routes');

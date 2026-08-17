@@ -29,7 +29,7 @@ import {
     fetchBaseSyspromptRaw,
 } from './src/app/runtime-bridge.js';
 import { isBaseSectionEnabled, isEffectiveSectionEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
-import { isMapArchitectTextOpener, MAP_ARCHITECT_TEXT_OPENER_RULES } from './map-architect-opener.js';
+import { isMapArchitectTextOpener, MAP_ARCHITECT_TEXT_OPENER_RULES, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
 import { normalizeGmContent, unwrapManagedSectionContent } from './src/state/sysprompt-content.js';
 import { buildNarrativePacingSection } from './src/state/narrative-pacing.js';
 import {
@@ -378,7 +378,7 @@ const NARRATOR_TOGGLE_IDS = {
     dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
-const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). New maps use CreateAreaMap (function calling) or the text-command opener under Persistent Maps → Map Architect. Expect sharp edges.';
+const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). New maps use CreateAreaMap (function calling) or the text-command opener below. Expect sharp edges.';
 
 export function isSectionUnlocked(settings, tag) {
     return (settings.customSyspromptLibrary || []).some(p =>
@@ -410,6 +410,7 @@ function syncNarratorToggleUi(tag, settings) {
     if (tag === LOCATION_MAPPING_SECTION_TAG) {
         el.disabled = false;
         if (label) label.title = LOCATION_MAPPING_TOGGLE_TITLE;
+        syncMapArchitectOpenerNestedVisibility(el.checked);
         return;
     }
     el.disabled = unlocked;

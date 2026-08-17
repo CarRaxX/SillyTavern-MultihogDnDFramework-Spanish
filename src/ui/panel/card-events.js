@@ -2,6 +2,7 @@ import { getRuntimeActions, sectionPages } from '../../app/runtime-bridge.js';
 import { runtimeState } from '../../app/runtime-state.js';
 import { pickGenreCharacterName } from '../../state/character-names.js';
 import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../../state/section-enabled.js';
+import { applyMapArchitectOpenerToUi, normalizeMapArchitectOpener, syncMapArchitectOpenerNestedVisibility } from '../../../map-architect-opener.js';
 
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const runtime = getRuntimeActions();
@@ -679,6 +680,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 if (settingKey === LOCATION_MAPPING_SECTION_TAG) {
                     // Keep the optional Components toggle authoritative for
                     // the live Scene View and any detached map window.
+                    syncMapArchitectOpenerNestedVisibility(!!cb.checked);
                     runtimeState.hasActiveDungeonMap = false;
                     globalThis._rpgSyncAgentImmersionUi?.();
                     void globalThis._rpgRefreshImmersionView?.();
@@ -692,6 +694,17 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     syncOptionalMod('#rt_onboarding_mod_party_bench', 'party_bench');
     syncOptionalMod('#rt_onboarding_mod_dungeon_reality_and_hidden_mapping', 'dungeon_reality_and_hidden_mapping');
     syncOptionalMod('#rt_onboarding_mod_cyoa_mode', 'CYOA_mode');
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
+    el.querySelectorAll('input[name="rt_onboarding_map_architect_opener"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            syncSettingsAndUI(settings => {
+                settings.mapArchitectOpener = normalizeMapArchitectOpener(input.value);
+            });
+            applyMapArchitectOpenerToUi(input.value);
+        });
+    });
 
     // Onboarding Relationship System Sync
     const onboardingRelBarsCb = el.querySelector('#rt_onboarding_mod_npc_rel_bars');

@@ -93,7 +93,7 @@ For the narrator, I'd recommend trying at least the following:
 
 ### Initial Setup
 
-1. Ensure **Function Calling** is enabled in your Chat Completion preset if you want Hybrid RNG (`RollTheDice`) and the default Persistent Maps opener (`CreateAreaMap`). You can skip function calling: set Persistent Maps → Map Architect opener to **Text command**, and use Pre-Seeded RNG. You can turn Persistent Maps off under Components / Game Systems.
+1. Ensure **Function Calling** is enabled in your Chat Completion preset if you want Hybrid RNG (`RollTheDice`) and the default Persistent Maps opener (`CreateAreaMap`). You can skip function calling: set the Map Architect opener to **Text command** under Narrator Configuration → Components (when Persistent Maps is on) or Settings → Persistent Maps → Map Architect, and use Pre-Seeded RNG. You can turn Persistent Maps off under Components / Game Systems.
 
 2. Set up your connections in the extension's connection settings. A lightweight, relatively fast and cheap model is recommended for everything but the main narrator/GM.
 
@@ -538,7 +538,7 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ## Persistent Maps (Alpha)
 
-Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)**. New maps need either function calling (`CreateAreaMap`) or the **Text command** opener under Settings → Persistent Maps → Map Architect. Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
+Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)**. New maps need either function calling (`CreateAreaMap`) or the **Text command** opener that appears under that checkbox (same control lives under Settings → Persistent Maps → Map Architect). Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
 
 It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
@@ -548,7 +548,7 @@ The Adventure Companion cannot flip the Components checkbox or open Visuals/Map 
 
 1. The narrator requests a map **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`).
    - **Tool call (default):** `CreateAreaMap`. Requires function calling. SillyTavern pauses the turn until Map Architect returns.
-   - **Text command:** Settings → Persistent Maps → Map Architect → **Text command**. The narrator outputs only a `[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]` block (site, entrance, kind, scale, premise) and stops. The extension strips that block, runs Map Architect, injects the private result, and continues the same assistant message. Prose after the fence is discarded so invented rooms cannot race the map.
+   - **Text command:** Narrator Configuration → Components (when Persistent Maps is on) or Settings → Persistent Maps → Map Architect → **Text command**. The narrator outputs only a `[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]` block (site, entrance, kind, scale, threat, premise) and stops — including with CYOA Mode on, so choices are not appended on that turn. Scale is size; threat (`LOW` / `MODERATE` / `HIGH` / `DEADLY`) is site danger for enemy/trap density, never party level. The extension strips that block, runs Map Architect, injects the private result, and continues the same assistant message. Prose after the fence is discarded so invented rooms cannot race the map. CYOA choices resume on the continued narration turn.
 2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map. Map Architect, Map Updater, and Map Evolution output budgets default to 25,000 tokens and remain configurable. Map Architect and Map Evolution stream their replies — there is no Multihog idle timeout — so a long OpenRouter / nano-gpt job is not dropped after ~60s of silence while the model is still writing.
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.

@@ -67,7 +67,8 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         ];
 
         for (const source of sources) {
-            expect(source).toContain('call `CreateAreaMap` exactly once');
+            expect(source).toContain('never translated, transliterated, expanded, or retitled');
+            expect(source).toContain('A distinct site title must already appear in the footer');
             expect(source).toContain('kind DUNGEON');
             expect(source).toContain('kind SETTLEMENT');
             expect(source).toContain('SETTLEMENT maps are district-scale');

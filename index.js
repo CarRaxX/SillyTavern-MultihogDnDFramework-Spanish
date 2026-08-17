@@ -4,7 +4,7 @@ import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSe
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride, isCombatActive } from './llm-client.js';
-import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncLocationMappingRuntime, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, getMapUpdaterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
+import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncLocationMappingRuntime, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, onMapArchitectAssistantMessage, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, getMapUpdaterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
 import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
@@ -28,6 +28,7 @@ import { openDisplayGroupsManager } from './display-groups.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent, isSectionUnlocked, isEffectiveSectionEnabled } from './game-systems.js';
 import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
+import { applyMapArchitectOpenerToUi, normalizeMapArchitectOpener, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
 import { openManageGameCartridges, promptAndSaveCurrentAsCartridge } from './game-cartridges.js';
 import {
     deleteNpcFromLibrary,
@@ -1263,6 +1264,8 @@ function syncOnboardingUI() {
                 : (s.syspromptModules?.[key] ?? true);
         }
     }
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
 
     // Time & Date sync — Character Creator + "Other ways to begin" drawer
     syncSegToggle(onboarding.querySelector('#rt-cr-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
@@ -2918,6 +2921,8 @@ function loadProfile(name) {
     $('#rpg_portrait_openai_model_manual').val(s.portraitOpenaiModel || '');
 
     // Sync Persistent Maps settings UI
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
     $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
     $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
     $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
@@ -5267,11 +5272,13 @@ function organizeConnectionSettingsUI() {
             settings,
             presetManager: pm,
         });
-        $(`input[name="rpg_map_architect_opener"][value="${settings.mapArchitectOpener === 'text' ? 'text' : 'tool'}"]`).prop('checked', true);
-        $('input[name="rpg_map_architect_opener"]').on('change', function () {
-            settings.mapArchitectOpener = String($(this).val() || 'tool') === 'text' ? 'text' : 'tool';
+        applyMapArchitectOpenerToUi(settings.mapArchitectOpener);
+        syncMapArchitectOpenerNestedVisibility(settings.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
+        $('input[name="rpg_map_architect_opener"], input[name="rpg_map_architect_opener_components"]').on('change', function () {
+            settings.mapArchitectOpener = normalizeMapArchitectOpener($(this).val());
             saveSettings();
             scheduleAutoApply();
+            applyMapArchitectOpenerToUi(settings.mapArchitectOpener);
         });
         $('#rpg_map_architect_lookback').val(settings.mapArchitectLookback ?? 12).on('change', function () {
             settings.mapArchitectLookback = Math.max(0, Math.min(100, parseInt(String($(this).val()), 10) || 0));
@@ -6701,6 +6708,12 @@ function organizeConnectionSettingsUI() {
         eventSource.on(event_types.GENERATION_STARTED, onGenerationStarted);
         eventSource.on(event_types.GENERATION_ENDED, onGenerationEnded);
         eventSource.on(event_types.GENERATION_STOPPED, onGenerationEnded);
+        if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, onMapArchitectAssistantMessage);
+        const catchUpMapArchitectFence = () => {
+            setTimeout(() => { void onMapArchitectAssistantMessage(undefined, 'normal'); }, 0);
+        };
+        if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, catchUpMapArchitectFence);
+        if (event_types.CHAT_LOADED) eventSource.on(event_types.CHAT_LOADED, catchUpMapArchitectFence);
         if (event_types.MESSAGE_EDITED) eventSource.on(event_types.MESSAGE_EDITED, handleRelationshipSwipeChange);
         if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, handleRelationshipSwipeChange);
 
@@ -9537,6 +9550,9 @@ RULES:
                     $('#rpg_quests_options').toggle(checked);
                     refreshOrderList();
                 }
+                if (key === LOCATION_MAPPING_SECTION_TAG) {
+                    syncMapArchitectOpenerNestedVisibility(checked);
+                }
                 if (key === 'party_bench') {
                     if (!fresh.modules) fresh.modules = {};
                     fresh.modules['benched party'] = checked;
@@ -9558,6 +9574,9 @@ RULES:
 
             if (key === 'quests') {
                 $('#rpg_quests_options').toggle(val);
+            }
+            if (key === LOCATION_MAPPING_SECTION_TAG) {
+                syncMapArchitectOpenerNestedVisibility(val);
             }
         });
 
@@ -11299,7 +11318,8 @@ RULES:
             $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
 
             // Persistent Maps
-            $(`input[name="rpg_map_architect_opener"][value="${s.mapArchitectOpener === 'text' ? 'text' : 'tool'}"]`).prop('checked', true);
+            applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+            syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
             $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
             $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
             $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);

@@ -4,6 +4,21 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.0.10] - 2026-08-17
+
+### Added
+- **Site threat** (`LOW`, `MODERATE`, `HIGH`, `DEADLY`) on `CreateAreaMap` and `[CREATE_AREA_MAP]`: occupancy and trap density for Map Architect. Independent of scale (size) and never matched to party level. Dungeons default HIGH; settlements default MODERATE. Existing maps without a threat field keep working.
+
+### Changed
+- **Map Architect opener** also appears under Narrator Configuration → Components (and onboarding) when Persistent Maps is enabled, in addition to Settings → Persistent Maps → Map Architect.
+- **Text-command opener + CYOA**: the narrator is told not to append CYOA choices on the `[CREATE_AREA_MAP]` command turn; choices resume after the map exists.
+- **Text-command opener parsing**: `name` / `footer_root` aliases and prose scales such as "Small-to-medium" are accepted, and a `[CREATE_AREA_MAP]` fence runs Map Architect whenever Persistent Maps is on.
+
+### Fixed
+- **Persistent Maps multilingual identity**: `site` must be a verbatim Location footer segment (not a translated/retitled English name). Map Architect is told to write human-readable labels in the campaign language. A new map whose root cannot match the live footer is rejected instead of creating an orphan Location entry.
+- **Text-command opener handshake**: `[CREATE_AREA_MAP]` is scanned before State Tracker gates, including regenerate/swipe turns, with `MESSAGE_RECEIVED` and chat-load catch-up so SillyTavern cannot eat the fence before Map Architect runs.
+- **Continue-after-map ramble**: leftover assistant reasoning is cleared, the continue stub is a short in-world line instead of an empty/ZWSP resume, and the private continue brief is not a second full map dump.
+
 ## [8.0.3] - 2026-08-17
 
 ### Added

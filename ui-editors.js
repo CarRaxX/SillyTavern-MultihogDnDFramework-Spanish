@@ -20,6 +20,8 @@ import {
     autoApplySysprompt
 } from './src/app/runtime-bridge.js';
 import { renderMemoAsCards, MARKER_TYPE_MAP, getMarkerLibraryKeys } from './renderer.js';
+import { applyMapArchitectOpenerToUi, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
+import { LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
 
 export function handleCategorySettings(tag, targetEl) {
     const existing = document.getElementById('rt-cat-settings-popup');
@@ -1101,6 +1103,8 @@ export function syncSettingsAndUI(updateFn) {
                 : (fresh.syspromptModules?.[key] ?? true);
         }
     }
+    applyMapArchitectOpenerToUi(fresh.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(fresh.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
 
     const relBarsCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_npc_rel_bars'));
     if (relBarsCb) relBarsCb.checked = !!fresh.npcRelationshipBars;

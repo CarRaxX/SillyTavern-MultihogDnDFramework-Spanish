@@ -17,7 +17,10 @@ import {
     formatDungeonMapForUpdater,
     formatDungeonMapForEvolution,
     getSiteRootFromLocation,
+    locationContainsSiteRoot,
     looksLikeDungeonSite,
+    mapSiteMatchesLiveFooter,
+    mapSiteFooterMismatchHint,
     migrateDungeonMapAttachmentToContent,
     migrateDungeonMapSectionToStructured,
     parseDungeonMapDocument,
@@ -70,6 +73,27 @@ describe('Map Architect validation', () => {
         });
         expect(result.valid).toBe(true);
         expect(result.document.areas).toHaveLength(2);
+        expect(result.document.threat).toBe('HIGH');
+    });
+
+    it('stamps requested threat onto a valid map and rejects a mismatched threat', () => {
+        const stamped = validateDungeonMapArchitecture(connectedArchitectMap, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'LOW',
+        });
+        expect(stamped.valid).toBe(true);
+        expect(stamped.document.threat).toBe('LOW');
+
+        const mismatched = structuredClone(connectedArchitectMap);
+        mismatched.threat = 'DEADLY';
+        const rejected = validateDungeonMapArchitecture(mismatched, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'LOW',
+        });
+        expect(rejected.valid).toBe(false);
+        expect(rejected.errors.some(error => error.code === 'THREAT_MISMATCH')).toBe(true);
     });
 
     it('rejects omitted reverse passages and orphaned areas with correction hints', () => {
@@ -92,6 +116,18 @@ describe('Map Architect validation', () => {
         const result = validateDungeonMapArchitecture(broken, { site: 'Abbey Undercroft', entrance: 'Cellar Landing' });
         expect(result.valid).toBe(false);
         expect(result.errors.some(error => error.code === 'UNKNOWN_ASSET_LOCATION')).toBe(true);
+    });
+
+    it('treats a translated English site title as a miss against a live Russian footer', () => {
+        const footer = 'Андермаунтина, шестой уровень, Кладовая запчастей';
+        expect(locationContainsSiteRoot(footer, 'Undermountain Level 6 — The Grinding Halls')).toBe(false);
+        expect(mapSiteMatchesLiveFooter('Undermountain Level 6 — The Grinding Halls', footer)).toBe(false);
+        expect(locationContainsSiteRoot(footer, 'шестой уровень')).toBe(true);
+        expect(locationContainsSiteRoot(footer, 'Кладовая запчастей')).toBe(true);
+        expect(mapSiteMatchesLiveFooter('шестой уровень', footer)).toBe(true);
+        expect(mapSiteMatchesLiveFooter('Ashgate Maintenance Tunnels', 'Kuzne, Ashgate Maintenance Tunnels, Junction Chamber Theta')).toBe(true);
+        expect(mapSiteMatchesLiveFooter('Invented Title', '')).toBe(true);
+        expect(mapSiteFooterMismatchHint('Undermountain Level 6 — The Grinding Halls', footer)).toContain('Never translate');
     });
 
     it('accepts pack count on initial assets and rejects count 0', () => {
@@ -158,6 +194,7 @@ describe('Map Architect validation', () => {
         });
         expect(result.valid).toBe(true);
         expect(result.document.kind).toBe('SETTLEMENT');
+        expect(result.document.threat).toBe('MODERATE');
         expect(result.document.areas).toHaveLength(6);
 
         const tooSmall = structuredClone(settlement);
@@ -194,6 +231,28 @@ describe('Map Architect validation', () => {
         expect(injection).toContain('name it in the Location footer');
         expect(injection).toContain('Map kind: SETTLEMENT (district-scale)');
         expect(injection).not.toContain('room-scale interior canon');
+    });
+
+    it('tells the narrator that site threat governs occupancy, not party level', () => {
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Abbey Undercroft',
+            mapChunks: [JSON.stringify({
+                version: 3,
+                site: 'Abbey Undercroft',
+                kind: 'DUNGEON',
+                threat: 'LOW',
+                areas: [
+                    { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['A stone landing.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'A stair' }] },
+                    { id: 'crypt', name: 'Crypt', knowledge: 'DISCOVERED', geometry: ['A dusty crypt.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'A stair' }] },
+                ],
+                assets: [],
+            })],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Abbey Undercroft, Cellar Landing');
+        expect(injection).toContain('Site threat is LOW');
+        expect(injection).toContain('not party level');
+        expect(injection).toContain('Site threat: LOW');
     });
 });
 
@@ -332,6 +391,7 @@ Area: Ossuary Behind Rotten Tapestry
             version: 3,
             site: 'Abbey Undercroft',
             kind: 'DUNGEON',
+            threat: 'DEADLY',
             areas: [
                 { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['Low oak beams cross the ceiling.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'Iron-banded door' }, { to: 'vault', state: 'LOCKED', detail: 'Sealed glyph door' }] },
                 { id: 'crypt', name: 'Crypt Passage', knowledge: 'DISCOVERED', geometry: ['A collapsed arch provides cover.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'Iron-banded door' }] },
@@ -357,6 +417,8 @@ Area: Ossuary Behind Rotten Tapestry
         expect(readable).not.toContain('Explodes on touch');
         expect(readable).not.toContain('Smoldering remains');
         expect(readable).not.toContain('A collapsed arch provides cover');
+        expect(readable).not.toContain('Site threat');
+        expect(readable).not.toContain('DEADLY');
     });
 
     it('uses explicit child chronicles once when establishing current state from a legacy map', () => {

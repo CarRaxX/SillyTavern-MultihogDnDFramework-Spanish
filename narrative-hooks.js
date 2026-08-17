@@ -40,8 +40,12 @@ import {
 } from './dungeon-reality.js';
 import { runMapArchitect } from './map-architect.js';
 import {
+    applyMapArchitectTextOpenerCyoaCaveat,
+    buildMapArchitectContinueBrief,
+    clearAssistantReasoning,
     createAreaMapCommandIsComplete,
     isMapArchitectTextOpener,
+    seedMapArchitectContinueText,
     stripCreateAreaMapCommand,
 } from './map-architect-opener.js';
 export { isPercentFormula, resolveDiceCompare };
@@ -49,6 +53,7 @@ export { isPercentFormula, resolveDiceCompare };
 const dungeonMissingMapWarnings = new Set();
 let _pendingMapArchitectResult = null;
 let _mapArchitectTextOpenerBusy = false;
+let _mapArchitectNarrationContinue = false;
 
 /** Keep mapped root lore visible to LA exactly while its location root is active. */
 function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation) {
@@ -532,13 +537,14 @@ export function registerMapArchitectTool() {
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'Exact root Location label used in the location footer and external campaign archive, e.g. "Abbey Undercroft" or "Riverford".' },
-                    entrance: { type: 'string', description: 'Short natural label for the area the player is entering now (dungeon room, city gate, market square, docks, etc.). This becomes the first VISITED map area.' },
+                    site: { type: 'string', description: 'Copy the Location footer segment that names this mapped dungeon/settlement, character-for-character. Never translate, transliterate, expand, or retitle. A distinct site title must already appear in the footer.' },
+                    entrance: { type: 'string', description: 'Copy the current footer leaf or named entrance exactly as printed. Never translate it. This becomes the first VISITED map area.' },
                     kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'], description: 'DUNGEON = room-scale interior (ruins, lairs, strongholds). SETTLEMENT = district-scale town/city/village. Required.' },
-                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate scope. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
+                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Geographic size, not danger. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
+                    threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'], description: 'Site danger for occupancy and trap density. Independent of party level and of scale. LOW = sparse/empty, MODERATE = some hostiles, HIGH = frequent hostiles and traps, DEADLY = layered overlapping threats. A LARGE LOW ruin can be vast and empty.' },
                     premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },
                 },
-                required: ['site', 'entrance', 'kind', 'scale', 'premise'],
+                required: ['site', 'entrance', 'kind', 'scale', 'threat', 'premise'],
             },
             action: async args => runMapArchitect(args),
             formatMessage: args => {
@@ -1081,12 +1087,14 @@ export function installInterceptor() {
                 }
             }
         }
+        const narrationContinue = _mapArchitectNarrationContinue;
         if (_pendingMapArchitectResult) {
             dungeonInjection = dungeonInjection
                 ? `${_pendingMapArchitectResult}\n\n${dungeonInjection}`
                 : _pendingMapArchitectResult;
             _pendingMapArchitectResult = null;
         }
+        if (narrationContinue) _mapArchitectNarrationContinue = false;
         const _rbLastAi = _rbChat ? [..._rbChat].reverse().find(m => !m.is_user && !m.is_system) : null;
         if (_rbLastAi) {
             applyMemoSwipeRollback(_rbLastAi, settings);
@@ -1225,7 +1233,13 @@ export function installInterceptor() {
             const bundleParts = [];
             const modeTags = buildNarrativeModeTags(settings.narrativePacing);
             if (modeTags) bundleParts.push(modeTags);
-            if (cyoaActive) bundleParts.push(buildCyoaModeBlock(settings.cyoaConfig || {}));
+            if (cyoaActive) {
+                let cyoaBlock = buildCyoaModeBlock(settings.cyoaConfig || {});
+                if (isLocationMappingEnabled(settings) && isMapArchitectTextOpener(settings) && !narrationContinue) {
+                    cyoaBlock = applyMapArchitectTextOpenerCyoaCaveat(cyoaBlock);
+                }
+                bundleParts.push(cyoaBlock);
+            }
             if (bundleParts.length) {
                 injections += `${bundleParts.join('\n\n')}\n\n`;
                 if (settings.debugMode) {
@@ -2340,26 +2354,95 @@ function applyAssistantMessageText(ctx, message, text) {
     }
 }
 
+function logMapArchitectTextOpener(status, extra = {}) {
+    recordSchedulerEvent(`map_architect_text_opener_${status}`, extra);
+    console.log(`[RPG Tracker] Map Architect text opener: ${status}`, extra);
+}
+
+/**
+ * Scan assistant messages after the latest user turn for a [CREATE_AREA_MAP] fence.
+ * Tool-call system rows can sit after the stub, so "latest assistant" is not enough.
+ */
+function findCreateAreaMapCandidate(chat) {
+    if (!Array.isArray(chat)) return null;
+    let lastUser = -1;
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]?.is_user) {
+            lastUser = i;
+            break;
+        }
+    }
+    for (let i = chat.length - 1; i > lastUser; i--) {
+        const message = chat[i];
+        if (!message || message.is_user || message.extra?.rpgMapArchitectTextOpenerRan) continue;
+        const cleaned = cleanMessageContent(message);
+        const raw = getDungeonMessageText(message);
+        const strippedClean = stripCreateAreaMapCommand(cleaned);
+        const strippedRaw = stripCreateAreaMapCommand(raw);
+        const stripped = strippedClean.command ? strippedClean : strippedRaw;
+        if (stripped.command) return { message, stripped, index: i };
+    }
+    return null;
+}
+
 /**
  * Text-command CreateAreaMap fallback: strip the fence, run Map Architect, continue the narrator.
  * Returns true when the normal ST/LA/updater cadence must be skipped for this generation.
  */
-async function maybeRunMapArchitectTextOpener({ chat, settings, currentType }) {
-    if (!isLocationMappingEnabled(settings) || !isMapArchitectTextOpener(settings)) return false;
-    if (_mapArchitectTextOpenerBusy) return true;
-    if (['swipe', 'regenerate', 'impersonate', 'quiet', 'continue'].includes(String(currentType || '').toLowerCase())) return false;
+async function maybeRunMapArchitectTextOpener({ chat, settings, currentType, source = 'generation_ended' }) {
+    const type = String(currentType || '').toLowerCase();
+    const textMode = isMapArchitectTextOpener(settings);
+    const mappingOn = isLocationMappingEnabled(settings);
+    if (!mappingOn) {
+        if (textMode) logMapArchitectTextOpener('skip', { reason: 'persistent_maps_off', source, generationType: type });
+        return false;
+    }
+    if (_mapArchitectTextOpenerBusy) {
+        logMapArchitectTextOpener('skip', { reason: 'busy', source, generationType: type });
+        return true;
+    }
+    if (['impersonate', 'quiet'].includes(type)) {
+        logMapArchitectTextOpener('skip', { reason: 'generation_type', source, generationType: type });
+        return false;
+    }
 
-    const message = getLatestAssistantCandidate(chat);
-    if (!message) return false;
-    const source = getDungeonMessageText(message);
-    const stripped = stripCreateAreaMapCommand(source);
-    if (!stripped.command) return false;
+    const candidate = findCreateAreaMapCandidate(chat);
+    if (!candidate) {
+        const latest = getLatestAssistantCandidate(chat);
+        const preview = String(latest?.mes || '').slice(0, 240);
+        const fenceMentioned = /CREATE_AREA_MAP/i.test(preview);
+        if (textMode || fenceMentioned) {
+            logMapArchitectTextOpener('skip', {
+                reason: 'no_fence',
+                source,
+                generationType: type,
+                textMode,
+                fenceMentioned,
+                preview,
+            });
+        }
+        return false;
+    }
+
+    const { message, stripped, index } = candidate;
+    logMapArchitectTextOpener('fence_found', {
+        source,
+        generationType: type,
+        index,
+        site: stripped.command.args?.site || '',
+        speaker: message.name || '',
+        isSystem: !!message.is_system,
+    });
+
     _mapArchitectTextOpenerBusy = true;
     try {
+        message.extra = message.extra || {};
+        message.extra.rpgMapArchitectTextOpenerRan = true;
         applyAssistantMessageText(SillyTavern.getContext(), message, stripped.text);
 
         const args = stripped.command.args;
         if (!createAreaMapCommandIsComplete(args)) {
+            logMapArchitectTextOpener('skip', { reason: 'incomplete_command', source, generationType: type, args });
             globalThis.toastr?.error?.(
                 'Map Architect text command is missing site, entrance, kind, or premise. Stay outside and try again next turn.',
                 'Map Architect',
@@ -2369,29 +2452,57 @@ async function maybeRunMapArchitectTextOpener({ chat, settings, currentType }) {
         }
 
         const siteLabel = args.site;
+        logMapArchitectTextOpener('running', { source, generationType: type, site: siteLabel });
         globalThis.toastr?.info?.(`Generating a location map for ${siteLabel}...`, 'Map Architect', { timeOut: 4000 });
-        const result = await runMapArchitect(args);
-        _pendingMapArchitectResult = String(result || '').trim();
+        await runMapArchitect(args);
+        clearAssistantReasoning(message);
+        applyAssistantMessageText(
+            SillyTavern.getContext(),
+            message,
+            seedMapArchitectContinueText(stripped.text, args.entrance),
+        );
+        _pendingMapArchitectResult = buildMapArchitectContinueBrief(args);
+        _mapArchitectNarrationContinue = true;
         const ctx = SillyTavern.getContext();
         if (typeof ctx.generate !== 'function') {
             console.error('[RPG Tracker] Cannot continue after Map Architect text opener: generate() is unavailable.');
             _pendingMapArchitectResult = null;
+            _mapArchitectNarrationContinue = false;
             return true;
         }
         setTimeout(() => {
             void Promise.resolve(ctx.generate('continue')).catch(error => {
                 console.error('[RPG Tracker] Continue after Map Architect text opener failed:', error);
                 _pendingMapArchitectResult = null;
+                _mapArchitectNarrationContinue = false;
             });
         }, 75);
         return true;
     } catch (error) {
         _pendingMapArchitectResult = null;
+        _mapArchitectNarrationContinue = false;
         console.error('[RPG Tracker] Map Architect text opener failed:', error);
         return true;
     } finally {
         _mapArchitectTextOpenerBusy = false;
     }
+}
+
+/**
+ * Backup path when GENERATION_ENDED never emits (ST only emits it if #mes_stop was visible).
+ * MESSAGE_RECEIVED still fires after the assistant message is saved.
+ */
+export async function onMapArchitectAssistantMessage(messageId, type) {
+    const ctx = SillyTavern.getContext();
+    const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+    const message = Number.isInteger(messageId) ? chat[messageId] : null;
+    if (message?.is_user) return false;
+    return maybeRunMapArchitectTextOpener({
+        chat,
+        settings: getSettings(),
+        currentType: type || _lastGenerationType,
+        source: 'message_received',
+    });
 }
 
 function getLatestAssistantCandidate(chat) {
@@ -2446,9 +2557,16 @@ export function isLatestAssistantFromActiveChar(chat, ctx) {
 
 /**
  * Fires on GENERATION_STARTED. Stores the type of generation.
+ * ST also emits this for prompt-build dry runs — those must not look like a live turn.
  * @param {string} type
+ * @param {object} [_options]
+ * @param {boolean} [dryRun]
  */
-export function onGenerationStarted(type) {
+export function onGenerationStarted(type, _options, dryRun) {
+    if (dryRun === true) {
+        recordSchedulerEvent('generation_started_dry_run', { generationType: type ?? null });
+        return;
+    }
     _lastGenerationType = type;
     _rpgIsGenerating = true;
     recordSchedulerEvent('generation_started', { generationType: type ?? null });
@@ -2562,20 +2680,33 @@ export async function onGenerationEnded() {
         console.warn('[RPG Tracker] CYOA render finalization failed:', error);
     }
     const settings = getSettings();
+    const currentType = _lastGenerationType;
+    const ctx = SillyTavern.getContext();
+    const { chat } = ctx;
+
+    // Fence handshake beats ST/LA, including while a previous tracker pass is still running
+    // and even when the latest row is a tool-call system message.
+    if (await maybeRunMapArchitectTextOpener({ chat, settings, currentType, source: 'generation_ended' })) {
+        recordSchedulerEvent('generation_ended_aborted', {
+            reason: 'map_architect_text_opener',
+            generationType: currentType ?? null,
+        });
+        setTimeout(() => { _lastGenerationType = null; }, 0);
+        return;
+    }
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
     const routerActive = !!settings.routerEnabled;
     if ((!settings.enabled && !routerActive) || isStateRunning) {
         recordSchedulerEvent('generation_ended_aborted', {
             reason: (!settings.enabled && !routerActive) ? 'disabled' : 'state_running',
-            generationType: _lastGenerationType ?? null,
+            generationType: currentType ?? null,
         });
         return;
     }
 
     // Check if the generation was for Impersonation or Quiet tasks.
     // In these cases, the chat history did not actually change.
-    const currentType = _lastGenerationType;
     recordSchedulerEvent('generation_ended_enter', {
         generationType: currentType ?? null,
         chatLength: SillyTavern.getContext()?.chat?.length ?? 0,
@@ -2594,9 +2725,6 @@ export async function onGenerationEnded() {
         return;
     }
 
-    const ctx = SillyTavern.getContext();
-    const { chat } = ctx;
-
     // Only auto-run State Tracker / Lorebook Agent when the latest assistant speaker is {{char}}.
     // Fake announcement speakers (e.g. "System Notifications") must not tick run-every or fire passes.
     if (!isLatestAssistantFromActiveChar(chat, ctx)) {
@@ -2609,14 +2737,6 @@ export async function onGenerationEnded() {
             generationType: currentType ?? null,
             speaker: getLatestAssistantCandidate(chat)?.name || null,
             activeChar: ctx?.name2 || null,
-        });
-        return;
-    }
-
-    if (await maybeRunMapArchitectTextOpener({ chat, settings, currentType })) {
-        recordSchedulerEvent('generation_ended_aborted', {
-            reason: 'map_architect_text_opener',
-            generationType: currentType ?? null,
         });
         return;
     }

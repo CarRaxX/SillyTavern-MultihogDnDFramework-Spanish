@@ -15,6 +15,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
             version: { type: 'integer', enum: [3] },
             site: { type: 'string', minLength: 1 },
             kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
             areas: {
                 type: 'array',
                 minItems: 2,

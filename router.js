@@ -32,6 +32,8 @@ import {
     extractDungeonMapSection,
     extractFooterLocation,
     findLatestDungeonLocation,
+    locationContainsSiteRoot,
+    mapSiteFooterMismatchHint,
     getDungeonMapAttachment,
     listMappedSiteDocuments,
     migrateDungeonMapAttachmentToContent,
@@ -610,6 +612,11 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
             existing: true,
             document: parseDungeonMapDocument(existing.content, site).document,
         };
+    }
+
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site)) {
+        throw new Error(mapSiteFooterMismatchHint(site, currentLocation));
     }
 
     if (!rootEntry) {

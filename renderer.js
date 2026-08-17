@@ -2373,7 +2373,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-setup-guide">
                     <b class="rt-onboarding-setup-title">Initial Setup:</b>
                     <ol class="rt-onboarding-setup-list">
-                        <li>Ensure <b>Function Calling</b> is enabled in your Chat Completion preset if you want Hybrid RNG tool rolls and the default Persistent Maps opener (<b>CreateAreaMap</b>). You can skip function calling: set Persistent Maps → Map Architect opener to <b>Text command</b>, and use Pre-Seeded RNG. You <i>can</i> turn Persistent Maps off in Game Systems / Components.</li>
+                        <li>Ensure <b>Function Calling</b> is enabled in your Chat Completion preset if you want Hybrid RNG tool rolls and the default Persistent Maps opener (<b>CreateAreaMap</b>). You can skip function calling: set the Map Architect opener to <b>Text command</b> under Narrator Configuration (when Persistent Maps is on), and use Pre-Seeded RNG. You <i>can</i> turn Persistent Maps off in Game Systems / Components.</li>
                         <li>Set up your connections in the extension's connection settings. I recommend a lightweight, relatively fast and cheap model for everything but the main narrator/GM. More on that below.</li>
                         <li>Create a character card for your "narrator" (e.g. Game Master). Leave the card content empty, as the framework handles all logic via the system/Main ST prompt.</li>
                         <li>Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to get started quicker.</li>
@@ -2480,10 +2480,23 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
                             <span>⛺ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. New maps need CreateAreaMap (function calling) or the text-command opener under Persistent Maps → Map Architect.">
+                        <div>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. New maps need CreateAreaMap (function calling) or the text-command opener below.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
                             <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>
+                        <div id="rt_onboarding_map_architect_opener_wrap" style="padding-left: 20px; display: none; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold; margin-top: 2px;">Map Architect opener</span>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Default. The narrator calls CreateAreaMap; SillyTavern pauses the turn until the map is ready.">
+                                <input type="radio" name="rt_onboarding_map_architect_opener" value="tool" id="rt_onboarding_map_architect_opener_tool" />
+                                <span>Tool call (CreateAreaMap) — requires function calling</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="For models or presets without function calling. The narrator emits a [CREATE_AREA_MAP] block and stops; Map Architect runs, then narration continues.">
+                                <input type="radio" name="rt_onboarding_map_architect_opener" value="text" id="rt_onboarding_map_architect_opener_text" />
+                                <span>Text command — no function calling</span>
+                            </label>
+                        </div>
+                        </div>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />
                             <span>🧭 CYOA Mode (Numbered action choices at end of outputs)</span>
