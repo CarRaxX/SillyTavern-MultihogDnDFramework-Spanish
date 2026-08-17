@@ -59,7 +59,7 @@ describe('Map Architect component', () => {
         expect(architect).toContain('persistArchitectDungeonMap');
         expect(architect).toContain('mapArchitectConnectionSource');
         expect(architect).not.toContain('mapRuntimeConnectionSource');
-        expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true }');
+        expect(architect).toContain("{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' }");
         expect(architect).toContain('CreateAreaMap');
         expect(architect).not.toContain('CreateDungeonMap');
         expect(architect).toContain('Location map ready for');

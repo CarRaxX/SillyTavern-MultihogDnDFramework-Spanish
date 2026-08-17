@@ -8,16 +8,17 @@ import { escapeHtml } from './memo-processor.js';
 let transactions = [];
 let isOpen = false;
 let debugPanel = null;
+const expandedSections = new Set();
+const PREVIEW_CHARS = 280;
 
 export function initializeDebugViewer() {
     if (debugPanel) return;
-    
+
     debugPanel = document.createElement('div');
     debugPanel.id = 'rpg-debug-viewer';
     debugPanel.className = 'rpg-debug-viewer';
     debugPanel.style.display = 'none';
-    
-    // Aesthetic structure
+
     debugPanel.innerHTML = `
         <div class="rt-resizer-tr" id="rt-debug-resizer-tr" title="Resize from top-right"></div>
         <div class="rt-resizer-br" id="rt-debug-resizer-br" title="Resize from bottom-right"></div>
@@ -27,21 +28,21 @@ export function initializeDebugViewer() {
                 <span class="rpg-debug-title">Context Debugger</span>
             </div>
             <div class="rpg-debug-header-right">
-                <button id="rpg-debug-clear" title="Clear History">🧹</button>
-                <button id="rpg-debug-close">✕</button>
+                <button type="button" id="rpg-debug-expand-all" title="Expand all sections">▾▾</button>
+                <button type="button" id="rpg-debug-collapse-all" title="Collapse all sections">▸▸</button>
+                <button type="button" id="rpg-debug-clear" title="Clear History">🧹</button>
+                <button type="button" id="rpg-debug-close">✕</button>
             </div>
         </div>
         <div class="rpg-debug-content">
             <div class="rpg-debug-empty">No transactions logged yet.</div>
         </div>
     `;
-    
+
     document.body.appendChild(debugPanel);
-    
-    // Geometry Key
+
     const GEO_KEY = 'rpg_tracker_geometry_debug_viewer';
 
-    // Restore geometry
     try {
         const saved = JSON.parse(localStorage.getItem(GEO_KEY));
         if (saved && saved.left !== undefined) {
@@ -58,25 +59,45 @@ export function initializeDebugViewer() {
         const rect = debugPanel.getBoundingClientRect();
         localStorage.setItem(GEO_KEY, JSON.stringify({
             left: rect.left, top: rect.top,
-            width: rect.width, height: rect.height
+            width: rect.width, height: rect.height,
         }));
     };
 
-    // Events
     debugPanel.querySelector('#rpg-debug-close').onclick = () => toggleDebugViewer(false);
     debugPanel.querySelector('#rpg-debug-clear').onclick = () => {
         transactions = [];
+        expandedSections.clear();
         renderTransactions();
     };
-    
-    // Draggable (using pointer events)
+    debugPanel.querySelector('#rpg-debug-expand-all').onclick = () => {
+        for (const key of collectSectionKeys()) expandedSections.add(key);
+        renderTransactions();
+    };
+    debugPanel.querySelector('#rpg-debug-collapse-all').onclick = () => {
+        expandedSections.clear();
+        renderTransactions();
+    };
+
+    debugPanel.addEventListener('click', (e) => {
+        const section = e.target.closest('.rpg-debug-section');
+        if (!section || !debugPanel.contains(section)) return;
+        if (e.target.closest('button') && !e.target.closest('.rpg-debug-section-toggle')) return;
+        const key = section.getAttribute('data-section-key');
+        if (!key) return;
+        const clickingText = e.target.closest('.rpg-debug-text');
+        if (clickingText && section.classList.contains('rpg-debug-section-open')) return;
+        if (expandedSections.has(key)) expandedSections.delete(key);
+        else expandedSections.add(key);
+        renderTransactions();
+    });
+
     const header = debugPanel.querySelector('.rpg-debug-header');
     let isDragging = false;
     let dragStartX, dragStartY, dragStartLeft, dragStartTop;
 
     header.onpointerdown = (e) => {
         if (e.button !== 0) return;
-        if (e.target.closest('button')) return; // Avoid drag on button click
+        if (e.target.closest('button')) return;
         isDragging = true;
         header.setPointerCapture(e.pointerId);
         dragStartX = e.clientX;
@@ -84,7 +105,6 @@ export function initializeDebugViewer() {
         const rect = debugPanel.getBoundingClientRect();
         dragStartLeft = rect.left;
         dragStartTop = rect.top;
-        
         e.preventDefault();
     };
 
@@ -108,7 +128,6 @@ export function initializeDebugViewer() {
     header.onpointerup = stopDrag;
     header.onpointercancel = stopDrag;
 
-    // Resizable Setup
     const resizerTR = debugPanel.querySelector('#rt-debug-resizer-tr');
     const resizerBR = debugPanel.querySelector('#rt-debug-resizer-br');
 
@@ -136,11 +155,8 @@ export function initializeDebugViewer() {
             startHeight = rect.height;
             startTop = rect.top;
             startLeft = rect.left;
-
-            // Lock positioning variables to styles
             debugPanel.style.left = startLeft + 'px';
             debugPanel.style.top = startTop + 'px';
-
             e.preventDefault();
             e.stopPropagation();
         };
@@ -180,6 +196,7 @@ export function initializeDebugViewer() {
 }
 
 export function toggleDebugViewer(force) {
+    if (!debugPanel) initializeDebugViewer();
     isOpen = force !== undefined ? force : !isOpen;
     if (debugPanel) {
         debugPanel.style.display = isOpen ? 'flex' : 'none';
@@ -190,45 +207,101 @@ export function toggleDebugViewer(force) {
 export function logTransaction(source, messages, response = null) {
     const transaction = {
         timestamp: new Date().toLocaleTimeString(),
-        source, // 'Tracker' or 'Main Chat'
-        messages, // [{role: 'system', content: '...'}, {role: 'user', content: '...'}]
+        source,
+        messages,
         response,
-        id: Date.now()
+        id: Date.now(),
     };
-    
+
     transactions.unshift(transaction);
-    if (transactions.length > 10) transactions.pop(); // Keep last 10
-    
+    if (transactions.length > 10) {
+        const dropped = transactions.pop();
+        for (const key of [...expandedSections]) {
+            if (String(key).startsWith(`${dropped.id}:`)) expandedSections.delete(key);
+        }
+    }
+
     if (isOpen) renderTransactions();
 }
 
+function sourceBadgeStyle(source) {
+    const label = String(source || 'Tracker');
+    if (/architect/i.test(label)) return { bg: 'rgba(212, 169, 64, 0.2)', fg: '#d4a940' };
+    if (/evolution/i.test(label)) return { bg: 'rgba(80, 140, 255, 0.2)', fg: '#7eb0ff' };
+    if (/tracker/i.test(label)) return { bg: 'rgba(0, 255, 170, 0.2)', fg: '#00ffaa' };
+    return { bg: 'rgba(255, 150, 0, 0.2)', fg: '#ffaa00' };
+}
+
+function previewText(text) {
+    const compact = String(text || '').replace(/\s+/g, ' ').trim();
+    if (compact.length <= PREVIEW_CHARS) return compact;
+    return compact.slice(0, PREVIEW_CHARS) + '…';
+}
+
+function sectionKey(transactionId, kind) {
+    return `${transactionId}:${kind}`;
+}
+
+function collectSectionKeys() {
+    const keys = [];
+    for (const t of transactions) {
+        (t.messages || []).forEach((m, i) => {
+            keys.push(sectionKey(t.id, `${m.role === 'system' ? 'system' : 'user'}:${i}`));
+        });
+        if (t.response) keys.push(sectionKey(t.id, 'response'));
+    }
+    return keys;
+}
+
+function renderSection(transactionId, kind, label, roleClass, text) {
+    const key = sectionKey(transactionId, kind);
+    const open = expandedSections.has(key);
+    const body = String(text || '');
+    return `
+        <div class="rpg-debug-section${kind === 'response' ? ' rpg-debug-section-response' : ''}${open ? ' rpg-debug-section-open' : ''}" data-section-key="${escapeHtml(key)}">
+            <button type="button" class="rpg-debug-section-toggle rpg-debug-label ${roleClass}" aria-expanded="${open ? 'true' : 'false'}">
+                <i class="fa-solid fa-chevron-right rpg-debug-chevron" aria-hidden="true"></i>
+                <span>${label}</span>
+                <span class="rpg-debug-section-chars">${body.length.toLocaleString()} chars</span>
+            </button>
+            <div class="rpg-debug-text-preview">${escapeHtml(previewText(body))}</div>
+            <div class="rpg-debug-text${kind === 'response' ? ' response' : ''}">${escapeHtml(body)}</div>
+        </div>`;
+}
+
 function renderTransactions() {
+    if (!debugPanel) return;
     const content = debugPanel.querySelector('.rpg-debug-content');
+    if (!content) return;
     if (transactions.length === 0) {
         content.innerHTML = '<div class="rpg-debug-empty">No transactions logged yet.</div>';
         return;
     }
-    
-    content.innerHTML = transactions.map(t => `
+
+    const scrollTop = content.scrollTop;
+    content.innerHTML = transactions.map(t => {
+        const badge = sourceBadgeStyle(t.source);
+        const messageHtml = (t.messages || []).map((m, i) => renderSection(
+            t.id,
+            `${m.role === 'system' ? 'system' : 'user'}:${i}`,
+            m.role === 'system' ? 'SYSTEM PROMPT' : 'USER MESSAGE',
+            m.role === 'system' ? 'system' : 'input',
+            m.content,
+        )).join('');
+        const responseHtml = t.response
+            ? renderSection(t.id, 'response', 'AI RESPONSE', 'output', t.response)
+            : '';
+        return `
         <div class="rpg-debug-transaction" data-id="${t.id}">
             <div class="rpg-debug-trans-header">
-                <span class="rpg-debug-time">${t.timestamp}</span>
-                <span class="rpg-debug-source" style="background: ${t.source === 'Tracker' ? 'rgba(0, 255, 170, 0.2)' : 'rgba(255, 150, 0, 0.2)'}; color: ${t.source === 'Tracker' ? '#00ffaa' : '#ffaa00'}; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${t.source.toUpperCase()}</span>
+                <span class="rpg-debug-time">${escapeHtml(String(t.timestamp || ''))}</span>
+                <span class="rpg-debug-source" style="background:${badge.bg};color:${badge.fg};">${escapeHtml(String(t.source || 'Tracker').toUpperCase())}</span>
             </div>
             <div class="rpg-debug-trans-body">
-                ${t.messages.map(m => `
-                    <div class="rpg-debug-section">
-                        <div class="rpg-debug-label ${m.role === 'system' ? 'system' : 'input'}">${m.role === 'system' ? 'SYSTEM PROMPT' : 'USER MESSAGE'}</div>
-                        <div class="rpg-debug-text">${escapeHtml(m.content)}</div>
-                    </div>
-                `).join('')}
-                ${t.response ? `
-                    <div class="rpg-debug-section" style="opacity: 0.6; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
-                        <div class="rpg-debug-label output">AI RESPONSE (State)</div>
-                        <div class="rpg-debug-text response" style="max-height: 100px;">${escapeHtml(t.response)}</div>
-                    </div>
-                ` : ''}
+                ${messageHtml}
+                ${responseHtml}
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
+    content.scrollTop = scrollTop;
 }

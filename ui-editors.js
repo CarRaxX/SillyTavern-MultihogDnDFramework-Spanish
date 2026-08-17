@@ -2,7 +2,6 @@ import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAUL
 import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
-import { toggleDebugViewer } from './debug-viewer.js';
 import { makeDraggable } from './ui-geometry.js';
 import { 
     saveSettings, 
@@ -715,7 +714,6 @@ export function openCustomFieldEditor(index) {
 
     document.getElementById('rt_cfe_cancel').onclick = close;
     document.getElementById('rt_cfe_close').onclick = close;
-    document.getElementById('rpg-tracker-debug-btn').onclick = () => toggleDebugViewer();
     document.getElementById('rt_cfe_export').onclick = () => {
         const { liveField } = resolveLiveField();
         exportModules([liveField || {

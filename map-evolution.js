@@ -261,7 +261,7 @@ Return JSON only.`;
             attempt ? `${systemPrompt}\n\nPrevious output was not valid digest JSON. ${lastError}` : systemPrompt,
             userPrompt,
             signal,
-            { stream: true },
+            { stream: true, debugSource: 'Map Evolution' },
         );
         const parsed = parseCompressionDigests(output);
         if (parsed.ok) {
@@ -538,7 +538,7 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
         }
         if (attempt > 0) broadcastStep('thought', `${site.siteRoot}: correction pass ${attempt}...`);
         else broadcastStep('thought', `${site.siteRoot}: requesting evolution (${trigger})...`);
-        const output = await sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal, { stream: true });
+        const output = await sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal, { stream: true, debugSource: 'Map Evolution' });
         lastOutput = output;
         const parsed = parseMapArchitectResponse(output);
         if (!parsed.value) {

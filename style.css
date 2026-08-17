@@ -6363,6 +6363,7 @@ textarea.rt-cr-input {
     color: #eee;
     font-family: 'Consolas', 'Monaco', monospace;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .rpg-debug-header {
@@ -6412,12 +6413,29 @@ textarea.rt-cr-input {
 }
 
 .rpg-debug-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+    flex: 1 1 0%;
+    height: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    overscroll-behavior: contain;
+    padding: 12px 14px 16px 12px;
+    display: block;
+    box-sizing: border-box;
+    scrollbar-width: auto;
+    scrollbar-color: rgba(0, 255, 170, 0.7) rgba(0, 0, 0, 0.45);
+}
+
+#rpg-debug-viewer.rpg-debug-viewer {
+    overflow: hidden !important;
+}
+
+#rpg-debug-viewer .rpg-debug-content {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: scroll !important;
 }
 
 .rpg-debug-empty {
@@ -6431,7 +6449,11 @@ textarea.rt-cr-input {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
-    overflow: hidden;
+    overflow: visible;
+    margin-bottom: 12px;
+}
+.rpg-debug-transaction:last-child {
+    margin-bottom: 0;
 }
 
 .rpg-debug-trans-header {
@@ -6457,14 +6479,56 @@ textarea.rt-cr-input {
     gap: 6px;
 }
 
+.rpg-debug-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: inherit;
+    color: inherit;
+    min-height: 0;
+    line-height: 1.2;
+}
+
+.rpg-debug-chevron {
+    font-size: 10px;
+    opacity: 0.75;
+    transition: transform 0.15s ease;
+    width: 10px;
+    text-align: center;
+}
+
+.rpg-debug-section-open .rpg-debug-chevron {
+    transform: rotate(90deg);
+}
+
+.rpg-debug-section-chars {
+    margin-left: auto;
+    font-weight: normal;
+    letter-spacing: 0;
+    text-transform: none;
+    opacity: 0.65;
+    font-size: 10px;
+}
+
+.rpg-debug-source {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 10px;
+}
+
 .rpg-debug-label {
     font-size: 10px;
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    width: fit-content;
+    padding: 6px 8px;
+    border-radius: 4px;
 }
 
 .rpg-debug-label.input {
@@ -6482,36 +6546,60 @@ textarea.rt-cr-input {
     color: #00ffaa;
 }
 
-.rpg-debug-text {
+.rpg-debug-text,
+.rpg-debug-text-preview {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 6px;
     padding: 10px;
     font-size: 11px;
     line-height: 1.4;
-    white-space: pre-wrap;
     word-break: break-word;
-    max-height: 500px;
-    overflow-y: auto;
 }
 
+.rpg-debug-text-preview {
+    white-space: normal;
+    overflow: hidden;
+    max-height: none;
+    cursor: pointer;
+}
+
+.rpg-debug-text {
+    white-space: pre-wrap;
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+.rpg-debug-section:not(.rpg-debug-section-open) .rpg-debug-text {
+    display: none;
+}
+
+.rpg-debug-section-open .rpg-debug-text-preview {
+    display: none;
+}
+
+.rpg-debug-section-response {
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-top: 10px;
+}
 .rpg-debug-text.response {
     border-color: rgba(0, 255, 170, 0.15);
 }
 
 /* Custom scrollbar for debug viewer */
 .rpg-debug-content::-webkit-scrollbar {
-    width: 8px;
+    width: 12px;
 }
 .rpg-debug-content::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
 }
 .rpg-debug-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: rgba(0, 255, 170, 0.45);
+    border-radius: 6px;
 }
 .rpg-debug-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 255, 170, 0.7);
 }
 
 /* Nested Drawers Styling */

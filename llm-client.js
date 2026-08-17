@@ -513,7 +513,6 @@ export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTok
         const data = await response.json();
         const result = data.message.content;
         console.log(`[RPG Tracker] Response from Ollama: "${String(result || '').substring(0, 100)}..."`);
-        logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], result);
         return result;
     }
     const reader = response.body.getReader();
@@ -542,7 +541,6 @@ export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTok
     }
     if (!fullContent.trim()) throw new Error('Ollama returned an empty response.');
     console.log(`[RPG Tracker] Response from Ollama: "${fullContent.substring(0, 100)}..."`);
-    logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], fullContent);
     return fullContent;
 }
 
@@ -661,7 +659,6 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
 
     if (!fullContent.trim()) throw new Error('OpenAI returned an empty response.');
     console.log(`[RPG Tracker] Response from OpenAI: "${fullContent.substring(0, 100)}..."`);
-    logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], fullContent);
     return fullContent;
 }
 
@@ -791,7 +788,7 @@ function extractRawStateResponse(context, raw) {
  * @param {string} systemPrompt
  * @param {string} userPrompt
  * @param {AbortSignal|null} [signal]
- * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null, stream?: boolean }} [options]
+ * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null, stream?: boolean, debugSource?: string }} [options]
  * @returns {Promise<string>}
  */
 export async function sendStateRequest(settings, systemPrompt, userPrompt, signal = null, options = {}) {
@@ -799,6 +796,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     const userMacroNames = options.userMacroNames || [];
     const jsonSchema = options.jsonSchema || null;
     const stream = !!options.stream;
+    const debugSource = String(options.debugSource || 'Tracker').trim() || 'Tracker';
     const finalize = (text) => (preserveUserMacro && typeof text === 'string')
         ? restoreUserMacro(text, userMacroNames)
         : text;
@@ -845,7 +843,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 } catch (_) { /* keep streamed / raw text */ }
             }
             if (typeof text === 'string') {
-                logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
+                logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
                 return finalize(text);
             }
             throw new Error(`[RPG Tracker] Profile request returned unexpected type: ${JSON.stringify(raw).substring(0, 200)}`);
@@ -873,13 +871,17 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── Ollama Mode ──
     if (settings.connectionSource === 'ollama') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via Ollama: ${settings.ollamaModel}`);
-        return finalize(await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null, stream));
+        const text = await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null, stream);
+        logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
+        return finalize(text);
     }
 
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        return finalize(await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null));
+        const text = await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null);
+        logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
+        return finalize(text);
     }
 
     // ── Default mode: generateRaw through the active connection ──
@@ -894,7 +896,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
         const raw = await sendViaLiveChatCompletion(context, settings, messages, { signal });
         const text = await collectCompletionText(raw);
         if (!text) throw new Error('Main API returned no usable response content.');
-        logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
+        logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
         return finalize(text);
     }
 
@@ -969,7 +971,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
                 ?? JSON.stringify(result);
         }
 
-        logTransaction('Tracker', [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
+        logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
         return finalize(text);
 
     } catch (err) {

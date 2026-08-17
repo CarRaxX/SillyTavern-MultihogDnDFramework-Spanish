@@ -407,6 +407,7 @@ With Deadlines + Frustration enabled, overdue NPC quests decay giver mood via `F
 - **Full Audit** — chunked pass over large chat history to rebuild a complete memo.
 - **Rendering Tags Library** — live previews of `((TAG))` markers used in module lines.
 - Mobile: open from the wand menu.
+- **Context Debugger** — wand menu item **Multihog Context Debugger** (wrench icon). Floating overlay of the last 10 State Tracker, Map Architect, and Map Evolution prompts and AI replies. Prompt/reply blocks start collapsed; click a row to expand it. Not a button on the tracker panel.
 
 ### Connection settings
 

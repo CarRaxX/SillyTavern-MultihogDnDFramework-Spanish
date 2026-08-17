@@ -4,6 +4,14 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.0.2] - 2026-08-17
+
+### Changed
+- **Context Debugger** is a wand-menu item (**Multihog Context Debugger**), not a tracker-header button. It logs the last 10 Tracker, Map Architect, and Map Evolution request/response pairs so streamed replies can be inspected without relying on the SillyTavern server console. Prompt and reply blocks start collapsed; expand one, or use the header expand/collapse-all controls. The overlay window is the only scroller.
+
+### Fixed
+- **Context Debugger window scroll**: the card list now scrolls inside the overlay. Inner prompt boxes no longer have their own scrollbars, so the mouse wheel is not trapped.
+
 ## [8.0.1] - 2026-08-17
 
 ### Fixed

@@ -2412,7 +2412,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     suffix;
             }
 
-            const result = await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true });
+            const result = await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' });
 
             if (result && typeof result === 'string') {
                 if (settings.debugMode) console.log(`[RPG Tracker] Raw Result (Chunk ${i + 1}):`, result);
@@ -2658,7 +2658,7 @@ export async function sendDirectPrompt(message, options = {}) {
             `## USER INSTRUCTION\n${message}\n\n` +
             `## OUTPUT ONLY CHANGED OR NEW SECTIONS:`;
 
-        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true });
+        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' });
 
         if (result && typeof result === 'string') {
             let cleanedOutput = result;
@@ -4257,7 +4257,6 @@ function createPanel() {
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
-        toggleDebugViewer,
         triggerBackgroundPortraitGeneration,
         updateAgentStatusIndicator,
         updateChatLinkUI,
@@ -11459,6 +11458,21 @@ RULES:
         });
 
         wandContainer.appendChild(btn);
+
+        if (!document.getElementById('rpg_tracker_debug_wand_button')) {
+            const debugBtn = document.createElement('div');
+            debugBtn.id = 'rpg_tracker_debug_wand_button';
+            debugBtn.classList.add('list-group-item', 'flex-container', 'flexGap5');
+            debugBtn.innerHTML = `
+            <div class="fa-solid fa-screwdriver-wrench extensionsMenuExtensionButton"></div>
+            <span>Multihog Context Debugger</span>
+        `;
+            debugBtn.addEventListener('click', () => {
+                initializeDebugViewer();
+                toggleDebugViewer();
+            });
+            wandContainer.appendChild(debugBtn);
+        }
     }
 
     // ── Debug harness (safe to leave in — only runs when called manually) ──

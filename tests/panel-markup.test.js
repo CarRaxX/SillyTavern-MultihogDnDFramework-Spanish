@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { buildPanelMarkup } from '../src/ui/panel/panel-markup.js';
 
 describe('panel markup', () => {
@@ -18,6 +19,7 @@ describe('panel markup', () => {
         expect(markup).toContain('id="rpg-tracker-agent"');
         expect(markup).toContain('rt-panel-collapsed');
         expect(markup).toContain('id="rpg-tracker-settings-btn"');
+        expect(markup).not.toContain('rpg-tracker-debug-btn');
         expect(markup.indexOf('rpg-tracker-settings-btn')).toBeLessThan(markup.indexOf('rpg-tracker-help-btn'));
         expect(markup).toContain('id="rt-agent-router-manual-run"');
         expect(markup).toContain('id="rt-research-lorebook"');
@@ -61,5 +63,22 @@ describe('panel markup', () => {
         expect(markup).toContain('id="rt-agent-map-evo-n-row" style="display:flex;');
         expect(markup).toContain('id="rt-agent-world-locations" value="5"');
         expect(markup).toContain('id="rt-agent-world-interval" value="12"');
+    });
+
+    it('opens the Context Debugger from the wand menu, not the tracker header', () => {
+        const index = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+        expect(index).toContain("debugBtn.id = 'rpg_tracker_debug_wand_button'");
+        expect(index).toContain('Multihog Context Debugger');
+        expect(index).toContain('fa-screwdriver-wrench');
+        expect(index).toContain('initializeDebugViewer()');
+        expect(index).toContain('toggleDebugViewer()');
+        expect(index.indexOf('toggle_rpg_tracker_wand_button')).toBeLessThan(index.indexOf('rpg_tracker_debug_wand_button'));
+        expect(settingsMarkup).toContain('Multihog Context Debugger');
+        const style = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+        const contentRule = style.slice(style.indexOf('.rpg-debug-content {'), style.indexOf('.rpg-debug-empty'));
+        expect(contentRule).toContain('min-height: 0');
+        expect(contentRule).toContain('overflow-y: scroll');
+        expect(style).toContain('rpg-debug-section-toggle');
     });
 });

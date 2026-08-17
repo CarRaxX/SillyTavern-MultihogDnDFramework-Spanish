@@ -220,7 +220,6 @@ export function createPanel(dependencies) {
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
-        toggleDebugViewer,
         triggerBackgroundPortraitGeneration,
         updateAgentStatusIndicator,
         updateChatLinkUI,
@@ -6123,11 +6122,6 @@ ${namingRule}`;
             toastr['info']('Tracker hidden. You can reopen it at any time from the Extensions (Wand) Menu.', 'RPG Tracker');
         }
         saveSettings();
-    });
-
-    // Context Debugger toggle
-    panel.querySelector('#rpg-tracker-debug-btn').addEventListener('click', () => {
-        toggleDebugViewer();
     });
 
     // Direct prompt toggle
