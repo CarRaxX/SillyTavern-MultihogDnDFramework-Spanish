@@ -29,6 +29,16 @@ describe('Character Creator fields', () => {
         expect(creatorSource).toContain('it is disabled — do NOT output that block or its concept');
     });
 
+    it('labels the CHARACTER header control Create PC Card', () => {
+        expect(rendererSource).toContain('class="rt-char-to-persona-btn"');
+        expect(rendererSource).toContain('Create PC Card');
+        const btnBlock = rendererSource.slice(
+            rendererSource.indexOf('class="rt-char-to-persona-btn"'),
+            rendererSource.indexOf('class="rt-char-to-persona-btn"') + 500,
+        );
+        expect(btnBlock).not.toMatch(/>\s*👤\s*</);
+    });
+
     it('keeps the main creator boxes free of example placeholders', () => {
         const ids = [
             'rt-cr-name',

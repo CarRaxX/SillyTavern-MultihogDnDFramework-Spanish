@@ -29,6 +29,13 @@ import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refres
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent, isSectionUnlocked, isEffectiveSectionEnabled } from './game-systems.js';
 import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
 import { openManageGameCartridges, promptAndSaveCurrentAsCartridge } from './game-cartridges.js';
+import {
+    deleteNpcFromLibrary,
+    exportNpcToFile,
+    fetchSrcAsDataUrl,
+    importNpcPackages,
+    saveNpcToLibrary,
+} from './npc-library.js';
 import { RENDERING_TAGS_LIBRARY, sectionPages, configureRuntimeActions } from './src/app/runtime-bridge.js';
 import { bindRenderedCardEvents } from './src/ui/panel/card-events.js';
 import { createDetachedPanel } from './src/ui/panel/detached-panel.js';
@@ -3329,10 +3336,10 @@ function refreshPortraitPromptPresetsList() {
     });
 }
 
-async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null) {
+async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null, options = {}) {
     const refresh = onRefresh || refreshRenderedView;
     const s = getSettings();
-    const currentSrc = lookupCustomPortraitSrc(s, entityName);
+    const currentSrc = String(options.currentSrc || lookupCustomPortraitSrc(s, entityName) || '');
     const zoomWrapperId = `rt-portrait-zoom-wrap-${Date.now()}`;
     const zoomImgId     = `rt-portrait-zoom-img-${Date.now()}`;
     const zoomBadgeId   = `rt-portrait-zoom-badge-${Date.now()}`;
@@ -3366,10 +3373,15 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
         popupOpts.customButtons.push({ text: '🗑 Clear Portrait', result: 2, classes: ['menu_button'] });
     }
 
+    const persistPortrait = typeof options.applyPortrait === 'function'
+        ? options.applyPortrait
+        : (src) => applyPortraitData(entityName, src);
     const localApply = async (src) => {
-        await applyPortraitData(entityName, src);
+        await persistPortrait(src);
         refresh();
-        void runtimeState.refreshNpcManifest().catch(() => { });
+        if (typeof options.applyPortrait !== 'function') {
+            void runtimeState.refreshNpcManifest().catch(() => { });
+        }
     };
 
     let capturedUrl = currentSrc.startsWith('http') ? currentSrc : '';
@@ -4166,9 +4178,12 @@ function createPanel() {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        deleteNpcFromLibrary,
         escapeHtml,
+        exportNpcToFile,
         extractCurrentTimeStr,
         fileToDataUrl,
+        fetchSrcAsDataUrl,
         formatInWorldTime,
         getLorebookManifest,
         getNarrativeBlocks,
@@ -4179,6 +4194,7 @@ function createPanel() {
         getMapUpdaterTick,
         getSettings,
         handleTrackerEnabledChange,
+        importNpcPackages,
         isMapUpdaterRunning,
         isMapEvolutionRunning,
         isRouterRunning,
@@ -4222,6 +4238,7 @@ function createPanel() {
         runStateModelPass,
         sanitizeLorebookRecordContent,
         saveChatState,
+        saveNpcToLibrary,
         saveSettings,
         scaleImageTo512Square,
         scaleImageToLandscape,

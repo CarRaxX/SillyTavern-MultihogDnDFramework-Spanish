@@ -4,6 +4,18 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-08-17
+
+### Added
+- **NPC/PC Library**: bookmark campaign NPCs and Player Cards into a global library that is not tied to a chat. Cards are role-agnostic: a saved PC can later be an NPC, and vice versa. Packages are `.mnpc.json` files with an optional embedded portrait; the library stores portraits as files, not in settings.json.
+- **NPC/PC Manager**: labeled control on the NPCs header in Campaign Records (Library, From Card, Freeform, Archetype). The CHARACTER header control is labeled **Create PC Card**.
+- **Library actions**: Full Card, Fit into Story, **Add as is**, **Play as PC** (installs the Player Card and asks the State Tracker to swap `[CHARACTER]`), **Add to Party** (`(Name joins the party.)` Direct Prompt), export, and delete.
+- **Library Full Card**: same CORE layout as the campaign card, with a Library badge and keywords. **Edit Text** saves back to the library. Click the portrait to replace, generate, crop, or clear it (library storage only). No relationship bars or AI edit.
+
+### Changed
+- Library cards store CORE identity, keywords, and portrait only — not campaign relationship numbers, chronicle, or dynamic lore. Existing library entries are cleaned the next time the Library tab opens.
+- Library rows: a square portrait matching the action-stack height, appearance plus personality blurb, and a gold scrollbar matching the Full Card button.
+
 ## [7.99.3] - 2026-08-17
 
 ### Changed

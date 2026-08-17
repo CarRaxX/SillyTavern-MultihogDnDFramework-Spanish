@@ -516,6 +516,12 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 - **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Persistent Maps** below.
 - Real-time scene-art triggers: on location enter/change and/or every N outputs.
 
+### NPC Library
+
+The extension keeps a **global character library** (not chat-linked). Bookmark any campaign NPC or Player Card from Campaign Records (card bookmark, compact-list bookmark, or **Save to Library** on the Full Card). Open **NPC/PC Manager** from the NPCs header: view the Full Card, **Add as is**, **Play as PC** (installs the Player Card and asks the State Tracker to swap `[CHARACTER]`), Fit into Story (AI adaptation as an NPC), **Add to Party**, export, or remove. **Edit Text** on a library card saves back to the library. Click the Full Card portrait to replace, generate, crop, or clear it (library storage only). Library rows show a portrait aligned with the action stack and the appearance plus personality blurb.
+
+Export writes a single `.mnpc.json` package. The portrait is copied into that JSON as base64 so you can share one file; import restores the image into library storage. Campaign relationship numbers and chronicle/lore after `[CORE]` are not saved — only CORE identity, keywords, and the portrait.
+
 ### Slash command
 
 `/lorebookagent` (aliases `/lbagent`, `/la`, `/router`):

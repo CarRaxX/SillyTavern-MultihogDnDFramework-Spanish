@@ -2622,8 +2622,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
         ` : '';
 
         const personaFromCharBtn = tag === 'CHARACTER' ? `
-            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create Lorebook Agent Player Card from this CHARACTER (uses sheet + last 3 story messages)">
-                👤
+            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create a Lorebook Agent Player Card from this CHARACTER sheet (uses the sheet plus the last 3 story messages)">
+                Create PC Card
             </button>
         ` : '';
 

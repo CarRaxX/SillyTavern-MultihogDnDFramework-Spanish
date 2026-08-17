@@ -53,7 +53,7 @@ export function prepareShippedLorebookPromptTemplate(template) {
     }).replace(/Day X/g, 'Day N');
 }
 
-/** Shared procedural naming rule for World Skeleton + Add NPC to Story creators. */
+/** Shared procedural naming rule for World Skeleton + NPC/PC Manager creators. */
 export const NEW_NPC_NAMING_RULE = `[New NPC Naming Rule: When introducing a new, unestablished character, silently create their name using these dynamic constraints:
 Style & Culture: Analyze the current scene, local region, and surrounding characters. Match the linguistic flavor, tone, and naming conventions natively found in the immediate environment.
 Mandatory Starting Sounds: First Name Root: '{{random:a,e,i,o,u,ba,be,bi,bo,bu,ca,ce,ci,co,cu,da,de,di,do,du,fa,fe,fi,fo,fu,ga,ge,gi,go,gu,ha,he,hi,ho,hu,ja,je,ji,jo,ju,ka,ke,ki,ko,ku,la,le,li,lo,lu,ma,me,mi,mo,mu,na,ne,ni,no,nu,pa,pe,pi,po,pu,qua,que,qui,quo,ra,re,ri,ro,ru,sa,se,si,so,su,ta,te,ti,to,tu,va,ve,vi,vo,vu,wa,we,wi,wo,wu,ya,ye,yi,yo,yu,za,ze,zi,zo,zu}}{{random:l,n,r,s,t,v,m,d}}' | Last Name Root: '{{random:a,e,i,o,u,ba,be,bi,bo,bu,ca,ce,ci,co,cu,da,de,di,do,du,fa,fe,fi,fo,fu,ga,ge,gi,go,gu,ha,he,hi,ho,hu,ja,je,ji,jo,ju,ka,ke,ki,ko,ku,la,le,li,lo,lu,ma,me,mi,mo,mu,na,ne,ni,no,nu,pa,pe,pi,po,pu,qua,que,qui,quo,ra,re,ri,ro,ru,sa,se,si,so,su,ta,te,ti,to,tu,va,ve,vi,vo,vu,wa,we,wi,wo,wu,ya,ye,yi,yo,yu,za,ze,zi,zo,zu}}{{random:l,n,r,s,t,v,m,d}}'.
@@ -346,6 +346,12 @@ export function buildDefaultSettings() {
         customTheme: null,
 
         savedThemes: {},
+
+        /**
+         * Global reusable NPC templates (CORE text + optional portrait path).
+         * Not chat-linked. Shape: { id, name, keys, content, portraitPath, notes, createdAt, updatedAt }.
+         */
+        npcLibrary: [],
 
         /** Locked chrome for the floating settings window: 'dark' | 'light'. Independent of tracker/ST theme. */
         settingsOverlayAppearance: 'light',

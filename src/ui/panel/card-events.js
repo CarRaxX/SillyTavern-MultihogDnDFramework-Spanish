@@ -805,9 +805,10 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const wordCount = parseInt(String(wordsRaw || '150'), 10) || 150;
             const personaOpts = { chatLookback: 3, preferCharacterBlock: true };
             const extraHints = '\n\nSource: existing [CHARACTER] sheet. Match its stats, class, gear, and traits. Use the last 3 story messages only for voice, relationships, and current situation.';
-            const prev = btn.textContent;
+            const prev = btn.dataset.idleLabel || btn.textContent.trim() || 'Create PC Card';
+            btn.dataset.idleLabel = prev;
             btn.disabled = true;
-            btn.textContent = '⏳';
+            btn.textContent = 'Creating…';
             try {
                 toastr['info'](`Generating Lorebook Agent persona for "${charName}"…`, 'RPG Tracker');
                 const bio = await generatePersonaBio(charName, wordCount, extraHints, personaOpts);
@@ -818,7 +819,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 }
             } finally {
                 btn.disabled = false;
-                btn.textContent = prev || '👤';
+                btn.textContent = prev;
             }
         });
     });

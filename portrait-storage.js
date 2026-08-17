@@ -190,6 +190,9 @@ export function countPortraitPathRefs(settings, targetPath) {
         scan(cs.customPortraits);
         scan(cs.customLocationImages);
     }
+    for (const rec of settings.npcLibrary || []) {
+        if (rec?.portraitPath === targetPath) count++;
+    }
     return count;
 }
 

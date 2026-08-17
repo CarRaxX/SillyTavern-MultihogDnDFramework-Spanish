@@ -1436,7 +1436,7 @@
     gap: 6px;
 }
 
-.rt-fullview-btn, .rt-category-settings-btn, .rt-char-to-persona-btn {
+.rt-fullview-btn, .rt-category-settings-btn {
     background: none;
     border: none;
     padding: 0;
@@ -1452,9 +1452,39 @@
     justify-content: center;
 }
 
-.rt-fullview-btn:hover, .rt-category-settings-btn:hover, .rt-char-to-persona-btn:hover {
+.rt-fullview-btn:hover, .rt-category-settings-btn:hover {
     opacity: 1;
     color: var(--rt-text);
+}
+
+.rt-char-to-persona-btn {
+    background: rgba(120, 80, 220, 0.16);
+    border: 1px solid rgba(120, 80, 220, 0.4);
+    color: #c4b5fd;
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-transform: none;
+    padding: 2px 7px;
+    margin: 0;
+    border-radius: 4px;
+    line-height: 1.3;
+    white-space: nowrap;
+    opacity: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.rt-char-to-persona-btn:hover {
+    background: rgba(120, 80, 220, 0.28);
+    border-color: rgba(180, 140, 255, 0.65);
+    color: #ddd6fe;
+}
+.rt-char-to-persona-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
 }
 
 .rt-fullview-btn.active {
@@ -7321,26 +7351,28 @@ textarea.rt-cr-input {
     color: #ecc050;
 }
 
-/* ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ NPC Add Button ĂÂ˘Ă˘âŹÂĂ˘âÂŹĂÂ˘Ă˘âŹÂĂ˘âÂŹ */
-.rt-npc-add-btn {
-    background: rgba(212, 169, 64, 0.08);
-    border: 1px dashed rgba(212, 169, 64, 0.3);
+/* NPC/PC Manager — header control on the NPCs Campaign Records folder */
+.rt-npc-manager-btn {
+    background: rgba(212, 169, 64, 0.12);
+    border: 1px solid rgba(212, 169, 64, 0.35);
     color: #d4a940;
     cursor: pointer;
     font-size: 9px;
-    padding: 4px 8px;
+    font-weight: bold;
+    padding: 2px 7px;
     border-radius: 4px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-    margin-top: 4px;
-    font-weight: bold;
+    flex-shrink: 0;
+    white-space: nowrap;
+    line-height: 1.3;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.rt-npc-add-btn:hover {
-    background: rgba(212, 169, 64, 0.15);
-    border-color: rgba(212, 169, 64, 0.5);
+.rt-npc-manager-btn:hover {
+    background: rgba(212, 169, 64, 0.22);
+    border-color: rgba(212, 169, 64, 0.55);
     color: #ecc050;
 }
 
@@ -8016,6 +8048,131 @@ textarea.rt-cr-input {
     background: rgba(0, 255, 170, 0.15);
     border-color: rgba(0, 255, 170, 0.4);
 }
+.rt-npc-library-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: stretch;
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+.rt-npc-library-item .rt-charpicker-avatar {
+    position: relative;
+    width: auto;
+    height: 0;
+    min-width: auto;
+    min-height: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    align-self: stretch;
+}
+.rt-npc-library-item .rt-charpicker-avatar img,
+.rt-npc-library-item .rt-charpicker-avatar-placeholder {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.rt-npc-library-item .rt-charpicker-avatar-placeholder {
+    font-size: 36px;
+}
+.rt-npc-library-item .rt-charpicker-info {
+    justify-content: flex-start;
+    align-self: stretch;
+    min-width: 0;
+    height: 0;
+    min-height: 100%;
+    overflow: hidden;
+    padding-top: 2px;
+}
+.rt-npc-library-item .rt-charpicker-desc {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    display: block;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: unset;
+    scrollbar-width: thin;
+    scrollbar-color: #d4a940 transparent;
+}
+.rt-npc-library-item .rt-charpicker-desc::-webkit-scrollbar {
+    width: 6px;
+}
+.rt-npc-library-item .rt-charpicker-desc::-webkit-scrollbar-track {
+    background: transparent;
+}
+.rt-npc-library-item .rt-charpicker-desc::-webkit-scrollbar-thumb {
+    background: #d4a940;
+    border-radius: 3px;
+}
+.rt-npc-library-item .rt-charpicker-desc::-webkit-scrollbar-thumb:hover {
+    background: #e0bc5c;
+}
+.rt-npc-library-item .rt-charpicker-btns {
+    align-self: start;
+    align-items: stretch;
+    width: max-content;
+    min-width: 0;
+}
+.rt-npc-library-item .rt-charpicker-add-btn {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+}
+.rt-npc-library-icon-row {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.rt-npc-library-split-row {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.rt-npc-library-split-row > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.rt-npc-library-icon-row .rt-npc-library-icon-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+.rt-charpicker-add-btn.rt-npc-library-view-btn {
+    background: rgba(212, 169, 64, 0.1);
+    border-color: rgba(212, 169, 64, 0.3);
+    color: #d4a940;
+}
+.rt-charpicker-add-btn.rt-npc-library-view-btn:hover {
+    background: rgba(212, 169, 64, 0.18);
+    border-color: rgba(212, 169, 64, 0.5);
+}
+.rt-charpicker-add-btn.rt-npc-library-party-btn {
+    background: rgba(80, 140, 255, 0.1);
+    border-color: rgba(80, 140, 255, 0.35);
+    color: #7eb0ff;
+}
+.rt-charpicker-add-btn.rt-npc-library-party-btn:hover {
+    background: rgba(80, 140, 255, 0.18);
+    border-color: rgba(80, 140, 255, 0.5);
+}
+.rt-charpicker-add-btn.rt-npc-library-pc-btn {
+    background: rgba(120, 80, 220, 0.12);
+    border-color: rgba(120, 80, 220, 0.4);
+    color: #c4b5fd;
+}
+.rt-charpicker-add-btn.rt-npc-library-pc-btn:hover {
+    background: rgba(120, 80, 220, 0.2);
+    border-color: rgba(120, 80, 220, 0.55);
+}
 .rt-charpicker-load-more {
     text-align: center;
     padding: 8px;
@@ -8039,8 +8196,8 @@ textarea.rt-cr-input {
 }
 .rt-npc-creator-tab {
     flex: 1;
-    padding: 8px 6px;
-    font-size: 10px;
+    padding: 8px 4px;
+    font-size: 9.5px;
     font-weight: bold;
     text-align: center;
     cursor: pointer;
@@ -8068,6 +8225,54 @@ textarea.rt-cr-input {
 }
 .rt-npc-creator-panel.hidden {
     display: none;
+}
+
+.rt-npc-library-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.rt-npc-library-import-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: rgba(212, 169, 64, 0.12);
+    border: 1px solid rgba(212, 169, 64, 0.35);
+    color: #d4a940;
+}
+.rt-npc-library-import-btn:hover {
+    background: rgba(212, 169, 64, 0.2);
+    border-color: rgba(212, 169, 64, 0.5);
+}
+.rt-npc-library-hint {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.45;
+}
+.rt-npc-library-icon-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--rt-text-muted, #aaa);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 4px 7px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.rt-npc-library-icon-btn:hover {
+    color: var(--rt-text, #eee);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+.rt-npc-library-delete-btn:hover {
+    color: #ff5555;
+    border-color: rgba(255, 85, 85, 0.4);
+}
+.rt-npc-action-btn.rt-npc-library:hover {
+    color: #d4a940 !important;
+    border-color: rgba(212, 169, 64, 0.45) !important;
 }
 
 @media screen and (max-width: 800px) {
@@ -8111,6 +8316,27 @@ textarea.rt-cr-input {
     .rt-charpicker-add-btn {
         width: 100%;
         text-align: center;
+    }
+
+    .rt-npc-library-item {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .rt-npc-library-item .rt-charpicker-btns {
+        grid-column: 1 / -1;
+        width: 100%;
+        align-self: stretch;
+    }
+
+    .rt-npc-library-item .rt-charpicker-avatar {
+        width: 96px;
+        height: 96px;
+        min-width: 96px;
+        min-height: 96px;
+        max-width: 96px;
+        max-height: 96px;
+        aspect-ratio: auto;
+        align-self: center;
     }
 }
 

@@ -63,6 +63,7 @@ describe('saveChatState', () => {
         expect(part.npcRelationshipValues).not.toBe(s.npcRelationshipValues);
         expect(part.npcRelationshipLog).toEqual(s.npcRelationshipLog);
         expect(part.npcRelationshipLog).not.toBe(s.npcRelationshipLog);
+        expect(part.npcLibrary).toBeUndefined();
 
         s.npcRelationshipValues['Eldoria_NPCs::7'].friendship = 99;
         expect(part.npcRelationshipValues['Eldoria_NPCs::7'].friendship).toBe(18);

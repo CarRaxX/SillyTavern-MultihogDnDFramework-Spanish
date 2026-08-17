@@ -5,7 +5,7 @@ import { wireAgentMapEvolution } from './panel-map-evolution.js';
 import { wireAgentActivity } from './panel-agent-activity.js';
 import { buildPanelMarkup } from './panel-markup.js';
 import { createSceneViewController } from './panel-scene-view.js';
-import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis } from './card-synopsis.js';
+import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis, getCardLibraryBlurb } from './card-synopsis.js';
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
@@ -13,6 +13,7 @@ import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSecti
 import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { openDungeonMapReadablePopup } from './dungeon-map-panel.js';
+import { buildAddLibraryNpcToPartyPrompt, buildApplyLibraryCardAsPcPrompt, extractLibraryIdentityContent, findLibraryNpcByName, getNpcLibrary, sanitizeNpcLibraryRecords } from '../../../npc-library-lib.js';
 
 /**
  * Resolve ST macros (e.g. {{user}}, {{char}}) for READ-ONLY display of Lorebook Agent
@@ -140,9 +141,12 @@ export function createPanel(dependencies) {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        deleteNpcFromLibrary,
         escapeHtml,
+        exportNpcToFile,
         extractCurrentTimeStr,
         fileToDataUrl,
+        fetchSrcAsDataUrl,
         formatInWorldTime,
         getLorebookManifest,
         getNarrativeBlocks,
@@ -153,6 +157,7 @@ export function createPanel(dependencies) {
         getMapUpdaterTick,
         getSettings,
         handleTrackerEnabledChange,
+        importNpcPackages,
         isMapUpdaterRunning,
         isMapEvolutionRunning,
         isRouterRunning,
@@ -196,6 +201,7 @@ export function createPanel(dependencies) {
         runStateModelPass,
         sanitizeLorebookRecordContent,
         saveChatState,
+        saveNpcToLibrary,
         saveSettings,
         scaleImageTo512Square,
         scaleImageToLandscape,
@@ -961,6 +967,303 @@ export function createPanel(dependencies) {
         });
         const syncAgentImmersionUi = sceneView.syncAgentImmersionUi;
 
+        /**
+         * Copy a campaign NPC or Player Card (CORE + portrait) into the global library.
+         * Identity cards are role-agnostic: a saved PC can later be an NPC, and vice versa.
+         * @param {{ label?: string, name?: string, content?: string, keys?: string[] }} item
+         */
+        const saveCampaignNpcToLibrary = async (item) => {
+            const name = String(item?.label || item?.name || '').trim();
+            if (!name) {
+                toastr['warning']('This card has no name to save.', 'Library');
+                return;
+            }
+            const s = getSettings();
+            const existing = findLibraryNpcByName(s, name);
+            if (existing && !confirm(`"${name}" is already in the Library. Overwrite it?`)) return;
+            try {
+                await saveNpcToLibrary(s, {
+                    name,
+                    content: extractLibraryIdentityContent(item.content || ''),
+                    keys: item.keys || [name],
+                    portraitSrc: resolvePortraitSrcForPlayerCharacter(s, name) || lookupCustomPortraitSrc(s, name) || '',
+                }, { overwriteId: existing?.id });
+                toastr['success'](`Saved "${name}" to the Library.`, 'Library');
+            } catch (err) {
+                toastr['error'](`Failed to save card: ${String(err.message || err).substring(0, 120)}`, 'Library');
+            }
+        };
+
+        const parseNpcSections = (content, isPC = false) => {
+            const sections = { core: {}, dynamic: [] };
+            if (!content) return sections;
+
+            let coreContent = '';
+            let dynamicContent = content;
+
+            const coreMatch = content.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
+            if (coreMatch) {
+                coreContent = coreMatch[1];
+                dynamicContent = content.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '');
+            } else {
+                coreContent = content;
+                dynamicContent = '';
+            }
+
+            const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
+            const escRgx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const customNames = customSecs.map(s => escRgx(s.name.trim())).join('|');
+            const legacyNames = 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|(?<!Friendship\\/)(?<!Affection\\/)Relationship';
+
+            const knownNamesForScan = new Set(customSecs.map(s => s.name.trim().toLowerCase()));
+            const legacySet = new Set(['appearance/species','appearance','personality','brief background','background','habits/behaviors','habits','behaviors','strengths','flaws','relationship']);
+            const inlineSubLabelBlacklist = new Set(['species', 'ethnicity', 'gender', 'age', 'race', 'body type', 'height', 'build']);
+            const discoveredNames = [];
+            for (const rawLine of coreContent.split('\n')) {
+                const hm = rawLine.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:/);
+                if (hm) {
+                    const nm = hm[1].trim();
+                    const nmLc = nm.toLowerCase();
+                    if (!knownNamesForScan.has(nmLc) && !legacySet.has(nmLc) && !inlineSubLabelBlacklist.has(nmLc)) {
+                        discoveredNames.push(escRgx(nm));
+                    }
+                }
+            }
+            const extraNames = discoveredNames.length ? discoveredNames.join('|') : '';
+            const allNamesPattern = [customNames, extraNames, legacyNames].filter(Boolean).join('|');
+            const sectionMarkers = new RegExp(`(?=(?:${allNamesPattern})\\s*:)`, 'gi');
+
+            const normalizedCore = coreContent.replace(sectionMarkers, '\n');
+            const coreLines = normalizedCore.split('\n');
+            let currentSection = 'General';
+
+            const allNamesPatternStart = [customNames, extraNames, 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship'].filter(Boolean).join('|');
+            const sectionPattern = new RegExp(`^(${allNamesPatternStart})\\s*:`, 'i');
+
+            for (const line of coreLines) {
+                const trimmed = line.trim();
+                if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
+                const match = trimmed.match(sectionPattern);
+                if (match) {
+                    currentSection = match[1].replace(/\s*\{\{user\}\}/, '').replace(/\s+with$/i, '').trim();
+                    if (/^Habits/i.test(currentSection) && /Behaviors/i.test(currentSection)) {
+                        currentSection = 'Habits/Behaviors';
+                    } else if (currentSection.toLowerCase() === 'background') {
+                        currentSection = 'Brief Background';
+                    }
+                    const afterColon = trimmed.substring(match[0].length).trim();
+                    if (afterColon) {
+                        if (!sections.core[currentSection]) sections.core[currentSection] = [];
+                        sections.core[currentSection].push(afterColon);
+                    }
+                } else {
+                    if (!sections.core[currentSection]) sections.core[currentSection] = [];
+                    sections.core[currentSection].push(trimmed);
+                }
+            }
+
+            const dynamicLines = dynamicContent.split('\n');
+            for (const line of dynamicLines) {
+                const trimmed = line.trim();
+                if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
+                const timestampOnlyRegex = /^\[[^\]]+\]\s*$/;
+                if (timestampOnlyRegex.test(trimmed)) continue;
+                sections.dynamic.push(trimmed);
+            }
+            return sections;
+        };
+
+        const sectionIcons = {
+            'General': '📋', 'Species': '🧬', 'Body': '👁️', 'Worn Equipment': '🎽', 'Equipment': '🎽',
+            'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
+            'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
+            'Behaviors': '🔄', 'Relationship': '❤️',
+            'Strengths': '⚡', 'Flaws': '⚠️',
+        };
+
+        const getCardAppearanceSynopsis = (content) =>
+            buildCardAppearanceSynopsis(content, substituteDisplayMacros);
+
+        const renderSectionsHtml = (rawContent, isPC = false, options = {}) => {
+            const parsed = parseNpcSections(stripDungeonMapSection(rawContent), isPC);
+            const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
+            let html = '';
+            const coreEntries = Object.entries(parsed.core);
+            if (coreEntries.length > 0) {
+                html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">🛡️ Core Identity</div>`;
+                for (const [name, lines] of coreEntries) {
+                    const config = customSecs.find(s => s.name.trim().toLowerCase() === name.trim().toLowerCase());
+                    const icon = config ? config.icon : (sectionIcons[name] || '📋');
+                    const sectionColor = config ? config.color : (
+                        name === 'Species' ? '#0ea5e9' :
+                            (name === 'Body' || name === 'Appearance/Species' || name === 'Appearance') ? '#d4a940' :
+                                name === 'Worn Equipment' || name === 'Equipment' ? '#f59e0b' :
+                                    name === 'Personality' ? '#8b5cf6' :
+                                name === 'Brief Background' ? '#3b82f6' :
+                                    name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
+                                        name === 'Strengths' ? '#22c55e' :
+                                            name === 'Flaws' ? '#ef4444' :
+                                                'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))'
+                    );
+                    html += `<div style="margin-bottom:18px;">
+                            <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
+                                <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
+                            </div>
+                            <div style="font-size:15px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
+                                ${lines.map(l => escapeHtml(substituteDisplayMacros(l))).join('<br>')}
+                            </div>
+                        </div>`;
+                }
+            }
+            if (!options.omitDynamic && parsed.dynamic.length > 0) {
+                html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-top:24px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">📖 Campaign History &amp; Dynamic Lore</div>`;
+                html += `<div style="font-size:14px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);padding:4px 0 4px 10px;">`;
+                html += parsed.dynamic.map(line => {
+                    const match = line.match(/^(\[.+?\])\s*(.*)/);
+                    if (match) {
+                        return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtml(substituteDisplayMacros(match[2]))}</span></div>`;
+                    }
+                    return `<div style="margin-bottom:8px;">${escapeHtml(substituteDisplayMacros(line))}</div>`;
+                }).join('');
+                html += `</div>`;
+            }
+            return html;
+        };
+
+        const libraryPortraitDisplaySrc = (path) => {
+            if (!path) return '';
+            if (path.startsWith('/') || path.startsWith('data:') || /^https?:/i.test(path)) return path;
+            return `/${path}`;
+        };
+
+        /**
+         * Full NPC Card for a library template (CORE + portrait, no campaign relationship bars).
+         * @param {object} record
+         */
+        const openLibraryNpcCard = async (record) => {
+            const ctx = SillyTavern.getContext();
+            if (!ctx.callGenericPopup || !record) return;
+            const hidePortrait = getSettings().npcPortraits === false;
+            const portraitSrc = libraryPortraitDisplaySrc(record.portraitPath);
+            const keysLabel = Array.isArray(record.keys) && record.keys.length
+                ? record.keys.join(', ')
+                : record.name || '';
+            record.content = extractLibraryIdentityContent(record.content);
+            const sectionsInitialHtml = renderSectionsHtml(record.content, false, { omitDynamic: true })
+                || '<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>';
+            const renderLibraryPopupPortraitInner = (src) => {
+                const imgOrPlaceholder = src
+                    ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(record.name || '')}">`
+                    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;color:var(--SmartThemeBodyColor, inherit);">👤</div>`;
+                return `${imgOrPlaceholder}<div class="rt-npc-portrait-gen-overlay" title="${src ? 'Replace portrait' : 'Set portrait'}" style="font-size:32px;">${src ? '⚙️' : '🎨'}</div>`;
+            };
+
+            const popupDom = document.createElement('div');
+            popupDom.style.cssText = 'width:100%;box-sizing:border-box;padding:24px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);color:var(--SmartThemeBodyColor, inherit);max-height:85vh;overflow-y:auto;';
+            popupDom.innerHTML = `
+                <div style="display:flex;gap:24px;margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;">
+                    ${hidePortrait ? '' : `<div style="flex-shrink:0;width:280px;"><div class="rt-npc-portrait-wrap rt-npc-popup-portrait-wrap" style="width:100%;height:auto;aspect-ratio:1;border-radius:12px;border:2px solid rgba(212,169,64,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.4);">${renderLibraryPopupPortraitInner(portraitSrc)}</div></div>`}
+                    <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                            <div style="font-size:24px;font-weight:bold;color:#d4a940;line-height:1.2;">${escapeHtml(record.name || 'Unnamed NPC')}</div>
+                            <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
+                        </div>
+                        <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;align-self:flex-start;background:rgba(212,169,64,0.12);color:#d4a940;border:1px solid rgba(212,169,64,0.35);">📚 Library</span>
+                        ${keysLabel ? `<div style="font-size:12px;opacity:0.65;">Keywords: ${escapeHtml(keysLabel)}</div>` : ''}
+                    </div>
+                </div>
+                <div style="border-top:2px solid rgba(212,169,64,0.15);padding-top:18px;">
+                    <div class="rt-npc-popup-view">
+                        <div class="rt-npc-popup-sections">${sectionsInitialHtml}</div>
+                    </div>
+                    <div class="rt-npc-popup-edit" style="display:none;flex-direction:column;gap:10px;">
+                        <div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">✏️ Editing Library Entry</div>
+                        <textarea class="rt-npc-popup-textarea" spellcheck="false" style="width:100%;min-height:420px;box-sizing:border-box;background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.3));color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(212,169,64,0.35);border-radius:8px;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                            <button class="rt-npc-popup-cancel-btn menu_button" style="font-size:12px;padding:5px 14px;">Cancel</button>
+                            <button class="rt-npc-popup-save-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(212,169,64,0.2);border-color:rgba(212,169,64,0.5);color:#d4a940;font-weight:bold;">💾 Save</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const viewPane = popupDom.querySelector('.rt-npc-popup-view');
+            const editPane = popupDom.querySelector('.rt-npc-popup-edit');
+            const sectionsDiv = popupDom.querySelector('.rt-npc-popup-sections');
+            const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
+            const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
+            const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
+            const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
+            const popupPortraitWrap = popupDom.querySelector('.rt-npc-popup-portrait-wrap');
+            if (popupPortraitWrap) {
+                popupPortraitWrap.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const refreshLibraryPortrait = () => {
+                        popupPortraitWrap.innerHTML = renderLibraryPopupPortraitInner(
+                            libraryPortraitDisplaySrc(record.portraitPath),
+                        );
+                        document.dispatchEvent(new CustomEvent('rt_npc_library_updated'));
+                    };
+                    await showPortraitSettingsMenu(record.name, refreshLibraryPortrait, record.content || '', {
+                        currentSrc: libraryPortraitDisplaySrc(record.portraitPath),
+                        applyPortrait: async (src) => {
+                            const stored = await saveNpcToLibrary(getSettings(), {
+                                name: record.name,
+                                content: record.content,
+                                keys: record.keys,
+                                portraitSrc: src || '',
+                            }, { overwriteId: record.id });
+                            record.portraitPath = stored.portraitPath || '';
+                            record.content = stored.content;
+                            record.keys = stored.keys;
+                        },
+                    });
+                });
+            }
+
+            editBtn?.addEventListener('click', () => {
+                textarea.value = record.content || '';
+                viewPane.style.display = 'none';
+                editPane.style.display = 'flex';
+                textarea.focus();
+            });
+            cancelBtn?.addEventListener('click', () => {
+                editPane.style.display = 'none';
+                viewPane.style.display = 'block';
+            });
+            saveBtn?.addEventListener('click', async () => {
+                saveBtn.disabled = true;
+                saveBtn.textContent = '…';
+                try {
+                    const stored = await saveNpcToLibrary(getSettings(), {
+                        name: record.name,
+                        content: textarea.value,
+                        keys: record.keys,
+                        portraitSrc: record.portraitPath || '',
+                    }, { overwriteId: record.id });
+                    record.content = stored.content;
+                    record.keys = stored.keys;
+                    record.portraitPath = stored.portraitPath;
+                    const newHtml = renderSectionsHtml(record.content, false, { omitDynamic: true });
+                    sectionsDiv.innerHTML = newHtml
+                        || '<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>';
+                    editPane.style.display = 'none';
+                    viewPane.style.display = 'block';
+                    toastr['success'](`Updated "${record.name}" in the NPC Library.`, 'NPC Library');
+                    document.dispatchEvent(new CustomEvent('rt_npc_library_updated'));
+                } catch (err) {
+                    toastr['error'](`Save failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Library');
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '💾 Save';
+                }
+            });
+
+            await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
+                okButton: 'Close', cancelButton: false, wide: true, large: true,
+            });
+        };
+
         refreshManifest = async (source = 'auto') => {
             const s = getSettings();
             const dungeonRealityEnabled = isLocationMappingEnabled(s);
@@ -987,157 +1290,6 @@ export function createPanel(dependencies) {
             list.innerHTML = '';
             // Helper: escape HTML to prevent XSS and rendering issues
             const escapeHtml = (unsafe) => (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-
-            // Helper: parse NPC/PC content into structured sections for the detail popup
-            const parseNpcSections = (content, isPC = false) => {
-                const sections = { core: {}, dynamic: [] };
-                if (!content) return sections;
-
-                // 1. Extract [CORE] ... [/CORE] block
-                let coreContent = '';
-                let dynamicContent = content;
-
-                const coreMatch = content.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
-                if (coreMatch) {
-                    coreContent = coreMatch[1];
-                    dynamicContent = content.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '');
-                } else {
-                    coreContent = content;
-                    dynamicContent = '';
-                }
-
-                // 2. Parse core sections
-                const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
-                const escRgx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const customNames = customSecs.map(s => escRgx(s.name.trim())).join('|');
-                // Background must not match inside "Brief Background:" (zero-width splitter would
-                // insert a newline before "Background", leaving a stray "Brief" under Personality).
-                const legacyNames = 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|(?<!Friendship\\/)(?<!Affection\\/)Relationship';
-
-                // Discover any lazily-appended fields (e.g. "Combat Profile:") not in the known sets.
-                // Excludes common inline sub-labels (e.g. "Species:", "Ethnicity:", "Gender:") that
-                // models sometimes write as a leading label *inside* the Appearance/Species prose —
-                // those are not real CORE sections and must never be split into their own header.
-                const knownNamesForScan = new Set(customSecs.map(s => s.name.trim().toLowerCase()));
-                const legacySet = new Set(['appearance/species','appearance','personality','brief background','background','habits/behaviors','habits','behaviors','strengths','flaws','relationship']);
-                const inlineSubLabelBlacklist = new Set(['species', 'ethnicity', 'gender', 'age', 'race', 'body type', 'height', 'build']);
-                const discoveredNames = [];
-                for (const rawLine of coreContent.split('\n')) {
-                    const hm = rawLine.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:/);
-                    if (hm) {
-                        const nm = hm[1].trim();
-                        const nmLc = nm.toLowerCase();
-                        if (!knownNamesForScan.has(nmLc) && !legacySet.has(nmLc) && !inlineSubLabelBlacklist.has(nmLc)) {
-                            discoveredNames.push(escRgx(nm));
-                        }
-                    }
-                }
-                const extraNames = discoveredNames.length ? discoveredNames.join('|') : '';
-                const allNamesPattern = [customNames, extraNames, legacyNames].filter(Boolean).join('|');
-                const sectionMarkers = new RegExp(`(?=(?:${allNamesPattern})\\s*:)`, 'gi');
-
-                const normalizedCore = coreContent.replace(sectionMarkers, '\n');
-                const coreLines = normalizedCore.split('\n');
-                let currentSection = 'General';
-
-                const allNamesPatternStart = [customNames, extraNames, 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship'].filter(Boolean).join('|');
-                const sectionPattern = new RegExp(`^(${allNamesPatternStart})\\s*:`, 'i');
-
-                for (const line of coreLines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
-                    const match = trimmed.match(sectionPattern);
-                    if (match) {
-                        currentSection = match[1].replace(/\s*\{\{user\}\}/, '').replace(/\s+with$/i, '').trim();
-
-                        // Normalize section names for consistent rendering
-                        if (/^Habits/i.test(currentSection) && /Behaviors/i.test(currentSection)) {
-                            currentSection = 'Habits/Behaviors';
-                        } else if (currentSection.toLowerCase() === 'background') {
-                            currentSection = 'Brief Background';
-                        }
-
-                        const afterColon = trimmed.substring(match[0].length).trim();
-                        if (afterColon) {
-                            if (!sections.core[currentSection]) sections.core[currentSection] = [];
-                            sections.core[currentSection].push(afterColon);
-                        }
-                    } else {
-                        if (!sections.core[currentSection]) sections.core[currentSection] = [];
-                        sections.core[currentSection].push(trimmed);
-                    }
-                }
-
-                // 3. Parse dynamic updates
-                const dynamicLines = dynamicContent.split('\n');
-                for (const line of dynamicLines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
-                    const timestampOnlyRegex = /^\[[^\]]+\]\s*$/;
-                    if (timestampOnlyRegex.test(trimmed)) continue;
-                    sections.dynamic.push(trimmed);
-                }
-                return sections;
-            };
-
-            const sectionIcons = {
-                'General': '📋', 'Species': '🧬', 'Body': '👁️', 'Worn Equipment': '🎽', 'Equipment': '🎽',
-                'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
-                'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
-                'Behaviors': '🔄', 'Relationship': '❤️',
-                'Strengths': '⚡', 'Flaws': '⚠️',
-            };
-
-            const getCardAppearanceSynopsis = (content) =>
-                buildCardAppearanceSynopsis(content, substituteDisplayMacros);
-
-            const renderSectionsHtml = (rawContent, isPC = false) => {
-                const parsed = parseNpcSections(stripDungeonMapSection(rawContent), isPC);
-                const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
-                let html = '';
-                const coreEntries = Object.entries(parsed.core);
-                if (coreEntries.length > 0) {
-                    html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">🛡️ Core Identity</div>`;
-                    for (const [name, lines] of coreEntries) {
-                        const config = customSecs.find(s => s.name.trim().toLowerCase() === name.trim().toLowerCase());
-                        const icon = config ? config.icon : (sectionIcons[name] || '📋');
-                        const sectionColor = config ? config.color : (
-                            name === 'Species' ? '#0ea5e9' :
-                                (name === 'Body' || name === 'Appearance/Species' || name === 'Appearance') ? '#d4a940' :
-                                    name === 'Worn Equipment' || name === 'Equipment' ? '#f59e0b' :
-                                        name === 'Personality' ? '#8b5cf6' :
-                                    name === 'Brief Background' ? '#3b82f6' :
-                                        name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
-                                            name === 'Strengths' ? '#22c55e' :
-                                                name === 'Flaws' ? '#ef4444' :
-                                                    'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))'
-                        );
-                        html += `<div style="margin-bottom:18px;">
-                                <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
-                                    <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
-                                </div>
-                                <div style="font-size:15px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
-                                    ${lines.map(l => escapeHtml(substituteDisplayMacros(l))).join('<br>')}
-                                </div>
-                            </div>`;
-                    }
-                }
-                if (parsed.dynamic.length > 0) {
-                    html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-top:24px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">📖 Campaign History &amp; Dynamic Lore</div>`;
-                    html += `<div style="font-size:14px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);padding:4px 0 4px 10px;">`;
-                    html += parsed.dynamic.map(line => {
-                        const match = line.match(/^(\[.+?\])\s*(.*)/);
-                        if (match) {
-                            return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtml(substituteDisplayMacros(match[2]))}</span></div>`;
-                        }
-                        return `<div style="margin-bottom:8px;">${escapeHtml(substituteDisplayMacros(line))}</div>`;
-                    }).join('');
-                    html += `</div>`;
-                }
-                return html;
-            };
-
-
 
             try {
                 const s = getSettings();
@@ -1171,6 +1323,7 @@ export function createPanel(dependencies) {
                             <span class="rt-npc-status-badge active" style="background:rgba(120,80,220,0.15);color:#c4b5fd;border:1px solid rgba(120,80,220,0.5);">👤 Player Character</span>
                             <div class="rt-npc-actions">
                                 <button class="rt-npc-action-btn rt-npc-view" title="View PC card"><i class="fa-solid fa-address-card"></i> Full PC Card</button>
+                                <button class="rt-npc-action-btn rt-npc-library" title="Save to Library"><i class="fa-solid fa-bookmark"></i></button>
                                 <button class="rt-npc-action-btn rt-npc-edit" title="Edit PC text"><i class="fa-solid fa-pen-to-square"></i></button>
                                 <button class="rt-npc-action-btn rt-npc-delete" title="Unlink Player Character"><i class="fa-solid fa-link-slash"></i></button>
                             </div>
@@ -1214,6 +1367,7 @@ export function createPanel(dependencies) {
                                         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
                                             <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
                                             <button class="rt-npc-popup-ai-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;background:rgba(120,80,220,0.15);border-color:rgba(120,80,220,0.5);color:#c4b5fd;">✨ Edit with AI</button>
+                                            <button class="rt-npc-popup-library-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">📚 Save to Library</button>
                                         </div>
                                     </div>
                                     <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;align-self:flex-start;background:rgba(120,80,220,0.15);color:#c4b5fd;border:1px solid rgba(120,80,220,0.5);">Player Character</span>
@@ -1256,6 +1410,7 @@ export function createPanel(dependencies) {
                         const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
                         const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
                         const aiEditBtn = popupDom.querySelector('.rt-npc-popup-ai-edit-btn');
+                        const libraryBtn = popupDom.querySelector('.rt-npc-popup-library-btn');
                         const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
                         const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
                         const sectionsDiv = popupDom.querySelector('.rt-npc-popup-sections');
@@ -1281,6 +1436,15 @@ export function createPanel(dependencies) {
                         };
 
                         editBtn.addEventListener('click', startEdit);
+
+                        libraryBtn?.addEventListener('click', async () => {
+                            await saveCampaignNpcToLibrary({
+                                name: pc.name,
+                                label: pc.name,
+                                content: pc.bio || '',
+                                keys: [pc.name],
+                            });
+                        });
 
                         cancelBtn.addEventListener('click', () => showPane(viewPane));
 
@@ -1375,6 +1539,19 @@ export function createPanel(dependencies) {
                         viewBtn.addEventListener('click', async (e) => {
                             e.stopPropagation();
                             await openPcPopup(false);
+                        });
+                    }
+
+                    const libBtn = pcDiv.querySelector('.rt-npc-library');
+                    if (libBtn) {
+                        libBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            await saveCampaignNpcToLibrary({
+                                name: pc.name,
+                                label: pc.name,
+                                content: pc.bio || '',
+                                keys: [pc.name],
+                            });
                         });
                     }
 
@@ -1492,6 +1669,7 @@ export function createPanel(dependencies) {
                             <span class="rt-mf-icon" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace;">${isOpen ? '▼' : '▶'}</span>
                             <span style="font-weight:bold; font-size:11px; flex:1; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(displayName)}</span>
                             <span style="font-size:9px; opacity:0.45; color:var(--rt-text-muted); flex-shrink:0;">${activeCount}/${items.length} (${totalTokens}t)</span>
+                            ${isNpcBook ? '<button type="button" class="rt-npc-manager-btn" title="NPC/PC Manager — library, add to story, import/export"><i class="fa-solid fa-users-gear"></i> NPC/PC Manager</button>' : ''}
                             ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                             ${isLocBook ? '<button class="rt-loc-settings-btn" title="Location Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                         `;
@@ -1507,8 +1685,15 @@ export function createPanel(dependencies) {
                                 else _manifestOpenFolders.delete(bookName);
                             });
 
-                            // NPC settings gear button handler
+                            // NPC/PC Manager + settings gear
                             if (isNpcBook) {
+                                const managerBtn = folderHdr.querySelector('.rt-npc-manager-btn');
+                                if (managerBtn) {
+                                    managerBtn.addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        openNpcCreatorDialog(bookName, prefix);
+                                    });
+                                }
                                 const settingsBtn = folderHdr.querySelector('.rt-npc-settings-btn');
                                 if (settingsBtn) {
                                     settingsBtn.addEventListener('click', async (e) => {
@@ -1969,6 +2154,7 @@ export function createPanel(dependencies) {
                                             <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
                                                 <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
                                                 <button class="rt-npc-popup-ai-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;background:rgba(212,169,64,0.1);border-color:rgba(212,169,64,0.5);color:#d4a940;">✨ Edit with AI</button>
+                                                <button class="rt-npc-popup-library-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">📚 Save to Library</button>
                                             </div>
                                         </div>
                                         <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;align-self:flex-start;${activeStyle}">${activeLabel}</span>
@@ -2020,6 +2206,7 @@ export function createPanel(dependencies) {
                                     const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
                                     const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
                                     const aiEditBtn = popupDom.querySelector('.rt-npc-popup-ai-edit-btn');
+                                    const libraryBtn = popupDom.querySelector('.rt-npc-popup-library-btn');
                                     const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
                                     const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
                                     const aiInstructionsEl = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-ai-instructions'));
@@ -2056,6 +2243,10 @@ export function createPanel(dependencies) {
                                         textarea.value = item.content || '';
                                         npcShowPane(editPane);
                                         textarea.focus();
+                                    });
+
+                                    libraryBtn?.addEventListener('click', async () => {
+                                        await saveCampaignNpcToLibrary(item);
                                     });
 
                                     cancelBtn.addEventListener('click', () => npcShowPane(viewPane));
@@ -2527,6 +2718,7 @@ export function createPanel(dependencies) {
                                     </div>${renderRelTierRow(rel.friendship, rel.affection, getNpcRelationshipMax(s))}` : ''}
                                     <div class="rt-npc-actions">
                                         <button class="rt-npc-action-btn rt-npc-view" data-id="${item.id}" title="View NPC card"><i class="fa-solid fa-address-card"></i> Full NPC Card</button>
+                                        <button class="rt-npc-action-btn rt-npc-library" data-id="${item.id}" title="Save to NPC Library"><i class="fa-solid fa-bookmark"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-pin" data-id="${item.id}" title="${isPinned ? 'Pinned — always active for the Lorebook Agent' : 'Pin — keep this entry permanently active'}" style="${isPinned ? 'color:#34a853;' : ''}"><i class="fa-solid fa-thumbtack"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-edit" data-id="${item.id}" title="Edit entry"><i class="fa-solid fa-pen-to-square"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-clean" data-id="${item.id}" title="Cleanup entry"><i class="fa-solid fa-broom"></i></button>
@@ -2562,7 +2754,7 @@ export function createPanel(dependencies) {
 
                                     // Click card body → toggle inline view
                                     card.addEventListener('click', (e) => {
-                                        if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-wrap, .rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-view, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
+                                        if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-wrap, .rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-view, .rt-npc-library, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
                                         const body = ensureEntryBody();
                                         const opening = body.style.display === 'none';
                                         body.style.display = opening ? 'flex' : 'none';
@@ -2594,6 +2786,12 @@ export function createPanel(dependencies) {
                                     if (viewBtn) viewBtn.addEventListener('click', (e) => {
                                         e.stopPropagation();
                                         openNpcDetailPopup(item, parseRelationship(item.id));
+                                    });
+
+                                    const libBtn = card.querySelector('.rt-npc-library');
+                                    if (libBtn) libBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        await saveCampaignNpcToLibrary(item);
                                     });
 
                                     const editBtn = card.querySelector('.rt-npc-edit');
@@ -2920,6 +3118,7 @@ export function createPanel(dependencies) {
                                         }
                                         if (isNpcBook) {
                                             viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
+                                            viewNpcHtml += `<button class="rt-agent-entry-save-npc" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Save to NPC Library"><i class="fa-solid fa-bookmark"></i></button>`;
                                             if (s.npcRelationshipBars && renderCompactRelStats) {
                                                 relStatsHtml = renderCompactRelStats(node.item.id);
                                             }
@@ -2961,6 +3160,14 @@ export function createPanel(dependencies) {
                                         viewNpcBtn.addEventListener('click', (e) => {
                                             e.stopPropagation();
                                             openNpcDetailPopup(node.item, parseRelationship(node.item.id));
+                                        });
+                                    }
+
+                                    const saveNpcBtn = entryHdr.querySelector('.rt-agent-entry-save-npc');
+                                    if (saveNpcBtn && node.item) {
+                                        saveNpcBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            await saveCampaignNpcToLibrary(node.item);
                                         });
                                     }
 
@@ -3047,7 +3254,7 @@ export function createPanel(dependencies) {
 
                                     if (node.item) {
                                         entryHdr.addEventListener('click', (e) => {
-                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-loc-thumb-wrap')) return;
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-save-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-loc-thumb-wrap')) return;
                                             const opening = entryBody.style.display === 'none';
                                             entryBody.style.display = opening ? 'flex' : 'none';
                                             entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
@@ -3083,17 +3290,6 @@ export function createPanel(dependencies) {
                                 }
 
                             } // end !useNpcCardView
-
-                            if (isNpcBook) {
-                                const addNpcBtn = document.createElement('div');
-                                addNpcBtn.className = 'rt-npc-add-btn';
-                                addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC to Story';
-                                addNpcBtn.addEventListener('click', (e) => {
-                                    e.stopPropagation();
-                                    openNpcCreatorDialog(bookName, prefix);
-                                });
-                                folderBody.appendChild(addNpcBtn);
-                            }
 
                             folder.appendChild(folderHdr);
                             folder.appendChild(folderBody);
@@ -3215,6 +3411,11 @@ export function createPanel(dependencies) {
                 content = `[CORE]\n${coreLines.join('\n')}\n[/CORE]`;
             }
 
+            if (Array.isArray(charCard.keys) && charCard.keys.length) {
+                const overrideKeys = charCard.keys.map(k => String(k || '').trim()).filter(Boolean);
+                if (overrideKeys.length) keys = overrideKeys;
+            }
+
             // Load or create the book
             let bookData = null;
             try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) { }
@@ -3302,19 +3503,32 @@ export function createPanel(dependencies) {
                 await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
             }
 
-            // Embed avatar as portrait (use URL directly to retain original quality and prevent settings bloat)
-            if (charCard.avatar) {
+            // Embed portrait: library/package data URL or path, else ST character avatar
+            let appliedPortrait = false;
+            if (charCard.portraitSrc) {
+                try {
+                    let src = charCard.portraitSrc;
+                    if (!String(src).startsWith('data:image/')) {
+                        try { src = await fetchSrcAsDataUrl(src) || src; } catch (_) { /* keep original path */ }
+                    }
+                    await applyPortraitData(name, src);
+                    appliedPortrait = true;
+                } catch (err) {
+                    console.warn('[RPG Tracker] Failed to apply NPC library portrait:', err);
+                }
+            } else if (charCard.avatar) {
                 try {
                     const avatarUrl = `/characters/${encodeURIComponent(charCard.avatar)}`;
                     await applyPortraitData(name, avatarUrl);
+                    appliedPortrait = true;
                 } catch (err) {
                     console.warn('[RPG Tracker] Failed to embed character avatar as NPC portrait:', err);
                 }
             }
 
-            // Manual "Add NPC to Story" writes do not produce a Lorebook Agent
+            // Manual NPC/PC Manager writes do not produce a Lorebook Agent
             // finish event, so enqueue this newly saved entry directly.
-            if (s.enablePortraits !== false && s.npcPortraits !== false && s.portraitAutoGenerateNpcs) {
+            if (!appliedPortrait && s.enablePortraits !== false && s.npcPortraits !== false && s.portraitAutoGenerateNpcs) {
                 triggerBackgroundPortraitGeneration(name, refreshAll, content);
             }
 
@@ -3688,6 +3902,7 @@ ${namingRule}`;
             }
             document.body.dataset.rtNpcCreatorLoading = '1';
             let overlayAttached = false;
+            let onNpcLibraryUpdated = null;
 
             try {
             const ctx = SillyTavern.getContext();
@@ -3747,12 +3962,18 @@ ${namingRule}`;
             const popup = document.createElement('div');
             popup.className = 'rt-charpicker-popup';
 
-            const dismissOverlay = () => closeNpcCreatorOverlay();
+            const dismissOverlay = () => {
+                if (onNpcLibraryUpdated) {
+                    document.removeEventListener('rt_npc_library_updated', onNpcLibraryUpdated);
+                    onNpcLibraryUpdated = null;
+                }
+                closeNpcCreatorOverlay();
+            };
 
             // Header
             const header = document.createElement('div');
             header.className = 'rt-charpicker-header';
-            header.innerHTML = `<h3>✨ Add NPC to Story</h3>`;
+            header.innerHTML = `<h3>📚 NPC/PC Manager</h3>`;
             const closeBtn = document.createElement('button');
             closeBtn.className = 'rt-charpicker-close';
             closeBtn.textContent = '✕';
@@ -3762,7 +3983,10 @@ ${namingRule}`;
             // Tab bar
             const tabBar = document.createElement('div');
             tabBar.className = 'rt-npc-creator-tabs';
+            const libraryCount = getNpcLibrary(getSettings()).length;
+            const defaultTab = libraryCount > 0 ? 'library' : 'card';
             const tabDefs = [
+                { id: 'library', label: '📚 Library' },
                 { id: 'card', label: '🗂️ From Card' },
                 { id: 'freeform', label: '✍️ Freeform' },
                 { id: 'archetype', label: '🎭 Archetype' },
@@ -3771,13 +3995,13 @@ ${namingRule}`;
             const tabPanels = {};
             for (const { id, label } of tabDefs) {
                 const btn = document.createElement('div');
-                btn.className = 'rt-npc-creator-tab' + (id === 'card' ? ' active' : '');
+                btn.className = 'rt-npc-creator-tab' + (id === defaultTab ? ' active' : '');
                 btn.textContent = label;
                 btn.dataset.tab = id;
                 tabBar.appendChild(btn);
                 tabBtns[id] = btn;
                 const panel = document.createElement('div');
-                panel.className = 'rt-npc-creator-panel' + (id === 'card' ? '' : ' hidden');
+                panel.className = 'rt-npc-creator-panel' + (id === defaultTab ? '' : ' hidden');
                 panel.dataset.panel = id;
                 tabPanels[id] = panel;
             }
@@ -3799,7 +4023,7 @@ ${namingRule}`;
             overlay.addEventListener('click', (e) => { if (e.target === overlay) dismissOverlay(); });
 
             // ── Helper: AI preview + add flow ──────────────────────────────
-            const showNpcPreviewAndAdd = async (generatedTag, defaultName, toastLabel, originalAvatar = null) => {
+            const showNpcPreviewAndAdd = async (generatedTag, defaultName, toastLabel, originalAvatar = null, portraitSrc = null) => {
                 if (!ctx.callGenericPopup) return;
                 const parsed = parseNpcTag(generatedTag);
                 const nameToAdd = parsed ? parsed.name : defaultName;
@@ -3856,7 +4080,7 @@ ${namingRule}`;
                         }
                     }
 
-                    const fakeCard = { name: finalName, avatar: originalAvatar };
+                    const fakeCard = { name: finalName, avatar: originalAvatar, portraitSrc };
                     const ok = await createNpcFromCharCard(fakeCard, bookName, finalContent);
                     if (ok) {
                         toastr['success'](`Added "${finalName}" as NPC.`, toastLabel);
@@ -4174,6 +4398,361 @@ ${namingRule}`;
                 archetypePanel.appendChild(conceptLabel);
                 archetypePanel.appendChild(conceptInput);
                 archetypePanel.appendChild(genBtn);
+            }
+
+            // ── Tab 4: NPC Library ─────────────────────────────────────────
+            {
+                const libraryPanel = tabPanels['library'];
+
+                const toolbar = document.createElement('div');
+                toolbar.className = 'rt-npc-library-toolbar';
+
+                const importBtn = document.createElement('button');
+                importBtn.className = 'rt-npc-library-import-btn';
+                importBtn.innerHTML = '<i class="fa-solid fa-file-import"></i> Import';
+                importBtn.title = 'Import a .mnpc.json NPC package (portrait is embedded in the file)';
+
+                const hint = document.createElement('div');
+                hint.className = 'rt-npc-library-hint';
+                hint.textContent = 'Identity cards are role-agnostic. Add as is or Play as PC; Fit into Story adapts them into the current campaign as an NPC. Add to Party sends a join to the State Tracker.';
+
+                toolbar.appendChild(importBtn);
+                libraryPanel.appendChild(toolbar);
+                libraryPanel.appendChild(hint);
+
+                const searchInput = document.createElement('input');
+                searchInput.className = 'rt-charpicker-search';
+                searchInput.type = 'text';
+                searchInput.placeholder = '🔍 Search library…';
+                searchInput.style.cssText = 'margin:0 0 8px 0;width:100%;box-sizing:border-box;';
+
+                const listContainer = document.createElement('div');
+                listContainer.className = 'rt-charpicker-list';
+                listContainer.style.padding = '0';
+
+                libraryPanel.appendChild(searchInput);
+                libraryPanel.appendChild(listContainer);
+
+                let libraryFilter = '';
+
+                const applyLibraryPortrait = async (name, portraitPath) => {
+                    if (!portraitPath || !name) return;
+                    try {
+                        let src = portraitPath;
+                        if (!String(src).startsWith('data:image/')) {
+                            try { src = await fetchSrcAsDataUrl(src) || src; } catch (_) { /* keep path */ }
+                        }
+                        await applyPortraitData(name, src);
+                    } catch (err) {
+                        console.warn('[RPG Tracker] Failed to apply library portrait:', err);
+                    }
+                };
+
+                const installLibraryCardAsPlayerCharacter = async (rec) => {
+                    const chatId = runtimeState.currentChatId || SillyTavern.getContext()?.chatId;
+                    if (!chatId) {
+                        toastr['warning']('No active chat to attach a Player Card.', 'Library');
+                        return false;
+                    }
+                    const s = getSettings();
+                    if (!s.chatStates) s.chatStates = {};
+                    const existing = s.chatStates[chatId]?.playerCharacter;
+                    if (existing?.name && String(existing.name) !== String(rec.name)) {
+                        if (!confirm(`Replace Player Card "${existing.name}" with "${rec.name}"?`)) return false;
+                    } else if (existing?.name && String(existing.name) === String(rec.name)) {
+                        if (!confirm(`"${rec.name}" is already the Player Card. Overwrite it from the library?`)) return false;
+                    }
+                    if (!s.chatStates[chatId]) s.chatStates[chatId] = {};
+                    s.chatStates[chatId].playerCharacter = {
+                        name: rec.name,
+                        bio: rec.content || '',
+                        wordCount: existing?.wordCount || 150,
+                        timestamp: Date.now(),
+                    };
+                    if (typeof saveChatState === 'function') saveChatState(chatId);
+                    await applyLibraryPortrait(rec.name, rec.portraitPath);
+                    toastr['info'](`Setting "${rec.name}" as Player Card and updating [CHARACTER]…`, 'Library');
+                    const result = await sendDirectPrompt(buildApplyLibraryCardAsPcPrompt(rec));
+                    if (typeof refreshAgentManifestNow === 'function') await refreshAgentManifestNow();
+                    if (typeof refreshRenderedView === 'function') refreshRenderedView();
+                    if (result?.success) {
+                        dismissOverlay();
+                        return true;
+                    }
+                    if (result?.status !== 'busy') {
+                        toastr['warning'](`Player Card was set. State Tracker did not update [CHARACTER]: ${result?.message || 'no changes'}.`, 'Library');
+                    }
+                    return true;
+                };
+
+                const renderLibraryList = () => {
+                    listContainer.innerHTML = '';
+                    const s = getSettings();
+                    if (sanitizeNpcLibraryRecords(s)) saveSettings();
+                    const records = getNpcLibrary(s)
+                        .slice()
+                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+                    const filtered = libraryFilter
+                        ? records.filter(r => String(r.name || '').toLowerCase().includes(libraryFilter))
+                        : records;
+
+                    if (records.length === 0) {
+                        listContainer.innerHTML = '<div class="rt-charpicker-empty">Library is empty. Bookmark an NPC in Campaign Records, or import a package.</div>';
+                        return;
+                    }
+                    if (filtered.length === 0) {
+                        listContainer.innerHTML = '<div class="rt-charpicker-empty">No library NPCs match your search.</div>';
+                        return;
+                    }
+
+                    for (const rec of filtered) {
+                        const item = document.createElement('div');
+                        item.className = 'rt-charpicker-item rt-npc-library-item';
+                        item.title = 'Open Full Card';
+
+                        const avatarDiv = document.createElement('div');
+                        avatarDiv.className = 'rt-charpicker-avatar';
+                        if (rec.portraitPath) {
+                            const img = document.createElement('img');
+                            img.src = rec.portraitPath.startsWith('/') || rec.portraitPath.startsWith('data:')
+                                ? rec.portraitPath
+                                : `/${rec.portraitPath}`;
+                            img.loading = 'lazy';
+                            img.alt = rec.name;
+                            img.onerror = () => {
+                                img.replaceWith(Object.assign(document.createElement('div'), {
+                                    className: 'rt-charpicker-avatar-placeholder',
+                                    textContent: '👤',
+                                }));
+                            };
+                            avatarDiv.appendChild(img);
+                        } else {
+                            avatarDiv.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
+                        }
+
+                        const infoDiv = document.createElement('div');
+                        infoDiv.className = 'rt-charpicker-info';
+                        const nameEl = document.createElement('div');
+                        nameEl.className = 'rt-charpicker-name';
+                        nameEl.textContent = rec.name || 'Unnamed';
+                        const descEl = document.createElement('div');
+                        descEl.className = 'rt-charpicker-desc';
+                        descEl.textContent = getCardLibraryBlurb(rec.content, substituteDisplayMacros) || 'No description';
+                        infoDiv.appendChild(nameEl);
+                        infoDiv.appendChild(descEl);
+
+                        const btnsDiv = document.createElement('div');
+                        btnsDiv.className = 'rt-charpicker-btns';
+
+                        const viewBtn = document.createElement('button');
+                        viewBtn.className = 'rt-charpicker-add-btn rt-npc-library-view-btn';
+                        viewBtn.innerHTML = '<i class="fa-solid fa-address-card"></i> Full Card';
+                        viewBtn.title = 'View the full library card (CORE identity and portrait)';
+                        viewBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            openLibraryNpcCard(rec);
+                        });
+
+                        const addBtn = document.createElement('button');
+                        addBtn.className = 'rt-charpicker-add-btn direct';
+                        addBtn.textContent = '+ Add as is';
+                        addBtn.title = 'Copy this identity into the current story as an NPC, including portrait.';
+                        addBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            addBtn.disabled = true;
+                            addBtn.textContent = '⏳ Adding...';
+                            try {
+                                const fakeCard = {
+                                    name: rec.name,
+                                    keys: rec.keys,
+                                    portraitSrc: rec.portraitPath || '',
+                                };
+                                const ok = await createNpcFromCharCard(fakeCard, bookName, rec.content);
+                                if (ok) {
+                                    toastr['success'](`Added "${rec.name}" as NPC.`, 'Library');
+                                    dismissOverlay();
+                                    await refreshManifest();
+                                }
+                            } catch (err) {
+                                toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'Library');
+                            } finally {
+                                addBtn.disabled = false;
+                                addBtn.textContent = '+ Add as is';
+                            }
+                        });
+
+                        const aiBtn = document.createElement('button');
+                        aiBtn.className = 'rt-charpicker-add-btn ai-adapt';
+                        aiBtn.textContent = '🤖 Fit into Story';
+                        aiBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            aiBtn.disabled = true;
+                            aiBtn.textContent = '⏳ Adapting...';
+                            try {
+                                const adapted = await adaptNpcWithAI({
+                                    name: rec.name,
+                                    description: rec.content,
+                                    personality: '',
+                                });
+                                if (!adapted) { aiBtn.disabled = false; aiBtn.textContent = '🤖 Fit into Story'; return; }
+                                await showNpcPreviewAndAdd(adapted, rec.name, 'NPC Library', null, rec.portraitPath || '');
+                            } catch (err) {
+                                toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Library');
+                            } finally {
+                                aiBtn.disabled = false;
+                                aiBtn.textContent = '🤖 Fit into Story';
+                            }
+                        });
+
+                        const partyBtn = document.createElement('button');
+                        partyBtn.className = 'rt-charpicker-add-btn rt-npc-library-party-btn';
+                        partyBtn.textContent = '+ Add to Party';
+                        partyBtn.title = 'Send this card to the State Tracker so they join [PARTY].';
+                        partyBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            partyBtn.disabled = true;
+                            partyBtn.textContent = '⏳ Adding...';
+                            try {
+                                toastr['info'](`Adding "${rec.name}" to the party via State Tracker…`, 'Library');
+                                const result = await sendDirectPrompt(buildAddLibraryNpcToPartyPrompt(rec));
+                                if (result?.success && result.changed) {
+                                    await applyLibraryPortrait(rec.name, rec.portraitPath);
+                                    if (typeof refreshRenderedView === 'function') refreshRenderedView();
+                                    dismissOverlay();
+                                } else if (!result?.success && result?.status !== 'busy') {
+                                    toastr['error'](result?.message || 'State Tracker did not add the party member.', 'Library');
+                                }
+                            } catch (err) {
+                                toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'Library');
+                            } finally {
+                                partyBtn.disabled = false;
+                                partyBtn.textContent = '+ Add to Party';
+                            }
+                        });
+
+                        const pcBtn = document.createElement('button');
+                        pcBtn.className = 'rt-charpicker-add-btn rt-npc-library-pc-btn';
+                        pcBtn.textContent = '▶ Play as PC';
+                        pcBtn.title = 'Make this identity the Player Card and ask the State Tracker to swap [CHARACTER].';
+                        pcBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            pcBtn.disabled = true;
+                            pcBtn.textContent = '⏳ Setting...';
+                            try {
+                                await installLibraryCardAsPlayerCharacter(rec);
+                            } catch (err) {
+                                toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'Library');
+                            } finally {
+                                pcBtn.disabled = false;
+                                pcBtn.textContent = '▶ Play as PC';
+                            }
+                        });
+
+                        const exportBtn = document.createElement('button');
+                        exportBtn.className = 'rt-npc-library-icon-btn';
+                        exportBtn.innerHTML = '<i class="fa-solid fa-file-export"></i>';
+                        exportBtn.title = 'Export as .mnpc.json (includes portrait)';
+                        exportBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            try {
+                                const hadPortrait = await exportNpcToFile(rec);
+                                if (hadPortrait) {
+                                    toastr['success'](`Exported "${rec.name}" with portrait.`, 'NPC Library');
+                                } else if (rec.portraitPath) {
+                                    toastr['warning'](`Exported "${rec.name}" without portrait (image could not be read).`, 'NPC Library');
+                                } else {
+                                    toastr['success'](`Exported "${rec.name}".`, 'NPC Library');
+                                }
+                            } catch (err) {
+                                toastr['error'](`Export failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Library');
+                            }
+                        });
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'rt-npc-library-icon-btn rt-npc-library-delete-btn';
+                        delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                        delBtn.title = 'Remove from library';
+                        delBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            if (!confirm(`Remove "${rec.name}" from the Library? This does not delete them from the current story.`)) return;
+                            try {
+                                await deleteNpcFromLibrary(getSettings(), rec.id);
+                                toastr['info'](`Removed "${rec.name}" from the library.`, 'NPC Library');
+                                renderLibraryList();
+                            } catch (err) {
+                                toastr['error'](`Delete failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Library');
+                            }
+                        });
+
+                        const roleRow = document.createElement('div');
+                        roleRow.className = 'rt-npc-library-split-row';
+                        roleRow.appendChild(addBtn);
+                        roleRow.appendChild(pcBtn);
+
+                        const iconRow = document.createElement('div');
+                        iconRow.className = 'rt-npc-library-icon-row';
+                        iconRow.appendChild(exportBtn);
+                        iconRow.appendChild(delBtn);
+
+                        btnsDiv.appendChild(viewBtn);
+                        btnsDiv.appendChild(aiBtn);
+                        btnsDiv.appendChild(roleRow);
+                        btnsDiv.appendChild(partyBtn);
+                        btnsDiv.appendChild(iconRow);
+                        item.appendChild(avatarDiv);
+                        item.appendChild(infoDiv);
+                        item.appendChild(btnsDiv);
+                        item.addEventListener('click', (e) => {
+                            if (e.target.closest('.rt-charpicker-btns, button, a, input')) return;
+                            openLibraryNpcCard(rec);
+                        });
+                        listContainer.appendChild(item);
+                    }
+                };
+
+                let searchTimeout = null;
+                searchInput.addEventListener('input', () => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        libraryFilter = searchInput.value.trim().toLowerCase();
+                        renderLibraryList();
+                    }, 200);
+                });
+
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.json,.mnpc.json,application/json';
+                fileInput.multiple = true;
+                fileInput.style.display = 'none';
+                libraryPanel.appendChild(fileInput);
+
+                importBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    fileInput.click();
+                });
+                fileInput.addEventListener('change', async () => {
+                    const files = [...(fileInput.files || [])];
+                    fileInput.value = '';
+                    if (!files.length) return;
+                    let imported = 0;
+                    for (const file of files) {
+                        try {
+                            const text = await file.text();
+                            const stored = await importNpcPackages(getSettings(), text);
+                            imported += stored.length;
+                        } catch (err) {
+                            toastr['error'](`${file.name}: ${String(err.message || err).substring(0, 120)}`, 'NPC Library');
+                        }
+                    }
+                    if (imported > 0) {
+                        toastr['success'](`Imported ${imported} NPC${imported === 1 ? '' : 's'}.`, 'NPC Library');
+                        renderLibraryList();
+                    }
+                });
+
+                onNpcLibraryUpdated = () => renderLibraryList();
+                document.addEventListener('rt_npc_library_updated', onNpcLibraryUpdated);
+                renderLibraryList();
             }
 
             // Add to DOM
