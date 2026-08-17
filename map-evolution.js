@@ -23,6 +23,7 @@ import {
     appendEvolutionBacklogEntry,
     appendEvolutionThreads,
     applyCompressedThreadDigests,
+    buildReportOutcomeStamps,
     describeEvolutionBacklog,
     describeEvolutionThreads,
     describeEvolutionTimeWindow,
@@ -59,6 +60,7 @@ import {
 export {
     appendEvolutionBacklogEntry,
     appendEvolutionThreads,
+    buildReportOutcomeStamps,
     describeEvolutionBacklog,
     describeEvolutionThreads,
     describeEvolutionTimeWindow,
@@ -301,18 +303,6 @@ function formatEvolutionBacklog(backlog) {
     return `Recent trajectory represented, including the current gap: ${backlog.representedElapsed}
 Quiet time accumulated since the most recent material commit, including the current gap: ${backlog.quietElapsed}
 ${backlog.truncated ? '(Only the most recent bounded portion of the trajectory is shown.)\n' : ''}${history}`;
-}
-
-function normalizeReportOutcomes(rawOutcomes, reports, fallbackStatus, digest = '') {
-    const allowed = new Set(['materialized', 'already_realized_by_play', 'considered']);
-    const supplied = new Map((Array.isArray(rawOutcomes) ? rawOutcomes : [])
-        .map(outcome => [String(outcome?.report_id || '').trim(), String(outcome?.status || '').trim()])
-        .filter(([reportId, status]) => reportId && allowed.has(status)));
-    return (reports || []).map(report => ({
-        reportId: report.reportId,
-        status: supplied.get(report.reportId) || fallbackStatus,
-        localDigest: String(digest || '').trim(),
-    }));
 }
 
 function stampReportOutcomes(settings, siteRoot, outcomes, consideredAt) {
@@ -567,10 +557,10 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
                 ok: true,
                 noop: true,
                 siteRoot: site.siteRoot,
-                reportOutcomes: normalizeReportOutcomes(
+                reportOutcomes: buildReportOutcomeStamps(
                     parsed.value.report_outcomes,
                     worldReports,
-                    'considered',
+                    { noop: true },
                 ),
                 timeWindow,
             };
@@ -623,11 +613,10 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
             transaction,
             digestLine: summarizeEvolutionDigest(site.siteRoot, transaction),
             timeWindow,
-            reportOutcomes: normalizeReportOutcomes(
+            reportOutcomes: buildReportOutcomeStamps(
                 rawReportOutcomes,
                 worldReports,
-                'considered',
-                summarizeEvolutionDigest(site.siteRoot, transaction),
+                { digest: summarizeEvolutionDigest(site.siteRoot, transaction) },
             ),
         };
     }
@@ -803,6 +792,11 @@ export async function runMapEvolutionPass({
         broadcastStep('finish', `Map Evolution: ${applied} applied, ${noops} noop, ${failed} failed.`);
         return { ok: failed === 0, results, applied, noops, failed };
     } catch (error) {
+        // Finished sites already wrote map commits to the lorebook and stamped
+        // Last Evolved / report applications / backlog in memory. Persist that
+        // bookkeeping on abort or throw so a later hydrate cannot re-due a site
+        // whose map was already mutated.
+        try { persistMapEvolutionState(); } catch (_) { /* best-effort */ }
         if (error?.name === 'AbortError') {
             console.log('[RPG Tracker] Map Evolution aborted by user.');
             if (_mapEvolutionRunning) broadcastStep('error', 'Stopped by user.');
