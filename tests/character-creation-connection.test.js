@@ -93,6 +93,6 @@ describe('shared Character Creation connection', () => {
 
         expect(creator.match(/connectionSettings: getCharacterCreationConnectionSettings\(s\)/g)?.length).toBeGreaterThanOrEqual(3);
         expect(cards.match(/connectionSettings: getCharacterCreationConnectionSettings\(getSettings\(\)\)/g)?.length).toBe(3);
-        expect(index).toContain('sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt)');
+        expect(index).toContain('sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true })');
     });
 });

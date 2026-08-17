@@ -25,6 +25,7 @@ describe('Map Architect component', () => {
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         expect(defaults).toContain('mapArchitectMaxTokens: 25000');
         expect(architect).toContain('Number(settings.mapArchitectMaxTokens) || 25000');
+        expect(architect).toContain('stream: true');
         expect(index).toContain('settings.mapArchitectMaxTokens ?? 25000');
         expect(index).toContain('Math.min(32000, parseInt(String($(this).val()), 10) || 25000)');
         expect(profiles).toContain('mapArchitectMaxTokens: s.mapArchitectMaxTokens ?? 25000');
@@ -58,7 +59,7 @@ describe('Map Architect component', () => {
         expect(architect).toContain('persistArchitectDungeonMap');
         expect(architect).toContain('mapArchitectConnectionSource');
         expect(architect).not.toContain('mapRuntimeConnectionSource');
-        expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA }');
+        expect(architect).toContain('{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true }');
         expect(architect).toContain('CreateAreaMap');
         expect(architect).not.toContain('CreateDungeonMap');
         expect(architect).toContain('Location map ready for');

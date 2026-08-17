@@ -2412,7 +2412,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     suffix;
             }
 
-            const result = await sendStateRequest(settings, systemPrompt, userPrompt);
+            const result = await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true });
 
             if (result && typeof result === 'string') {
                 if (settings.debugMode) console.log(`[RPG Tracker] Raw Result (Chunk ${i + 1}):`, result);
@@ -2658,7 +2658,7 @@ export async function sendDirectPrompt(message, options = {}) {
             `## USER INSTRUCTION\n${message}\n\n` +
             `## OUTPUT ONLY CHANGED OR NEW SECTIONS:`;
 
-        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt);
+        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true });
 
         if (result && typeof result === 'string') {
             let cleanedOutput = result;

@@ -161,4 +161,65 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
 
         expect(capturedOverride.custom_url).toBe('http://127.0.0.1:1234/v1');
     });
+
+    it('streams keep-alive jobs so provider idle timeouts cannot drop a finished reply', async () => {
+        let capturedOptions = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            ConnectionManagerRequestService: {
+                getProfile: () => ({ preset: '' }),
+                sendRequest: async (_profileId, _messages, _maxTokens, options) => {
+                    capturedOptions = options;
+                    return async function* () {
+                        yield { text: 'Hel' };
+                        yield { text: 'Hello map' };
+                    };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1' },
+            'system prompt',
+            'user prompt',
+            null,
+            { stream: true },
+        );
+
+        expect(capturedOptions.stream).toBe(true);
+        expect(result).toBe('Hello map');
+    });
+
+    it('streams Main API Chat Completion instead of quiet generateRaw when asked', async () => {
+        let usedRaw = false;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            chatCompletionSettings: { chat_completion_source: 'nanogpt', nanogpt_model: 'gemini-pro' },
+            generateRaw: async () => {
+                usedRaw = true;
+                throw new Error('quiet generateRaw must not be used for keep-alive jobs');
+            },
+            ChatCompletionService: {
+                processRequest: async (data) => {
+                    expect(data.stream).toBe(true);
+                    expect(data.model).toBe('gemini-pro');
+                    return async function* () {
+                        yield { text: '{"ok":true}' };
+                    };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { stream: true },
+        );
+
+        expect(usedRaw).toBe(false);
+        expect(result).toBe('{"ok":true}');
+    });
 });

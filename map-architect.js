@@ -154,7 +154,7 @@ async function runMapArchitectOnce(rawArgs) {
             systemPrompt,
             prompt,
             null,
-            { jsonSchema: MAP_ARCHITECT_JSON_SCHEMA },
+            { jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true },
         );
         const parsed = parseMapArchitectResponse(output);
         const validation = parsed.value

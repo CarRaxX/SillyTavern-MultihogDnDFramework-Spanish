@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.0.1] - 2026-08-17
+
+### Fixed
+- **Long Map Architect / Map Evolution / State Tracker jobs**: those requests now stream so OpenRouter, nano-gpt, and similar gateways cannot idle-cut the HTTP wait at ~60s and then drop a reply the model already finished. There is no Multihog generation timeout setting.
+
 ## [8.0.0] - 2026-08-17
 
 ### Added

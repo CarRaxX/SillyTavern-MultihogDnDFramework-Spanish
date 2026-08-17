@@ -546,7 +546,7 @@ The Adventure Companion cannot flip the Components checkbox or open Visuals/Map 
 ### How a map is created
 
 1. The narrator calls `CreateAreaMap` **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`).
-2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map. Map Architect, Map Updater, and Map Evolution output budgets default to 25,000 tokens and remain configurable.
+2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map. Map Architect, Map Updater, and Map Evolution output budgets default to 25,000 tokens and remain configurable. Map Architect and Map Evolution stream their replies — there is no Multihog idle timeout — so a long OpenRouter / nano-gpt job is not dropped after ~60s of silence while the model is still writing.
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 

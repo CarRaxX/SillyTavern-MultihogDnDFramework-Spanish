@@ -687,6 +687,7 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('listMappedEvolutionSites');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
+        expect(evolution).toContain('stream: true');
         expect(evolution).toContain('OPEN CAUSAL THREADS (THIS SITE)');
         expect(evolution).toContain('settings.mapEvolutionThreadsBySite');
         expect(evolution).toContain('Field reminder: Every operation needs cause');
