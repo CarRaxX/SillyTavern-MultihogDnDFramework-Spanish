@@ -26,6 +26,7 @@ import {
     uniqueLibraryNpcName,
     upsertLibraryNpc,
     removeLibraryNpcRecord,
+    resolveLibraryPortraitUpdate,
 } from './npc-library-lib.js';
 
 export * from './npc-library-lib.js';
@@ -88,6 +89,7 @@ export async function deleteLibraryPortraitIfOrphan(settings, path) {
 /**
  * Save a campaign NPC (or imported package) into the global library.
  * Copies the portrait into library storage so campaign and library stay independent.
+ * Omit `portraitSrc` to keep an existing library portrait; pass `''` to clear it.
  */
 export async function saveNpcToLibrary(settings, { name, content, keys, portraitSrc, notes } = {}, { overwriteId } = {}) {
     const s = settings || getSettings();
@@ -98,14 +100,17 @@ export async function saveNpcToLibrary(settings, { name, content, keys, portrait
     const targetId = overwriteId || existing?.id;
     const previousPath = existing?.portraitPath || '';
 
-    let portraitPath = '';
-    if (portraitSrc) {
+    const portraitUpdate = resolveLibraryPortraitUpdate(previousPath, portraitSrc);
+    let portraitPath = previousPath;
+    if (portraitUpdate.kind === 'replace') {
         try {
             portraitPath = await persistLibraryPortrait(portraitSrc, name);
         } catch (err) {
             console.warn('[RPG Tracker] NPC library portrait copy failed:', err);
             portraitPath = previousPath;
         }
+    } else {
+        portraitPath = portraitUpdate.path;
     }
 
     const record = createLibraryRecord({

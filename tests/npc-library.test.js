@@ -16,6 +16,7 @@ import {
     upsertLibraryNpc,
     buildAddLibraryNpcToPartyPrompt,
     buildApplyLibraryCardAsPcPrompt,
+    resolveLibraryPortraitUpdate,
 } from '../npc-library-lib.js';
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -87,6 +88,15 @@ She sold them a coil of rope.`;
         expect(removeLibraryNpcRecord(s, rec.id)?.name).toBe('Odran');
         expect(s.npcLibrary).toHaveLength(0);
         expect(findLibraryNpcByName(s, 'Odran')).toBeNull();
+    });
+
+    it('keeps an existing library portrait when portraitSrc is omitted on overwrite', () => {
+        expect(resolveLibraryPortraitUpdate('user/images/old.png', undefined))
+            .toEqual({ kind: 'set', path: 'user/images/old.png' });
+        expect(resolveLibraryPortraitUpdate('user/images/old.png', ''))
+            .toEqual({ kind: 'set', path: '' });
+        expect(resolveLibraryPortraitUpdate('user/images/old.png', 'data:image/png;base64,abc'))
+            .toEqual({ kind: 'replace' });
     });
 });
 
