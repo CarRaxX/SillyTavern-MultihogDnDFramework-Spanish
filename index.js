@@ -2793,6 +2793,7 @@ function loadProfile(name) {
 
     s.mapArchitectLookback = p.mapArchitectLookback ?? 12;
     s.mapArchitectMaxTokens = p.mapArchitectMaxTokens ?? 25000;
+    s.mapArchitectOpener = p.mapArchitectOpener === 'text' ? 'text' : 'tool';
     s.mapArchitectSystemPrompt = p.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
     s.mapArchitectConnectionSource = p.mapArchitectConnectionSource ?? "default";
     s.mapArchitectConnectionProfileId = p.mapArchitectConnectionProfileId || "";
@@ -5265,6 +5266,12 @@ function organizeConnectionSettingsUI() {
             keyPrefix: 'mapRuntime',
             settings,
             presetManager: pm,
+        });
+        $(`input[name="rpg_map_architect_opener"][value="${settings.mapArchitectOpener === 'text' ? 'text' : 'tool'}"]`).prop('checked', true);
+        $('input[name="rpg_map_architect_opener"]').on('change', function () {
+            settings.mapArchitectOpener = String($(this).val() || 'tool') === 'text' ? 'text' : 'tool';
+            saveSettings();
+            scheduleAutoApply();
         });
         $('#rpg_map_architect_lookback').val(settings.mapArchitectLookback ?? 12).on('change', function () {
             settings.mapArchitectLookback = Math.max(0, Math.min(100, parseInt(String($(this).val()), 10) || 0));
@@ -11292,6 +11299,7 @@ RULES:
             $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
 
             // Persistent Maps
+            $(`input[name="rpg_map_architect_opener"][value="${s.mapArchitectOpener === 'text' ? 'text' : 'tool'}"]`).prop('checked', true);
             $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
             $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
             $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);

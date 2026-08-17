@@ -1310,6 +1310,8 @@ Rules:
 
         mapArchitectMaxTokens: 25000,
 
+        mapArchitectOpener: "tool",
+
         mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
 
         mapArchitectConnectionSource: "default",

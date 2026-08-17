@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.0.3] - 2026-08-17
+
+### Added
+- **Persistent Maps text-command opener**: Settings → Persistent Maps → Map Architect can use **Text command** instead of `CreateAreaMap` when function calling is unavailable. The narrator emits `[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]` and stops; Map Architect runs, the fence is stripped, and narration continues from the entrance. The tool-call opener remains the default.
+
 ## [8.0.2] - 2026-08-17
 
 ### Changed

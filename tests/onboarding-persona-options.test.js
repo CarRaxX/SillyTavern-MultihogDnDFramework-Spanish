@@ -98,7 +98,8 @@ describe('onboarding Player Card and ST persona options', () => {
         expect(functionIndex).toBeGreaterThan(setupIndex);
         expect(narratorCardIndex).toBeGreaterThan(functionIndex);
         expect(instantIndex).toBeGreaterThan(narratorCardIndex);
-        expect(html).toContain('Persistent Maps will not work');
+        expect(html).toContain('Text command');
+        expect(html).toContain('CreateAreaMap');
         expect(html).toContain('connection settings');
         expect(html).not.toContain('Leave the card fields empty');
     });

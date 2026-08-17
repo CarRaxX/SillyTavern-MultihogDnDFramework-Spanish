@@ -133,6 +133,7 @@ export function saveProfile(name) {
         portraitOpenaiModel: s.portraitOpenaiModel || "",
         mapArchitectLookback: s.mapArchitectLookback ?? 12,
         mapArchitectMaxTokens: s.mapArchitectMaxTokens ?? 25000,
+        mapArchitectOpener: s.mapArchitectOpener || 'tool',
         mapArchitectSystemPrompt: s.mapArchitectSystemPrompt || "",
         mapArchitectConnectionSource: s.mapArchitectConnectionSource ?? "default",
         mapArchitectConnectionProfileId: s.mapArchitectConnectionProfileId || "",

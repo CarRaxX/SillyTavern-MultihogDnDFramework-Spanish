@@ -2373,7 +2373,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-setup-guide">
                     <b class="rt-onboarding-setup-title">Initial Setup:</b>
                     <ol class="rt-onboarding-setup-list">
-                        <li>Ensure <b>Function Calling</b> is enabled in your Chat Completion preset. Otherwise Persistent Maps will not work. It's quite an important feature, so you're missing out if you don't have it. You <i>can</i> turn it off, though, in the Game Systems settings. Function calling is also required for Hybrid RNG (RollTheDice tool).</li>
+                        <li>Ensure <b>Function Calling</b> is enabled in your Chat Completion preset if you want Hybrid RNG tool rolls and the default Persistent Maps opener (<b>CreateAreaMap</b>). You can skip function calling: set Persistent Maps → Map Architect opener to <b>Text command</b>, and use Pre-Seeded RNG. You <i>can</i> turn Persistent Maps off in Game Systems / Components.</li>
                         <li>Set up your connections in the extension's connection settings. I recommend a lightweight, relatively fast and cheap model for everything but the main narrator/GM. More on that below.</li>
                         <li>Create a character card for your "narrator" (e.g. Game Master). Leave the card content empty, as the framework handles all logic via the system/Main ST prompt.</li>
                         <li>Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to get started quicker.</li>
@@ -2480,7 +2480,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
                             <span>⛺ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled.">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. New maps need CreateAreaMap (function calling) or the text-command opener under Persistent Maps → Map Architect.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
                             <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>

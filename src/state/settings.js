@@ -1126,6 +1126,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
     'mapArchitectMaxTokensFloored',
+    'mapArchitectOpener',
     'mapArchitectSystemPrompt',
     'mapArchitectConnectionSource',
     'mapArchitectConnectionProfileId',

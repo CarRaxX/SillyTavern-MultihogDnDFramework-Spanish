@@ -50,7 +50,9 @@ describe('Map Architect component', () => {
         expect(hooks).toContain("unregisterFunctionTool('CreateDungeonMap')");
         expect(hooks).toContain("enum: ['DUNGEON', 'SETTLEMENT']");
         expect(hooks).toContain('Generating a location map for');
-        expect(hooks).toContain('isLocationMappingEnabled(settings)');
+        expect(hooks).toContain('isMapArchitectTextOpener(settings)');
+        expect(hooks).toContain("ctx.generate('continue')");
+        expect(hooks).toContain('maybeRunMapArchitectTextOpener');
         expect(hooks).toContain('export function syncLocationMappingRuntime()');
         expect(hooks).toContain('stopMapUpdaterPass()');
         expect(hooks).toContain('stopMapEvolutionPass()');

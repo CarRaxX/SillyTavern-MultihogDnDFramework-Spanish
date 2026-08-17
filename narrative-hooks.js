@@ -31,6 +31,7 @@ import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/stat
 import {
     buildDungeonRealityInjection,
     findLatestDungeonLocation,
+    getDungeonMessageText,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
     resolveActiveDungeonSite,
@@ -38,9 +39,16 @@ import {
     stripDungeonRealityBlocksFromPrompt,
 } from './dungeon-reality.js';
 import { runMapArchitect } from './map-architect.js';
+import {
+    createAreaMapCommandIsComplete,
+    isMapArchitectTextOpener,
+    stripCreateAreaMapCommand,
+} from './map-architect-opener.js';
 export { isPercentFormula, resolveDiceCompare };
 
 const dungeonMissingMapWarnings = new Set();
+let _pendingMapArchitectResult = null;
+let _mapArchitectTextOpenerBusy = false;
 
 /** Keep mapped root lore visible to LA exactly while its location root is active. */
 function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation) {
@@ -516,6 +524,7 @@ export function registerMapArchitectTool() {
 
         const settings = getSettings();
         if (!isLocationMappingEnabled(settings)) return;
+        if (isMapArchitectTextOpener(settings)) return;
         registerFunctionTool({
             name: 'CreateAreaMap',
             displayName: 'Map Architect',
@@ -1071,6 +1080,12 @@ export function installInterceptor() {
                     console.error(`[RPG Tracker] Dungeon Reality is enabled and the party appears to be inside "${currentLocation}", but no captured site map is available. Adjudication is missing its objective map until the GM emits a valid <div hidden> map with a footer location.`);
                 }
             }
+        }
+        if (_pendingMapArchitectResult) {
+            dungeonInjection = dungeonInjection
+                ? `${_pendingMapArchitectResult}\n\n${dungeonInjection}`
+                : _pendingMapArchitectResult;
+            _pendingMapArchitectResult = null;
         }
         const _rbLastAi = _rbChat ? [..._rbChat].reverse().find(m => !m.is_user && !m.is_system) : null;
         if (_rbLastAi) {
@@ -2308,6 +2323,77 @@ export let _rpgIsGenerating = false;
  * @param {any[]} chat
  * @returns {any|null}
  */
+function applyAssistantMessageText(ctx, message, text) {
+    message.mes = text;
+    if (typeof message.content === 'string') message.content = text;
+    if (Array.isArray(message.swipes) && message.swipes.length) {
+        const idx = Math.max(0, Math.min(message.swipes.length - 1, Number(message.swipe_id) || 0));
+        message.swipes[idx] = text;
+    }
+    const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+    const index = chat.indexOf(message);
+    if (index >= 0 && typeof ctx.updateMessageBlock === 'function') {
+        try { ctx.updateMessageBlock(index, message); } catch (_) { /* UI refresh is best effort */ }
+    }
+    if (typeof ctx.saveChat === 'function') {
+        try { void ctx.saveChat(); } catch (_) { /* persistence is best effort */ }
+    }
+}
+
+/**
+ * Text-command CreateAreaMap fallback: strip the fence, run Map Architect, continue the narrator.
+ * Returns true when the normal ST/LA/updater cadence must be skipped for this generation.
+ */
+async function maybeRunMapArchitectTextOpener({ chat, settings, currentType }) {
+    if (!isLocationMappingEnabled(settings) || !isMapArchitectTextOpener(settings)) return false;
+    if (_mapArchitectTextOpenerBusy) return true;
+    if (['swipe', 'regenerate', 'impersonate', 'quiet', 'continue'].includes(String(currentType || '').toLowerCase())) return false;
+
+    const message = getLatestAssistantCandidate(chat);
+    if (!message) return false;
+    const source = getDungeonMessageText(message);
+    const stripped = stripCreateAreaMapCommand(source);
+    if (!stripped.command) return false;
+    _mapArchitectTextOpenerBusy = true;
+    try {
+        applyAssistantMessageText(SillyTavern.getContext(), message, stripped.text);
+
+        const args = stripped.command.args;
+        if (!createAreaMapCommandIsComplete(args)) {
+            globalThis.toastr?.error?.(
+                'Map Architect text command is missing site, entrance, kind, or premise. Stay outside and try again next turn.',
+                'Map Architect',
+                { timeOut: 10000 },
+            );
+            return true;
+        }
+
+        const siteLabel = args.site;
+        globalThis.toastr?.info?.(`Generating a location map for ${siteLabel}...`, 'Map Architect', { timeOut: 4000 });
+        const result = await runMapArchitect(args);
+        _pendingMapArchitectResult = String(result || '').trim();
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.generate !== 'function') {
+            console.error('[RPG Tracker] Cannot continue after Map Architect text opener: generate() is unavailable.');
+            _pendingMapArchitectResult = null;
+            return true;
+        }
+        setTimeout(() => {
+            void Promise.resolve(ctx.generate('continue')).catch(error => {
+                console.error('[RPG Tracker] Continue after Map Architect text opener failed:', error);
+                _pendingMapArchitectResult = null;
+            });
+        }, 75);
+        return true;
+    } catch (error) {
+        _pendingMapArchitectResult = null;
+        console.error('[RPG Tracker] Map Architect text opener failed:', error);
+        return true;
+    } finally {
+        _mapArchitectTextOpenerBusy = false;
+    }
+}
+
 function getLatestAssistantCandidate(chat) {
     if (!Array.isArray(chat)) return null;
     for (let i = chat.length - 1; i >= 0; i--) {
@@ -2523,6 +2609,14 @@ export async function onGenerationEnded() {
             generationType: currentType ?? null,
             speaker: getLatestAssistantCandidate(chat)?.name || null,
             activeChar: ctx?.name2 || null,
+        });
+        return;
+    }
+
+    if (await maybeRunMapArchitectTextOpener({ chat, settings, currentType })) {
+        recordSchedulerEvent('generation_ended_aborted', {
+            reason: 'map_architect_text_opener',
+            generationType: currentType ?? null,
         });
         return;
     }
