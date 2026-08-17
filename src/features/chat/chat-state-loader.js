@@ -85,6 +85,7 @@ export function createChatStateLoader({
     s.mapEvolutionTickCount = saved.mapEvolutionTickCount ?? 1;
     s.mapEvolutionTickRandomize = saved.mapEvolutionTickRandomize !== false;
     s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(saved.mapEvolutionSelectedRoots || []));
+    s.mapEvolutionIntervalHoursBySite = JSON.parse(JSON.stringify(saved.mapEvolutionIntervalHoursBySite || {}));
     s.mapEvolutionWorldReportLookback = saved.mapEvolutionWorldReportLookback ?? 5;
     s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(saved.mapEvolutionWorldReportApplications || {}));
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;

@@ -1,5 +1,5 @@
 import { runtimeState } from '../../app/runtime-state.js';
-import { summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
+import { evolutionIntervalHoursForSettings, summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
 
 const BADGE_ON = 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; background:rgba(52,168,83,0.18); color:#34a853; border:1px solid rgba(52,168,83,0.3);';
 const BADGE_OFF = 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);';
@@ -63,6 +63,7 @@ export function wireAgentMapEvolution({
         const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
             intervalHours: s.mapEvolutionIntervalHours,
             currentMinutes: currentMemoMinutes(),
+            intervalHoursFor: evolutionIntervalHoursForSettings(s, s.mapEvolutionLastSiteRoot || ''),
         });
         const lastEl = agentPanel.querySelector('#rt-agent-map-evo-last-fired');
         const nextEl = agentPanel.querySelector('#rt-agent-map-evo-next-fire');
@@ -78,6 +79,10 @@ export function wireAgentMapEvolution({
         const intervalInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-interval'));
         if (intervalInp && document.activeElement !== intervalInp) {
             intervalInp.value = String(s.mapEvolutionIntervalHours ?? 12);
+        }
+        const onSiteInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-onsite-interval'));
+        if (onSiteInp && document.activeElement !== onSiteInp) {
+            onSiteInp.value = String(s.mapEvolutionOnSiteIntervalHours ?? 12);
         }
         const scopeSel = /** @type {HTMLSelectElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-tick-scope'));
         if (scopeSel && document.activeElement !== scopeSel) {
@@ -103,6 +108,25 @@ export function wireAgentMapEvolution({
             intervalInp.value = String(s.mapEvolutionIntervalHours);
             saveSettings();
             $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours);
+            if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
+                runtimeState.updateMapEvolutionScheduleDisplayRef();
+            } else {
+                updateAgentMapEvolutionStatus();
+            }
+        });
+    }
+
+    const onSiteInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-onsite-interval'));
+    if (onSiteInp) {
+        onSiteInp.addEventListener('change', () => {
+            const s = getSettings();
+            const parsed = parseInt(onSiteInp.value, 10);
+            s.mapEvolutionOnSiteIntervalHours = parsed === 0
+                ? 0
+                : Math.max(1, Math.min(168, Number.isFinite(parsed) ? parsed : 12));
+            onSiteInp.value = String(s.mapEvolutionOnSiteIntervalHours);
+            saveSettings();
+            $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours);
             if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
                 runtimeState.updateMapEvolutionScheduleDisplayRef();
             } else {

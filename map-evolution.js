@@ -28,6 +28,7 @@ import {
     describeEvolutionThreads,
     describeEvolutionTimeWindow,
     estimateMapHistoryTokens,
+    evolutionIntervalHoursForSettings,
     filterSitesByRoots,
     formatClosedThreadsForCompression,
     formatEvolutionElapsedMinutes,
@@ -653,6 +654,7 @@ function resolveSitesForPass(loaded, {
         lastFiredMinutesFor: root => lastFiredMinutesForSite(settings, root),
         currentMinutes,
         intervalHours: settings.mapEvolutionIntervalHours,
+        intervalHoursFor: evolutionIntervalHoursForSettings(settings, active?.siteRoot || ''),
     });
     return [...picked.baseline, ...picked.due];
 }

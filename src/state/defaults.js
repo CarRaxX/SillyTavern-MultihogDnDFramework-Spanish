@@ -1364,6 +1364,10 @@ Rules:
 
         mapEvolutionIntervalHours: 12,
 
+        mapEvolutionOnSiteIntervalHours: 12,
+
+        mapEvolutionIntervalHoursBySite: {},
+
         mapEvolutionMaxTokens: 25000,
 
         mapEvolutionCompressEnabled: true,

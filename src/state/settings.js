@@ -876,6 +876,15 @@ function getSettingsInternal(extensionSettings) {
     s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
+    s.mapEvolutionOnSiteIntervalHours = (() => {
+        const hours = Math.floor(Number(s.mapEvolutionOnSiteIntervalHours));
+        if (!Number.isFinite(hours)) return 12;
+        if (hours === 0) return 0;
+        return Math.max(1, Math.min(168, hours));
+    })();
+    if (!s.mapEvolutionIntervalHoursBySite || typeof s.mapEvolutionIntervalHoursBySite !== 'object' || Array.isArray(s.mapEvolutionIntervalHoursBySite)) {
+        s.mapEvolutionIntervalHoursBySite = {};
+    }
     s.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, Number(s.mapEvolutionWorldReportLookback) || 5));
     if (!s.mapEvolutionBacklogBySite || typeof s.mapEvolutionBacklogBySite !== 'object' || Array.isArray(s.mapEvolutionBacklogBySite)) {
         s.mapEvolutionBacklogBySite = {};
@@ -1151,6 +1160,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapUpdaterSystemPrompt',
     'mapEvolutionEnabled',
     'mapEvolutionIntervalHours',
+    'mapEvolutionOnSiteIntervalHours',
     'mapEvolutionMaxTokens',
     'mapEvolutionCompressEnabled',
     'mapEvolutionCompressThreshold',

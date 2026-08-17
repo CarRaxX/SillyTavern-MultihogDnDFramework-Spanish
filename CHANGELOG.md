@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-08-17
+
+### Added
+- **Map Evolution LOD timers**: a **Current map** interval beside the existing other-maps interval, plus optional per-map hours on the mapped-site list. Blank inherits; `0` skips automatic ticks for that site. Evolution's prompt and operations are unchanged — presence only chooses the clock. The site list splits **Run now** (checkbox) from **Per-map interval** (optional override); inherit is labeled, not pre-filled as `12`.
+
 ## [8.0.10] - 2026-08-17
 
 ### Added

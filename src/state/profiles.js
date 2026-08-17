@@ -60,6 +60,8 @@ export function saveProfile(name) {
         mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
         mapEvolutionEnabled: s.mapEvolutionEnabled !== false,
         mapEvolutionIntervalHours: s.mapEvolutionIntervalHours ?? 12,
+        mapEvolutionOnSiteIntervalHours: s.mapEvolutionOnSiteIntervalHours ?? 12,
+        mapEvolutionIntervalHoursBySite: JSON.parse(JSON.stringify(s.mapEvolutionIntervalHoursBySite || {})),
         mapEvolutionMaxTokens: s.mapEvolutionMaxTokens ?? 25000,
         mapEvolutionCompressEnabled: s.mapEvolutionCompressEnabled !== false,
         mapEvolutionCompressThreshold: s.mapEvolutionCompressThreshold ?? 10000,

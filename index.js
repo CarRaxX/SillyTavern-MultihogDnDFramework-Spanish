@@ -13,7 +13,7 @@ import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
-import { summarizeMapEvolutionSchedule, stampEvolutionLastFired } from './map-evolution-lib.js';
+import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -222,6 +222,18 @@ function persistMapEvolutionSelectedRootsFromUi() {
     return roots;
 }
 
+function persistMapEvolutionIntervalOverrideFromUi(siteRoot, rawValue) {
+    const settings = getSettings();
+    settings.mapEvolutionIntervalHoursBySite = setSiteEvolutionIntervalOverride(
+        settings.mapEvolutionIntervalHoursBySite,
+        siteRoot,
+        String(rawValue || '').trim(),
+    );
+    saveSettings();
+    if (settings.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+    updateMapEvolutionScheduleDisplay();
+}
+
 function syncMapEvolutionTickRows(settings) {
     const scope = settings?.mapEvolutionTickScope || 'all';
     $('#rpg_map_evolution_n_row').toggle(scope === 'count' || scope === 'selected');
@@ -240,19 +252,85 @@ async function refreshMapEvolutionSelectedList() {
     }
     if (!sites.length) {
         $list.append($('<i>').css({ opacity: '0.6', fontSize: '0.85em' }).text('No mapped sites in this chat.'));
+        $('#rpg_map_evolution_site_list_header').hide();
+        updateMapEvolutionScheduleDisplay();
         return;
     }
+    $('#rpg_map_evolution_site_list_header').show();
     const selected = new Set((getSettings().mapEvolutionSelectedRoots || []).map(root => String(root || '').trim().toLowerCase()));
+    const settings = getSettings();
+    const currentRoot = sites.find(site => site.current)?.siteRoot || '';
+    const inheritedFor = evolutionIntervalHoursForSettings({
+        ...settings,
+        mapEvolutionIntervalHoursBySite: {},
+    }, currentRoot);
+    const overrides = settings.mapEvolutionIntervalHoursBySite || {};
     for (const site of sites) {
         const $input = $('<input type="checkbox">')
             .attr('data-site-root', site.siteRoot)
             .prop('checked', selected.has(String(site.siteRoot || '').trim().toLowerCase()));
         const label = site.current ? `${site.siteRoot} (current)` : site.siteRoot;
-        const $item = $('<label class="checkbox_label">').css('font-size', '0.9em')
-            .append($input, $('<span>').text(label));
+        const inherited = inheritedFor(site.siteRoot);
+        const overrideHours = getSiteEvolutionIntervalOverride(overrides, site.siteRoot);
+        const hasOverride = overrideHours != null;
+        const inheritText = inherited === 0
+            ? (site.current ? 'Automatic: skip (current map)' : 'Automatic: skip (other maps)')
+            : (site.current ? `Automatic: ${inherited}h (current map)` : `Automatic: ${inherited}h (other maps)`);
+        const $inherit = $('<div>').css({
+            fontSize: '0.75em',
+            opacity: hasOverride ? '0.45' : '0.65',
+            lineHeight: '1.3',
+            marginTop: '2px',
+        }).text(hasOverride ? `Override · was ${inherited === 0 ? 'skip' : `${inherited}h`}` : inheritText);
+        const $hours = $('<input type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole">')
+            .attr({
+                'data-site-root': site.siteRoot,
+                min: '0',
+                max: '168',
+                placeholder: '—',
+                title: hasOverride
+                    ? 'Custom automatic interval for this map. Clear the box to inherit Other maps / Current map again. 0 skips automatic ticks.'
+                    : 'Leave blank to inherit Other maps / Current map. Fill only to override this map\'s automatic timer. 0 skips automatic ticks. Independent of the Run now checkbox.',
+            })
+            .css({ width: '56px', minWidth: '56px', fontSize: '0.85em', textAlign: 'center', boxSizing: 'border-box' })
+            .val(hasOverride ? String(overrideHours) : '');
+        $hours.on('change', function () {
+            persistMapEvolutionIntervalOverrideFromUi(site.siteRoot, String($(this).val() || ''));
+            void refreshMapEvolutionSelectedList();
+        });
+        const $row = $('<div>').css({
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            padding: '4px 0',
+        });
+        const $name = $('<span>').css({ flex: '1', minWidth: '0' }).append(
+            $('<div>').text(label),
+            $inherit,
+        );
+        const $item = $('<label class="checkbox_label">').css({
+            fontSize: '0.9em',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '6px',
+            flex: '1',
+            minWidth: '0',
+            margin: '0',
+        }).append($input.css({ marginTop: '2px' }), $name);
         $input.on('change', persistMapEvolutionSelectedRootsFromUi);
-        $list.append($item);
+        const $interval = $('<div>').css({
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            width: '72px',
+            flex: '0 0 72px',
+            justifyContent: 'flex-end',
+            paddingTop: '1px',
+        }).append($hours, $('<span>').css({ fontSize: '0.75em', opacity: '0.55' }).text('h'));
+        $row.append($item, $interval);
+        $list.append($row);
     }
+    updateMapEvolutionScheduleDisplay(currentRoot);
 }
 
 function currentMemoMinutes() {
@@ -262,11 +340,13 @@ function currentMemoMinutes() {
     return timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
 }
 
-function updateMapEvolutionScheduleDisplay() {
+function updateMapEvolutionScheduleDisplay(currentRoot = '') {
     const s = getSettings();
+    const root = currentRoot || s.mapEvolutionLastSiteRoot || '';
     const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
         intervalHours: s.mapEvolutionIntervalHours,
         currentMinutes: currentMemoMinutes(),
+        intervalHoursFor: evolutionIntervalHoursForSettings(s, root),
     });
     const lastText = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Never';
     $('#rpg_map_evolution_last_fired').text(lastText);
@@ -2821,6 +2901,13 @@ function loadProfile(name) {
     s.mapUpdaterSystemPrompt = p.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
     s.mapEvolutionEnabled = p.mapEvolutionEnabled !== false;
     s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 12);
+    s.mapEvolutionOnSiteIntervalHours = (() => {
+        const hours = Math.floor(Number(p.mapEvolutionOnSiteIntervalHours));
+        if (!Number.isFinite(hours)) return s.mapEvolutionIntervalHours;
+        if (hours === 0) return 0;
+        return Math.max(1, Math.min(168, hours));
+    })();
+    s.mapEvolutionIntervalHoursBySite = JSON.parse(JSON.stringify(p.mapEvolutionIntervalHoursBySite || {}));
     s.mapEvolutionMaxTokens = p.mapEvolutionMaxTokens ?? 25000;
     s.mapEvolutionCompressEnabled = p.mapEvolutionCompressEnabled !== false;
     s.mapEvolutionCompressThreshold = (() => {
@@ -2942,6 +3029,7 @@ function loadProfile(name) {
     $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
     $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
     $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
+    $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours ?? 12);
     $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
     $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
     $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
@@ -5339,6 +5427,18 @@ function organizeConnectionSettingsUI() {
             saveSettings();
             updateMapEvolutionScheduleDisplay();
             $('#rt-agent-map-evo-interval').val(settings.mapEvolutionIntervalHours);
+            void refreshMapEvolutionSelectedList();
+        });
+        $('#rpg_map_evolution_onsite_interval_hours').val(settings.mapEvolutionOnSiteIntervalHours ?? 12).on('change', function () {
+            const parsed = parseInt(String($(this).val()), 10);
+            settings.mapEvolutionOnSiteIntervalHours = parsed === 0
+                ? 0
+                : Math.max(1, Math.min(168, Number.isFinite(parsed) ? parsed : 12));
+            $(this).val(settings.mapEvolutionOnSiteIntervalHours);
+            saveSettings();
+            updateMapEvolutionScheduleDisplay();
+            $('#rt-agent-map-evo-onsite-interval').val(settings.mapEvolutionOnSiteIntervalHours);
+            void refreshMapEvolutionSelectedList();
         });
         $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
             settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
@@ -5422,13 +5522,23 @@ function organizeConnectionSettingsUI() {
         });
         $('#rpg_map_evolution_btn_override_next').on('click', async function () {
             const s = getSettings();
-            const intervalHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 12);
-            const intervalMinutes = intervalHours * 60;
+            let listed = [];
+            try {
+                listed = await listMappedEvolutionSites();
+            } catch (error) {
+                console.warn('[RPG Tracker] Failed to list mapped sites for Evolution override:', error);
+            }
+            const currentRoot = listed.find(site => site.current)?.siteRoot || s.mapEvolutionLastSiteRoot || '';
+            const hoursFor = evolutionIntervalHoursForSettings(s, currentRoot);
             const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
-                intervalHours,
+                intervalHours: s.mapEvolutionIntervalHours,
                 currentMinutes: currentMemoMinutes(),
+                intervalHoursFor: hoursFor,
             });
-            const currentNextMins = schedule.nextMins >= 0 ? schedule.nextMins : intervalMinutes;
+            const fallbackHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 12);
+            const currentNextMins = schedule.nextMins >= 0
+                ? schedule.nextMins
+                : currentMemoMinutes() >= 0 ? currentMemoMinutes() + fallbackHours * 60 : fallbackHours * 60;
 
             function fmtHint(totalMins) {
                 if (totalMins < 0) return s.useDdMmYyFormat ? '01/01/2026, 08:00 AM' : (s.use24hTime ? 'Day 1, 00:00' : 'Day 1, 12:00 AM');
@@ -5454,20 +5564,22 @@ function organizeConnectionSettingsUI() {
                 return;
             }
 
-            const lastFiredMins = parsedNextMins - intervalMinutes;
-            const lastLabel = formatInWorldTime(lastFiredMins);
-            let roots = Object.keys(s.mapEvolutionLastFiredBySite || {});
-            try {
-                const listed = await listMappedEvolutionSites();
-                roots = [...roots, ...listed.map(site => site.siteRoot)];
-            } catch (error) {
-                console.warn('[RPG Tracker] Failed to list mapped sites for Evolution override:', error);
-            }
+            let roots = [...Object.keys(s.mapEvolutionLastFiredBySite || {}), ...listed.map(site => site.siteRoot)];
             if (!roots.length) {
                 toastr.warning('No mapped sites to schedule.', 'Map Evolution');
                 return;
             }
-            s.mapEvolutionLastFiredBySite = stampEvolutionLastFired({}, roots, lastLabel);
+            let stamps = {};
+            for (const root of roots) {
+                const hours = hoursFor(root);
+                if (!hours || hours <= 0) continue;
+                stamps = stampEvolutionLastFired(stamps, [root], formatInWorldTime(parsedNextMins - hours * 60));
+            }
+            if (!Object.keys(stamps).length) {
+                toastr.warning('Every mapped site is set to never auto-tick.', 'Map Evolution');
+                return;
+            }
+            s.mapEvolutionLastFiredBySite = stamps;
             saveSettings();
             if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
             updateMapEvolutionScheduleDisplay();
@@ -11342,6 +11454,7 @@ RULES:
             $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
             $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
             $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
+            $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours ?? 12);
             $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
             $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
             $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);

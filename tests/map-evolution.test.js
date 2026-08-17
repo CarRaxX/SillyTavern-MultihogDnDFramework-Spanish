@@ -24,6 +24,9 @@ import {
     pickCompleteNarratorCommits,
     pickSitesForEvolutionTick,
     resolvePlayerBubble,
+    resolveSiteEvolutionIntervalHours,
+    setSiteEvolutionIntervalOverride,
+    getSiteEvolutionIntervalOverride,
     siteEvolutionDue,
     stampEvolutionLastFired,
     summarizeEvolutionDigest,
@@ -186,6 +189,8 @@ describe('Map Evolution', () => {
         expect(siteEvolutionDue(null, 8 * 60, 4)).toEqual({ due: false, baseline: true });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 3 * 60, 4)).toEqual({ due: false, baseline: false });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 4 * 60, 4)).toEqual({ due: true, baseline: false });
+        expect(siteEvolutionDue(8 * 60, 8 * 60 + 48 * 60, 0)).toEqual({ due: false, baseline: false });
+        expect(siteEvolutionDue(null, 8 * 60, 0)).toEqual({ due: false, baseline: true });
     });
 
     it('describes the model time window from this site\'s Last Evolved timestamp', () => {
@@ -686,6 +691,64 @@ describe('Map Evolution', () => {
         expect(empty.baseline).toEqual([]);
     });
 
+    it('resolves current-map and per-site interval overrides without changing Evolution behavior', () => {
+        const options = {
+            intervalHours: 12,
+            onSiteIntervalHours: 2,
+            intervalHoursBySite: { 'Bunker Theta': 4 },
+            currentRoot: 'Bunker Theta',
+        };
+        expect(resolveSiteEvolutionIntervalHours('Bunker Theta', options)).toBe(4);
+        expect(resolveSiteEvolutionIntervalHours('Morrowfen', options)).toBe(12);
+        expect(resolveSiteEvolutionIntervalHours('Bunker Theta', { ...options, intervalHoursBySite: {} })).toBe(2);
+        expect(resolveSiteEvolutionIntervalHours('Morrowfen', { ...options, currentRoot: 'Morrowfen', onSiteIntervalHours: 0 })).toBe(0);
+        expect(getSiteEvolutionIntervalOverride({ 'bunker theta': 4 }, 'Bunker Theta')).toBe(4);
+        expect(getSiteEvolutionIntervalOverride({}, 'Bunker Theta')).toBeNull();
+        expect(setSiteEvolutionIntervalOverride({ 'bunker theta': 4 }, 'Bunker Theta', '')).toEqual({});
+        expect(setSiteEvolutionIntervalOverride({}, 'Bunker Theta', 0)).toEqual({ 'bunker theta': 0 });
+    });
+
+    it('picks due maps from per-site intervals while leaving others waiting', () => {
+        const lastFiredMinutesFor = () => 0;
+        const picked = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'all',
+            currentRoot: 'Forgotten Tomb',
+            lastFiredMinutesFor,
+            currentMinutes: 3 * 60,
+            intervalHours: 12,
+            intervalHoursFor: root => resolveSiteEvolutionIntervalHours(root, {
+                intervalHours: 12,
+                onSiteIntervalHours: 2,
+                intervalHoursBySite: { Morrowfen: 0 },
+                currentRoot: 'Forgotten Tomb',
+            }),
+        });
+        expect(picked.due.map(site => site.siteRoot)).toEqual(['Forgotten Tomb']);
+    });
+
+    it('summarizes next Evolution from the soonest per-site clock', () => {
+        expect(summarizeMapEvolutionSchedule({
+            hall: 'Day 1, 08:00',
+            docks: 'Day 1, 08:00',
+        }, {
+            intervalHours: 12,
+            intervalHoursFor: key => (key === 'hall' ? 2 : 12),
+        })).toEqual({
+            lastMins: 8 * 60,
+            nextMins: 10 * 60,
+        });
+        expect(summarizeMapEvolutionSchedule({
+            hall: 'Day 1, 08:00',
+        }, {
+            intervalHours: 12,
+            intervalHoursFor: () => 0,
+            currentMinutes: 16 * 60,
+        })).toEqual({
+            lastMins: 8 * 60,
+            nextMins: -1,
+        });
+    });
+
     it('keeps Evolution sequential, occupancy-separate, and wired through the pipeline', () => {
         const evolution = readFileSync(new URL('../map-evolution.js', import.meta.url), 'utf8');
         const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
@@ -746,6 +809,11 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('<b>Map Evolution</b>');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_enabled"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_interval_hours"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_onsite_interval_hours"');
+        expect(settingsMarkup).toContain('<b>Per-map interval</b>');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_site_list_header"');
+        expect(panelMarkup).toContain('id="rt-agent-map-evo-onsite-interval"');
+        expect(evolution).toContain('evolutionIntervalHoursForSettings');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_world_report_lookback"');
         expect(settingsMarkup).toContain('Reports never trigger an immediate map fan-out');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_scope"');
@@ -757,8 +825,9 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_next_report_val"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_btn_override_next"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_testing_ground"');
-        expect(settingsMarkup).toContain('<b style="font-size:0.9em; flex:1;">Run now</b>');
-        expect(settingsMarkup).toContain('does not require Selected maps');
+        expect(settingsMarkup).toContain('<b style="font-size:0.9em; flex:1;">Mapped sites</b>');
+        expect(settingsMarkup).toContain('<b>Run now</b> is the checkbox');
+        expect(settingsMarkup).toContain('does not enable or disable a per-map timer');
         expect(indexSource).not.toContain("$('#rpg_map_evolution_selected_row').toggle(scope === 'selected')");
         expect(indexSource).toContain("$('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected')");
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);

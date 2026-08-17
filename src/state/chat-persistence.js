@@ -409,6 +409,7 @@ export function saveChatState(chatId, opts = {}) {
         mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
         mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
         mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),
+        mapEvolutionIntervalHoursBySite: JSON.parse(JSON.stringify(s.mapEvolutionIntervalHoursBySite || {})),
         mapEvolutionWorldReportLookback: s.mapEvolutionWorldReportLookback ?? 5,
         mapEvolutionWorldReportApplications: JSON.parse(JSON.stringify(s.mapEvolutionWorldReportApplications || {})),
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,

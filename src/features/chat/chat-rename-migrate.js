@@ -75,6 +75,7 @@ const KNOWN_PARTITION_KEYS = new Set([
     'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionThreadsBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
     'dungeonMapRevealAll',
     'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
+    'mapEvolutionIntervalHoursBySite',
     'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
     'routerDefaultOrder', 'routerDefaultRole', 'loreInjectionPosition',
@@ -129,6 +130,7 @@ export function partitionHasCampaignSubstance(p) {
         || hasMapEntries(p.mapEvolutionBacklogBySite)
         || hasMapEntries(p.mapEvolutionThreadsBySite)
         || hasMapEntries(p.mapEvolutionWorldReportApplications)
+        || hasMapEntries(p.mapEvolutionIntervalHoursBySite)
         || hasMapEntries(p.worldProgressionLocationLastAdvanced)
         || hasItems(p.mapEvolutionSelectedRoots)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;

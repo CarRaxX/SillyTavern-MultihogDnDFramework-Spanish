@@ -74,13 +74,100 @@ export function resolvePlayerBubble(document, currentLocation, { combatActive = 
     };
 }
 
+export const MAP_EVOLUTION_INTERVAL_MAX_HOURS = 168;
+
+/**
+ * Clamp an Evolution interval. 0 means "never auto-tick" when allowNever is set.
+ * Invalid values fall back rather than becoming 0.
+ */
+export function normalizeEvolutionIntervalHours(value, { allowNever = false, fallback = 12 } = {}) {
+    const fallbackHours = Math.max(1, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(Number(fallback) || 12)));
+    if (value == null || value === '') return fallbackHours;
+    const hours = Math.floor(Number(value));
+    if (!Number.isFinite(hours)) return fallbackHours;
+    if (allowNever && hours === 0) return 0;
+    if (hours < 1) return fallbackHours;
+    return Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, hours);
+}
+
+/** Sparse per-site hour overrides. Keys are normalized site roots. 0 = never auto. */
+export function normalizeEvolutionIntervalOverrides(raw) {
+    const next = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return next;
+    for (const [siteRoot, value] of Object.entries(raw)) {
+        const key = normalizeDungeonLabel(siteRoot);
+        if (!key) continue;
+        const hours = Math.floor(Number(value));
+        if (!Number.isFinite(hours) || hours < 0) continue;
+        next[key] = Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, hours);
+    }
+    return next;
+}
+
+export function getSiteEvolutionIntervalOverride(bySite, siteRoot) {
+    const key = normalizeDungeonLabel(siteRoot);
+    const overrides = normalizeEvolutionIntervalOverrides(bySite);
+    return key && Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : null;
+}
+
+export function setSiteEvolutionIntervalOverride(bySite, siteRoot, hours) {
+    const next = normalizeEvolutionIntervalOverrides(bySite);
+    const key = normalizeDungeonLabel(siteRoot);
+    if (!key) return next;
+    if (hours == null || hours === '') {
+        delete next[key];
+        return next;
+    }
+    const parsed = Math.floor(Number(hours));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        delete next[key];
+        return next;
+    }
+    next[key] = Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, parsed);
+    return next;
+}
+
+/**
+ * Interval used for one mapped site.
+ * Per-site override (including 0) wins. Otherwise current-map hours if the party
+ * is there, else the other-maps hours. Presence never changes Evolution's job —
+ * only how often this site is due.
+ */
+export function resolveSiteEvolutionIntervalHours(siteRoot, {
+    intervalHours = 12,
+    onSiteIntervalHours = null,
+    intervalHoursBySite = {},
+    currentRoot = '',
+} = {}) {
+    const key = normalizeDungeonLabel(siteRoot);
+    const overrides = normalizeEvolutionIntervalOverrides(intervalHoursBySite);
+    if (key && Object.prototype.hasOwnProperty.call(overrides, key)) return overrides[key];
+    const offSite = normalizeEvolutionIntervalHours(intervalHours, { allowNever: false, fallback: 12 });
+    const onSite = (onSiteIntervalHours == null || onSiteIntervalHours === '')
+        ? offSite
+        : normalizeEvolutionIntervalHours(onSiteIntervalHours, { allowNever: true, fallback: offSite });
+    return key && key === normalizeDungeonLabel(currentRoot) ? onSite : offSite;
+}
+
+export function evolutionIntervalHoursForSettings(settings, currentRoot = '') {
+    return (siteRoot) => resolveSiteEvolutionIntervalHours(siteRoot, {
+        intervalHours: settings?.mapEvolutionIntervalHours,
+        onSiteIntervalHours: settings?.mapEvolutionOnSiteIntervalHours,
+        intervalHoursBySite: settings?.mapEvolutionIntervalHoursBySite,
+        currentRoot,
+    });
+}
+
 /**
  * First visit stamps a baseline and does not fire. Later elapsed intervals fire.
+ * intervalHours 0 means never auto-tick after the baseline.
  */
 export function siteEvolutionDue(lastMinutes, currentMinutes, intervalHours) {
-    const interval = Math.max(1, Number(intervalHours) || 4) * 60;
     if (!Number.isFinite(lastMinutes) || lastMinutes < 0) return { due: false, baseline: true };
     if (!Number.isFinite(currentMinutes) || currentMinutes < 0) return { due: false, baseline: false };
+    const hours = Number(intervalHours);
+    if (hours === 0) return { due: false, baseline: false };
+    const interval = Math.max(1, Number.isFinite(hours) && hours > 0 ? hours : 4) * 60;
     return { due: (currentMinutes - lastMinutes) >= interval, baseline: false };
 }
 
@@ -297,16 +384,29 @@ export function describeEvolutionTimeWindow(lastEvolvedLabel, currentTimeLabel) 
  */
 export function summarizeMapEvolutionSchedule(lastFiredBySite, {
     intervalHours = 4,
+    intervalHoursFor = null,
     currentMinutes = -1,
 } = {}) {
-    const interval = Math.max(1, Number(intervalHours) || 4) * 60;
-    const times = Object.values(lastFiredBySite && typeof lastFiredBySite === 'object' ? lastFiredBySite : {})
-        .map(parseFiredMinutes)
-        .filter(mins => mins >= 0);
-    const lastMins = times.length ? Math.max(...times) : -1;
+    const defaultHours = Math.max(1, Number(intervalHours) || 4);
+    const hoursFor = typeof intervalHoursFor === 'function'
+        ? (key) => {
+            const hours = Number(intervalHoursFor(key));
+            return Number.isFinite(hours) && hours >= 0 ? hours : defaultHours;
+        }
+        : () => defaultHours;
+    const entries = Object.entries(lastFiredBySite && typeof lastFiredBySite === 'object' ? lastFiredBySite : {})
+        .map(([key, label]) => ({ key, mins: parseFiredMinutes(label), hours: hoursFor(key) }))
+        .filter(entry => entry.mins >= 0);
+    const lastMins = entries.length ? Math.max(...entries.map(entry => entry.mins)) : -1;
+    const nextCandidates = entries
+        .filter(entry => entry.hours > 0)
+        .map(entry => entry.mins + entry.hours * 60);
     let nextMins = -1;
-    if (times.length) nextMins = Math.min(...times.map(mins => mins + interval));
-    else if (Number.isFinite(currentMinutes) && currentMinutes >= 0) nextMins = currentMinutes + interval;
+    if (nextCandidates.length) nextMins = Math.min(...nextCandidates);
+    else if (!entries.length && Number.isFinite(currentMinutes) && currentMinutes >= 0) {
+        const fallback = hoursFor('');
+        if (fallback > 0) nextMins = currentMinutes + fallback * 60;
+    }
     return { lastMins, nextMins };
 }
 
@@ -373,6 +473,7 @@ export function pickSitesForEvolutionTick(sites, {
     lastFiredMinutesFor = () => -1,
     currentMinutes = -1,
     intervalHours = 4,
+    intervalHoursFor = null,
     random = Math.random,
 } = {}) {
     const normalizedScope = normalizeEvolutionTickScope(scope);
@@ -384,10 +485,13 @@ export function pickSitesForEvolutionTick(sites, {
         pool = filterSitesByRoots(pool, selectedRoots);
     }
 
+    const hoursFor = typeof intervalHoursFor === 'function'
+        ? intervalHoursFor
+        : () => intervalHours;
     const baseline = [];
     const due = [];
     for (const site of pool) {
-        const status = siteEvolutionDue(lastFiredMinutesFor(site.siteRoot), currentMinutes, intervalHours);
+        const status = siteEvolutionDue(lastFiredMinutesFor(site.siteRoot), currentMinutes, hoursFor(site.siteRoot));
         if (status.baseline) baseline.push({ ...site, stampBaselineOnly: true });
         else if (status.due) due.push(site);
     }
