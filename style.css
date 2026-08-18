@@ -5846,8 +5846,8 @@ textarea.rt-cr-input {
 }
 
 .rt-dungeon-map-knowledge {
-    border-color: rgba(125, 211, 252, 0.25);
-    color: #bae6fd;
+    border-color: rgba(255, 170, 0, 0.28);
+    color: #ffaa00;
 }
 
 .rt-dungeon-map-asset-detail {
@@ -5939,12 +5939,13 @@ textarea.rt-cr-input {
 }
 
 .rt-agent-view-mode-btn-visualization .rt-agent-view-mode-label {
-    background: linear-gradient(90deg, #8ecae6 0%, #a8d8ea 45%, #c4b5fd 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    opacity: 0.55;
-    transition: opacity 0.22s ease;
+    color: #ffaa00;
+    opacity: 0.48;
+    transition: opacity 0.22s ease, color 0.22s ease;
+}
+
+.rt-agent-view-mode-btn-visualization:hover:not(.rt-agent-view-mode-btn-active) .rt-agent-view-mode-label {
+    opacity: 0.82;
 }
 
 .rt-agent-view-mode-btn-visualization .rt-agent-view-mode-glow {
@@ -5952,26 +5953,27 @@ textarea.rt-cr-input {
     height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
-    background: #5eb8d4;
-    opacity: 0.35;
-    box-shadow: 0 0 6px rgba(94, 184, 212, 0.4);
-    transition: opacity 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+    background: #ffaa00;
+    opacity: 0.32;
+    box-shadow: 0 0 6px rgba(255, 170, 0, 0.35);
+    transition: opacity 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease, background 0.22s ease;
 }
 
 .rt-agent-view-mode-btn-visualization.rt-agent-view-mode-btn-active {
-    background: linear-gradient(135deg, rgba(94, 184, 212, 0.16) 0%, rgba(120, 80, 220, 0.1) 100%);
-    box-shadow:
-        inset 0 0 0 1px rgba(94, 184, 212, 0.38),
-        0 0 16px rgba(94, 184, 212, 0.12);
+    background: #ffaa00;
+    color: #121212;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
 }
 
 .rt-agent-view-mode-btn-visualization.rt-agent-view-mode-btn-active .rt-agent-view-mode-label {
+    color: #121212;
     opacity: 1;
 }
 
 .rt-agent-view-mode-btn-visualization.rt-agent-view-mode-btn-active .rt-agent-view-mode-glow {
+    background: #121212;
     opacity: 1;
-    box-shadow: 0 0 8px rgba(94, 184, 212, 0.85), 0 0 14px rgba(120, 80, 220, 0.35);
+    box-shadow: none;
     animation: rt-viz-mode-pulse 2.4s ease-in-out infinite;
 }
 
@@ -7811,11 +7813,10 @@ textarea.rt-cr-input {
     justify-content: center;
     margin: 0;
     padding: 3px 8px;
-    border: 1px solid var(--rt-accent, #7dd3fc);
+    border: 1px solid #ffaa00;
     border-radius: 4px;
-    background: rgba(125, 211, 252, 0.18);
-    background: color-mix(in srgb, var(--rt-accent, #7dd3fc) 18%, transparent);
-    color: inherit;
+    background: #ffaa00;
+    color: #121212;
     font: inherit;
     font-size: 0.78em;
     font-weight: 700;
@@ -7826,8 +7827,8 @@ textarea.rt-cr-input {
     opacity: 1;
 }
 .rt-dungeon-map-details:hover {
-    background: rgba(125, 211, 252, 0.32);
-    background: color-mix(in srgb, var(--rt-accent, #7dd3fc) 32%, transparent);
+    background: #ffb833;
+    border-color: #ffb833;
 }
 .rt-immersion-map-popped-body {
     display: flex;
@@ -7835,9 +7836,9 @@ textarea.rt-cr-input {
     justify-content: space-between;
     gap: 8px;
     padding: 8px 10px;
-    border: 1px solid rgba(125, 211, 252, 0.22);
+    border: 1px solid rgba(255, 170, 0, 0.28);
     border-radius: 6px;
-    background: rgba(14, 116, 144, 0.1);
+    background: rgba(0, 0, 0, 0.45);
     font-size: 0.8em;
     font-weight: 500;
     letter-spacing: 0;
@@ -7847,9 +7848,9 @@ textarea.rt-cr-input {
 .rt-dungeon-graph-scroll {
     overflow: auto;
     max-height: 220px;
-    border: 1px solid rgba(125, 211, 252, 0.22);
+    border: 1px solid rgba(255, 170, 0, 0.28);
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.22);
+    background: #0c0c0c;
     padding: 4px;
     cursor: grab;
     user-select: none;
@@ -7880,13 +7881,13 @@ textarea.rt-cr-input {
     -webkit-user-select: none;
 }
 .rt-dungeon-graph-edge {
-    stroke: rgba(125, 211, 252, 0.55);
+    stroke: rgba(255, 170, 0, 0.48);
     stroke-width: 1.6;
 }
 .rt-dungeon-graph-edge-locked,
 .rt-dungeon-graph-edge-closed {
     stroke-dasharray: 5 4;
-    stroke: rgba(212, 169, 64, 0.7);
+    stroke: rgba(255, 170, 0, 0.72);
 }
 .rt-dungeon-graph-edge-blocked,
 .rt-dungeon-graph-edge-destroyed {
@@ -7895,34 +7896,39 @@ textarea.rt-cr-input {
 }
 .rt-dungeon-graph-node rect,
 .rt-dungeon-graph-node circle {
-    fill: rgba(14, 116, 144, 0.28);
-    stroke: rgba(125, 211, 252, 0.45);
+    fill: #161616;
+    stroke: rgba(255, 170, 0, 0.55);
     stroke-width: 1.2;
 }
 .rt-dungeon-graph-node text {
-    fill: var(--rt-text, #e8e8e8);
+    fill: #f0f0f0;
     pointer-events: none;
 }
 .rt-dungeon-graph-node-discovered rect {
-    fill: rgba(14, 116, 144, 0.14);
-    stroke: rgba(125, 211, 252, 0.28);
+    fill: #101010;
+    stroke: rgba(255, 170, 0, 0.28);
 }
 .rt-dungeon-graph-node-discovered text {
-    opacity: 0.72;
+    fill: #c8c8c8;
+    opacity: 0.78;
 }
 .rt-dungeon-graph-node-fog circle {
-    fill: rgba(255, 255, 255, 0.06);
-    stroke: rgba(255, 255, 255, 0.22);
+    fill: #0a0a0a;
+    stroke: rgba(255, 170, 0, 0.18);
     stroke-dasharray: 2 2;
 }
 .rt-dungeon-graph-node-fog text {
-    fill: var(--rt-text-muted, #aaa);
+    fill: rgba(255, 170, 0, 0.45);
     font-size: 10px;
 }
 .rt-dungeon-graph-node-current rect {
-    fill: rgba(125, 211, 252, 0.28);
-    stroke: #7dd3fc;
-    stroke-width: 2;
+    fill: #0e0e0e;
+    stroke: #ffaa00;
+    stroke-width: 2.2;
+}
+.rt-dungeon-graph-node-current text {
+    fill: #ffaa00;
+    font-weight: 700;
 }
 .rt-dungeon-graph-node-revealed {
     cursor: pointer;
@@ -7931,7 +7937,107 @@ textarea.rt-cr-input {
     outline: none;
 }
 .rt-dungeon-graph-node-revealed:hover rect {
-    fill: rgba(125, 211, 252, 0.22);
+    fill: rgba(255, 170, 0, 0.16);
+}
+.rt-dungeon-graph-node-current:hover rect {
+    fill: rgba(255, 170, 0, 0.22);
+}
+.rt-dungeon-graph-icon {
+    pointer-events: auto;
+    color: #c5d0da;
+    opacity: 1;
+    filter: drop-shadow(0 0 0.6px #041018) drop-shadow(0 0 0.6px #041018);
+}
+.rt-dungeon-graph-icon-art {
+    pointer-events: none;
+}
+.rt-dungeon-graph-icon-hit {
+    fill: transparent;
+    pointer-events: all;
+}
+.rt-dungeon-graph-icon-creature { color: #ffc48a; }
+.rt-dungeon-graph-icon-group { color: #f0a05a; }
+.rt-dungeon-graph-icon-trap { color: #ff6b5c; }
+.rt-dungeon-graph-icon-hazard { color: #f3d04a; }
+.rt-dungeon-graph-icon-alarm { color: #ffe066; }
+.rt-dungeon-graph-icon-barrier { color: #c5d0da; }
+.rt-dungeon-graph-icon-object { color: #8fe0ff; }
+.rt-dungeon-graph-icon-loot { color: #ffd36a; }
+.rt-dungeon-graph-icon-effect { color: #d4c2ff; }
+.rt-dungeon-graph-icon-other { color: #c5d0da; }
+.rt-dungeon-graph-icon-deactivated,
+.rt-dungeon-graph-icon-spent {
+    opacity: 0.82;
+}
+.rt-dungeon-graph-icon-destroyed,
+.rt-dungeon-graph-icon-dead {
+    opacity: 0.7;
+}
+.rt-dungeon-graph-icon-stressed {
+    color: #ff9a6a;
+}
+.rt-dungeon-graph-icon-suspected {
+    opacity: 0.88;
+}
+.rt-dungeon-graph-icon-unrevealed {
+    opacity: 0.55;
+}
+.rt-dungeon-graph-icon-overflow {
+    fill: var(--rt-text, #e8e8e8);
+    pointer-events: none;
+}
+.rt-dungeon-graph-asset-tip {
+    position: fixed;
+    z-index: 26000;
+    pointer-events: none;
+    min-width: 148px;
+    max-width: 260px;
+    padding: 7px 8px 8px;
+    border: 1px solid rgba(255, 170, 0, 0.45);
+    border-radius: 8px;
+    background: rgba(12, 12, 12, 0.96);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+    color: var(--rt-text, #e8e8e8);
+    font-size: 12px;
+    line-height: 1.35;
+}
+dialog .rt-dungeon-graph-asset-tip,
+.popup .rt-dungeon-graph-asset-tip {
+    z-index: 30;
+}
+.rt-dungeon-graph-asset-tip-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    color: #ffaa00;
+    font-size: 12px;
+}
+.rt-dungeon-graph-asset-tip-head strong {
+    font-weight: 650;
+    color: var(--rt-text, #e8e8e8);
+}
+.rt-dungeon-graph-asset-tip-detail {
+    margin-top: 5px;
+    color: var(--rt-text, #e8e8e8);
+    font-size: 11px;
+    line-height: 1.4;
+    opacity: 0.88;
+}
+.rt-dungeon-graph-asset-tip::after {
+    content: '';
+    position: absolute;
+    left: var(--tip-arrow-left, 50%);
+    top: 100%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(255, 170, 0, 0.45);
+}
+.rt-dungeon-graph-asset-tip-below::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 170, 0, 0.45);
 }
 .rt-dungeon-map-detached-panel {
     display: flex;

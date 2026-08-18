@@ -23,7 +23,10 @@ import {
     mapSiteFooterMismatchHint,
     migrateDungeonMapAttachmentToContent,
     migrateDungeonMapSectionToStructured,
+    normalizeDungeonMapDocument,
     parseDungeonMapDocument,
+    coerceAssetState,
+    isPlayCanonLockedState,
     parseDungeonDeltaBlock,
     reconcileDungeonMapAreaKnowledge,
     resolveActiveDungeonSite,
@@ -1263,5 +1266,67 @@ The last guard falls and a loose stone reveals a niche.
         });
         expect(zero.ok).toBe(false);
         expect(zero.errors[0].code).toBe('INVALID_COUNT');
+    });
+
+    it('stores DEACTIVATED as the canonical neutralized-mechanism state', () => {
+        expect(coerceAssetState('DISARMED')).toBe('DEACTIVATED');
+        expect(coerceAssetState('inactive')).toBe('DEACTIVATED');
+        expect(coerceAssetState('PACIFIED')).toBe('DEACTIVATED');
+        expect(isPlayCanonLockedState('DISARMED')).toBe(true);
+        expect(isPlayCanonLockedState('DEACTIVATED')).toBe(true);
+
+        const document = normalizeDungeonMapDocument({
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'entry', name: 'Entry', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'needle', kind: 'TRAP', name: 'Poison Needle', location: 'entry',
+                state: 'DISARMED', knowledge: 'KNOWN', detail: 'Pins folded back.', origin: 'INITIAL_MAP',
+            }],
+        });
+        expect(document.assets[0].state).toBe('DEACTIVATED');
+
+        const withDisarmed = {
+            ...connectedArchitectMap,
+            assets: [{
+                ...connectedArchitectMap.assets[0],
+                id: 'glyph',
+                kind: 'TRAP',
+                name: 'Scorching Glyph',
+                state: 'DISARMED',
+            }],
+        };
+        const accepted = validateDungeonMapArchitecture(withDisarmed, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(accepted.valid).toBe(true);
+        expect(accepted.document.assets.find(asset => asset.id === 'glyph').state).toBe('DEACTIVATED');
+
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'entry', name: 'Entry', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'needle', kind: 'TRAP', name: 'Poison Needle', location: 'entry',
+                state: 'ARMED', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP',
+            }],
+        };
+        const disarmed = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-1600-needle-off',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'needle', state: 'DISARMED',
+                knowledge: 'KNOWN', cause: 'The party folded the needle back.', actor: 'party',
+            }],
+        });
+        expect(disarmed.ok).toBe(true);
+        expect(disarmed.document.assets[0].state).toBe('DEACTIVATED');
+
+        const revived = applyDungeonMapTransaction(disarmed.document, {
+            operation_id: 'evo-day2-0800-rearm',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'needle', state: 'ARMED', cause: 'Should not rearm.' }],
+        });
+        expect(revived.ok).toBe(false);
+        expect(revived.errors[0]).toMatchObject({ code: 'PLAY_CANON_LOCKED' });
     });
 });

@@ -115,6 +115,7 @@ describe('Map Architect component', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('The narrator will invent those granular locations during play');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"kind":"DUNGEON"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"kind":"SETTLEMENT"');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('a neutralized mechanism is DEACTIVATED');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"origin":"INITIAL_MAP"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"state":"LOCKED"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never make a chapel, inn, shop, or house its own settlement area');

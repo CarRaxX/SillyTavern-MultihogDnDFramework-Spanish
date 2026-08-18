@@ -58,7 +58,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
                             type: 'string',
                             enum: [
                                 'ACTIVE', 'ALERT', 'IDLE', 'DORMANT', 'FLEEING', 'CAPTURED',
-                                'DEAD', 'DESTROYED', 'DISABLED', 'DISARMED', 'ARMED', 'TRIGGERED',
+                                'DEAD', 'DESTROYED', 'DISABLED', 'DEACTIVATED', 'DISARMED', 'ARMED', 'TRIGGERED',
                                 'LOCKED', 'UNLOCKED', 'OPEN', 'CLOSED', 'BLOCKED', 'CLEARED',
                                 'INTACT', 'DAMAGED', 'TAKEN', 'AVAILABLE', 'EXHAUSTED', 'EXPIRED',
                                 'DISMISSED', 'REMOVED', 'UNKNOWN',

@@ -4,6 +4,15 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.10.0] - 2026-08-18
+
+### Added
+- **Map node occupancy icons**: Visuals/Map room nodes show characteristic kind art under the label for known (and suspected) assets — creature, pack, trap, hazard, alarm, barrier, effect, loot, object (`src/ui/SVG`). Live traps render as `TRAP_ARMED`; a neutralized mechanism renders as `TRAP_DEACTIVATED`. Reveal All still shows unrevealed occupancy as faded icons.
+
+### Changed
+- **Visuals/Map orange/black**: room nodes, connectors, and the Visuals/Map tab use the same `#ffaa00` highlight as character-sheet numbers, on near-black fills. The current room is an orange stroke with orange type; the active Visuals/Map toggle is an orange chip with black type. Occupancy art uses a warm amber/gold/bronze set so kinds still read apart without neon fills.
+- **Asset state `DEACTIVATED`**: canonical "switched off" state for traps, alarms, and similar mechanisms. `DISARMED`, `INACTIVE`, and `PACIFIED` are accepted aliases and stored as `DEACTIVATED`. Map Evolution cannot reverse it, same as the old `DISARMED` lock. Reset stored Map Architect / Map Evolution prompts to pick up the new wording.
+
 ## [8.1.3] - 2026-08-18
 
 ### Fixed

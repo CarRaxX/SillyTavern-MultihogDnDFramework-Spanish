@@ -58,6 +58,8 @@ describe('panel builder', () => {
     it('opens a knowledge-filtered site inspector from Visuals/Map', () => {
         const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
         expect(source).toContain('bindDungeonMapPan');
+        expect(source).toContain('bindDungeonMapAssetPopups');
+        expect(source).toContain("anchor.closest('dialog, .popup')");
         expect(source).toContain("root.classList.contains('rt-dungeon-graph-scroll')");
         expect(source).toContain('openDungeonMapReadablePopup');
         expect(source).toContain('Reveal All');
@@ -65,6 +67,7 @@ describe('panel builder', () => {
         expect(source).toContain('Raw JSON');
         expect(source).toContain('class="rt-dungeon-map-raw"');
         const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+        expect(css).toContain('.rt-dungeon-graph-asset-tip');
         expect(css).toMatch(/\.rt-dungeon-map-popup\s*\{[^}]*text-align:\s*left;/);
         expect(css).toMatch(/\.rt-dungeon-map-raw\s*\{[\s\S]*?text-align:\s*left;[\s\S]*?white-space:\s*pre;/);
         expect(source).toContain('Map Evolution History');

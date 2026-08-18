@@ -3,6 +3,7 @@ import { runtimeState } from '../../app/runtime-state.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
+import { renderDungeonGraphAssetTipHtml } from '../../../dungeon-map-icons.js';
 import { serializeDungeonMapDocument } from '../../../dungeon-reality.js';
 import { describeEvolutionBacklog, formatEvolutionElapsedMinutes, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
@@ -173,6 +174,7 @@ export function bindDungeonMapPan(root) {
             if (!moved && (Math.abs(dx) > PAN_THRESHOLD_PX || Math.abs(dy) > PAN_THRESHOLD_PX)) {
                 moved = true;
                 scroll.classList.add('rt-dungeon-graph-panning');
+                hideDungeonMapAssetTip();
             }
             if (!moved) return;
             scroll.scrollLeft = startLeft - dx;
@@ -184,6 +186,111 @@ export function bindDungeonMapPan(root) {
         scroll.addEventListener('lostpointercapture', endDrag);
         scroll.addEventListener('dragstart', (event) => event.preventDefault());
         scroll.addEventListener('selectstart', (event) => event.preventDefault());
+    }
+    bindDungeonMapAssetPopups(root);
+}
+
+const ASSET_TIP_ID = 'rt-dungeon-graph-asset-tip';
+
+function resolveAssetTipHost(anchor) {
+    return (anchor instanceof Element && anchor.closest('dialog, .popup')) || document.body;
+}
+
+function ensureDungeonMapAssetTip(host = document.body) {
+    let tip = document.getElementById(ASSET_TIP_ID);
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = ASSET_TIP_ID;
+        tip.className = 'rt-dungeon-graph-asset-tip';
+        tip.hidden = true;
+        window.addEventListener('resize', hideDungeonMapAssetTip);
+    }
+    if (tip.parentElement !== host) host.appendChild(tip);
+    return tip;
+}
+
+export function hideDungeonMapAssetTip() {
+    const tip = document.getElementById(ASSET_TIP_ID);
+    if (!tip || tip.hidden) return;
+    tip.hidden = true;
+    tip.replaceChildren();
+}
+
+function positionDungeonMapAssetTip(tip, anchor) {
+    const host = tip.parentElement || document.body;
+    const anchoredInHost = host !== document.body;
+    const rect = anchor.getBoundingClientRect();
+    const hostRect = anchoredInHost
+        ? host.getBoundingClientRect()
+        : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const pad = 8;
+    const gap = 8;
+    tip.style.position = anchoredInHost ? 'absolute' : 'fixed';
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    const tipRect = tip.getBoundingClientRect();
+    const scrollLeft = anchoredInHost ? host.scrollLeft : 0;
+    const scrollTop = anchoredInHost ? host.scrollTop : 0;
+    let left = rect.left - hostRect.left + (rect.width - tipRect.width) / 2 + scrollLeft;
+    let top = rect.top - hostRect.top - tipRect.height - gap + scrollTop;
+    const placeBelow = top < pad;
+    if (placeBelow) top = rect.top - hostRect.top + rect.height + gap + scrollTop;
+    const maxLeft = (anchoredInHost ? host.clientWidth || hostRect.width : window.innerWidth) - tipRect.width - pad;
+    const maxTop = (anchoredInHost ? host.clientHeight || hostRect.height : window.innerHeight) - tipRect.height - pad;
+    left = Math.max(pad, Math.min(left, maxLeft));
+    top = Math.max(pad, Math.min(top, maxTop));
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+    tip.style.setProperty('--tip-arrow-left', `${Math.round(rect.left - hostRect.left - left + rect.width / 2 + scrollLeft)}px`);
+    tip.classList.toggle('rt-dungeon-graph-asset-tip-below', placeBelow);
+}
+
+function showDungeonMapAssetTip(icon) {
+    const tip = ensureDungeonMapAssetTip(resolveAssetTipHost(icon));
+    tip.innerHTML = renderDungeonGraphAssetTipHtml({
+        name: icon.getAttribute('data-asset-name'),
+        kind: icon.getAttribute('data-asset-kind'),
+        state: icon.getAttribute('data-asset-state'),
+        knowledge: icon.getAttribute('data-asset-knowledge'),
+        detail: icon.getAttribute('data-asset-detail'),
+        count: icon.getAttribute('data-asset-count'),
+    });
+    tip.hidden = false;
+    positionDungeonMapAssetTip(tip, icon);
+}
+
+function iconFromEventTarget(target) {
+    return target instanceof Element ? target.closest('.rt-dungeon-graph-icon') : null;
+}
+
+export function bindDungeonMapAssetPopups(root) {
+    if (!root) return;
+    const scrolls = [];
+    if (root instanceof HTMLElement && root.classList.contains('rt-dungeon-graph-scroll')) {
+        scrolls.push(root);
+    }
+    if (typeof root.querySelectorAll === 'function') {
+        root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => scrolls.push(scroll));
+    }
+    for (const scroll of scrolls) {
+        if (!(scroll instanceof HTMLElement) || scroll.dataset.assetTipBound === '1') continue;
+        scroll.dataset.assetTipBound = '1';
+        scroll.addEventListener('pointerover', (event) => {
+            const icon = iconFromEventTarget(event.target);
+            if (!icon || !scroll.contains(icon)) return;
+            showDungeonMapAssetTip(icon);
+        });
+        scroll.addEventListener('pointerout', (event) => {
+            const from = iconFromEventTarget(event.target);
+            const to = iconFromEventTarget(event.relatedTarget);
+            if (from && from !== to) hideDungeonMapAssetTip();
+        });
+        scroll.addEventListener('scroll', hideDungeonMapAssetTip, { passive: true });
+        const popupContent = scroll.closest('.popup-content');
+        if (popupContent instanceof HTMLElement && popupContent.dataset.assetTipScroll !== '1') {
+            popupContent.dataset.assetTipScroll = '1';
+            popupContent.addEventListener('scroll', hideDungeonMapAssetTip, { passive: true });
+        }
     }
 }
 

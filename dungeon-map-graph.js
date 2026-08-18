@@ -8,6 +8,12 @@ import {
     normalizeDungeonMapDocument,
     resolveCurrentMapPlacement,
 } from './dungeon-reality.js';
+import {
+    MAP_NODE_FONT,
+    collectAreaAssetIcons,
+    mapNodeIconMetrics,
+    renderAreaAssetIconsSvg,
+} from './dungeon-map-icons.js';
 
 function escapeXml(value) {
     return String(value || '')
@@ -86,15 +92,22 @@ export function buildDungeonMapGraph(document, { playerFacing = true, currentLoc
     const visibleIds = new Set([...known, ...fog]);
     const nodes = map.areas
         .filter(area => visibleIds.has(area.id))
-        .map(area => ({
-            id: area.id,
-            name: area.name,
-            knowledge: area.knowledge,
-            fog: fog.has(area.id),
-            revealed: known.has(area.id),
-            current: area.id === currentAreaId,
-            entrance: map.areas[0]?.id === area.id,
-        }));
+        .map(area => {
+            const fogged = fog.has(area.id);
+            const icons = fogged
+                ? []
+                : collectAreaAssetIcons(map.assets, area.id, { playerFacing });
+            return {
+                id: area.id,
+                name: area.name,
+                knowledge: area.knowledge,
+                fog: fogged,
+                revealed: known.has(area.id),
+                current: area.id === currentAreaId,
+                entrance: map.areas[0]?.id === area.id,
+                icons,
+            };
+        });
     const edges = uniqueConnectionEdges(map.areas).filter(edge =>
         visibleIds.has(edge.from) && visibleIds.has(edge.to));
     return {
@@ -135,8 +148,9 @@ function bfsRanks(nodes, edges, rootId) {
  * @param {{ compact?: boolean }} [options]
  */
 export function layoutDungeonMapGraph(graph, { compact = true } = {}) {
-    const nodeWidth = compact ? 108 : 148;
-    const nodeHeight = compact ? 28 : 36;
+    const nodeWidth = compact ? 140 : 192;
+    const nodeHeight = compact ? 36 : 47;
+    const iconMetrics = mapNodeIconMetrics(compact);
     const fogSize = compact ? 18 : 22;
     const rankGap = compact ? 56 : 84;
     const nodeGap = compact ? 10 : 16;
@@ -166,15 +180,27 @@ export function layoutDungeonMapGraph(graph, { compact = true } = {}) {
     const byId = new Map();
     let maxBottom = padding;
     for (const [rank, layer] of [...layers.entries()].sort((a, b) => a[0] - b[0])) {
-        layer.forEach((node, order) => {
+        let y = padding;
+        layer.forEach((node) => {
             const width = node.fog ? fogSize : nodeWidth;
-            const height = node.fog ? fogSize : nodeHeight;
+            const hasIcons = !node.fog && (node.icons || []).length > 0;
+            const height = node.fog ? fogSize : (hasIcons ? iconMetrics.height : nodeHeight);
             const x = padding + rank * (nodeWidth + rankGap) + (nodeWidth - width) / 2;
-            const y = padding + order * (nodeHeight + nodeGap) + (nodeHeight - height) / 2;
-            const placed = { ...node, x, y, width, height, cx: x + width / 2, cy: y + height / 2 };
+            const placed = {
+                ...node,
+                x,
+                y,
+                width,
+                height,
+                cx: x + width / 2,
+                cy: y + height / 2,
+                labelY: hasIcons ? y + iconMetrics.labelYOffset : y + height / 2,
+                iconY: hasIcons ? y + iconMetrics.iconYOffset : y + height / 2,
+            };
             positioned.push(placed);
             byId.set(node.id, placed);
             maxBottom = Math.max(maxBottom, y + height);
+            y += height + nodeGap;
         });
     }
     const width = padding * 2 + (maxRank + 1) * nodeWidth + maxRank * rankGap;
@@ -250,7 +276,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
     if (!layout.nodes.length) {
         return '<div class="rt-dungeon-graph-empty">No revealed rooms yet.</div>';
     }
-    const fontSize = compact ? 10 : 12;
+    const fontSize = compact ? MAP_NODE_FONT.compact : MAP_NODE_FONT.expanded;
     const edges = layout.edges.map(edge => {
         const title = escapeXml([edge.state, edge.detail].filter(Boolean).join(' — '));
         const stateClass = `rt-dungeon-graph-edge rt-dungeon-graph-edge-${String(edge.state || 'OPEN').toLowerCase()}`;
@@ -264,16 +290,21 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
         const attrs = [
             `class="${nodeClass(node)}"`,
             node.fog ? 'data-fog="1" aria-hidden="true"' : `data-area-id="${escapeXml(node.id)}" data-area-path="${escapeXml(path)}" role="button" tabindex="0"`,
-        ].join(' ');
-        const title = node.fog
-            ? 'Unexplored'
-            : escapeXml(`${node.name}${node.current ? (graph.currentInteriorName ? ` (in ${graph.currentInteriorName})` : ' (you are here)') : ''}`);
+        ];
+        const here = node.current
+            ? (graph.currentInteriorName ? ` (in ${graph.currentInteriorName})` : ' (you are here)')
+            : '';
+        if (!node.fog) attrs.push(`aria-label="${escapeXml(`${node.name}${here}`)}"`);
         const shape = node.fog
             ? `<circle cx="${node.cx}" cy="${node.cy}" r="${node.width / 2}"></circle>`
             : `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="6"></rect>`;
-        return `<g ${attrs}><title>${title}</title>${shape}<text x="${node.cx}" y="${node.cy}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}">${escapeXml(label)}</text></g>`;
+        const textY = node.labelY ?? node.cy;
+        const icons = node.fog || !(node.icons || []).length
+            ? ''
+            : renderAreaAssetIconsSvg(node.icons, { cx: node.cx, y: node.iconY, compact });
+        return `<g ${attrs.join(' ')}>${shape}<text x="${node.cx}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}">${escapeXml(label)}</text>${icons}</g>`;
     }).join('');
-    return `<svg class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
 }
 
 /**

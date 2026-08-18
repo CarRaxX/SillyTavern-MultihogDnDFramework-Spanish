@@ -7,6 +7,7 @@ import {
     renderDungeonMapReadableHtml,
     resolveDungeonGraphCurrentArea,
 } from '../dungeon-map-graph.js';
+import { collectAreaAssetIcons, MAP_ICON_SIZE, mapAssetIconMood, mapAssetIconToken, renderDungeonGraphAssetTipHtml } from '../dungeon-map-icons.js';
 import { getLocationLeaf, resolveCurrentMapPlacement, resolveDungeonMapForLocation } from '../dungeon-reality.js';
 
 const midExplorationMap = {
@@ -265,7 +266,7 @@ describe('dungeon map graph', () => {
         expect(byId['lantern-gate'].current).toBe(false);
         expect(graph.currentInteriorName).toBe('Chapel of the Drowned Stone');
         const svg = renderDungeonMapGraphSvg(graph, { compact: true, siteRoot: 'Morrowfen' });
-        expect(svg).toContain('in Chapel of the Drowned Stone');
+        expect(svg).toContain('aria-label="Shrine Quarter (in Chapel of the Drowned Stone)"');
     });
 
     it('still highlights the parent district when the interior is not yet an asset', () => {
@@ -335,5 +336,147 @@ describe('dungeon map graph', () => {
         expect(html).toContain('Black water');
         expect(html).toContain('Ossuary wight');
         expect(html).toContain('Casket needle');
+    });
+
+    it('maps trap moods onto ARMED vs DEACTIVATED icon tokens', () => {
+        expect(mapAssetIconMood('TRAP', 'ARMED')).toBe('ARMED');
+        expect(mapAssetIconMood('TRAP', 'ACTIVE')).toBe('ARMED');
+        expect(mapAssetIconMood('TRAP', 'DEACTIVATED')).toBe('DEACTIVATED');
+        expect(mapAssetIconMood('TRAP', 'DISABLED')).toBe('DEACTIVATED');
+        expect(mapAssetIconMood('TRAP', 'TRIGGERED')).toBe('TRIGGERED');
+        expect(mapAssetIconToken({ kind: 'TRAP', state: 'ACTIVE' })).toBe('TRAP_ARMED');
+        expect(mapAssetIconToken({ kind: 'TRAP', state: 'DEACTIVATED' })).toBe('TRAP_DEACTIVATED');
+        expect(mapAssetIconToken({ kind: 'CREATURE', state: 'ACTIVE' })).toBe('CREATURE_LIVE');
+        expect(mapAssetIconToken({ kind: 'CREATURE', state: 'DEAD' })).toBe('CREATURE_DEAD');
+    });
+
+    it('renders known asset icons under room labels and hides unrevealed ones', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [
+                {
+                    id: 'cellar-landing',
+                    name: 'Cellar Landing',
+                    knowledge: 'VISITED',
+                    geometry: ['Low oak beams.'],
+                    connections: [{ to: 'crypt-passage', state: 'OPEN', detail: 'Iron-banded door' }],
+                },
+                {
+                    id: 'crypt-passage',
+                    name: 'Crypt Passage',
+                    knowledge: 'VISITED',
+                    geometry: ['A collapsed arch.'],
+                    connections: [
+                        { to: 'cellar-landing', state: 'OPEN', detail: 'Iron-banded door' },
+                        { to: 'ossuary', state: 'OPEN', detail: 'Rotten tapestry' },
+                    ],
+                },
+                {
+                    id: 'ossuary',
+                    name: 'Ossuary',
+                    knowledge: 'UNREVEALED',
+                    geometry: ['Stacked bones.'],
+                    connections: [{ to: 'crypt-passage', state: 'OPEN', detail: 'Rotten tapestry' }],
+                },
+            ],
+            assets: [
+                {
+                    id: 'scorching-glyph',
+                    kind: 'TRAP',
+                    name: 'Scorching Glyph',
+                    location: 'cellar-landing',
+                    state: 'ARMED',
+                    knowledge: 'KNOWN',
+                    detail: 'Heat-rune on the threshold.',
+                    origin: 'INITIAL_MAP',
+                },
+                {
+                    id: 'folded-needle',
+                    kind: 'TRAP',
+                    name: 'Folded Needle',
+                    location: 'crypt-passage',
+                    state: 'DEACTIVATED',
+                    knowledge: 'KNOWN',
+                    detail: 'Pins folded back.',
+                    origin: 'INITIAL_MAP',
+                },
+                {
+                    id: 'hidden-wight',
+                    kind: 'CREATURE',
+                    name: 'Ossuary wight',
+                    location: 'ossuary',
+                    state: 'ACTIVE',
+                    knowledge: 'UNREVEALED',
+                    detail: 'Bone dust in the air.',
+                    origin: 'INITIAL_MAP',
+                },
+                {
+                    id: 'suspected-plate',
+                    kind: 'TRAP',
+                    name: 'Pressure Plate',
+                    location: 'crypt-passage',
+                    state: 'ARMED',
+                    knowledge: 'SUSPECTED',
+                    detail: 'The flagstone sits proud.',
+                    origin: 'INITIAL_MAP',
+                },
+            ],
+        };
+        expect(collectAreaAssetIcons(map.assets, 'cellar-landing', { playerFacing: true }).map(icon => icon.token))
+            .toEqual(['TRAP_ARMED']);
+        expect(collectAreaAssetIcons(map.assets, 'ossuary', { playerFacing: true })).toEqual([]);
+        expect(collectAreaAssetIcons(map.assets, 'ossuary', { playerFacing: false }).map(icon => icon.token))
+            .toEqual(['CREATURE_LIVE']);
+
+        const playerGraph = buildDungeonMapGraph(map, { playerFacing: true, currentLocation: 'Abbey Undercroft, Cellar Landing' });
+        const byId = Object.fromEntries(playerGraph.nodes.map(node => [node.id, node]));
+        expect(byId['cellar-landing'].icons.map(icon => icon.token)).toEqual(['TRAP_ARMED']);
+        expect(byId['crypt-passage'].icons.map(icon => icon.token)).toEqual(['TRAP_DEACTIVATED', 'TRAP_ARMED']);
+        expect(byId.ossuary.icons).toEqual([]);
+
+        const playerSvg = renderDungeonMapGraphSvg(playerGraph, { compact: true, siteRoot: 'Abbey Undercroft' });
+        expect(playerSvg).toContain('data-icon="TRAP_ARMED"');
+        expect(playerSvg).toContain('data-icon="TRAP_DEACTIVATED"');
+        expect(playerSvg).toContain('data-asset-name="Scorching Glyph"');
+        expect(playerSvg).toContain('data-asset-state="ARMED"');
+        expect(playerSvg).toContain('rt-dungeon-graph-icon-trap');
+        expect(playerSvg).toContain('rt-dungeon-graph-icon-art');
+        expect(playerSvg).toContain('SVG/trap.svg');
+        expect(playerSvg).not.toMatch(/rt-dungeon-graph-node[^>]*>\s*<title>/);
+        expect(playerSvg).not.toMatch(/rt-dungeon-graph-icon[\s\S]*?<title>/);
+        expect(playerSvg).not.toContain('data-icon="CREATURE_LIVE"');
+        expect(playerSvg).not.toContain('Ossuary wight');
+
+        const layout = layoutDungeonMapGraph(playerGraph, { compact: true });
+        const landing = layout.nodes.find(node => node.id === 'cellar-landing');
+        const fog = layout.nodes.find(node => node.id === 'ossuary');
+        expect(landing.height).toBeGreaterThan(36);
+        expect(landing.iconY - landing.labelY).toBeCloseTo(13 / 2 + 3 + 16.9 / 2);
+        expect(playerSvg).toContain(`scale(${MAP_ICON_SIZE.compact / 12})`);
+        expect(fog.height).toBe(18);
+
+        const gmGraph = buildDungeonMapGraph(map, { playerFacing: false });
+        const gmSvg = renderDungeonMapGraphSvg(gmGraph, { compact: false });
+        expect(gmSvg).toContain('data-icon="CREATURE_LIVE"');
+        expect(gmSvg).toContain('SVG/creature.svg');
+        expect(gmSvg).toContain('rt-dungeon-graph-icon-unrevealed');
+    });
+
+    it('renders an inspector-matching asset hover card', () => {
+        const html = renderDungeonGraphAssetTipHtml({
+            name: 'Scorching Glyph',
+            kind: 'TRAP',
+            state: 'ARMED',
+            knowledge: 'KNOWN',
+            detail: 'Heat-rune on the threshold.',
+        });
+        expect(html).toContain('Scorching Glyph');
+        expect(html).toContain('rt-dungeon-map-tag');
+        expect(html).toContain('TRAP');
+        expect(html).toContain('ARMED');
+        expect(html).toContain('KNOWN');
+        expect(html).toContain('Heat-rune on the threshold.');
+        expect(renderDungeonGraphAssetTipHtml({ name: 'Pack', kind: 'GROUP', count: 6 })).toContain('×6');
     });
 });
