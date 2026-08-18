@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.1.3] - 2026-08-18
+
+### Fixed
+- **Main prompt backup**: the original Quick Prompt Main is now snapshotted from Prompt Manager (not only an empty/unhydrated textarea) *before* the framework overwrites it, then mirrored to a browser-local backup that cannot be cancelled by a settings.json save or wiped by turning the tracker/extension off. Disable (⏻) restores that copy even when Quick Prompts is closed, and a later re-enable will not replace a real user backup with the D&D narrator prompt or an empty string.
+
 ## [8.1.2] - 2026-08-18
 
 ### Changed

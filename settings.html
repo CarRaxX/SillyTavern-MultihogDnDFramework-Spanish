@@ -48,13 +48,13 @@
                         <!-- MAIN PROMPT BACKUP -->
                         <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Main Prompt Backup</small>
                         <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; padding: 0 4px; margin-bottom: 6px;">
-                            When the State Tracker is on (and Custom Sysprompt Mode is off), the framework writes its system prompt to <b>Quick Prompt → Main</b>, replacing whatever was there. This backup saves that previous Main text so you can get it back — automatically before the first overwrite, and again when you disable the tracker with the <b>⏻</b> button on the tracker panel header (or by unchecking <b>Enable State Tracker</b> in settings). To jump back to your normal, non-D&amp;D RP, click <b>⏻</b> on the panel — your original Main prompt is restored right away, no profile switching. Use the buttons below anytime to refresh the saved copy (for example after editing Main yourself).
+                        When the State Tracker is on (and Custom Sysprompt Mode is off), the framework writes its system prompt to <b>Quick Prompt → Main</b>, replacing whatever was there. Your previous Main text is auto-saved <b>before</b> that overwrite, in this browser, independently of settings.json. The copy is kept when you click <b>⏻</b>, uncheck <b>Enable State Tracker</b>, disable the extension, or reload — it is not deleted just because the tracker is off. To jump back to your normal, non-D&amp;D RP, click <b>⏻</b> on the panel. Use the buttons below anytime to refresh the saved copy after editing Main yourself (while the tracker is off, or in Custom Sysprompt Mode).
                         </div>
                         <label class="checkbox_label" style="padding-left: 4px;">
                             <input id="rpg_main_sysprompt_backup_enabled" type="checkbox" />
                             <span>Enable Main prompt backup &amp; restore</span>
                             <i class="fa-solid fa-circle-question interactable"
-                                title="On by default. When enabled, your Quick Prompt Main text is snapshotted before the framework overwrites it and restored when you click the ⏻ button on the tracker panel (or uncheck Enable State Tracker) — so you can return to normal, non-D&amp;D RP that way. You can also save or restore manually with the buttons below."></i>
+                                title="On by default. Your Quick Prompt Main is snapshotted before the framework overwrites it and stored in this browser so it cannot be wiped by a cancelled settings save, a tracker ⏻ toggle, or temporarily disabling the extension. Restore happens when you click ⏻ (or uncheck Enable State Tracker). You can also save or restore manually with the buttons below."></i>
                         </label>
                         <div id="rpg_main_sysprompt_backup_controls" class="flex-container flexFlowColumn gap-1" style="padding-left: 4px; margin-top: 4px;">
                             <div class="flex-container gap-1" style="width: 100%;">
@@ -783,7 +783,7 @@
                         <input id="rpg_tracker_enabled" type="checkbox" />
                         <span>Enable State Tracker</span>
                         <i class="fa-solid fa-circle-question interactable"
-                            title="When enabled (and Custom Sysprompt Mode is off), the framework system prompt is written to Quick Prompt Main. Your previous Main prompt is backed up automatically before the first overwrite and restored when you click the ⏻ button on the tracker panel (or uncheck this box) — so you can quickly return to normal, non-D&amp;D RP without changing profiles."></i>
+                            title="When enabled (and Custom Sysprompt Mode is off), the framework system prompt is written to Quick Prompt Main. Your previous Main prompt is backed up first (browser-local, kept even if you disable the tracker or the extension) and restored when you click the ⏻ button on the tracker panel (or uncheck this box)."></i>
                     </label>
 
                     <label class="checkbox_label" style="margin-bottom: 8px;" title="Forces the State Model to output the COMPLETE, verified state for every enabled module on every pass, instead of only the changed sections. Trades tokens/latency for reliability — recommended for weaker/local models that struggle to keep delta-tracked state consistent. While enabled, the Core Prompt and User Prompt Suffix (further below) are temporarily replaced by built-in Full Review versions; your custom edits are preserved and restored when you turn this off.">
