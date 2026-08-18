@@ -33,7 +33,9 @@ import {
     stripCapturedDungeonMapBlocks,
     stripDungeonRealityBlocksFromPrompt,
     stripDungeonMapSection,
+    detachDungeonMapFromLocationEntry,
     syncDungeonRealityState,
+    canonicalizeReciprocalConnectionDetails,
     validateDungeonMapArchitecture,
 } from '../dungeon-reality.js';
 
@@ -97,6 +99,25 @@ describe('Map Architect validation', () => {
         });
         expect(rejected.valid).toBe(false);
         expect(rejected.errors.some(error => error.code === 'THREAT_MISMATCH')).toBe(true);
+    });
+
+    it('copies the first-seen route detail onto a reciprocal pair so directional paraphrases do not fail the map', () => {
+        const directional = structuredClone(connectedArchitectMap);
+        directional.areas[0].connections[0].detail = 'A low, braced crawlway passes eastward through fractured masonry into the ossuary.';
+        directional.areas[1].connections[0].detail = 'A low, braced crawlway passes westward through fractured masonry into the chamber.';
+        expect(validateDungeonMapArchitecture(directional, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).valid).toBe(false);
+
+        canonicalizeReciprocalConnectionDetails(directional.areas);
+        const result = validateDungeonMapArchitecture(directional, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(result.valid).toBe(true);
+        expect(directional.areas[0].connections[0].detail).toBe(directional.areas[1].connections[0].detail);
+        expect(directional.areas[0].connections[0].detail).toContain('eastward');
     });
 
     it('rejects omitted reverse passages and orphaned areas with correction hints', () => {
@@ -318,6 +339,10 @@ A desecrated altar.
         expect(stored.areas[0].geometry).toContain('A desecrated altar.');
         expect(stripDungeonMapSection(root.content)).toBe('[CORE]A crypt.[/CORE]');
         expect(root.extensions?.multihogDungeonMap).toBeUndefined();
+        expect(detachDungeonMapFromLocationEntry(root)).toBe(true);
+        expect(extractDungeonMapSection(root.content)).toBe('');
+        expect(root.content).toBe('[CORE]A crypt.[/CORE]');
+        expect(detachDungeonMapFromLocationEntry(root)).toBe(false);
     });
 
     it('migrates the earlier private-extension attachment into normal lore content', () => {

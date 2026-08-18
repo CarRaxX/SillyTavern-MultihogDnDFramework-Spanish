@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, mergePreservedColorMarkup, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, persistMapEvolutionState, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, mergePreservedColorMarkup, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent, parseJsonWithColorRepair } from './memo-processor.js';
@@ -25,10 +25,12 @@ import { findMostRecentNarratorMessage } from './src/state/present-now.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
+    detachDungeonMapFromLocationEntry,
     buildDungeonSitesFromLocationEntries,
     collectDungeonMapCandidates,
     dungeonLabelsMatch,
     dungeonSiteRootsMatch,
+    normalizeDungeonLabel,
     extractDungeonMapSection,
     extractFooterLocation,
     findLatestDungeonLocation,
@@ -48,6 +50,7 @@ import {
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
 import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
+import { clearEvolutionHistoryForSite, setSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
 import {
     buildWorldProgressionLocationDossiers,
     normalizeWorldReportMetadata,
@@ -576,7 +579,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
  * Atomically attach a validated Map Architect document to its root Location.
  * Existing maps always win: concurrent/repeated tool calls never overwrite canon.
  */
-export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
+export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowOffsite = false, requireNew = false, locationKeys = null, locationCore = '' } = {}) {
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
     const prefix = getLivePrefix();
@@ -607,6 +610,9 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
     });
     const existing = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
     if (existing) {
+        if (requireNew) {
+            throw new Error(`A mapped location named "${site}" already exists.`);
+        }
         return {
             bookName,
             entryId: `${bookName}::${rootEntry.uid}`,
@@ -616,20 +622,28 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
         };
     }
 
+    if (requireNew && rootEntry) {
+        throw new Error(`A location named "${site}" already exists. Use + MAP on that root instead.`);
+    }
+
     const currentLocation = findLatestDungeonLocation(ctx.chat || []);
-    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site)) {
+    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site) && !allowOffsite) {
         throw new Error(mapSiteFooterMismatchHint(site, currentLocation));
     }
 
     if (!rootEntry) {
         const uids = Object.keys(bookData.entries || {}).map(Number).filter(Number.isFinite);
         const nextUid = uids.length ? Math.max(...uids) + 1 : 0;
+        const coreBody = String(locationCore || '').trim();
+        const coreContent = /\[CORE\]/i.test(coreBody)
+            ? coreBody
+            : `[CORE]\n${coreBody || `${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.`}\n[/CORE]`;
         rootEntry = {
             uid: nextUid,
-            key: [site],
+            key: locationKeysForNewRoot(site, locationKeys),
             keysecondary: [],
             comment: site,
-            content: `[CORE]\n${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.\n[/CORE]`,
+            content: coreContent,
             constant: false,
             selective: false,
             selectiveLogic: 0,
@@ -680,6 +694,93 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
         existing: false,
         document: mapDocument,
     };
+}
+
+/** True when a Location root with this site name already exists. */
+export async function locationRootExists(siteRoot) {
+    const site = String(siteRoot || '').trim();
+    const prefix = getLivePrefix();
+    if (!site || !prefix) return false;
+    const ctx = SillyTavern.getContext();
+    const bookData = await loadWorldInfoFresh(`${prefix}_Locations`, ctx);
+    if (!bookData?.entries) return false;
+    return Object.values(bookData.entries).some(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
+    });
+}
+
+/**
+ * Remove the private [MAP] from a Locations entry without deleting the lore record.
+ * CORE/chronicles stay. Evolution trajectory for that site is dropped so a later
+ * map is not biased by the deleted occupancy clock.
+ */
+export async function deleteDungeonMapFromLocationEntry(id) {
+    const raw = String(id || '');
+    const splitAt = raw.indexOf('::');
+    const bookName = splitAt >= 0 ? raw.slice(0, splitAt) : '';
+    const uid = splitAt >= 0 ? raw.slice(splitAt + 2) : '';
+    if (!bookName || !uid) return { ok: false, error: 'Invalid lorebook entry id.' };
+
+    const ctx = SillyTavern.getContext();
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
+    const rootEntry = bookData?.entries?.[uid];
+    if (!rootEntry) return { ok: false, error: 'Location entry was not found.' };
+    if (!getDungeonMapAttachment(rootEntry)) return { ok: false, error: 'That Location has no private map.' };
+
+    const siteRoot = String(rootEntry.comment || '').trim();
+    if (!detachDungeonMapFromLocationEntry(rootEntry)) {
+        return { ok: false, error: 'Could not remove the private map.' };
+    }
+    rootEntry.disable = false;
+
+    await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map removal');
+    recordLiveDungeonMapSnapshot(
+        getSettings(),
+        collectDungeonMapHistorySnapshot(bookData.entries, bookName) || { bookName, maps: [] },
+    );
+
+    const settings = getSettings();
+    const siteKey = normalizeDungeonLabel(siteRoot);
+    const cleared = clearEvolutionHistoryForSite({
+        backlogBySite: settings.mapEvolutionBacklogBySite,
+        threadsBySite: settings.mapEvolutionThreadsBySite,
+        reportApplicationsBySite: settings.mapEvolutionWorldReportApplications,
+    }, siteRoot);
+    if (cleared.cleared) {
+        settings.mapEvolutionBacklogBySite = cleared.backlogBySite;
+        settings.mapEvolutionThreadsBySite = cleared.threadsBySite;
+        settings.mapEvolutionWorldReportApplications = cleared.reportApplicationsBySite;
+    }
+    if (siteKey) {
+        settings.mapEvolutionIntervalHoursBySite = setSiteEvolutionIntervalOverride(
+            settings.mapEvolutionIntervalHoursBySite,
+            siteRoot,
+            null,
+        );
+        if (settings.mapEvolutionLastFiredBySite && typeof settings.mapEvolutionLastFiredBySite === 'object') {
+            delete settings.mapEvolutionLastFiredBySite[siteKey];
+        }
+        if (normalizeDungeonLabel(settings.mapEvolutionLastSiteRoot) === siteKey) {
+            settings.mapEvolutionLastSiteRoot = '';
+        }
+        if (normalizeDungeonLabel(settings.mapEvolutionPendingExitRoot) === siteKey) {
+            settings.mapEvolutionPendingExitRoot = '';
+        }
+        if (Array.isArray(settings.mapEvolutionSelectedRoots)) {
+            settings.mapEvolutionSelectedRoots = settings.mapEvolutionSelectedRoots.filter(
+                root => normalizeDungeonLabel(root) !== siteKey,
+            );
+        }
+    }
+    persistMapEvolutionState();
+
+    if (typeof ctx.updateWorldInfoList === 'function') {
+        try { await ctx.updateWorldInfoList(); } catch (_) { /* list refresh is best-effort */ }
+    }
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+    return { ok: true, bookName, entryId: raw, siteRoot };
 }
 
 /** Captures the complete current campaign state for lossless redo. */
@@ -4170,6 +4271,12 @@ function cleanKeys(keys) {
     if (!Array.isArray(keys)) return [];
     const unique = [...new Set(keys.map(k => k?.trim()).filter(Boolean))];
     return unique.slice(0, 6); // Hard cap: max 6 keywords per entry to prevent keyword bloat
+}
+
+/** Site name first, then user keywords, still capped at 6. */
+function locationKeysForNewRoot(site, keys) {
+    const extra = Array.isArray(keys) ? keys : String(keys || '').split(/[,;\n]/);
+    return cleanKeys([site, ...extra]);
 }
 
 /**

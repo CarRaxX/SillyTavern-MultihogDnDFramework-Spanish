@@ -524,6 +524,34 @@ function architectureError(code, path, received, hint) {
 }
 
 /**
+ * Reciprocal routes are one physical passage. Models often rewrite detail from
+ * each room (eastward vs westward). Copy the first-seen string onto the reverse
+ * when state already matches. Does not invent missing reverses.
+ */
+export function canonicalizeReciprocalConnectionDetails(areas) {
+    if (!Array.isArray(areas)) return areas;
+    const seen = new Set();
+    for (const area of areas) {
+        const from = String(area?.id || '').trim();
+        if (!from || !Array.isArray(area?.connections)) continue;
+        for (const connection of area.connections) {
+            const to = String(connection?.to || '').trim();
+            if (!to) continue;
+            const pair = from < to ? `${from}\0${to}` : `${to}\0${from}`;
+            if (seen.has(pair)) continue;
+            seen.add(pair);
+            const target = areas.find(candidate => String(candidate?.id || '').trim() === to);
+            const reverse = (target?.connections || []).find(candidate => String(candidate?.to || '').trim() === from);
+            if (!reverse || reverse.state !== connection.state) continue;
+            if (String(reverse.detail || '') !== String(connection.detail || '')) {
+                reverse.detail = String(connection.detail || '');
+            }
+        }
+    }
+    return areas;
+}
+
+/**
  * Strictly validate a newly generated map before it becomes campaign canon.
  * Unlike normalizeDungeonMapDocument(), this never repairs missing topology or
  * silently invents IDs: the Map Architect gets actionable errors and retries.
@@ -656,7 +684,12 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
             } else if (reverse.state !== connection.state) {
                 errors.push(architectureError('CONNECTION_STATE_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.state, `Use ${connection.state} in both directions.`));
             } else if (String(reverse.detail || '') !== String(connection.detail || '')) {
-                errors.push(architectureError('CONNECTION_DETAIL_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.detail, 'Use the same route detail in both directions so the reciprocal passage has one canonical description.'));
+                errors.push(architectureError(
+                    'CONNECTION_DETAIL_MISMATCH',
+                    `$.areas[${targetIndex}].connections`,
+                    reverse.detail,
+                    `Copy this exact detail onto both ends: "${connection.detail}". The reverse currently says "${reverse.detail}".`,
+                ));
             }
         }
     });
@@ -1001,6 +1034,21 @@ export function attachDungeonMapToLocationEntry(entry, map) {
     entry.content = `${visible}${visible ? '\n\n' : ''}[MAP]\n${serializeDungeonMapDocument(document)}\n[/MAP]`;
     if (entry.extensions?.[DUNGEON_MAP_EXTENSION_KEY]) {
         delete entry.extensions[DUNGEON_MAP_EXTENSION_KEY];
+    }
+    return true;
+}
+
+/** Strip [MAP] (and any leftover extension blob) while keeping [CORE] and chronicles. */
+export function detachDungeonMapFromLocationEntry(entry) {
+    if (!entry) return false;
+    const hadSection = !!extractDungeonMapSection(entry.content);
+    const hadLegacy = !!(entry.extensions && entry.extensions[DUNGEON_MAP_EXTENSION_KEY]);
+    const hadOps = !!(entry.extensions && entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY]);
+    if (!hadSection && !hadLegacy && !hadOps) return false;
+    if (hadSection) entry.content = stripDungeonMapSection(entry.content);
+    if (entry.extensions) {
+        delete entry.extensions[DUNGEON_MAP_EXTENSION_KEY];
+        delete entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY];
     }
     return true;
 }

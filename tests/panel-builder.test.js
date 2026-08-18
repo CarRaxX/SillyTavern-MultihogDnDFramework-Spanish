@@ -32,14 +32,43 @@ describe('panel builder', () => {
 
     it('shows a private-map viewer button on mapped Lorebook Agent locations', () => {
         const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
-        expect(source).toContain('node.item.has_dungeon_map');
+        expect(source).toContain('node.item?.has_dungeon_map');
         expect(source).toContain('rt-dungeon-map-badge');
         expect(source).toContain('View private dungeon map (alpha) attached to this root Location');
         expect(source).toContain('openDungeonMapPopup');
         expect(source).toContain('openDungeonMapReadablePopup');
+        expect(source).toContain('rt-dungeon-map-delete');
+        expect(source).toContain('rt-dungeon-map-create');
+        expect(source).toContain('deleteDungeonMapFromLocationEntry');
+        expect(source).toContain('runMapArchitect');
+        expect(source).toContain('allowOffsite: true');
+        expect(source).toContain('Create a private map for this location root');
+        expect(source).toContain('Remove the private map from this Location (keeps CORE)');
+        expect(source).not.toContain('startUserRequestedAreaMapGeneration');
         expect(source).not.toContain('renderDungeonMapReadableHtml');
         expect(source).not.toContain('revealAll: true');
         expect(source).toContain('stripDungeonMapSection(item.content');
+        expect(source).toContain('rt-map-create-mode');
+        expect(source).toContain('inferMapArchitectArgs');
+        expect(source).toContain("value=\"auto\" checked");
+        expect(source).toContain('rt-map-create-lookback');
+        expect(source).toContain('Filling map brief for');
+        expect(source).toContain('id="rt-map-create-manual" hidden');
+        expect(source).toContain('rt-loc-add-mapped-btn');
+        expect(source).toContain('promptAndCreateMappedLocation');
+        expect(source).toContain('requireNew: true');
+        expect(source).toContain('locationKeys');
+        expect(source).toContain('The location name is added automatically');
+        expect(source).toContain('rt-map-loc-mode');
+        expect(source).toContain('rt-map-loc-brief');
+        expect(source).toContain('rt-map-loc-lookback');
+        expect(source).toContain('0 uses no recent chat');
+        expect(source).not.toContain('Keywords are required');
+        expect(source).not.toContain('Include the location name.');
+        expect(source).toContain('Add mapped location');
+        expect(source).toContain('onClosing');
+        expect(source).toContain('popup.dlg');
+        expect(source).toContain('#rt-map-loc-name');
     });
 
     it('probes the mapped site on first panel build so Visuals/Map does not wait for a settings toggle', () => {

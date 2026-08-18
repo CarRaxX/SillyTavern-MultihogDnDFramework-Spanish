@@ -10,7 +10,8 @@ import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemo
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
-import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
+import { inferMapArchitectArgs, runMapArchitect } from './map-architect.js';
+import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, deleteDungeonMapFromLocationEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
@@ -3324,7 +3325,7 @@ async function showLorebookAgentDocumentation() {
                                 <li><b>Include Present NPCs in Location Scene Prompts</b> — Injects NPCs named in the latest narrator output (Present-Now name scanner: first/last name only, not Lorebook Agent keys) plus the linked Player Character into location image prompts. Locked on while Real-Time Visualization Mode is active.</li>
                                                 <li><b>Real-Time Visualization Mode</b> — Generates location images in Visuals/Map from current chat context and characters present. Choose a trigger: <b>On location enter</b> (once per place with no image), <b>On location change</b> (fresh image on each path change including revisits), or <b>Every N outputs</b> (still regenerates on location change, plus every N chat outputs — set N to 1 for every output). Enables Show Location Images and present-NPC prompts as a locked bundle; disables Auto-Generate Locations. Can be turned on without Show Location Images already being enabled first.</li>
                             </ul>
-                            <p style="margin-top:8px;"><b>Visuals/Map</b> (agent panel) shows the current location: a wide location hero image when scene art is on, a knowledge-filtered site map while inside a mapped dungeon, and tiles for characters present (active Lorebook NPCs plus the linked Player Character). The site map can be popped out into its own window. Click the hero, a revealed room, or a tile to open the matching location or character card. The Lorebook MAP badge on a mapped root remains the private GM inspector. Scene art is generated according to your Location Images settings — either on lorebook entry creation (Auto-Generate Locations) or on arrival (Real-Time Visualization Mode).</p>
+                            <p style="margin-top:8px;"><b>Visuals/Map</b> (agent panel) shows the current location: a wide location hero image when scene art is on, a knowledge-filtered site map while inside a mapped dungeon, and tiles for characters present (active Lorebook NPCs plus the linked Player Character). The site map can be popped out into its own window. Click the hero, a revealed room, or a tile to open the matching location or character card. On a mapped Location root, the cyan <b>MAP</b> chip opens the private GM inspector and the adjacent <b>X</b> removes only that <code>[MAP]</code> (CORE stays). Unmapped location roots show a muted <b>+ MAP</b>: Auto spends one Map Architect turn to fill entrance/kind/scale/threat/premise from lore plus recent story, then generates the map; Manual is the same fields filled by you. The Locations header <b>Add mapped location</b> button creates a new root and its map. Auto takes a name, optional brief, and story lookback (0 = no chat); Manual is the same fields filled by you. The location name is always added as a keyword. The narrator is not involved. Scene art is generated according to your Location Images settings — either on lorebook entry creation (Auto-Generate Locations) or on arrival (Real-Time Visualization Mode).</p>
                             <p style="margin-top:4px;"><i>Tip: With Real-Time Visualization Mode on, use Visuals/Map in the Lorebook Agent to see scene art as you move through the story (trigger depends on your Real-Time settings).</i></p>
 
                             <h4 style="margin-bottom: 5px;">🧹 Cleanup & Compression</h4>
@@ -4274,6 +4275,7 @@ function createPanel() {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        deleteDungeonMapFromLocationEntry,
         deleteNpcFromLibrary,
         escapeHtml,
         escapeHtmlWithColor,
@@ -4327,6 +4329,8 @@ function createPanel() {
         resolveLocationImageWithMeta,
         resolvePortraitSrcForPlayerCharacter,
         rollbackRouterPass,
+        runMapArchitect,
+        inferMapArchitectArgs,
         runRealtimeSceneArtCheck,
         runMapUpdaterPass,
         runMapEvolutionPass,

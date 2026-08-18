@@ -2,7 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [Unreleased]
+## [8.25.0] - 2026-08-19
+
+### Added
+- **Lorebook Agent map delete**: the cyan MAP chip on a mapped Location root now has an **X** that strips only `[MAP]` (CORE and the lore entry stay). Evolution trajectory for that site is cleared.
+- **On-demand map from a location root**: unmapped Location roots show a muted **+ MAP**. **Auto** spends one Map Architect turn to fill entrance, kind, scale, threat, and premise from the location lore plus recent story, then generates the private `[MAP]`. **Manual** is the same fields in a small form. A sticky **Generating a location map** toast stays up until success or failure. No narrator turn, no CYOA, no chat injection. The live location footer is not required for this explicit request.
+- **Add mapped location**: the Locations header has **Add mapped location** when Persistent Maps is on. **Auto** takes a name, an optional brief, and story lookback (0 = no chat) and fills the rest. **Manual** is name plus map fields; extra keywords are optional. The location name is always added as a keyword. Existing roots still use **+ MAP**.
+
+### Changed
+- **Map Architect reciprocal routes**: the prompt now says to write each connection detail once and copy that exact string onto the reverse (no eastward/westward rewrite). Architect also copies the first-seen detail onto matching reverses before validation, so this mismatch no longer burns a correction pass. Reset a stored Map Architect prompt to pick up the wording.
 
 ## [8.10.1] - 2026-08-18
 

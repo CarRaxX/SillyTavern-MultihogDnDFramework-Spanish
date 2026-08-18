@@ -40,14 +40,19 @@ export function isMapArchitectTextOpener(settings) {
     return String(settings?.mapArchitectOpener || MAP_ARCHITECT_OPENER_TOOL).trim().toLowerCase() === MAP_ARCHITECT_OPENER_TEXT;
 }
 
-/** Prepend the text-opener CYOA exception so "MUST ALWAYS end with choices" cannot win. */
-export function applyMapArchitectTextOpenerCyoaCaveat(cyoaBlock) {
+/** Prepend a map-handshake CYOA exception so "MUST ALWAYS end with choices" cannot win. */
+export function applyCyoaMapHandshakeCaveat(cyoaBlock, caveat = MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT) {
     const block = String(cyoaBlock || '');
     if (!block || block.includes('[MAP OPENER EXCEPTION]')) return block;
     return block.replace(
         /^<CYOA_mode>\s*/i,
-        `<CYOA_mode>\n[MAP OPENER EXCEPTION]\n${MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT}\n\n`,
+        `<CYOA_mode>\n[MAP OPENER EXCEPTION]\n${caveat}\n\n`,
     );
+}
+
+/** Prepend the text-opener CYOA exception so "MUST ALWAYS end with choices" cannot win. */
+export function applyMapArchitectTextOpenerCyoaCaveat(cyoaBlock) {
+    return applyCyoaMapHandshakeCaveat(cyoaBlock, MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT);
 }
 
 export function normalizeMapArchitectOpener(value) {

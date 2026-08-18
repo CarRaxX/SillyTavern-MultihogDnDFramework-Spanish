@@ -5195,6 +5195,64 @@ textarea.rt-cr-input {
     color: #a8e0f0;
 }
 
+.rt-dungeon-map-actions {
+    display: inline-flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    margin-right: 2px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(125, 211, 252, 0.38);
+}
+
+.rt-dungeon-map-badge,
+.rt-dungeon-map-create,
+.rt-dungeon-map-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    margin: 0;
+    padding: 1px 4px;
+    border: none;
+    border-radius: 0;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    cursor: pointer;
+    background: rgba(14, 116, 144, 0.18);
+    color: #7dd3fc;
+}
+
+.rt-dungeon-map-create {
+    color: rgba(125, 211, 252, 0.72);
+    background: rgba(14, 116, 144, 0.1);
+    font-weight: 600;
+}
+
+.rt-dungeon-map-delete {
+    padding: 1px 5px;
+    color: rgba(125, 211, 252, 0.78);
+    border-left: 1px solid rgba(125, 211, 252, 0.28);
+}
+
+.rt-dungeon-map-badge:hover,
+.rt-dungeon-map-create:hover {
+    background: rgba(14, 116, 144, 0.32);
+    color: #bae6fd;
+}
+
+.rt-dungeon-map-delete:hover {
+    background: rgba(185, 28, 28, 0.35);
+    color: #fecaca;
+}
+
+.rt-dungeon-map-create:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
 /* Lorebook Agent view mode switch (Campaign Records / Visuals/Map) */
 /* Dungeon map viewer */
 .rt-dungeon-map-popup {
@@ -7464,6 +7522,34 @@ textarea.rt-cr-input {
     background: rgba(212, 169, 64, 0.22);
     border-color: rgba(212, 169, 64, 0.55);
     color: #ecc050;
+}
+
+.rt-loc-add-mapped-btn {
+    background: rgba(14, 116, 144, 0.12);
+    border: 1px solid rgba(125, 211, 252, 0.38);
+    color: #7dd3fc;
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    line-height: 1.3;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.rt-loc-add-mapped-btn:hover {
+    background: rgba(14, 116, 144, 0.28);
+    border-color: rgba(125, 211, 252, 0.62);
+    color: #bae6fd;
+}
+.rt-loc-add-mapped-btn:disabled {
+    opacity: 0.55;
+    cursor: wait;
 }
 
 /* ĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂĂÂ˘Ă˘âŹÂ˘ĂÂ

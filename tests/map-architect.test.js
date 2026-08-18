@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseMapArchitectResponse } from '../map-architect-parser.js';
-import { MAP_ARCHITECT_JSON_SCHEMA } from '../map-architect-schema.js';
-import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../map-architect-prompt.js';
+import { MAP_ARCHITECT_BRIEF_JSON_SCHEMA, MAP_ARCHITECT_JSON_SCHEMA } from '../map-architect-schema.js';
+import { DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT, DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../map-architect-prompt.js';
 
 describe('Map Architect component', () => {
     it('recovers a valid JSON object from a fenced response', () => {
@@ -81,14 +81,32 @@ describe('Map Architect component', () => {
         expect(hooks).toContain('runtimeState.hasActiveDungeonMap = false');
         expect(architect).toContain('MAX_CORRECTION_ATTEMPTS = 2');
         expect(architect).toContain('persistArchitectDungeonMap');
+        expect(architect).toContain('allowOffsite');
+        expect(architect).toContain('requireNew');
+        expect(architect).toContain('locationKeys');
+        expect(architect).toContain('locationCore');
+        expect(architect).toContain('locationRootExists');
+        expect(architect).toContain('export async function inferMapArchitectArgs');
+        expect(architect).toContain('MAP_ARCHITECT_BRIEF_JSON_SCHEMA');
+        expect(architect).toContain('canonicalizeReciprocalConnectionDetails');
+        expect(architect).toContain('direction-neutral description of the passage');
+        expect(architect).toContain('USER BRIEF');
+        expect(architect).toContain('vacuum — do not invent from chat');
+        expect(router).toContain('export async function deleteDungeonMapFromLocationEntry');
+        expect(router).toContain('export async function locationRootExists');
+        expect(router).toContain('locationKeysForNewRoot');
+        expect(router).toContain('requireNew');
+        expect(router).toContain('detachDungeonMapFromLocationEntry');
         expect(architect).toContain('mapArchitectConnectionSource');
         expect(architect).not.toContain('mapRuntimeConnectionSource');
         expect(architect).toContain("{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' }");
         expect(architect).toContain('CreateAreaMap');
         expect(architect).toContain('Threat: ${args.threat}');
         expect(architect).not.toContain('CreateDungeonMap');
+        expect(architect).toContain('Generating a location map for');
         expect(architect).toContain('Location map ready for');
         expect(architect).toContain('Location map generation failed for');
+        expect(architect).toContain('startMapArchitectToast');
     });
 
     it('defines the complete structured map response contract', () => {
@@ -101,6 +119,19 @@ describe('Map Architect component', () => {
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.threat.enum).toEqual(['LOW', 'MODERATE', 'HIGH', 'DEADLY']);
     });
 
+    it('defines a handshake-only brief contract for Auto map create', () => {
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.name).toBe('map_architect_brief_v1');
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.returnInvalid).toBe(true);
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.required).toEqual(['entrance', 'kind', 'scale', 'threat', 'premise']);
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.kind.enum).toEqual(['DUNGEON', 'SETTLEMENT']);
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.scale.enum).toEqual(['SMALL', 'MEDIUM', 'LARGE']);
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.keywords.maxItems).toBe(5);
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('filling only the CreateAreaMap handshake');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('You do not design rooms');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('USER BRIEF');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).not.toContain('CREATE ONE PRIVATE MAP');
+    });
+
     it('tells the architect to populate incidental objects instead of leaving them for later', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Write every human-readable string in the same language and script');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not translate, transliterate, expand, or retitle them');
@@ -109,6 +140,8 @@ describe('Map Architect component', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Scale is size, not danger');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"threat":"HIGH"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).not.toContain('need not pre-invent');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('copy that exact same string onto the reverse connection');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never give a reciprocal pair two different detail strings');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Occasional hub/nexus layouts are welcome');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('one area may have many routes');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('KIND: DUNGEON');

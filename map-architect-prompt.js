@@ -19,6 +19,7 @@ AREAS AND PASSAGES
 - The first area must be the requested entrance, with knowledge VISITED. Areas directly perceptible from it may be DISCOVERED; all others are UNREVEALED. No other area begins VISITED.
 - Every area must belong to one connected physical graph rooted at the entrance. Never make an area inaccessible by omitting its route. A sealed, locked, hidden, collapsed, flooded, or otherwise unavailable way is still a connection with the corresponding state and detail.
 - Every connection must have a reverse connection with the same state and identical detail. Do not create one-way passages in the initial map.
+- Connection detail describes the physical passage itself, not travel from this room. Write the detail once, then copy that exact same string onto the reverse connection. Do not rewrite it from the other room: no swapping eastward/westward, into/back, or "from A"/"from B".
 - Occasional hub/nexus layouts are welcome: one area may have many routes when that fits the site. Do not force every map into a linear chain.
 - Put only durable geometry here: dimensions, layout, fixed terrain, elevation, passages, roads, walls, doors/connections, and fixed environmental construction. Do not put creatures, loot, keys, traps, movable furnishings, destructible barriers, alarms, temporary effects, or mutable conditions in geometry.
 
@@ -63,8 +64,33 @@ Dungeon (kind DUNGEON):
 Settlement (kind SETTLEMENT):
 {"version":3,"site":"Morrowfen","kind":"SETTLEMENT","threat":"MODERATE","areas":[{"id":"lantern-gate","name":"Lantern Gate","knowledge":"VISITED","geometry":["A fortified double-arch granite bridge spanning the outer fen channel.","Two squat bastions hold heavy brass braziers."],"connections":[{"to":"plank-market","state":"OPEN","detail":"A raised wooden rampway descending into the market concourse."}]},{"id":"plank-market","name":"Plank Market","knowledge":"DISCOVERED","geometry":["A trading district on oak piles and timber decking above stagnant marsh water.","Boardwalks radiate between stalls and stone ramps to higher districts."],"connections":[{"to":"lantern-gate","state":"OPEN","detail":"A raised wooden rampway descending into the market concourse."},{"to":"shrine-quarter","state":"OPEN","detail":"An ancient stone-paved ramp rising onto dry northern bedrock."}]},{"id":"shrine-quarter","name":"Shrine Quarter","knowledge":"UNREVEALED","geometry":["An elevated dark-stone terrace crowded with chapels and ossuaries.","Narrow flagstone paths hemmed by iron votive screens."],"connections":[{"to":"plank-market","state":"OPEN","detail":"An ancient stone-paved ramp rising onto dry northern bedrock."}]}],"assets":[{"id":"toll-guard-garrison","kind":"GROUP","name":"Town Toll Guards","location":"lantern-gate","state":"ACTIVE","knowledge":"KNOWN","detail":"Wary militia in boiled leather collecting river-crossing tolls.","origin":"INITIAL_MAP","faction":"Town Watch","count":6},{"id":"lantern-toll-braziers","kind":"OBJECT","name":"Blue-Flame Toll Braziers","location":"lantern-gate","state":"ACTIVE","knowledge":"KNOWN","detail":"Heavy brass braziers burning sulfurous blue peat-flame to pierce the fog.","origin":"INITIAL_MAP"},{"id":"shrine-ossuary-keepers","kind":"GROUP","name":"Keepers of the Drowned Stone","location":"shrine-quarter","state":"ACTIVE","knowledge":"UNREVEALED","detail":"Monastic caretakers tending memorial pools and fen rites.","origin":"INITIAL_MAP","faction":"Order of the Drowned Stone","count":8}]}
 
-Never omit the reverse connection. Never mark a non-entrance area VISITED on creation. Never use kind NPC. Never split a pack into many identical CREATURE assets. Never make a chapel, inn, shop, or house its own settlement area.
+Never omit the reverse connection. Never give a reciprocal pair two different detail strings. Never mark a non-entrance area VISITED on creation. Never use kind NPC. Never split a pack into many identical CREATURE assets. Never make a chapel, inn, shop, or house its own settlement area.
 
 DESIGN STANDARD
 - Do not contradict established campaign facts.
 - Before answering, silently verify: valid JSON; exact site, entrance, kind, and threat; human-readable strings in the campaign language; scale-appropriate area count for that kind; threat-appropriate occupancy and trap density; stable unique IDs; all references exist; all routes are reciprocal with identical detail; graph reaches every area even through blocked routes; mutable things are assets; no player knowledge leaks into knowledge fields.`;
+
+/** Dedicated prompt for the Lorebook Agent Auto path: fill handshake fields only. */
+export const DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT = `You are the Map Architect filling only the CreateAreaMap handshake. You do not narrate play. You do not design rooms, districts, assets, or a map JSON.
+
+The site root is locked. Infer entrance, kind, scale, threat, and premise from USER BRIEF, LOCATION LORE, and RECENT STORY, as a GM would before calling CreateAreaMap. If RECENT STORY is empty, do not invent from chat.
+
+KIND
+- SETTLEMENT = the city/town/village as a whole, district-scale. Never an alley, house, shop, rooftop, or street as the site.
+- DUNGEON = a high-risk interior: dungeon, ruin, lair, or trapped complex. Wilderness, roads, and countryside are not mapped.
+
+SCALE is size, not danger: SMALL, MEDIUM, or LARGE.
+THREAT is site danger, never matched to party level: LOW, MODERATE, HIGH, or DEADLY.
+
+ENTRANCE is the named way in the party would use, written in the campaign language.
+PREMISE is dense established facts only: who holds the site, what is known to be there, and constraints. Do not invent a full layout.
+KEYWORDS are optional extra trigger aliases besides the locked site name (max 5). Do not repeat or paraphrase the site name. Use [] if none.
+
+LANGUAGE
+- Do not retitle the locked site root.
+- Write entrance, premise, and keywords in the same language and script as the lore, brief, and story.
+- JSON keys and enums stay English.
+
+OUTPUT
+- Output exactly one JSON object and nothing else: {"entrance":"...","kind":"DUNGEON|SETTLEMENT","scale":"SMALL|MEDIUM|LARGE","threat":"LOW|MODERATE|HIGH|DEADLY","premise":"...","keywords":[]}.
+- No markdown fence, commentary, XML, or map.`;

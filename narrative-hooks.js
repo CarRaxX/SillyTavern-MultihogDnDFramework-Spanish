@@ -1033,6 +1033,7 @@ export function installInterceptor() {
     delete globalThis._rpgPromptManagerInterceptorActive;
     globalThis.rpgTrackerInterceptor = async function (chat, contextSize, abort, type) {
         const settings = getSettings();
+        const dungeonEnabled = isLocationMappingEnabled(settings);
 
         // The manifest interceptor is the sole injection path.
         const skipInjection = false;
@@ -1040,7 +1041,6 @@ export function installInterceptor() {
         // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
         const _rbCtx = SillyTavern.getContext();
         const _rbChat = _rbCtx?.chat;
-        const dungeonEnabled = isLocationMappingEnabled(settings);
         const dungeonChatId = getActiveChatId();
         const replacingLatestNarratorMessage = ['swipe', 'regenerate']
             .includes(String(type || '').toLowerCase());
@@ -2454,7 +2454,6 @@ async function maybeRunMapArchitectTextOpener({ chat, settings, currentType, sou
 
         const siteLabel = args.site;
         logMapArchitectTextOpener('running', { source, generationType: type, site: siteLabel });
-        globalThis.toastr?.info?.(`Generating a location map for ${siteLabel}...`, 'Map Architect', { timeOut: 4000 });
         await runMapArchitect(args);
         clearAssistantReasoning(message);
         applyAssistantMessageText(

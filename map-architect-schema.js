@@ -81,3 +81,29 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
         required: ['version', 'site', 'areas', 'assets'],
     },
 });
+
+/** Handshake-only contract: infer CreateAreaMap fields without emitting a map. */
+export const MAP_ARCHITECT_BRIEF_JSON_SCHEMA = Object.freeze({
+    name: 'map_architect_brief_v1',
+    description: 'Handshake fields for one Persistent Map, without the map itself.',
+    strict: false,
+    returnInvalid: true,
+    value: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            entrance: { type: 'string', minLength: 1 },
+            kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
+            scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
+            premise: { type: 'string', minLength: 1 },
+            keywords: {
+                type: 'array',
+                items: { type: 'string', minLength: 1 },
+                maxItems: 5,
+                description: 'Optional extra lorebook trigger words besides the locked site name. Do not include the site name.',
+            },
+        },
+        required: ['entrance', 'kind', 'scale', 'threat', 'premise'],
+    },
+});

@@ -9,7 +9,7 @@ import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis, getCardLibrar
 import { bindAdventureCompanion, closeAdventureCompanion, refreshAdventureCompanionLayout } from '../../../adventure-companion.js';
 import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
-import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection } from '../../../dungeon-reality.js';
+import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection, defaultMapSiteThreat } from '../../../dungeon-reality.js';
 import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { openDungeonMapReadablePopup } from './dungeon-map-panel.js';
@@ -28,6 +28,286 @@ function substituteDisplayMacros(text) {
         return typeof substituteParams === 'function' ? substituteParams(text) : text;
     } catch (_) {
         return text;
+    }
+}
+
+function premiseFromLocationContent(content) {
+    return stripDungeonMapSection(content || '')
+        .replace(/\[\/?CORE\]/gi, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 1200);
+}
+
+function popupControl(root, selector) {
+    return root?.querySelector?.(selector) || null;
+}
+
+function popupValue(root, selector, fallback = '') {
+    return String(popupControl(root, selector)?.value ?? fallback).trim();
+}
+
+function popupChecked(root, name, fallback = '') {
+    return String(popupControl(root, `input[name="${name}"]:checked`)?.value || fallback);
+}
+
+function parseLookbackValue(value, fallback) {
+    const parsed = parseInt(String(value ?? fallback), 10);
+    if (!Number.isFinite(parsed)) return Math.max(0, Math.min(100, Number(fallback) || 12));
+    return Math.max(0, Math.min(100, parsed));
+}
+
+async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtml, { runMapArchitect, inferMapArchitectArgs, lookbackDefault } = {}) {
+    const site = String(siteRoot || '').trim();
+    if (!site) return { ok: false, error: 'No location root to map.' };
+    const ctx = SillyTavern.getContext();
+    const { Popup } = ctx || {};
+    if (!Popup?.show?.confirm) return { ok: false, error: 'Popup API is not available.' };
+
+    const loreEntry = premiseFromLocationContent(locationContent);
+    const premiseDefault = loreEntry
+        || `${site} is a location root requested for a Persistent Map. Stay consistent with established story.`;
+    const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
+    const html = `
+        <div style="text-align:left;font-size:0.9em;line-height:1.4;">
+            <p>Create a private map for <b>${escapeHtml(site)}</b> with Map Architect. The narrator is not involved.</p>
+            <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="manual" onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
+            </div>
+            <div id="rt-map-create-auto" style="margin-top:8px;">
+                <p style="margin:0 0 6px;">Map Architect fills entrance, kind, scale, threat, and premise from this location's lore and recent story, then generates the map.</p>
+                <label style="display:block;">Story lookback
+                    <input id="rt-map-create-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                </label>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat.</p>
+            </div>
+            <div id="rt-map-create-manual" hidden>
+                <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="SETTLEMENT" checked> Settlement</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="DUNGEON"> Dungeon</label>
+                </div>
+                <label style="display:block;margin-top:8px;">Entrance
+                    <input id="rt-map-create-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                </label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <label style="flex:1;">Scale
+                        <select id="rt-map-create-scale" style="width:100%;margin-top:3px;">
+                            <option value="SMALL">SMALL</option>
+                            <option value="MEDIUM" selected>MEDIUM</option>
+                            <option value="LARGE">LARGE</option>
+                        </select>
+                    </label>
+                    <label style="flex:1;">Threat
+                        <select id="rt-map-create-threat" style="width:100%;margin-top:3px;">
+                            <option value="LOW">LOW</option>
+                            <option value="MODERATE" selected>MODERATE</option>
+                            <option value="HIGH">HIGH</option>
+                            <option value="DEADLY">DEADLY</option>
+                        </select>
+                    </label>
+                </div>
+                <label style="display:block;margin-top:8px;">Premise
+                    <textarea id="rt-map-create-premise" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;">${escapeHtml(premiseDefault)}</textarea>
+                </label>
+            </div>
+        </div>
+    `;
+
+    let form = null;
+    const choice = await Popup.show.confirm('Create map', html, {
+        okButton: 'Generate map',
+        cancelButton: 'Cancel',
+        onClosing: (popup) => {
+            if (popup.result) {
+                const root = popup.dlg;
+                const kind = popupChecked(root, 'rt-map-create-kind', 'SETTLEMENT');
+                form = {
+                    mode: popupChecked(root, 'rt-map-create-mode', 'auto'),
+                    kind,
+                    entrance: popupValue(root, '#rt-map-create-entrance', 'Entrance') || 'Entrance',
+                    scale: popupValue(root, '#rt-map-create-scale', 'MEDIUM').toUpperCase(),
+                    threat: popupValue(root, '#rt-map-create-threat', defaultMapSiteThreat(kind)).toUpperCase(),
+                    premise: popupValue(root, '#rt-map-create-premise', '') || premiseDefault,
+                    lookback: parseLookbackValue(popupValue(root, '#rt-map-create-lookback', lookbackValue), lookbackValue),
+                };
+            }
+            return true;
+        },
+    });
+    if (!choice) return { ok: false, cancelled: true };
+    if (!form) return { ok: false, error: 'Could not read the map form.' };
+
+    try {
+        if (form.mode === 'manual') {
+            await runMapArchitect({
+                site,
+                entrance: form.entrance,
+                kind: form.kind,
+                scale: form.scale,
+                threat: form.threat,
+                premise: form.premise,
+                allowOffsite: true,
+            });
+            return { ok: true, siteRoot: site };
+        }
+
+        if (typeof inferMapArchitectArgs !== 'function') {
+            return { ok: false, error: 'Map Architect auto-fill is not available.' };
+        }
+        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        const inferred = await inferMapArchitectArgs({
+            site,
+            loreEntry: loreEntry || premiseDefault,
+            lookback: form.lookback,
+        });
+        await runMapArchitect({
+            ...inferred,
+            site,
+            lookback: form.lookback,
+            allowOffsite: true,
+        });
+        return { ok: true, siteRoot: site };
+    } catch (error) {
+        return { ok: false, error: error?.message || String(error) };
+    }
+}
+
+function parseKeywordInput(value) {
+    return String(value || '').split(/[,;\n]/).map(part => part.trim()).filter(Boolean);
+}
+
+async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitectArgs, lookbackDefault } = {}) {
+    const ctx = SillyTavern.getContext();
+    const { Popup } = ctx || {};
+    if (!Popup?.show?.confirm) return { ok: false, error: 'Popup API is not available.' };
+    const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
+
+    const html = `
+        <div style="text-align:left;font-size:0.9em;line-height:1.4;">
+            <p>Create a new location root and generate its private map. The narrator is not involved.</p>
+            <label style="display:block;margin-top:8px;">Location name
+                <input id="rt-map-loc-name" type="text" placeholder="Exact site root, no ::" style="width:100%;margin-top:3px;box-sizing:border-box;">
+            </label>
+            <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="manual" onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
+            </div>
+            <div id="rt-map-loc-auto" style="margin-top:8px;">
+                <label style="display:block;">Brief
+                    <textarea id="rt-map-loc-brief" placeholder="What this place is. Map Architect fills the rest." style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                </label>
+                <label style="display:block;margin-top:8px;">Story lookback
+                    <input id="rt-map-loc-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                </label>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat — name and brief only.</p>
+            </div>
+            <div id="rt-map-loc-manual" hidden>
+                <label style="display:block;margin-top:8px;">Extra keywords
+                    <input id="rt-map-loc-keys" type="text" placeholder="Optional aliases, comma-separated" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                </label>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">The location name is added automatically. Max 6 total.</p>
+                <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="SETTLEMENT" checked> Settlement</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="DUNGEON"> Dungeon</label>
+                </div>
+                <label style="display:block;margin-top:8px;">Entrance
+                    <input id="rt-map-loc-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                </label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <label style="flex:1;">Scale
+                        <select id="rt-map-loc-scale" style="width:100%;margin-top:3px;">
+                            <option value="SMALL">SMALL</option>
+                            <option value="MEDIUM" selected>MEDIUM</option>
+                            <option value="LARGE">LARGE</option>
+                        </select>
+                    </label>
+                    <label style="flex:1;">Threat
+                        <select id="rt-map-loc-threat" style="width:100%;margin-top:3px;">
+                            <option value="LOW">LOW</option>
+                            <option value="MODERATE" selected>MODERATE</option>
+                            <option value="HIGH">HIGH</option>
+                            <option value="DEADLY">DEADLY</option>
+                        </select>
+                    </label>
+                </div>
+                <label style="display:block;margin-top:8px;">Premise
+                    <textarea id="rt-map-loc-premise" placeholder="Established facts for CORE and the map" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                </label>
+            </div>
+        </div>
+    `;
+
+    let form = null;
+    const choice = await Popup.show.confirm('Add mapped location', html, {
+        okButton: 'Create location and map',
+        cancelButton: 'Cancel',
+        onClosing: (popup) => {
+            if (popup.result) {
+                const root = popup.dlg;
+                const kind = popupChecked(root, 'rt-map-loc-kind', 'SETTLEMENT');
+                form = {
+                    site: popupValue(root, '#rt-map-loc-name'),
+                    mode: popupChecked(root, 'rt-map-loc-mode', 'auto'),
+                    userBrief: popupValue(root, '#rt-map-loc-brief'),
+                    lookback: parseLookbackValue(popupValue(root, '#rt-map-loc-lookback', lookbackValue), lookbackValue),
+                    locationKeys: parseKeywordInput(popupValue(root, '#rt-map-loc-keys')),
+                    kind,
+                    entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrance') || 'Entrance',
+                    scale: popupValue(root, '#rt-map-loc-scale', 'MEDIUM').toUpperCase(),
+                    threat: popupValue(root, '#rt-map-loc-threat', defaultMapSiteThreat(kind)).toUpperCase(),
+                    premise: popupValue(root, '#rt-map-loc-premise'),
+                };
+            }
+            return true;
+        },
+    });
+    if (!choice) return { ok: false, cancelled: true };
+    if (!form) return { ok: false, error: 'Could not read the mapped location form.' };
+
+    const site = form.site;
+    if (!site) return { ok: false, error: 'Location name is required.' };
+    if (site.includes('::')) return { ok: false, error: 'Use a location root name, not a nested :: path.' };
+
+    try {
+        if (form.mode === 'manual') {
+            if (!form.premise) return { ok: false, error: 'Premise is required. It becomes the location CORE and the map brief.' };
+            await runMapArchitect({
+                site,
+                entrance: form.entrance,
+                kind: form.kind,
+                scale: form.scale,
+                threat: form.threat,
+                premise: form.premise,
+                allowOffsite: true,
+                requireNew: true,
+                locationKeys: form.locationKeys,
+                locationCore: form.premise,
+            });
+            return { ok: true, siteRoot: site };
+        }
+
+        if (typeof inferMapArchitectArgs !== 'function') {
+            return { ok: false, error: 'Map Architect auto-fill is not available.' };
+        }
+        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        const inferred = await inferMapArchitectArgs({
+            site,
+            userBrief: form.userBrief,
+            lookback: form.lookback,
+        });
+        await runMapArchitect({
+            ...inferred,
+            site,
+            lookback: form.lookback,
+            allowOffsite: true,
+            requireNew: true,
+            locationKeys: inferred.keywords,
+            locationCore: inferred.premise,
+        });
+        return { ok: true, siteRoot: site };
+    } catch (error) {
+        return { ok: false, error: error?.message || String(error) };
     }
 }
 
@@ -141,6 +421,7 @@ export function createPanel(dependencies) {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        deleteDungeonMapFromLocationEntry,
         deleteNpcFromLibrary,
         escapeHtml,
         escapeHtmlWithColor,
@@ -194,6 +475,8 @@ export function createPanel(dependencies) {
         resolveLocationImageWithMeta,
         resolvePortraitSrcForPlayerCharacter,
         rollbackRouterPass,
+        runMapArchitect,
+        inferMapArchitectArgs,
         runRealtimeSceneArtCheck,
         runMapUpdaterPass,
         runMapEvolutionPass,
@@ -1619,6 +1902,12 @@ export function createPanel(dependencies) {
                             if (!byBook.has(npcBookName)) {
                                 byBook.set(npcBookName, []);
                             }
+                            if (dungeonRealityEnabled) {
+                                const locBookName = `${prefix}_Locations`;
+                                if (!byBook.has(locBookName)) {
+                                    byBook.set(locBookName, []);
+                                }
+                            }
                         }
 
                         // list.innerHTML = ''; // DO NOT CLEAR! This wipes the instantly-rendered PC card!
@@ -1674,6 +1963,7 @@ export function createPanel(dependencies) {
                             <span style="font-size:9px; opacity:0.45; color:var(--rt-text-muted); flex-shrink:0;">${activeCount}/${items.length} (${totalTokens}t)</span>
                             ${isNpcBook ? '<button type="button" class="rt-npc-manager-btn" title="NPC/PC Manager — library, add to story, import/export"><i class="fa-solid fa-users-gear"></i> NPC/PC Manager</button>' : ''}
                             ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
+                            ${isLocBook && dungeonRealityEnabled ? '<button type="button" class="rt-loc-add-mapped-btn" title="Create a new location root and generate its private map"><i class="fa-solid fa-plus"></i> Add mapped location</button>' : ''}
                             ${isLocBook ? '<button class="rt-loc-settings-btn" title="Location Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                         `;
 
@@ -1920,6 +2210,28 @@ export function createPanel(dependencies) {
 
                             // Location settings gear button handler
                             if (isLocBook) {
+                                const addMappedBtn = folderHdr.querySelector('.rt-loc-add-mapped-btn');
+                                if (addMappedBtn) {
+                                    addMappedBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        addMappedBtn.disabled = true;
+                                        try {
+                                            const choice = await promptAndCreateMappedLocation({
+                                                runMapArchitect,
+                                                inferMapArchitectArgs,
+                                                lookbackDefault: getSettings()?.mapArchitectLookback,
+                                            });
+                                            if (choice?.cancelled) return;
+                                            if (choice?.ok) {
+                                                await refreshManifest();
+                                            } else {
+                                                toastr.error(choice?.error || 'Could not create that mapped location.', 'Persistent Maps');
+                                            }
+                                        } finally {
+                                            addMappedBtn.disabled = false;
+                                        }
+                                    });
+                                }
                                 const locSettingsBtn = folderHdr.querySelector('.rt-loc-settings-btn');
                                 if (locSettingsBtn) {
                                     locSettingsBtn.addEventListener('click', async (e) => {
@@ -3116,9 +3428,6 @@ export function createPanel(dependencies) {
                                     if (node.item) {
                                         const entryTokens = Math.round((node.item.content || '').length / 4);
                                         tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
-                                        if (dungeonRealityEnabled && node.item.has_dungeon_map) {
-                                            dungeonMapBadgeHtml = `<button class="rt-dungeon-map-badge" type="button" style="display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:700;letter-spacing:0.04em;color:#7dd3fc;background:rgba(14,116,144,0.18);border:1px solid rgba(125,211,252,0.38);padding:1px 4px;border-radius:4px;flex-shrink:0;cursor:pointer;" title="View private dungeon map (alpha) attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button>`;
-                                        }
                                         if (isNpcBook) {
                                             viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
                                             viewNpcHtml += `<button class="rt-agent-entry-save-npc" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Save to NPC Library"><i class="fa-solid fa-bookmark"></i></button>`;
@@ -3140,6 +3449,15 @@ export function createPanel(dependencies) {
                                         pinHtml = `<button class="rt-agent-entry-pin" data-id="${node.item.id}" style="background:none; border:none; color:${isPinned ? '#34a853' : 'var(--rt-text-muted)'}; cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0; ${isPinned ? 'opacity:1;' : 'opacity:0.55;'}" title="${isPinned ? 'Pinned — always active for the Lorebook Agent' : 'Pin — keep this entry permanently active'}"><i class="fa-solid fa-thumbtack"></i></button>`;
                                         editHtml = `<button class="rt-agent-entry-edit" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Edit this lore entry"><i class="fa-solid fa-pen-to-square"></i></button>`;
                                         deleteHtml = `<button class="rt-agent-entry-delete" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Delete entry"><i class="fa-solid fa-trash"></i></button>`;
+                                    }
+
+                                    if (dungeonRealityEnabled && isLocBook) {
+                                        const isLocationRoot = !(node.parent && node.parent.name);
+                                        if (node.item?.has_dungeon_map) {
+                                            dungeonMapBadgeHtml = `<span class="rt-dungeon-map-actions"><button class="rt-dungeon-map-badge" type="button" title="View private dungeon map (alpha) attached to this root Location"><i class="fa-solid fa-map-location-dot"></i> MAP</button><button class="rt-dungeon-map-delete" type="button" title="Remove the private map from this Location (keeps CORE)"><i class="fa-solid fa-xmark"></i></button></span>`;
+                                        } else if (isLocationRoot) {
+                                            dungeonMapBadgeHtml = `<span class="rt-dungeon-map-actions"><button class="rt-dungeon-map-create" type="button" title="Create a private map for this location root"><i class="fa-solid fa-plus"></i> MAP</button></span>`;
+                                        }
                                     }
 
                                     entryHdr.innerHTML = `
@@ -3187,6 +3505,52 @@ export function createPanel(dependencies) {
                                         dungeonMapBtn.addEventListener('click', async (e) => {
                                             e.stopPropagation();
                                             await openDungeonMapPopup(node.item);
+                                        });
+                                    }
+
+                                    const dungeonMapDeleteBtn = entryHdr.querySelector('.rt-dungeon-map-delete');
+                                    if (dungeonMapDeleteBtn && node.item) {
+                                        dungeonMapDeleteBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const label = node.item.label || node.name;
+                                            if (!confirm(`Remove the private map from "${label}"?\n\nThe Location entry and CORE stay. Map Evolution history for this site is cleared.`)) return;
+                                            const result = await deleteDungeonMapFromLocationEntry(node.item.id);
+                                            if (result?.ok) {
+                                                await refreshManifest();
+                                                toastr.success(`Removed the map from "${label}".`, 'Lorebook Agent');
+                                            } else {
+                                                toastr.error(result?.error || 'Could not remove that map.', 'Lorebook Agent');
+                                            }
+                                        });
+                                    }
+
+                                    const dungeonMapCreateBtn = entryHdr.querySelector('.rt-dungeon-map-create');
+                                    if (dungeonMapCreateBtn) {
+                                        dungeonMapCreateBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const siteRoot = String(node.name || '').trim();
+                                            if (!siteRoot) return;
+                                            dungeonMapCreateBtn.disabled = true;
+                                            try {
+                                                const choice = await promptAndRunLorebookAgentMap(
+                                                    siteRoot,
+                                                    node.item?.content || '',
+                                                    escapeHtml,
+                                                    {
+                                                        runMapArchitect,
+                                                        inferMapArchitectArgs,
+                                                        lookbackDefault: getSettings()?.mapArchitectLookback,
+                                                    },
+                                                );
+                                                if (choice?.cancelled) return;
+                                                if (choice?.ok) {
+                                                    await refreshManifest();
+                                                } else {
+                                                    toastr.error(choice?.error || 'Could not create that map.', 'Persistent Maps');
+                                                }
+                                            } finally {
+                                                dungeonMapCreateBtn.disabled = false;
+                                            }
                                         });
                                     }
 
@@ -3257,7 +3621,7 @@ export function createPanel(dependencies) {
 
                                     if (node.item) {
                                         entryHdr.addEventListener('click', (e) => {
-                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-save-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-loc-thumb-wrap')) return;
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-pin, .rt-agent-entry-view-npc, .rt-agent-entry-save-npc, .rt-agent-entry-view-loc, .rt-dungeon-map-badge, .rt-dungeon-map-delete, .rt-dungeon-map-create, .rt-dungeon-map-actions, .rt-loc-thumb-wrap')) return;
                                             const opening = entryBody.style.display === 'none';
                                             entryBody.style.display = opening ? 'flex' : 'none';
                                             entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
