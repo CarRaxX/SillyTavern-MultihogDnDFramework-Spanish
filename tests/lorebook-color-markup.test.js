@@ -82,6 +82,28 @@ Personality: Calm`;
         )).toContain('<font color=#0070dd>Marcus</font>');
     });
 
+    it('does not re-wrap color phrases that are only substrings of longer words', () => {
+        expect(restoreFontColorWraps(
+            'Wears a <font color=#c00>red</font> cloak',
+            'Fred draws steel',
+        )).toBe('Fred draws steel');
+        expect(restoreFontColorWraps(
+            'Wears a <font color=#c00>red</font> cloak',
+            'a coloured banner',
+        )).toBe('a coloured banner');
+        expect(restoreFontColorWraps(
+            'Wears a <font color=#c00>red</font> cloak',
+            'a red banner',
+        )).toBe('a <font color=#c00>red</font> banner');
+
+        const merged = mergePreservedColorMarkup(
+            `Body: Wears a <font color=#c00>red</font> cloak`,
+            `Body: Fred wears a coloured cloak`,
+        );
+        expect(merged).toBe('Body: Fred wears a coloured cloak');
+        expect(merged).not.toContain('<font');
+    });
+
     it('Full Audit passes a preserve-color instruction into the Lorebook Agent', () => {
         expect(LOREBOOK_FULL_AUDIT_INSTRUCTION).toContain('<font color=#RRGGBB>');
         expect(indexSource).toContain('runRouterPass(null, LOREBOOK_FULL_AUDIT_INSTRUCTION, null, true, [], overrideChatLog)');

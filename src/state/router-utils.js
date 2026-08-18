@@ -425,8 +425,38 @@ function findLabeledFieldValue(map, name) {
 }
 
 /**
+ * Escape a literal for safe use inside a RegExp.
+ * @param {string} value
+ */
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * True when `index` starts a whole-token match of `needle` inside `haystack`.
+ * Letter/digit/_ on either side means the match is buried in a longer word
+ * (e.g. "red" inside "Fred" / "coloured") and must not be re-wrapped.
+ * @param {string} haystack
+ * @param {string} needle
+ * @param {number} index
+ */
+function isWholeTokenMatch(haystack, needle, index) {
+    if (index < 0 || !needle) return false;
+    const before = index > 0 ? haystack[index - 1] : '';
+    const after = index + needle.length < haystack.length
+        ? haystack[index + needle.length]
+        : '';
+    const wordish = /[0-9A-Za-z_]/;
+    if (before && wordish.test(before)) return false;
+    if (after && wordish.test(after)) return false;
+    return true;
+}
+
+/**
  * Re-wrap plain inner text with `<font color=...>` tags copied from older CORE markup.
- * First occurrence only, and only when the inner phrase is at least 2 characters.
+ * First whole-token occurrence only, and only when the inner phrase is at least 2 characters.
+ * Substring hits inside longer words are skipped so Full Audit cannot corrupt fields
+ * (e.g. colored "red" must not rewrite "Fred" or "coloured").
  * @param {string} oldText
  * @param {string} newText
  */
@@ -440,7 +470,15 @@ export function restoreFontColorWraps(oldText, newText) {
         const full = match[0];
         const inner = stripMarkupToText(match[2]);
         if (inner.length < 2 || result.includes(full)) continue;
-        if (result.includes(inner)) result = result.replace(inner, full);
+        const finder = new RegExp(escapeRegExp(inner), 'g');
+        let found = finder.exec(result);
+        while (found) {
+            if (isWholeTokenMatch(result, inner, found.index)) {
+                result = `${result.slice(0, found.index)}${full}${result.slice(found.index + inner.length)}`;
+                break;
+            }
+            found = finder.exec(result);
+        }
     }
     return result;
 }
