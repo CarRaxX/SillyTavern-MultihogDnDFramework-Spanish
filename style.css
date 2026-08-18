@@ -7936,17 +7936,11 @@ textarea.rt-cr-input {
 .rt-dungeon-graph-node-revealed:focus {
     outline: none;
 }
-.rt-dungeon-graph-node-revealed:hover rect {
-    fill: rgba(255, 170, 0, 0.16);
-}
-.rt-dungeon-graph-node-current:hover rect {
-    fill: rgba(255, 170, 0, 0.22);
-}
 .rt-dungeon-graph-icon {
     pointer-events: auto;
-    color: #c5d0da;
+    color: #ffaa00;
     opacity: 1;
-    filter: drop-shadow(0 0 0.6px #041018) drop-shadow(0 0 0.6px #041018);
+    filter: drop-shadow(0 0 0.55px rgba(255, 170, 0, 0.7));
 }
 .rt-dungeon-graph-icon-art {
     pointer-events: none;
@@ -7955,16 +7949,16 @@ textarea.rt-cr-input {
     fill: transparent;
     pointer-events: all;
 }
-.rt-dungeon-graph-icon-creature { color: #ffc48a; }
-.rt-dungeon-graph-icon-group { color: #f0a05a; }
-.rt-dungeon-graph-icon-trap { color: #ff6b5c; }
-.rt-dungeon-graph-icon-hazard { color: #f3d04a; }
-.rt-dungeon-graph-icon-alarm { color: #ffe066; }
-.rt-dungeon-graph-icon-barrier { color: #c5d0da; }
-.rt-dungeon-graph-icon-object { color: #8fe0ff; }
-.rt-dungeon-graph-icon-loot { color: #ffd36a; }
-.rt-dungeon-graph-icon-effect { color: #d4c2ff; }
-.rt-dungeon-graph-icon-other { color: #c5d0da; }
+.rt-dungeon-graph-icon-creature { color: #ff8c4a; }
+.rt-dungeon-graph-icon-group { color: #e56b32; }
+.rt-dungeon-graph-icon-trap { color: #ff5a2a; }
+.rt-dungeon-graph-icon-hazard { color: #ffc53d; }
+.rt-dungeon-graph-icon-alarm { color: #ffaa00; }
+.rt-dungeon-graph-icon-barrier { color: #e8d5b0; }
+.rt-dungeon-graph-icon-object { color: #d4a574; }
+.rt-dungeon-graph-icon-loot { color: #ffcc4a; }
+.rt-dungeon-graph-icon-effect { color: #ff9a5c; }
+.rt-dungeon-graph-icon-other { color: #c8925a; }
 .rt-dungeon-graph-icon-deactivated,
 .rt-dungeon-graph-icon-spent {
     opacity: 0.82;
@@ -7974,7 +7968,7 @@ textarea.rt-cr-input {
     opacity: 0.7;
 }
 .rt-dungeon-graph-icon-stressed {
-    color: #ff9a6a;
+    color: #ff8c4a;
 }
 .rt-dungeon-graph-icon-suspected {
     opacity: 0.88;

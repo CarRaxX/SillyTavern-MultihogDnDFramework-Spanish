@@ -29,7 +29,7 @@ const SLASH_OVERLAY = '<path d="M2 10.1 L10.1 2" fill="none" stroke="#0b1220" st
 const CROSS_OVERLAY = '<path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="#0b1220" stroke-width="2.4" stroke-linecap="round"/><path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round"/>';
 
 export const MAP_ICON_SIZE = { compact: 16.9, expanded: 18.2 };
-export const MAP_ICON_GAP = 2;
+export const MAP_ICON_GAP = 6;
 export const MAP_ICON_MAX = { compact: 6, expanded: 7 };
 export const MAP_NODE_FONT = { compact: 13, expanded: 15.6 };
 
