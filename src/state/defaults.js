@@ -12,6 +12,7 @@ import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from '../../map-evolution-compress-prompt.js';
 import { DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT } from '../../world-progression-prompt.js';
+import { MAIN_SYSPROMPT_BACKUP_KEY } from './main-sysprompt-backup.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -187,6 +188,10 @@ export function buildDefaultSettings() {
         stashedMainSysprompt: '',
 
         syspromptStashArmed: false,
+
+        /** Timestamp of the last durable Main-prompt localStorage backup write. */
+
+        mainSyspromptBackupTs: 0,
 
         rngEnabled: true,
 
@@ -1542,7 +1547,9 @@ export function clearExtensionLocalStorageUiState() {
 
         const key = localStorage.key(i);
 
-        if (key?.startsWith('rpg_tracker_')) keys.push(key);
+        // The user's original Quick Prompt Main is not UI chrome — keep it across
+        // factory reset so disabling/resetting the extension cannot delete it.
+        if (key?.startsWith('rpg_tracker_') && key !== MAIN_SYSPROMPT_BACKUP_KEY) keys.push(key);
 
     }
 

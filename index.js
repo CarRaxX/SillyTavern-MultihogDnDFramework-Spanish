@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
@@ -4657,42 +4657,16 @@ export async function fetchBaseSyspromptRaw(settingsOverride = null) {
     return content || '';
 }
 
-function getMainSyspromptTextarea() {
-    return /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
-}
-
-function isMainSyspromptBackupEnabled(settings) {
-    return settings.mainSyspromptBackupEnabled !== false;
-}
-
-/** Snapshot Quick Prompt Main before the framework overwrites it (once per tracker-on period). */
-function armMainSyspromptStash(settings, force = false, { manual = false } = {}) {
-    if (!isMainSyspromptBackupEnabled(settings)) return false;
-    if (!manual && (settings.customSysprompt || !settings.enabled)) return false;
-    if (settings.syspromptStashArmed && !force) return true;
-    const ta = getMainSyspromptTextarea();
-    if (!ta) return false;
-    settings.stashedMainSysprompt = ta.value;
-    settings.syspromptStashArmed = true;
-    saveSettings();
+function persistMainSyspromptBackupIfChanged(result, settings) {
+    if (result?.changed) saveSettings(true);
     updateMainSyspromptBackupStatusUi(settings);
-    return true;
 }
 
-/** Restore stashed Quick Prompt Main when the tracker is turned off (or manually from settings). */
-function restoreMainSyspromptStash(settings, { manual = false } = {}) {
-    if (!isMainSyspromptBackupEnabled(settings) || !settings.syspromptStashArmed) return false;
-    if (!manual && settings.customSysprompt) return false;
-    const ta = getMainSyspromptTextarea();
-    if (!ta) return false;
-    ta.value = settings.stashedMainSysprompt ?? '';
-    ta.dispatchEvent(new Event('blur', { bubbles: true }));
-    if (!manual) {
-        settings.syspromptStashArmed = false;
-        saveSettings();
-    }
+function restoreTrackedMainSysprompt(settings, { manual = false } = {}) {
+    const restored = restoreMainSyspromptStash(settings, { manual });
+    if (restored) saveSettings(true);
     updateMainSyspromptBackupStatusUi(settings);
-    return true;
+    return restored;
 }
 
 function updateMainSyspromptBackupStatusUi(settings = getSettings()) {
@@ -4712,14 +4686,13 @@ function updateMainSyspromptBackupStatusUi(settings = getSettings()) {
         statusEl.textContent = 'Backup is disabled — enable above to save or restore.';
         return;
     }
-    if (!settings.syspromptStashArmed) {
-        statusEl.textContent = 'No backup saved yet. It is created automatically before the framework overwrites Main, or use Save above.';
+    hydrateMainSyspromptBackup(settings);
+    const backupLen = getEffectiveBackupText(settings).length;
+    if (!backupLen) {
+        statusEl.textContent = 'No backup saved yet. It is created automatically before the framework overwrites Main, and kept in this browser even if the tracker or extension is turned off.';
         return;
     }
-    const len = (settings.stashedMainSysprompt ?? '').length;
-    statusEl.textContent = len
-        ? `Backup saved (${len.toLocaleString()} characters).`
-        : 'Backup saved (empty Main prompt).';
+    statusEl.textContent = `Backup saved (${backupLen.toLocaleString()} characters). Kept if you disable the tracker or the extension.`;
 }
 
 function syncMainSyspromptBackupControlsUi() {
@@ -4731,16 +4704,16 @@ async function handleTrackerEnabledChange(settings, enabled) {
     saveSettings();
     updatePanelStatus();
     if (settings.enabled) {
-        armMainSyspromptStash(settings, true);
         await autoApplySysprompt(true);
     } else {
-        restoreMainSyspromptStash(settings);
+        restoreTrackedMainSysprompt(settings);
         void resetCombatProfileOverride(settings);
     }
 }
 
 let _autoApplyTimer = null;
 let _stashDeferCount = 0;
+let _restoreDeferCount = 0;
 const MAX_STASH_DEFER = 25;
 let _lastDynamicRngCombatState = null;
 
@@ -4752,27 +4725,33 @@ export async function autoApplySysprompt(force = false) {
     if (s.customSysprompt) return;
     if (!force && !s.enabled) return;
 
+    const content = await fetchBaseSyspromptRaw(s);
+    if (!content) return;
+
+    const built = buildSysprompt(content);
+
     if (s.enabled && isMainSyspromptBackupEnabled(s)) {
-        const armed = armMainSyspromptStash(s);
-        if (!armed && !s.syspromptStashArmed) {
+        const result = captureMainSyspromptBackup(s, { builtFrameworkText: built });
+        persistMainSyspromptBackupIfChanged(result, s);
+        if (result.shouldDefer) {
             if (_stashDeferCount < MAX_STASH_DEFER) {
                 _stashDeferCount++;
                 scheduleAutoApply();
                 return;
             }
+            if (!getEffectiveBackupText(s).trim()) {
+                console.warn('[RPG Tracker] Refusing to overwrite Quick Prompt Main: backup source is not ready and no durable backup exists.');
+                return;
+            }
+        }
+        if (!result.ok && !getEffectiveBackupText(s).trim()) {
+            console.warn('[RPG Tracker] Refusing to overwrite Quick Prompt Main until a user backup can be saved.');
+            return;
         }
     }
     _stashDeferCount = 0;
 
-    const content = await fetchBaseSyspromptRaw(s);
-    if (!content) return;
-
-    const built = buildSysprompt(content);
-    const mainTextarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
-    if (mainTextarea) {
-        mainTextarea.value = built;
-        mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
-    }
+    setLiveMainSyspromptText(built);
 }
 
 /**
@@ -4810,6 +4789,21 @@ function scheduleAutoApply() {
     if (!s.enabled || s.customSysprompt) return;
     if (_autoApplyTimer) clearTimeout(_autoApplyTimer);
     _autoApplyTimer = setTimeout(() => { _autoApplyTimer = null; autoApplySysprompt(); }, 400);
+}
+
+function scheduleDisabledTrackerMainRestore() {
+    const s = getSettings();
+    if (s.enabled || s.customSysprompt) return;
+    if (maybeRestoreMainIfTrackerDisabled(s)) {
+        saveSettings(true);
+        updateMainSyspromptBackupStatusUi(s);
+        _restoreDeferCount = 0;
+        return;
+    }
+    if (!isMainSyspromptSourceReady() && _restoreDeferCount < MAX_STASH_DEFER) {
+        _restoreDeferCount++;
+        setTimeout(scheduleDisabledTrackerMainRestore, 400);
+    }
 }
 
 /**
@@ -5278,6 +5272,9 @@ function organizeConnectionSettingsUI() {
         // Disk settings.json saves (~12MB) are often cancelled when reloading after code edits;
         // this sync localStorage WAL restores the last intentional change.
         if (applyCriticalSettingsBackup(earlySettings)) {
+            void saveSettings(true);
+        }
+        if (hydrateMainSyspromptBackup(earlySettings)) {
             void saveSettings(true);
         }
     }
@@ -5931,8 +5928,7 @@ function organizeConnectionSettingsUI() {
                             // Wait a short moment for the UI to be fully drawn
                             await sleepMs(500);
 
-                            const mainTa = getMainSyspromptTextarea();
-                            const mainSyspromptText = mainTa ? mainTa.value : '';
+                            const mainSyspromptText = getLiveMainSyspromptText();
                             const changedCats = getChangedPromptDefaultCategories(storedSnapshot, currentSnapshot);
                             const hasSnapshot = !!storedSnapshot;
                             const changedLabels = [...changedCats]
@@ -6326,10 +6322,14 @@ function organizeConnectionSettingsUI() {
             if (!isMainSyspromptBackupEnabled(fresh)) {
                 return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
             }
-            if (armMainSyspromptStash(fresh, true, { manual: true })) {
+            const result = captureMainSyspromptBackup(fresh, { manual: true });
+            persistMainSyspromptBackupIfChanged(result, fresh);
+            if (result.changed || result.reason === 'kept' || result.reason === 'captured') {
                 toastr['success']('Current Quick Prompt Main saved to backup.', 'RPG Tracker');
-            } else if (!getMainSyspromptTextarea()) {
-                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
+            } else if (result.reason === 'empty') {
+                toastr['warning']('Current Main is empty — refusing to overwrite a saved backup with nothing.', 'RPG Tracker');
+            } else if (result.reason === 'already-framework') {
+                toastr['warning']('Current Main looks like the framework prompt, so the existing backup was left unchanged.', 'RPG Tracker');
             } else {
                 toastr['error']('Could not save backup.', 'RPG Tracker');
             }
@@ -6340,16 +6340,14 @@ function organizeConnectionSettingsUI() {
             if (!isMainSyspromptBackupEnabled(fresh)) {
                 return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
             }
-            if (!fresh.syspromptStashArmed) {
+            if (!getEffectiveBackupText(fresh).trim()) {
                 return toastr['info']('No backup saved yet. Use Save current Main to backup first.', 'RPG Tracker');
             }
-            if (restoreMainSyspromptStash(fresh, { manual: true })) {
+            if (restoreTrackedMainSysprompt(fresh, { manual: true })) {
                 const note = fresh.enabled && !fresh.customSysprompt
                     ? ' Click ⏻ on the tracker panel to keep it — the framework may overwrite Main again while the tracker is on.'
                     : '';
                 toastr['success'](`Backed-up Main prompt restored.${note}`, 'RPG Tracker');
-            } else if (!getMainSyspromptTextarea()) {
-                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
             } else {
                 toastr['error']('Could not restore backup.', 'RPG Tracker');
             }
@@ -11560,7 +11558,9 @@ RULES:
     // Fresh installs default to tracker on — schedule first apply so Main is stashed then overwritten.
     {
         const s = getSettings();
+        hydrateMainSyspromptBackup(s);
         if (s.enabled && !s.customSysprompt) scheduleAutoApply();
+        else scheduleDisabledTrackerMainRestore();
     }
 
     // Add wand button to toggle panel visibility
