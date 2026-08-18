@@ -21,6 +21,7 @@ import {
 } from './realtime-visualization-guard.js';
 import { migrateChatSetupCatalogs } from './chat-setup.js';
 import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js';
+import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -787,6 +788,18 @@ function getSettingsInternal(extensionSettings) {
             s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false, s);
         }
         s.settingsVersion = '5.5.17';
+    }
+
+    // 8.27.0: strengthen the Map Architect's MODERATE threat wording. Only
+    // migrate the untouched shipped default; preserve prompts customized by users.
+    if (isOlderThan(s.settingsVersion, '8.27.0')) {
+        const previousModerateLine = '  - MODERATE: some occupancy. Hostiles in a minority of rooms. A few traps or hazards on key routes. Safe pauses are possible.';
+        const currentModerateLine = '  - MODERATE: moderate occupancy. Hostiles here and there. Some traps and hazards. Safe pauses are not too unlikely.';
+        const legacyDefault = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT.replace(currentModerateLine, previousModerateLine);
+        if (s.mapArchitectSystemPrompt === legacyDefault) {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '8.27.0';
     }
 
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {

@@ -136,7 +136,7 @@ function threatBrief(threat, kind) {
     }
     return {
         LOW: 'LOW = mostly empty/abandoned; sparse hostiles and traps.',
-        MODERATE: 'MODERATE = some occupancy; hostiles in a minority of rooms; a few traps on key routes.',
+        MODERATE: 'MODERATE = moderate occupancy; hostiles here and there; some traps and hazards; safe pauses are not too unlikely.',
         HIGH: 'HIGH = frequent hostiles, packs or patrols, traps on multiple routes.',
         DEADLY: 'DEADLY = dense overlapping threats and layered traps; still traversable.',
     }[threat] || 'Threat is site danger, not party level.';

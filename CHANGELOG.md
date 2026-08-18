@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.27.0] - 2026-08-19
+
+### Changed
+- **Map Architect moderate threat wording**: MODERATE sites now use stronger occupancy and hazard guidance. Untouched saved defaults are migrated automatically; customized prompts are preserved.
+
 ## [8.25.0] - 2026-08-19
 
 ### Added

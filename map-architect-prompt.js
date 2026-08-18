@@ -39,7 +39,7 @@ Use for ruins, dungeons, strongholds, lairs, tombs, vaults, and other high-risk 
 - Put doors that can change state, enemies, patrols, traps, alarms, loot, keys, corpses, destructible obstacles, temporary damage, and environmental dangers in assets.
 - Threat is a site fact, never matched to party level or HP. It governs occupancy and hazard density; premise still decides who/what belongs here:
   - LOW: mostly empty or abandoned. 0-2 hostile CREATURE/GROUP assets. 0-1 TRAP/HAZARD. Clutter, doors, and traces of past use still fill the place.
-  - MODERATE: some occupancy. Hostiles in a minority of rooms. A few traps or hazards on key routes. Safe pauses are possible.
+  - MODERATE: moderate occupancy. Hostiles here and there. Some traps and hazards. Safe pauses are not too unlikely.
   - HIGH: frequent hostiles, packs or patrols, traps/hazards on multiple routes. Little easy rest.
   - DEADLY: dense overlapping threats, layered traps, almost no safe rooms. The graph must still be traversable.
 - Give dynamic creatures behavior/route only when it adds actionable logic.
