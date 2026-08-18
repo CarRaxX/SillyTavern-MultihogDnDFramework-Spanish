@@ -4,6 +4,11 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 
 ## [Unreleased]
 
+## [8.10.1] - 2026-08-18
+
+### Changed
+- **Map scale**: the GM opener now treats SETTLEMENT maps as the city/town as a whole (district-scale). Alleys, houses, shops, rooftops, and streets are not mapped sites. Wilderness, roads, countryside, and other places between maps are not mapped. A building gets a DUNGEON map only when that building itself is a high-risk dungeon, ruin, lair, or trapped complex. The occupancy-lag caution is gone from the narrator Persistent Maps section (Map Updater runs every turn). Reset a stored narrator Persistent Maps section and Map Architect prompt to pick up the wording.
+
 ## [8.10.0] - 2026-08-18
 
 ### Added

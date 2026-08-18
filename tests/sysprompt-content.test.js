@@ -72,6 +72,11 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).toContain('kind DUNGEON');
             expect(source).toContain('kind SETTLEMENT');
             expect(source).toContain('SETTLEMENT maps are district-scale');
+            expect(source).toContain('city/town level');
+            expect(source).toContain('Do not call `CreateAreaMap` for a district, alley, house, shop');
+            expect(source).toContain('Wilderness, roads, countryside, and other places between mapped sites are not mapped');
+            expect(source).toContain('Map a building as DUNGEON only when that building itself is a dungeon');
+            expect(source).toContain('That footer segment is not a new mapped site');
             expect(source).toContain('You may invent granular interiors and incidental locations');
             expect(source).toContain('When {{user}} actually enters an invented interior');
             expect(source).toContain('that interior MUST be the last segment');
@@ -83,10 +88,8 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).not.toContain('one valid JSON object');
             expect(source).not.toContain('CreateDungeonMap');
             expect(source).toContain('an external agent owns validated current-map updates');
-            expect(source).toContain('Established story events override stale map states');
-            expect(source).toContain('a killed enemy stays dead even if still listed ACTIVE');
-            expect(source).toContain('Cause / Actor / Since');
-            expect(source).toContain('Recent site activity');
+            expect(source).not.toContain('Occupancy on the attached map may lag');
+            expect(source).not.toContain('own cadence (often every turn)');
             expect(source).not.toContain('use the latest DUNGEON_REALITY block and do not invent catch-up facts');
             expect(source).not.toContain('Lorebook Agent');
         }

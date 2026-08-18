@@ -45,7 +45,7 @@ Use for ruins, dungeons, strongholds, lairs, tombs, vaults, and other high-risk 
 - Populate the site fully with the furnishings, clutter, tools, doors, loot, hazards, and other interactable objects that belong here; do not leave the map sparse for later invention.
 
 KIND: SETTLEMENT
-Use for villages, towns, cities, camps, and similar inhabited settlements.
+Use for villages, towns, cities, camps, and similar inhabited settlements as a whole. The JSON site is that city/town/village name — never an alley, house, shop, rooftop, or street.
 - Areas are districts, gates, plazas, walls, docks, markets, and a few major public landmarks — not every street, shop, house, or interior.
 - Scale targets: SMALL 4-7 areas, MEDIUM 6-10 areas, LARGE 8-14 areas. These counts are districts/landmarks, not rooms. Scale is size, not danger.
 - Stay macroscopic. Map how districts connect (roads, gates, rivers, walls). Add some granularity: a handful of publicly important landmarks as extra areas or assets when they define the district (keep, cathedral, bazaar, harbor crane), not a building-by-building inventory.

@@ -806,7 +806,7 @@ export function formatDungeonMapForNarrator(documentOrContent, siteFallback = ''
     const lines = [`Dungeon Site: ${document.site}`];
     const mapKind = normalizeMapSiteKind(document.kind);
     if (mapKind === 'SETTLEMENT') {
-        lines.push('Map kind: SETTLEMENT (district-scale). Invent granular interiors during play if they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).');
+        lines.push('Map kind: SETTLEMENT (district-scale). Invent granular interiors during play if they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior). Do not open a new map for an alley, shop, or house.');
     } else {
         lines.push('Map kind: DUNGEON (room-scale). Prefer this interior; you may add a room if play requires it, so long as it does not contradict established facts.');
     }
@@ -2425,7 +2425,7 @@ export function buildDungeonRealityInjection(site, currentLocation, { activityTe
     const mapKind = normalizeMapSiteKind(parsedMap?.kind);
     const mapThreat = normalizeMapSiteThreat(parsedMap?.threat, '');
     const kindCanon = mapKind === 'SETTLEMENT'
-        ? 'This attached map is district-scale settlement canon. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).'
+        ? 'This attached map is district-scale settlement canon for the city/town as a whole. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior). Do not request another map for an alley, shop, or house inside this settlement.'
         : 'This attached map is room-scale interior canon. Prefer it for layout and occupancy; you may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.';
     const threatCanon = mapThreat
         ? ` Site threat is ${mapThreat}: occupancy, traps, and hazards follow that site danger, not party level.`

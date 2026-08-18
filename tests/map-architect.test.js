@@ -47,7 +47,9 @@ describe('Map Architect component', () => {
         const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const architect = readFileSync(new URL('../map-architect.js', import.meta.url), 'utf8');
         const router = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
-        expect(hooks).toContain('Copy the Location footer segment that names this mapped dungeon/settlement');
+        expect(hooks).toContain('For SETTLEMENT, copy the town/city/village name from the Location footer');
+        expect(hooks).toContain('Do not call for an alley, house, shop, rooftop, warehouse, street');
+        expect(hooks).toContain('Do not call for wilderness, roads, countryside, or other places between mapped sites');
         expect(architect).toContain('mapSiteFooterMismatchHint');
         expect(architect).toContain('Live location footer:');
         expect(router).toContain('mapSiteFooterMismatchHint(site, currentLocation)');
@@ -111,6 +113,7 @@ describe('Map Architect component', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('one area may have many routes');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('KIND: DUNGEON');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('KIND: SETTLEMENT');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('never an alley, house, shop, rooftop, or street');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Areas are districts, gates, plazas');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('The narrator will invent those granular locations during play');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"kind":"DUNGEON"');

@@ -84,7 +84,7 @@ function requestSettings(settings) {
 
 function kindBrief(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT = district-scale town/city/village; do not map every building interior.'
+        ? 'SETTLEMENT = the city/town/village as a whole, district-scale; never an alley, house, or shop.'
         : 'DUNGEON = room-scale hidden interior; populate rooms fully.';
 }
 
