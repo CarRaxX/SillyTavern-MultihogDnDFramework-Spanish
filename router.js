@@ -696,6 +696,67 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
     };
 }
 
+/**
+ * Replace the root Location's [MAP] from manual JSON editing in the map inspector.
+ * Does not create new roots or overwrite a site that lost its map attachment.
+ */
+export async function persistManualDungeonMapDocument(siteRoot, mapDocument) {
+    const ctx = SillyTavern.getContext();
+    const settings = getSettings();
+    const prefix = getLivePrefix();
+    const site = String(siteRoot || '').trim();
+    if (!prefix) throw new Error('No campaign prefix is available for the Locations lorebook.');
+    if (!site) throw new Error('Site root is required.');
+    if (!mapDocument || typeof mapDocument !== 'object') throw new Error('Map document is required.');
+
+    const bookName = `${prefix}_Locations`;
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
+    if (!bookData?.entries) {
+        throw new Error(`Locations lorebook "${bookName}" could not be loaded.`);
+    }
+
+    const rootEntry = Object.values(bookData.entries).find(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
+    });
+    if (!rootEntry) throw new Error(`No Location root found for "${site}".`);
+    if (!getDungeonMapAttachment(rootEntry)) throw new Error(`"${site}" has no private map to edit.`);
+
+    if (migrateDungeonMapAttachmentToContent(rootEntry)) {
+        // legacy extension blob upgraded to [MAP] in content
+    }
+    rootEntry.content = replaceDungeonMapSection(
+        rootEntry.content,
+        serializeDungeonMapDocument(mapDocument),
+    );
+    reconcileDungeonMapAreaKnowledge(rootEntry, bookData.entries);
+    rootEntry.disable = true;
+
+    await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Manual map JSON edit');
+    recordLiveDungeonMapSnapshot(settings, collectDungeonMapHistorySnapshot(bookData.entries, bookName));
+
+    const chatId = ctx.chatId || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : '');
+    if (chatId) {
+        settings.chatStates = settings.chatStates || {};
+        settings.chatStates[chatId] = settings.chatStates[chatId] || {};
+        const campaignBooks = new Set(settings.chatStates[chatId].campaignBooks || []);
+        campaignBooks.add(bookName);
+        settings.chatStates[chatId].campaignBooks = [...campaignBooks];
+        void saveSettings();
+    }
+    if (typeof ctx.updateWorldInfoList === 'function') {
+        try { await ctx.updateWorldInfoList(); } catch (_) { /* best-effort */ }
+    }
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+
+    return {
+        bookName,
+        entryId: `${bookName}::${rootEntry.uid}`,
+        document: mapDocument,
+    };
+}
+
 /** True when a Location root with this site name already exists. */
 export async function locationRootExists(siteRoot) {
     const site = String(siteRoot || '').trim();

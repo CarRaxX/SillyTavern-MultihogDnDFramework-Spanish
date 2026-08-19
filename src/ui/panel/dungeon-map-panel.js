@@ -4,7 +4,8 @@ import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { renderDungeonGraphAssetTipHtml } from '../../../dungeon-map-icons.js';
-import { serializeDungeonMapDocument } from '../../../dungeon-reality.js';
+import { serializeDungeonMapDocument, parseEditableDungeonMapJson } from '../../../dungeon-reality.js';
+import { persistManualDungeonMapDocument } from '../../../router.js';
 import { describeEvolutionBacklog, formatEvolutionElapsedMinutes, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
 export const DUNGEON_MAP_DETACHED_KEY = 'rpg_tracker_dungeon_map_detached';
@@ -351,6 +352,7 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
     let currentDocument = mapDocument;
     let revealAll = isDungeonMapRevealAll();
     let currentView = 'readable';
+    let rawDirty = false;
     const locationLabel = currentLocation || currentLocationFromMemo();
     const popupDom = document.createElement('div');
     popupDom.className = 'rt-dungeon-map-popup';
@@ -362,11 +364,17 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         </div>
         <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Map view">
             <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Map Entries</button>
-            <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" ${revealAll ? '' : 'disabled '}title="${revealAll ? 'Inspect raw map JSON' : 'Turn on Reveal All to inspect raw JSON'}"><i class="fa-solid fa-code"></i> Raw JSON</button>
+            <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" ${revealAll ? '' : 'disabled '}title="${revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON'}"><i class="fa-solid fa-code"></i> Raw JSON</button>
         </div>
         <div class="rt-dungeon-graph-scroll rt-dungeon-map-popup-graph" data-map-graph></div>
         <div class="rt-dungeon-map-readable" data-map-panel="readable"></div>
-        <pre class="rt-dungeon-map-raw" data-map-panel="raw" hidden></pre>
+        <div class="rt-dungeon-map-raw-wrap" data-map-panel="raw" hidden>
+            <div class="rt-dungeon-map-raw-toolbar">
+                <button type="button" class="menu_button interactable rt-dungeon-map-raw-save"><i class="fa-solid fa-floppy-disk"></i> Save JSON</button>
+                <span class="rt-dungeon-map-raw-status" role="status" aria-live="polite"></span>
+            </div>
+            <textarea class="rt-dungeon-map-raw" spellcheck="false" aria-label="Map JSON editor"></textarea>
+        </div>
         <section class="rt-dungeon-map-evolution-section">
             <div class="rt-dungeon-map-evolution-header">
                 <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
@@ -378,7 +386,10 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
             <div class="rt-dungeon-map-evolution-history"></div>
         </section>`;
     const readable = popupDom.querySelector('.rt-dungeon-map-readable');
+    const rawWrap = popupDom.querySelector('.rt-dungeon-map-raw-wrap');
     const raw = popupDom.querySelector('.rt-dungeon-map-raw');
+    const rawSave = popupDom.querySelector('.rt-dungeon-map-raw-save');
+    const rawStatus = popupDom.querySelector('.rt-dungeon-map-raw-status');
     const rawButton = popupDom.querySelector('[data-map-view="raw"]');
     const graphHost = popupDom.querySelector('[data-map-graph]');
     const history = popupDom.querySelector('.rt-dungeon-map-evolution-history');
@@ -397,7 +408,7 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
     };
     const paint = () => {
         if (readable) readable.innerHTML = renderDungeonMapReadableHtml(currentDocument, { revealAll });
-        if (raw) raw.textContent = serializeDungeonMapDocument(currentDocument);
+        if (raw && !rawDirty) raw.value = serializeDungeonMapDocument(currentDocument);
         if (graphHost) {
             const graph = buildDungeonMapGraph(currentDocument, {
                 playerFacing: !revealAll,
@@ -413,15 +424,17 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         );
         if (rawButton) {
             rawButton.disabled = !revealAll;
-            rawButton.title = revealAll ? 'Inspect raw map JSON' : 'Turn on Reveal All to inspect raw JSON';
+            rawButton.title = revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON';
         }
+        if (rawSave) rawSave.disabled = !revealAll;
         if (!revealAll && currentView === 'raw') setMapView('readable');
     };
-    const reloadInspectorFromLiveMap = async () => {
+    const reloadInspectorFromLiveMap = async ({ resetRaw = true } = {}) => {
         const fresh = typeof runtimeState.loadMappedEvolutionSiteRef === 'function'
             ? await runtimeState.loadMappedEvolutionSiteRef(site)
             : null;
         if (fresh?.document) currentDocument = fresh.document;
+        if (resetRaw) rawDirty = false;
         paint();
         refreshDungeonMapViews();
         if (typeof runtimeState.refreshTrackerViewRef === 'function') {
@@ -440,8 +453,49 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         refreshDungeonMapViews();
     });
     for (const button of popupDom.querySelectorAll('[data-map-view]')) {
-        button.addEventListener('click', () => setMapView(button.dataset.mapView));
+        button.addEventListener('click', () => {
+            if (button.dataset.mapView === 'raw' && rawDirty && raw) {
+                const parsed = parseEditableDungeonMapJson(raw.value, site);
+                if (parsed.ok && parsed.document) currentDocument = parsed.document;
+            }
+            setMapView(button.dataset.mapView);
+        });
     }
+    raw?.addEventListener('input', () => {
+        rawDirty = true;
+        if (rawStatus) rawStatus.textContent = 'Unsaved changes.';
+    });
+    rawSave?.addEventListener('click', async () => {
+        if (!revealAll || !raw) return;
+        const parsed = parseEditableDungeonMapJson(raw.value, site);
+        if (!parsed.ok) {
+            if (rawStatus) rawStatus.textContent = parsed.errors.join(' ');
+            if (typeof globalThis.toastr?.error === 'function') {
+                globalThis.toastr.error(parsed.errors.join(' '), 'Map JSON', { timeOut: 8000 });
+            }
+            return;
+        }
+        rawSave.disabled = true;
+        if (rawStatus) rawStatus.textContent = 'Saving…';
+        try {
+            await persistManualDungeonMapDocument(site, parsed.document);
+            currentDocument = parsed.document;
+            rawDirty = false;
+            if (rawStatus) rawStatus.textContent = 'Saved.';
+            if (typeof globalThis.toastr?.success === 'function') {
+                globalThis.toastr.success(`Map JSON saved for ${site}.`, 'Map Inspector', { timeOut: 4000 });
+            }
+            await reloadInspectorFromLiveMap({ resetRaw: true });
+        } catch (error) {
+            const message = String(error?.message || error);
+            if (rawStatus) rawStatus.textContent = message;
+            if (typeof globalThis.toastr?.error === 'function') {
+                globalThis.toastr.error(message, 'Map JSON', { timeOut: 10000 });
+            }
+        } finally {
+            rawSave.disabled = !revealAll;
+        }
+    });
     runButton?.addEventListener('click', async () => {
         if (runtimeState.isLoreOrMapAgentBusyRef?.()) {
             if (runStatus) runStatus.textContent = 'Another lore or map agent is already running.';

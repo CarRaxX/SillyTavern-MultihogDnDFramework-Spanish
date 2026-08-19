@@ -122,22 +122,20 @@ function resolveLookback(settings, override) {
 function kindBrief(kind) {
     return kind === 'SETTLEMENT'
         ? 'SETTLEMENT = the city/town/village as a whole, district-scale; never an alley, house, or shop.'
-        : 'DUNGEON = room-scale hidden interior, including an explicitly requested standalone building; populate its rooms according to the premise and threat.';
+        : 'DUNGEON = room-scale hidden interior; populate rooms fully.';
 }
 
 function threatBrief(threat, kind) {
     if (normalizeMapSiteKind(kind) === 'SETTLEMENT') {
         return {
-            NONE: 'NONE = no active hostile presence, dangerous hazards, or violent conflict; do not invent danger.',
-            LOW: 'LOW = generally peaceful, but with at least one localized and real danger; not complete safety.',
+            LOW: 'LOW = sleepy watch and civilian life; not a war zone.',
             MODERATE: 'MODERATE = normal garrison or street crime.',
             HIGH: 'HIGH = occupation, curfews, armed factions in several districts.',
             DEADLY: 'DEADLY = active siege, massacre, or open war in the streets.',
         }[threat] || 'Threat is site danger, not party level.';
     }
     return {
-        NONE: 'NONE = no active hostile occupancy, armed traps, dangerous hazards, or violent conflict; do not invent danger.',
-        LOW: 'LOW = light but real danger; include at least one localized hostile, armed trap, or dangerous hazard.',
+        LOW: 'LOW = mostly empty/abandoned; sparse hostiles and traps.',
         MODERATE: 'MODERATE = moderate occupancy; hostiles here and there; some traps and hazards; safe pauses are not too unlikely.',
         HIGH: 'HIGH = frequent hostiles, packs or patrols, traps on multiple routes.',
         DEADLY: 'DEADLY = dense overlapping threats and layered traps; still traversable.',
@@ -312,7 +310,7 @@ RECENT STORY CONTEXT (${windowSize} messages${windowSize === 0 ? '; vacuum — d
 ${context || '(No additional recent context.)'}
 
 Infer entrance, kind, scale, threat, premise, and optional extra keywords as the GM would before calling CreateAreaMap.
-SETTLEMENT = the city/town/village as a whole, not an alley or shop. DUNGEON = a room-scale interior: a high-risk complex, or a singular named building deliberately selected by this Auto map request even when it is a peaceful home/base. Never infer a nested building when the locked site is the settlement itself.
+SETTLEMENT = the city/town/village as a whole, not an alley or shop. DUNGEON = a high-risk interior only.
 Do not include the locked site name in keywords.
 Output only the JSON object.`;
 

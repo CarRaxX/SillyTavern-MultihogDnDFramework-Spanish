@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.35.0] - 2026-08-19
+
+### Added
+- **Editable map inspector Raw JSON**: with **Reveal All** on, the Visuals/Map and lorebook MAP inspector Raw JSON tab is a native textarea with **Save JSON**. Validates site lock, normalizes the document, and persists directly to the Location root's private `[MAP]`.
+
+### Changed
+- **Map Architect scope tightened**: removed NONE from new map creation handshakes and dropped the standalone-building / peaceful-home mapping exception. DUNGEON is high-risk interiors only; threat choices are LOW through DEADLY. Restored full fantasy syntax examples in the Map Architect system prompt.
+
 ## [8.30.3] - 2026-08-19
 
 ### Changed

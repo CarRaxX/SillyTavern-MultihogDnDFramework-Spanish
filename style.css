@@ -5770,15 +5770,35 @@ textarea.rt-cr-input {
     display: none !important;
 }
 
+.rt-dungeon-map-raw-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rt-dungeon-map-raw-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.rt-dungeon-map-raw-status {
+    font-size: 11px;
+    color: var(--rt-text-muted, rgba(255, 255, 255, 0.62));
+}
+
 .rt-dungeon-map-raw {
     box-sizing: border-box;
     display: block;
     width: 100%;
     max-width: 100%;
+    min-height: 220px;
     max-height: 48vh;
     margin: 0;
     padding: 12px 14px;
     overflow: auto;
+    resize: vertical;
     text-align: left;
     white-space: pre;
     overflow-wrap: normal;

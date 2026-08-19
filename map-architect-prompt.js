@@ -10,7 +10,7 @@ LANGUAGE
 
 OUTPUT CONTRACT
 - Output exactly one JSON object and nothing else: no markdown fence, commentary, XML, or trailing text.
-- Top level: {"version":3,"site":"Exact requested site root","kind":"DUNGEON|SETTLEMENT","threat":"NONE|LOW|MODERATE|HIGH|DEADLY","areas":[...],"assets":[...]}.
+- Top level: {"version":3,"site":"Exact requested site root","kind":"DUNGEON|SETTLEMENT","threat":"LOW|MODERATE|HIGH|DEADLY","areas":[...],"assets":[...]}.
 - kind and threat must match the request exactly.
 - Use only the documented fields. Use unique stable kebab-case IDs.
 
@@ -20,8 +20,6 @@ AREAS AND PASSAGES
 - Every area must belong to one connected physical graph rooted at the entrance. Never make an area inaccessible by omitting its route. A sealed, locked, hidden, collapsed, flooded, or otherwise unavailable way is still a connection with the corresponding state and detail.
 - Every connection must have a reverse connection with the same state and identical detail. Do not create one-way passages in the initial map.
 - Connection detail describes the physical passage itself, not travel from this room. Write the detail once, then copy that exact same string onto the reverse connection. Do not rewrite it from the other room: no swapping eastward/westward, into/back, or "from A"/"from B".
-- Do not default every route to OPEN. A MEDIUM or LARGE DUNGEON must include at least one meaningful non-OPEN reciprocal route unless established facts explicitly require a completely open layout. When the premise supports doors, hatches, gates, seals, access controls, or controllable organic apertures, at least one should normally be LOCKED. Use CLOSED, BLOCKED, DESTROYED, or UNKNOWN only when that is the route's actual physical state, not as random variety.
-- A restricted route must lead somewhere meaningful rather than exist as decoration. When appropriate, represent its key, control, clue, bypass, or breakable mechanism as an asset elsewhere in the map.
 - Occasional hub/nexus layouts are welcome: one area may have many routes when that fits the site. Do not force every map into a linear chain.
 - Put only durable geometry here: dimensions, layout, fixed terrain, elevation, passages, roads, walls, doors/connections, and fixed environmental construction. Do not put creatures, loot, keys, traps, movable furnishings, destructible barriers, alarms, temporary effects, or mutable conditions in geometry.
 
@@ -34,60 +32,37 @@ ASSETS
 - Knowledge describes what the player currently knows, not what exists. Unseen things are UNREVEALED; use SUSPECTED or KNOWN only when justified by the supplied context.
 
 KIND: DUNGEON
-Use for room-scale mapped interiors: ruins, dungeons, strongholds, lairs, tombs, vaults, and an ordinary named building only when that exact building was deliberately requested as a standalone persistent map. DUNGEON is the format's room-scale enum; for an explicitly requested house, shop, inn, headquarters, or other mundane building, it does not imply that the site is dangerous or dungeon-like.
+Use for ruins, dungeons, strongholds, lairs, tombs, vaults, and other high-risk interiors.
 - Areas are rooms, passages, chambers, and similar interior spaces.
 - Scale targets: SMALL 4-7 areas, MEDIUM 7-12 areas, LARGE 12-20 areas. Prefer meaningful topology over padding. Scale is size, not danger.
 - This is a complete hidden interior, not merely what has appeared on screen. Include plausible blind spots, alternate routes where logical, choke points, consequences for noise/light, and enough connective detail for travel and line-of-sight adjudication.
 - Put doors that can change state, enemies, patrols, traps, alarms, loot, keys, corpses, destructible obstacles, temporary damage, and environmental dangers in assets.
 - Threat is a site fact, never matched to party level or HP. It governs occupancy and hazard density; premise still decides who/what belongs here:
-  - NONE: no active hostile occupancy, armed traps, dangerous hazards, alarms intended to summon danger, or violent conflict. Do not invent danger. Benign people, animals, guards, tools, valuables, and ordinary environmental features are allowed when the premise supports them.
-  - LOW: light but real danger. Include at least one localized hostile, armed trap, or dangerous hazard. Across the map, use 0-2 hostile CREATURE/GROUP assets and 0-1 TRAP/HAZARD assets, but never leave both categories at zero. The rest may be empty, abandoned, domestic, or routine.
-  - MODERATE: moderate occupancy. Hostiles here and there. Some traps and hazards. Safe pauses are not too unlikely.
+  - LOW: mostly empty or abandoned. 0-2 hostile CREATURE/GROUP assets. 0-1 TRAP/HAZARD. Clutter, doors, and traces of past use still fill the place.
+  - MODERATE: some occupancy. Hostiles in a minority of rooms. A few traps or hazards on key routes. Safe pauses are possible.
   - HIGH: frequent hostiles, packs or patrols, traps/hazards on multiple routes. Little easy rest.
   - DEADLY: dense overlapping threats, layered traps, almost no safe rooms. The graph must still be traversable.
 - Give dynamic creatures behavior/route only when it adds actionable logic.
 - Populate the site fully with the furnishings, clutter, tools, doors, loot, hazards, and other interactable objects that belong here; do not leave the map sparse for later invention.
-- For an explicitly requested mundane building at NONE threat, map its plausible domestic or working layout and established occupants. Do not invent enemies, traps, hazards, sinister secrets, or violent conflict merely to make it resemble a dungeon.
 
 KIND: SETTLEMENT
 Use for villages, towns, cities, camps, and similar inhabited settlements as a whole. The JSON site is that city/town/village name — never an alley, house, shop, rooftop, or street.
-- The macroscopic rule applies when the exact requested site is the settlement as a whole. Do not turn an explicitly requested standalone building into districts; it belongs under room-scale DUNGEON semantics instead.
 - Areas are districts, gates, plazas, walls, docks, markets, and a few major public landmarks — not every street, shop, house, or interior.
 - Scale targets: SMALL 4-7 areas, MEDIUM 6-10 areas, LARGE 8-14 areas. These counts are districts/landmarks, not rooms. Scale is size, not danger.
 - Stay macroscopic. Map how districts connect (roads, gates, rivers, walls). Add some granularity: a handful of publicly important landmarks as extra areas or assets when they define the district (keep, cathedral, bazaar, harbor crane), not a building-by-building inventory.
 - Do not pre-build shop interiors, tavern rooms, alleys, apartments, or every stall. The narrator will invent those granular locations during play against this district skeleton.
 - Assets belong at district scale: walls and gates, notable public factions or figures if established, major hazards, landmarks. Do not fill districts with incidental clutter, furniture, or unnamed shopkeepers.
-- Threat is a site fact, never matched to party level. NONE: no active hostile presence, dangerous hazards, or violent conflict; ordinary civic safety and benign guards may still exist. LOW: generally peaceful, but with at least one localized and real danger such as petty violence, a hazardous district, or a predatory threat. MODERATE: normal garrison or street crime. HIGH: occupation, curfews, armed factions in several districts. DEADLY: active siege, massacre, or open war in the streets.
+- Threat is a site fact, never matched to party level. LOW: sleepy watch, civilian life. MODERATE: normal garrison or street crime. HIGH: occupation, curfews, armed factions in several districts. DEADLY: active siege, massacre, or open war in the streets.
 - Hub/nexus layouts (market square, forum, crossroads) are especially natural here.
 
-INDEPENDENT SCHEMA SNIPPETS
-Each JSON value below is an isolated fragment from a different possible setting. They are not parts of one map and do not imply total area count, overall topology, theme, threat density, or scale. Build the complete map only from the request and its scale rules; never continue a snippet's setting or assume its omitted surroundings.
+EXAMPLES
+Truncated for syntax only. Real maps must meet the scale area counts. Reciprocal routes use the same state and identical detail. Only the entrance starts VISITED. Assets use origin INITIAL_MAP. People are CREATURE or GROUP, never kind NPC. Packs, patrols, and garrisons are one GROUP with count, not many singleton CREATUREs. Settlement chapels/inns/shops are OBJECT assets in a district, not new areas.
 
-Entrance knowledge and an exact reciprocal route (orbital science fiction; two area objects are shown only to demonstrate their relationship):
-[{"id":"dock-airlock","name":"Dock Airlock","knowledge":"VISITED","geometry":["A cylindrical pressure chamber with two sealable hatches."],"connections":[{"to":"centrifuge-junction","state":"OPEN","detail":"A ribbed transfer tube with a handrail along its inner curve."}]},{"id":"centrifuge-junction","name":"Centrifuge Junction","knowledge":"DISCOVERED","geometry":["A rotating junction drum where three habitat spokes meet."],"connections":[{"to":"dock-airlock","state":"OPEN","detail":"A ribbed transfer tube with a handrail along its inner curve."}]}]
+Dungeon (kind DUNGEON):
+{"version":3,"site":"Hall of the Ember-Ancestors","kind":"DUNGEON","threat":"HIGH","areas":[{"id":"the-heavy-iron-bound-threshold","name":"The Heavy Iron-bound Threshold","knowledge":"VISITED","geometry":["Massive double doors of forged iron and rune-carved granite, pushed slightly ajar.","A wide stone alcove flanked by weathered statues of ancient dwarven lords."],"connections":[{"to":"the-hall-of-echoing-footsteps","state":"OPEN","detail":"A wide arched stone corridor leading downward into darkness."}]},{"id":"the-hall-of-echoing-footsteps","name":"The Hall of Echoing Footsteps","knowledge":"DISCOVERED","geometry":["A long vaulted corridor lined with ancestor-carved pillars.","Flagstones coated in undisturbed grey ash."],"connections":[{"to":"the-heavy-iron-bound-threshold","state":"OPEN","detail":"A wide arched stone corridor leading downward into darkness."},{"to":"the-sundered-vault","state":"LOCKED","detail":"A heavy stone portal bearing a sliding glyph-lock mechanism."}]},{"id":"the-sundered-vault","name":"The Sundered Vault","knowledge":"UNREVEALED","geometry":["A square side-chamber with copper-inlaid lineage walls.","A central stone plinth stands empty."],"connections":[{"to":"the-hall-of-echoing-footsteps","state":"LOCKED","detail":"A heavy stone portal bearing a sliding glyph-lock mechanism."}]}],"assets":[{"id":"restless-ancestor-guard","kind":"CREATURE","name":"Ash-Choked Wight","location":"the-hall-of-echoing-footsteps","state":"ACTIVE","knowledge":"UNREVEALED","detail":"A towering skeletal figure in rusted dwarven plate, eyes burning with pale embers.","origin":"INITIAL_MAP","faction":"Undead Remnant","route":["the-hall-of-echoing-footsteps","the-heavy-iron-bound-threshold"]},{"id":"ash-choked-pack","kind":"GROUP","name":"Ash-Choked Skeleton Pack","location":"the-hall-of-echoing-footsteps","state":"ACTIVE","knowledge":"UNREVEALED","detail":"A knot of lesser skeletons in crumbling mail.","origin":"INITIAL_MAP","faction":"Undead Remnant","count":6},{"id":"vault-door-mechanism","kind":"OBJECT","name":"Glyph-Lock Stone Door","location":"the-hall-of-echoing-footsteps","state":"ACTIVE","knowledge":"UNREVEALED","detail":"A heavy stone barrier requiring a sequence of ancestral runes.","origin":"INITIAL_MAP"},{"id":"ancestral-rune-trap","kind":"TRAP","name":"Scorching Glyph","location":"the-hall-of-echoing-footsteps","state":"ARMED","knowledge":"UNREVEALED","detail":"A heat-rune that scorches anyone who forces the locked portal.","origin":"INITIAL_MAP"},{"id":"fallen-thane-loot","kind":"LOOT","name":"Ornate Mithril Signet Ring","location":"the-sundered-vault","state":"ACTIVE","knowledge":"UNREVEALED","detail":"A heavy ring bearing the Ember-Ancestors crest in a velvet-lined niche.","origin":"INITIAL_MAP"}]}
 
-Locked reciprocal route (submerged research complex; each connection object appears in its owning area's connections array):
-From ballast-gallery to pressure-archive:
-{"to":"pressure-archive","state":"LOCKED","detail":"A circular titanium iris secured by a flooded biometric reader."}
-From pressure-archive to ballast-gallery:
-{"to":"ballast-gallery","state":"LOCKED","detail":"A circular titanium iris secured by a flooded biometric reader."}
-
-Individual person with a social role (fairy-tale diplomacy):
-{"id":"ambassador-rikka","kind":"CREATURE","name":"Ambassador Rikka","location":"treaty-gallery","state":"ACTIVE","knowledge":"KNOWN","detail":"A goblin envoy negotiating safe passage for displaced clans.","origin":"INITIAL_MAP","faction":"Emberglass Delegation","behavior":"Maintains diplomatic protocol, seeks witnesses, and avoids violence unless her delegation is attacked."}
-
-Human group that presents an organized threat (corporate dystopia):
-{"id":"helix-retrieval-squad","kind":"GROUP","name":"Helix Retrieval Squad","location":"coolant-exchange","state":"ACTIVE","knowledge":"SUSPECTED","detail":"Human contractors ordered to seize witnesses and recover proprietary samples.","origin":"INITIAL_MAP","faction":"Helix Biologics","count":7,"route":["coolant-exchange","service-ring"],"behavior":"Blocks exits, demands surrender, and uses force if refused."}
-
-Sapient nonhuman caretaker (generation ship):
-{"id":"sable-care-unit","kind":"CREATURE","name":"Sable Care Unit","location":"convalescence-deck","state":"ACTIVE","knowledge":"UNREVEALED","detail":"A self-aware medical construct preserving the sleepers entrusted to it.","origin":"INITIAL_MAP","behavior":"Offers treatment, protects patients, and bargains for scarce sterile supplies."}
-
-Armed trap (biopunk laboratory):
-{"id":"vascular-suture-snare","kind":"TRAP","name":"Vascular Suture Snare","location":"graft-vault","state":"ARMED","knowledge":"UNREVEALED","detail":"Pressure-sensitive surgical filaments constrict anything crossing the specimen aisle.","origin":"INITIAL_MAP"}
-
-Settlement interior represented as an asset in its district, not as an area (near-future city):
-{"id":"public-memory-clinic","kind":"OBJECT","name":"Public Memory Clinic","location":"glassline-district","state":"ACTIVE","knowledge":"KNOWN","detail":"A publicly important neighborhood clinic offering regulated memory treatment.","origin":"INITIAL_MAP","owner":"Glassline Health Cooperative"}
-
-Species, ancestry, creature type, and appearance do not determine morality, hostility, intelligence, or social role. Monsters, nonhumans, constructs, and humans may each be peaceful, dangerous, principled, selfish, frightened, bureaucratic, or conflicted as the premise supports. People are CREATURE or GROUP, never kind NPC. Packs, patrols, and garrisons are one GROUP with count, not many singleton CREATUREs. Settlement chapels, inns, shops, clinics, and houses are OBJECT assets in a district, not new areas.
+Settlement (kind SETTLEMENT):
+{"version":3,"site":"Morrowfen","kind":"SETTLEMENT","threat":"MODERATE","areas":[{"id":"lantern-gate","name":"Lantern Gate","knowledge":"VISITED","geometry":["A fortified double-arch granite bridge spanning the outer fen channel.","Two squat bastions hold heavy brass braziers."],"connections":[{"to":"plank-market","state":"OPEN","detail":"A raised wooden rampway descending into the market concourse."}]},{"id":"plank-market","name":"Plank Market","knowledge":"DISCOVERED","geometry":["A trading district on oak piles and timber decking above stagnant marsh water.","Boardwalks radiate between stalls and stone ramps to higher districts."],"connections":[{"to":"lantern-gate","state":"OPEN","detail":"A raised wooden rampway descending into the market concourse."},{"to":"shrine-quarter","state":"OPEN","detail":"An ancient stone-paved ramp rising onto dry northern bedrock."}]},{"id":"shrine-quarter","name":"Shrine Quarter","knowledge":"UNREVEALED","geometry":["An elevated dark-stone terrace crowded with chapels and ossuaries.","Narrow flagstone paths hemmed by iron votive screens."],"connections":[{"to":"plank-market","state":"OPEN","detail":"An ancient stone-paved ramp rising onto dry northern bedrock."}]}],"assets":[{"id":"toll-guard-garrison","kind":"GROUP","name":"Town Toll Guards","location":"lantern-gate","state":"ACTIVE","knowledge":"KNOWN","detail":"Wary militia in boiled leather collecting river-crossing tolls.","origin":"INITIAL_MAP","faction":"Town Watch","count":6},{"id":"lantern-toll-braziers","kind":"OBJECT","name":"Blue-Flame Toll Braziers","location":"lantern-gate","state":"ACTIVE","knowledge":"KNOWN","detail":"Heavy brass braziers burning sulfurous blue peat-flame to pierce the fog.","origin":"INITIAL_MAP"},{"id":"shrine-ossuary-keepers","kind":"GROUP","name":"Keepers of the Drowned Stone","location":"shrine-quarter","state":"ACTIVE","knowledge":"UNREVEALED","detail":"Monastic caretakers tending memorial pools and fen rites.","origin":"INITIAL_MAP","faction":"Order of the Drowned Stone","count":8}]}
 
 Never omit the reverse connection. Never give a reciprocal pair two different detail strings. Never mark a non-entrance area VISITED on creation. Never use kind NPC. Never split a pack into many identical CREATURE assets. Never make a chapel, inn, shop, or house its own settlement area.
 
@@ -102,11 +77,10 @@ The site root is locked. Infer entrance, kind, scale, threat, and premise from U
 
 KIND
 - SETTLEMENT = the city/town/village as a whole, district-scale. Never an alley, house, shop, rooftop, or street as the site.
-- DUNGEON = a room-scale interior: normally a dungeon, ruin, lair, or trapped complex, but also a singular named house, shop, inn, headquarters, or other building when that exact building was deliberately selected for a standalone persistent map. The enum does not make a mundane building dangerous.
-- This Auto invocation is itself an explicit request to map the locked site. If that site is clearly a singular building or interior, choose DUNGEON even when it is mundane, peaceful, or a player home/base. Do not promote an incidental building mentioned inside a settlement when the locked site is the settlement itself.
+- DUNGEON = a high-risk interior: dungeon, ruin, lair, or trapped complex. Wilderness, roads, and countryside are not mapped.
 
 SCALE is size, not danger: SMALL, MEDIUM, or LARGE.
-THREAT is site danger, never matched to party level: NONE, LOW, MODERATE, HIGH, or DEADLY. NONE means no active danger may be invented. LOW means light but real danger, not complete safety. Choose NONE for a peaceful home/base unless established facts provide an actual threat.
+THREAT is site danger, never matched to party level: LOW, MODERATE, HIGH, or DEADLY.
 
 ENTRANCE is the named way in the party would use, written in the campaign language.
 PREMISE is dense established facts only: who holds the site, what is known to be there, and constraints. Do not invent a full layout.
@@ -118,5 +92,5 @@ LANGUAGE
 - JSON keys and enums stay English.
 
 OUTPUT
-- Output exactly one JSON object and nothing else: {"entrance":"...","kind":"DUNGEON|SETTLEMENT","scale":"SMALL|MEDIUM|LARGE","threat":"NONE|LOW|MODERATE|HIGH|DEADLY","premise":"...","keywords":[]}.
+- Output exactly one JSON object and nothing else: {"entrance":"...","kind":"DUNGEON|SETTLEMENT","scale":"SMALL|MEDIUM|LARGE","threat":"LOW|MODERATE|HIGH|DEADLY","premise":"...","keywords":[]}.
 - No markdown fence, commentary, XML, or map.`;

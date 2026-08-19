@@ -94,7 +94,10 @@ describe('panel builder', () => {
         expect(source).toContain('Reveal All');
         expect(source).toContain('Map Entries');
         expect(source).toContain('Raw JSON');
-        expect(source).toContain('class="rt-dungeon-map-raw"');
+        expect(source).toContain('Save JSON');
+        expect(source).toContain('parseEditableDungeonMapJson');
+        expect(source).toContain('persistManualDungeonMapDocument');
+        expect(source).toContain('<textarea class="rt-dungeon-map-raw"');
         const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
         expect(css).toContain('.rt-dungeon-graph-asset-tip');
         expect(css).toMatch(/\.rt-dungeon-map-popup\s*\{[^}]*text-align:\s*left;/);

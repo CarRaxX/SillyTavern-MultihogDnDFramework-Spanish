@@ -29,6 +29,8 @@ import {
     normalizeMapSiteThreat,
     MAP_SITE_THREATS,
     parseDungeonMapDocument,
+    parseEditableDungeonMapJson,
+    serializeDungeonMapDocument,
     coerceAssetState,
     isPlayCanonLockedState,
     parseDungeonDeltaBlock,
@@ -1491,5 +1493,46 @@ The last guard falls and a loose stone reveals a niche.
         });
         expect(revived.ok).toBe(false);
         expect(revived.errors[0]).toMatchObject({ code: 'PLAY_CANON_LOCKED' });
+    });
+
+    it('parses editable inspector JSON and rejects site mismatches', () => {
+        const json = serializeDungeonMapDocument(connectedArchitectMap);
+        const parsed = parseEditableDungeonMapJson(json, 'Abbey Undercroft');
+        expect(parsed.ok).toBe(true);
+        expect(parsed.document.site).toBe('Abbey Undercroft');
+        expect(parsed.document.areas.length).toBeGreaterThan(0);
+
+        const fenced = parseEditableDungeonMapJson('```json\n' + json + '\n```', 'Abbey Undercroft');
+        expect(fenced.ok).toBe(true);
+
+        const wrongSite = parseEditableDungeonMapJson(json, 'Other Site');
+        expect(wrongSite.ok).toBe(false);
+        expect(wrongSite.errors[0]).toContain('site must stay');
+
+        const broken = parseEditableDungeonMapJson('{bad', 'Abbey Undercroft');
+        expect(broken.ok).toBe(false);
+        expect(broken.errors.length).toBeGreaterThan(0);
+
+        const withAsset = parseEditableDungeonMapJson(
+            serializeDungeonMapDocument({
+                ...connectedArchitectMap,
+                assets: [
+                    ...connectedArchitectMap.assets,
+                    {
+                        id: 'new-rat',
+                        kind: 'CREATURE',
+                        name: 'Cellar Rat',
+                        location: 'cellar-landing',
+                        state: 'ACTIVE',
+                        knowledge: 'KNOWN',
+                        detail: 'Added via JSON.',
+                        origin: 'INITIAL_MAP',
+                    },
+                ],
+            }),
+            'Abbey Undercroft',
+        );
+        expect(withAsset.ok).toBe(true);
+        expect(withAsset.document.assets.some(asset => asset.id === 'new-rat')).toBe(true);
     });
 });

@@ -803,6 +803,42 @@ export function serializeDungeonMapDocument(document) {
     return JSON.stringify(normalizeDungeonMapDocument(document, document?.site), null, 2);
 }
 
+/** Parse user-edited map JSON from the inspector Raw JSON tab. */
+export function parseEditableDungeonMapJson(text, siteRoot = '') {
+    const source = stripJsonFence(text);
+    if (!source) return { ok: false, errors: ['JSON is empty.'], document: null };
+    if (!source.startsWith('{')) {
+        return { ok: false, errors: ['JSON must be one object starting with {.'], document: null };
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(source);
+    } catch (error) {
+        return { ok: false, errors: [String(error?.message || error || 'Invalid JSON.')], document: null };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ok: false, errors: ['JSON must be one object with version, site, areas, and assets.'], document: null };
+    }
+    const site = String(siteRoot || '').trim();
+    const rawSite = String(parsed.site || '').trim();
+    if (site && rawSite && !dungeonSiteRootsMatch(rawSite, site)) {
+        return {
+            ok: false,
+            errors: [`site must stay "${site}". Received "${rawSite}".`],
+            document: null,
+        };
+    }
+    const document = normalizeDungeonMapDocument(parsed, site || rawSite);
+    if (!Array.isArray(document.areas) || !document.areas.length) {
+        return { ok: false, errors: ['Map must include at least one area.'], document: null };
+    }
+    if (!Array.isArray(document.assets)) {
+        return { ok: false, errors: ['Map must include an assets array.'], document: null };
+    }
+    if (site) document.site = site;
+    return { ok: true, errors: [], document };
+}
+
 function formatMapAsset(asset, areasById) {
     const tags = [asset.kind, asset.state, asset.knowledge].filter(Boolean).join(' / ');
     const countLabel = Number.isInteger(asset.count) ? ` ×${asset.count}` : '';

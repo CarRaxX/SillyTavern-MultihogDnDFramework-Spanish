@@ -15,7 +15,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
             version: { type: 'integer', enum: [3] },
             site: { type: 'string', minLength: 1 },
             kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
-            threat: { type: 'string', enum: ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
             areas: {
                 type: 'array',
                 minItems: 2,
@@ -95,7 +95,7 @@ export const MAP_ARCHITECT_BRIEF_JSON_SCHEMA = Object.freeze({
             entrance: { type: 'string', minLength: 1 },
             kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
             scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'] },
-            threat: { type: 'string', enum: ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
             premise: { type: 'string', minLength: 1 },
             keywords: {
                 type: 'array',
