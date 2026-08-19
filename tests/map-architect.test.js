@@ -50,6 +50,8 @@ describe('Map Architect component', () => {
         expect(hooks).toContain('For SETTLEMENT, copy the town/city/village name from the Location footer');
         expect(hooks).toContain('Do not call for an alley, house, shop, rooftop, warehouse, street');
         expect(hooks).toContain('Do not call for wilderness, roads, countryside, or other places between mapped sites');
+        expect(hooks).toContain('Do not call if [MAPPED_SITES] lists that site');
+        expect(hooks).toContain('buildMappedSitesInjection');
         expect(architect).toContain('mapSiteFooterMismatchHint');
         expect(architect).toContain('Live location footer:');
         expect(router).toContain('mapSiteFooterMismatchHint(site, currentLocation)');

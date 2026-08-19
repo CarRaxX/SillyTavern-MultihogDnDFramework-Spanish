@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.28.0] - 2026-08-19
+
+### Added
+- **Mapped-site index for the narrator**: every Persistent Maps turn injects a compact `[MAPPED_SITES]` list of existing maps (name + kind). It does not depend on the live Location footer or lore keys, so approaching or re-entering Thornbrook (or any already-mapped site) no longer looks unmapped. `DUNGEON_REALITY` is still attached only while the footer matches. Reset a stored narrator Persistent Maps section to pick up the skip rule.
+
 ## [8.27.0] - 2026-08-19
 
 ### Changed

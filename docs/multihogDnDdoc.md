@@ -557,7 +557,7 @@ After a map exists, the **Map Updater** keeps occupancy current on its own caden
 
 The blue **MAP** badge on a root Location record and the details button in **Visuals/Map** open one shared inspector. **Reveal All** is remembered per chat. Until it is on, unrevealed map entries, raw JSON, and the content of material Evolution commits remain hidden, and Visuals/Map stays knowledge-filtered. Turning it on also fully reveals the Visuals/Map graph (named rooms instead of fog stubs). The inspector shows that same graph below the Map Entries / Raw JSON tabs, lists Evolution history, provides **Map Evolution: Run Now** (always scoped to only the map being viewed), and opens the **Testing Ground** sandbox for that site.
 
-Repeated `CreateAreaMap` calls do not replace an already attached map.
+Repeated `CreateAreaMap` calls do not replace an already attached map. Every Persistent Maps turn also injects a compact `[MAPPED_SITES]` list of every site that already has a map (independent of the current footer and lore keys), so the narrator will not request a map while approaching or re-entering a known site. The live `[DUNGEON_REALITY]` block is still attached only while the footer matches.
 
 Dungeon maps are **room-scale**. Settlement maps are **district-scale**: gates, plazas, wards, and a few major landmarks — not every shop or interior. The GM may invent granular locations (a specific inn, alley, house) against that skeleton.
 
@@ -578,7 +578,7 @@ Activation uses **whole location segments**, not substring matches and not first
 | `Whispering Woods, Forgotten Tomb` | Forgotten Tomb on (region wrapping) |
 | `Forest Near the Hall of the Ember-Ancestors` | **off** (nearby mention only) |
 
-Leaving the site stops narrator injection without deleting the map; returning resumes it. While inside, the GM receives compact occupancy prose (including each asset's latest Cause / Actor / Since when present) plus a short Recent site activity briefing — open causal threads, recent material Evolution commits up to a token ceiling (default 2000; never mid-cut), and DIGEST rows — not the full Evolution ledger. Commit lines omit the site name.
+Leaving the site stops `DUNGEON_REALITY` injection without deleting the map; returning resumes it. The `[MAPPED_SITES]` index stays in context so the narrator still knows which maps exist. While inside, the GM receives compact occupancy prose (including each asset's latest Cause / Actor / Since when present) plus a short Recent site activity briefing — open causal threads, recent material Evolution commits up to a token ceiling (default 2000; never mid-cut), and DIGEST rows — not the full Evolution ledger. Commit lines omit the site name.
 
 ### Player vs GM views
 

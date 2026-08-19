@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     applyDungeonMapTransaction,
     buildDungeonRealityInjection,
+    buildMappedSitesInjection,
+    listMappedSiteSummaries,
     buildDungeonMapCommitSchema,
     attachDungeonMapToLocationEntry,
     buildDungeonSitesFromLocationEntries,
@@ -1130,6 +1132,49 @@ The last guard falls and a loose stone reveals a niche.
         expect(prompt.at(-1).content).toContain('data-other-private');
         expect(storedEntry.content).toBe(storedContentBefore);
         expect(extractDungeonMapSection(storedEntry.content)).toContain('"site":"Ember Mine"');
+    });
+
+    it('lists existing maps for the narrator without requiring a matching footer', () => {
+        expect(buildMappedSitesInjection({})).toContain('[MAPPED_SITES — INTERNAL]');
+        expect(buildMappedSitesInjection({})).toContain('- None.');
+        expect(buildMappedSitesInjection({})).toContain('CreateAreaMap is allowed');
+
+        const sites = {
+            thornbrook: {
+                siteRoot: 'Thornbrook',
+                mapChunks: [JSON.stringify({ version: 3, site: 'Thornbrook', kind: 'SETTLEMENT', areas: [], assets: [] })],
+            },
+            ember: {
+                siteRoot: 'Ember Mine',
+                mapChunks: [JSON.stringify({ version: 3, site: 'Ember Mine', kind: 'DUNGEON', areas: [], assets: [] })],
+            },
+            incomplete: { siteRoot: 'Ghost Site', mapChunks: [] },
+        };
+        expect(listMappedSiteSummaries(sites)).toEqual([
+            { siteRoot: 'Ember Mine', kind: 'DUNGEON' },
+            { siteRoot: 'Thornbrook', kind: 'SETTLEMENT' },
+        ]);
+        const index = buildMappedSitesInjection(sites);
+        expect(index).toContain('- Ember Mine (DUNGEON)');
+        expect(index).toContain('- Thornbrook (SETTLEMENT)');
+        expect(index).toContain('when approaching, entering, or returning');
+        expect(index).not.toContain('Ghost Site');
+        expect(index).not.toContain('"version"');
+    });
+
+    it('strips a mapped-sites index from the prompt copy when Persistent Maps is off', () => {
+        const prompt = [
+            {
+                name: 'Dungeon Reality',
+                mes: '[MAPPED_SITES — INTERNAL]\n- Thornbrook (SETTLEMENT)\n[/MAPPED_SITES]\n',
+            },
+            {
+                role: 'system',
+                content: 'Keep this. [MAPPED_SITES — INTERNAL]\n- Ember Mine (DUNGEON)\n[/MAPPED_SITES]',
+            },
+        ];
+        stripDungeonRealityBlocksFromPrompt(prompt);
+        expect(prompt.some(message => /MAPPED_SITES/i.test(JSON.stringify(message)))).toBe(false);
     });
 
     it('uses the latest narrator footer and diagnoses obvious high-risk roots', () => {

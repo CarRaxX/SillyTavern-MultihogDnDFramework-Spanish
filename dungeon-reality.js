@@ -2152,6 +2152,36 @@ export function listMappedSiteDocuments(entries, bookName = '') {
     return records;
 }
 
+/** Compact name+kind rows for the narrator's always-on mapped-site index. */
+export function listMappedSiteSummaries(sites) {
+    const rows = [];
+    for (const site of Object.values(sites || {})) {
+        if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) continue;
+        const parsed = parseDungeonMapDocument(site.mapChunks[0], site.siteRoot).document;
+        rows.push({
+            siteRoot: String(site.siteRoot).trim(),
+            kind: normalizeMapSiteKind(parsed?.kind),
+        });
+    }
+    rows.sort((a, b) => a.siteRoot.localeCompare(b.siteRoot, undefined, { sensitivity: 'base' }));
+    return rows;
+}
+
+/**
+ * Always-on index of existing maps. Independent of the live footer and lore keys,
+ * so the narrator can skip CreateAreaMap while still approaching a mapped site.
+ */
+export function buildMappedSitesInjection(sites) {
+    const rows = listMappedSiteSummaries(sites);
+    const lines = rows.length
+        ? rows.map(row => `- ${row.siteRoot} (${row.kind})`)
+        : ['- None.'];
+    const guidance = rows.length
+        ? 'Every site below already has a private map. Do not call CreateAreaMap for these names, or for a nested place of one of them, when approaching, entering, or returning. DUNGEON_REALITY is attached only while the Location footer matches a listed site; this list is the complete index.'
+        : 'No private maps exist yet. CreateAreaMap is allowed for a new unmapped dungeon or settlement before first entry.';
+    return `[MAPPED_SITES — INTERNAL]\n${guidance}\n\n${lines.join('\n')}\n[/MAPPED_SITES]\n`;
+}
+
 /**
  * Capture selected narrator-message hidden blocks and merge new chunks by site.
  * Existing map chunks are never rewritten.
@@ -2427,7 +2457,8 @@ export function stripDungeonRealityBlocksFromPrompt(chat) {
         // Depth injections are prompt-only messages. Remove a stale one as
         // well, since it is not wrapped in a hidden HTML block.
         if (String(message?.name || '').trim() === 'Dungeon Reality'
-            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)) {
+            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)
+            || /\[MAPPED_SITES\s+[—-]\s+INTERNAL\]/i.test(messageText)) {
             chat.splice(index, 1);
             continue;
         }

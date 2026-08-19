@@ -84,6 +84,8 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).not.toContain('Do not invent missing rooms or hidden occupancy');
             expect(source).toContain('Do not design or emit the hidden map yourself');
             expect(source).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
+            expect(source).toContain('[MAPPED_SITES — INTERNAL]');
+            expect(source).toContain('absence of that block does not mean the site is unmapped');
             expect(source).not.toContain('<div hidden data-dungeon-map>');
             expect(source).not.toContain('one valid JSON object');
             expect(source).not.toContain('CreateDungeonMap');

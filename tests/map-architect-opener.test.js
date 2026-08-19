@@ -109,6 +109,8 @@ Level 6 | 08:00 AM, Day 1`);
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('the town/city/village itself');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('not the alley they are standing in');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('places between mapped sites are not mapped');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('[MAPPED_SITES — INTERNAL]');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('including when approaching or re-entering');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('CYOA Mode');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain(MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT);
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).not.toContain('CreateAreaMap');

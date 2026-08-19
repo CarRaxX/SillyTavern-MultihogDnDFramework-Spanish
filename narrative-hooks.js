@@ -30,6 +30,7 @@ import { isEffectiveSectionEnabled, isLocationMappingEnabled } from './src/state
 import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/state/narrative-pacing.js';
 import {
     buildDungeonRealityInjection,
+    buildMappedSitesInjection,
     findLatestDungeonLocation,
     getDungeonMessageText,
     getSiteRootFromLocation,
@@ -533,7 +534,7 @@ export function registerMapArchitectTool() {
         registerFunctionTool({
             name: 'CreateAreaMap',
             displayName: 'Map Architect',
-            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village as a whole (kind SETTLEMENT, district-scale). Do not call for an alley, house, shop, rooftop, warehouse, street, or other sub-place of a city. Do not call for wilderness, roads, countryside, or other places between mapped sites. A house is DUNGEON only if that building itself is a high-risk dungeon/ruin/lair. SETTLEMENT site is the city/town name, not the current alley. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
+            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village as a whole (kind SETTLEMENT, district-scale). Do not call for an alley, house, shop, rooftop, warehouse, street, or other sub-place of a city. Do not call for wilderness, roads, countryside, or other places between mapped sites. A house is DUNGEON only if that building itself is a high-risk dungeon/ruin/lair. SETTLEMENT site is the city/town name, not the current alley. Do not call if [MAPPED_SITES] lists that site or a parent of the place being entered, even when no DUNGEON_REALITY block is attached yet. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1069,6 +1070,7 @@ export function installInterceptor() {
             }
 
             const currentLocation = findLatestDungeonLocation(_rbChat);
+            const mappedSitesInjection = buildMappedSitesInjection(dungeonState.sites);
             const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation);
             if (activeSite) {
                 dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation, {
@@ -1087,6 +1089,9 @@ export function installInterceptor() {
                     console.error(`[RPG Tracker] Dungeon Reality is enabled and the party appears to be inside "${currentLocation}", but no captured site map is available. Adjudication is missing its objective map until the GM emits a valid <div hidden> map with a footer location.`);
                 }
             }
+            dungeonInjection = dungeonInjection
+                ? `${mappedSitesInjection}\n${dungeonInjection}`
+                : mappedSitesInjection;
         }
         const narrationContinue = _mapArchitectNarrationContinue;
         if (_pendingMapArchitectResult) {
