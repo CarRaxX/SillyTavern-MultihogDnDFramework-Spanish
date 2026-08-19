@@ -1456,6 +1456,11 @@ Rules:
 
         gameSystemWizardInjectMemo: false,
 
+        gameSystemWizardInjectModulePrompts: false,
+
+        /** Selected module example keys: stock:CHARACTER, field:TAG, sysprompt:id */
+        gameSystemWizardModuleExampleKeys: [],
+
         lastResetVersion: "",
 
         lastSeenPromptDefaultsFingerprint: "",
@@ -1541,7 +1546,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '8.35.0';
+export const FACTORY_SETTINGS_VERSION = '8.36.0';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */
