@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.30.2] - 2026-08-19
+
+### Changed
+- **Relationship update default**: new installs and unset configs now default to **State Tracker Tags** instead of Narrator Regex. Existing explicit `regex` choices are preserved.
+
 ## [8.30.1] - 2026-08-19
 
 ### Changed

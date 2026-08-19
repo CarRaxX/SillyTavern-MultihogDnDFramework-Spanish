@@ -505,8 +505,8 @@ Splitting Body from Worn Equipment means the Lorebook Agent can keep gear in syn
 
 Optional friendship/affection on NPC cards. Update methods (only one active):
 
-1. **Narrator Regex** (default) — parses annotations like `*(Friendship: Name +X — …)*` / Affection from narrator output.
-2. **State Tracker Tags** — tracker emits `[RELATIONS]` command lines; code applies deltas. (Those blocks are stripped before memo merge so they don’t leak into the GM memo.)
+1. **Narrator Regex** — parses annotations like `*(Friendship: Name +X — …)*` / Affection from narrator output.
+2. **State Tracker Tags** (default) — tracker emits `[RELATIONS]` command lines; code applies deltas. (Those blocks are stripped before memo merge so they don’t leak into the GM memo.)
 
 Caps default around ±150 (per-chat override possible in Campaign Records under the gear ⚙️ in the NPCs header).
 
