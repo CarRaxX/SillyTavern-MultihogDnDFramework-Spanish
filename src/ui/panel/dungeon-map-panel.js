@@ -5,7 +5,6 @@ import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClamped
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
 import { renderDungeonGraphAssetTipHtml } from '../../../dungeon-map-icons.js';
 import { serializeDungeonMapDocument, parseEditableDungeonMapJson } from '../../../dungeon-reality.js';
-import { persistManualDungeonMapDocument } from '../../../router.js';
 import { describeEvolutionBacklog, formatEvolutionElapsedMinutes, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
 export const DUNGEON_MAP_DETACHED_KEY = 'rpg_tracker_dungeon_map_detached';
@@ -478,6 +477,8 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         rawSave.disabled = true;
         if (rawStatus) rawStatus.textContent = 'Saving…';
         try {
+            const routerSpec = '../../../router.js';
+            const { persistManualDungeonMapDocument } = await import(routerSpec);
             await persistManualDungeonMapDocument(site, parsed.document);
             currentDocument = parsed.document;
             rawDirty = false;
