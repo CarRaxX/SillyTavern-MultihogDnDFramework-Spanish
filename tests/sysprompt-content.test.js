@@ -75,7 +75,13 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).toContain('city/town level');
             expect(source).toContain('Do not call `CreateAreaMap` for a district, alley, house, shop');
             expect(source).toContain('Wilderness, roads, countryside, and other places between mapped sites are not mapped');
-            expect(source).toContain('Map a building as DUNGEON only when that building itself is a dungeon');
+            expect(source).toContain('Do not call `CreateAreaMap` merely because {{user}} enters, owns, rents, visits, shops in, or sleeps in');
+            expect(source).toContain('explicitly asks for a persistent map of that exact named building');
+            expect(source).toContain('DUNGEON means room-scale, not dangerous');
+            expect(source).toContain('Use threat NONE when no actual danger is established; LOW means light but real danger');
+            expect(source).toContain('NONE has no active danger; LOW has light but real danger');
+            expect(source).toContain('unless the explicit standalone-building exception above applies');
+            expect(source).toContain('or an explicitly requested standalone building');
             expect(source).toContain('That footer segment is not a new mapped site');
             expect(source).toContain('You may invent granular interiors and incidental locations');
             expect(source).toContain('When {{user}} actually enters an invented interior');

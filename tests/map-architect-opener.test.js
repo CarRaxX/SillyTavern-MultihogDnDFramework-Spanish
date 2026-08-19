@@ -15,6 +15,13 @@ import {
 } from '../map-architect-opener.js';
 
 describe('Map Architect text opener', () => {
+    it('allows explicitly requested standalone buildings without mapping every ordinary interior', () => {
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('Do not emit a map command merely because the party enters, owns, rents, visits, shops in, or sleeps in');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('explicitly asks for a persistent map of that exact named building');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('DUNGEON means room-scale, not dangerous');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('unless the explicit standalone-building exception above applies');
+    });
+
     it('parses keyed CREATE_AREA_MAP fences and discards prose after the block', () => {
         const parsed = parseCreateAreaMapCommand(`The doors of the abbey wait.
 
@@ -103,11 +110,12 @@ Level 6 | 08:00 AM, Day 1`);
         expect(isMapArchitectTextOpener({})).toBe(false);
         expect(isMapArchitectTextOpener({ mapArchitectOpener: 'text' })).toBe(true);
         expect(normalizeMapArchitectOpener('TEXT')).toBe('text');
-        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('threat (LOW, MODERATE, HIGH, or DEADLY)');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('threat (NONE, LOW, MODERATE, HIGH, or DEADLY)');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('NONE has no active danger; LOW has light but real danger');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('Scale is geographic size');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('Do not invent keys such as name or footer_root');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('the town/city/village itself');
-        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('not the alley they are standing in');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('not the incidental place where they are standing');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('places between mapped sites are not mapped');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('[MAPPED_SITES — INTERNAL]');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('including when approaching or re-entering');
@@ -155,6 +163,17 @@ premise: A meat-grinder vault.
 [/CREATE_AREA_MAP]`);
         expect(deadly.args.threat).toBe('DEADLY');
         expect(createAreaMapCommandIsComplete(deadly.args)).toBe(true);
+
+        const safe = parseCreateAreaMapCommand(`[CREATE_AREA_MAP]
+site: Rowan House
+entrance: Front Door
+kind: DUNGEON
+scale: SMALL
+threat: NONE
+premise: The player's peaceful home.
+[/CREATE_AREA_MAP]`);
+        expect(safe.args.threat).toBe('NONE');
+        expect(createAreaMapCommandIsComplete(safe.args)).toBe(true);
 
         const omitted = parseCreateAreaMapCommand(`[CREATE_AREA_MAP]
 site: Quiet Ruin

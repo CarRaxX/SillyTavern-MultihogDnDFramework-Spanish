@@ -74,7 +74,7 @@ export const PLAY_CANON_LOCKED_STATES = [
     'DEAD', 'DESTROYED', 'DEACTIVATED', 'TAKEN', 'CLEARED', 'REMOVED', 'EXPIRED', 'DISMISSED',
 ];
 export const MAP_SITE_KINDS = ['DUNGEON', 'SETTLEMENT'];
-export const MAP_SITE_THREATS = ['LOW', 'MODERATE', 'HIGH', 'DEADLY'];
+export const MAP_SITE_THREATS = ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'];
 export const MAP_KILL_STATES = KILL_STATES;
 export const MAP_ASSET_KINDS = ASSET_KINDS;
 export const MAP_ASSET_STATES = ASSET_STATES;
@@ -272,7 +272,8 @@ export function normalizeMapSiteThreat(value, fallback = '') {
     const upper = raw.toUpperCase();
     if (MAP_SITE_THREATS.includes(upper)) return upper;
     if (/DEADLY|LETHAL|EXTREME|NIGHTMARE|SUICIDE|TPK/i.test(raw)) return 'DEADLY';
-    if (/\bLOW\b|LIGHT|MILD|SAFE|ROUTINE|QUIET|SPARSE|PEACEFUL/i.test(raw)) return 'LOW';
+    if (/\bNONE\b|NO[-\s]?THREAT|THREATLESS|HARMLESS|SAFE|PEACEFUL|NON[-\s]?DANGEROUS|NO[-\s]?DANGER/i.test(raw)) return 'NONE';
+    if (/\bLOW\b|LIGHT|MILD|ROUTINE|QUIET|SPARSE/i.test(raw)) return 'LOW';
     if (/MODERATE|STANDARD|TYPICAL|NORMAL|AVERAGE/i.test(raw) || /\bMEDIUM\b/.test(upper)) return 'MODERATE';
     if (/\bHIGH\b|DANGEROUS|SERIOUS|HEAVY|HARSH/.test(upper) || /high[-\s]?risk/i.test(raw)) return 'HIGH';
     return fallback;
@@ -524,25 +525,47 @@ function architectureError(code, path, received, hint) {
 }
 
 /**
- * Reciprocal routes are one physical passage. Models often rewrite detail from
- * each room (eastward vs westward). Copy the first-seen string onto the reverse
- * when state already matches. Does not invent missing reverses.
+ * Reciprocal routes are one physical passage. Mirror a valid one-way route onto
+ * its target when the reverse is absent. Models also often rewrite detail from
+ * each room (eastward vs westward), so copy the first-seen string onto an
+ * existing reverse when state already matches. Ambiguous/conflicting topology
+ * remains untouched for strict validation.
  */
 export function canonicalizeReciprocalConnectionDetails(areas) {
     if (!Array.isArray(areas)) return areas;
+    const areaIds = new Map();
+    const duplicateAreaIds = new Set();
+    for (const area of areas) {
+        const id = String(area?.id || '').trim();
+        if (!id) continue;
+        if (areaIds.has(id)) duplicateAreaIds.add(id);
+        else areaIds.set(id, area);
+    }
     const seen = new Set();
     for (const area of areas) {
         const from = String(area?.id || '').trim();
-        if (!from || !Array.isArray(area?.connections)) continue;
+        if (!from || duplicateAreaIds.has(from) || !Array.isArray(area?.connections)) continue;
         for (const connection of area.connections) {
             const to = String(connection?.to || '').trim();
-            if (!to) continue;
+            if (!to || to === from || duplicateAreaIds.has(to)) continue;
             const pair = from < to ? `${from}\0${to}` : `${to}\0${from}`;
             if (seen.has(pair)) continue;
             seen.add(pair);
-            const target = areas.find(candidate => String(candidate?.id || '').trim() === to);
-            const reverse = (target?.connections || []).find(candidate => String(candidate?.to || '').trim() === from);
-            if (!reverse || reverse.state !== connection.state) continue;
+            const target = areaIds.get(to);
+            if (!target || !Array.isArray(target.connections)) continue;
+            const reverses = target.connections.filter(candidate => String(candidate?.to || '').trim() === from);
+            if (reverses.length === 0) {
+                if (!CONNECTION_STATES.includes(connection?.state) || typeof connection?.detail !== 'string') continue;
+                target.connections.push({
+                    to: from,
+                    state: connection.state,
+                    detail: connection.detail,
+                });
+                continue;
+            }
+            if (reverses.length !== 1) continue;
+            const reverse = reverses[0];
+            if (reverse.state !== connection.state) continue;
             if (String(reverse.detail || '') !== String(connection.detail || '')) {
                 reverse.detail = String(connection.detail || '');
             }
@@ -592,11 +615,12 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
     if (raw.threat != null && raw.threat !== '') {
         const rawThreat = String(raw.threat || '').trim().toUpperCase();
         if (!MAP_SITE_THREATS.includes(rawThreat)) {
-            errors.push(architectureError('INVALID_THREAT', '$.threat', raw.threat, 'Use LOW, MODERATE, HIGH, or DEADLY.'));
+            errors.push(architectureError('INVALID_THREAT', '$.threat', raw.threat, 'Use NONE, LOW, MODERATE, HIGH, or DEADLY.'));
         } else if (requestedThreat && rawThreat !== requestedThreat) {
             errors.push(architectureError('THREAT_MISMATCH', '$.threat', raw.threat, `Use the requested threat exactly: "${requestedThreat}".`));
         }
     }
+    const effectiveThreat = normalizeMapSiteThreat(raw.threat, requestedThreat);
     if (!Array.isArray(raw.areas) || raw.areas.length < 2) {
         errors.push(architectureError('TOO_FEW_AREAS', '$.areas', raw.areas, 'Supply at least two connected areas.'));
     }
@@ -724,7 +748,12 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
         else assetIds.add(id);
         if (typeof asset.name !== 'string' || !asset.name.trim()) errors.push(architectureError('MISSING_ASSET_NAME', `${path}.name`, asset.name, 'Supply a concise entity name.'));
         if (!ASSET_KINDS.includes(asset.kind)) errors.push(architectureError('INVALID_ASSET_KIND', `${path}.kind`, asset.kind, `Use one of: ${ASSET_KINDS.join(', ')}.`));
-        if (!ASSET_STATES.includes(coerceAssetState(asset.state))) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        const assetState = coerceAssetState(asset.state);
+        if (!ASSET_STATES.includes(assetState)) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        const noneSafeThreatStates = ['DORMANT', 'DESTROYED', 'DISABLED', 'DEACTIVATED', 'CLEARED', 'EXPIRED', 'DISMISSED', 'REMOVED'];
+        if (effectiveThreat === 'NONE' && ['TRAP', 'HAZARD', 'ALARM'].includes(asset.kind) && !noneSafeThreatStates.includes(assetState)) {
+            errors.push(architectureError('NONE_THREAT_ACTIVE_DANGER', path, asset, 'Threat NONE cannot contain an active trap, hazard, or alarm. Remove it, use a safely inactive state, or request LOW or higher when real danger exists.'));
+        }
         if (!ASSET_KNOWLEDGE.includes(asset.knowledge)) errors.push(architectureError('INVALID_ASSET_KNOWLEDGE', `${path}.knowledge`, asset.knowledge, `Use one of: ${ASSET_KNOWLEDGE.join(', ')}.`));
         if (!areaIds.has(asset.location)) errors.push(architectureError('UNKNOWN_ASSET_LOCATION', `${path}.location`, asset.location, 'Place every initial asset in an existing area.'));
         if (typeof asset.detail !== 'string') errors.push(architectureError('INVALID_ASSET_DETAIL', `${path}.detail`, asset.detail, 'Supply a concise string; use "" when no detail is needed.'));
@@ -844,7 +873,9 @@ export function formatDungeonMapForNarrator(documentOrContent, siteFallback = ''
         lines.push('Map kind: DUNGEON (room-scale). Prefer this interior; you may add a room if play requires it, so long as it does not contradict established facts.');
     }
     if (document.threat) {
-        lines.push(`Site threat: ${document.threat}. Enemy, trap, and hazard density follow this site danger — not party level.`);
+        lines.push(document.threat === 'NONE'
+            ? 'Site threat: NONE. Do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict.'
+            : `Site threat: ${document.threat}. Enemy, trap, and hazard density follow this site danger — not party level.`);
     }
     const routes = formatMapRoutes(document, areasById);
     if (routes.length) lines.push('', 'Routes:', ...routes);
@@ -2178,7 +2209,7 @@ export function buildMappedSitesInjection(sites) {
         : ['- None.'];
     const guidance = rows.length
         ? 'Every site below already has a private map. Do not call CreateAreaMap for these names, or for a nested place of one of them, when approaching, entering, or returning. DUNGEON_REALITY is attached only while the Location footer matches a listed site; this list is the complete index.'
-        : 'No private maps exist yet. CreateAreaMap is allowed for a new unmapped dungeon or settlement before first entry.';
+        : 'No private maps exist yet. CreateAreaMap is allowed for a new unmapped dungeon or settlement before first entry, or for an exact named standalone building when the player explicitly requests its persistent layout.';
     return `[MAPPED_SITES — INTERNAL]\n${guidance}\n\n${lines.join('\n')}\n[/MAPPED_SITES]\n`;
 }
 
@@ -2507,7 +2538,9 @@ export function buildDungeonRealityInjection(site, currentLocation, { activityTe
         ? 'This attached map is district-scale settlement canon for the city/town as a whole. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior). Do not request another map for an alley, shop, or house inside this settlement.'
         : 'This attached map is room-scale interior canon. Prefer it for layout and occupancy; you may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.';
     const threatCanon = mapThreat
-        ? ` Site threat is ${mapThreat}: occupancy, traps, and hazards follow that site danger, not party level.`
+        ? mapThreat === 'NONE'
+            ? ' Site threat is NONE: do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict.'
+            : ` Site threat is ${mapThreat}: occupancy, traps, and hazards follow that site danger, not party level.`
         : '';
     const activity = String(activityText || '').trim();
     const activityBlock = activity

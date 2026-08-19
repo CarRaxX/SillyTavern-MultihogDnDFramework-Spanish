@@ -47,8 +47,10 @@ describe('Map Architect component', () => {
         const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const architect = readFileSync(new URL('../map-architect.js', import.meta.url), 'utf8');
         const router = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
+        const panel = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
         expect(hooks).toContain('For SETTLEMENT, copy the town/city/village name from the Location footer');
-        expect(hooks).toContain('Do not call for an alley, house, shop, rooftop, warehouse, street');
+        expect(hooks).toContain('Do not call merely for entering or owning an ordinary building');
+        expect(hooks).toContain('explicitly requests that exact building as a persistent room-scale map');
         expect(hooks).toContain('Do not call for wilderness, roads, countryside, or other places between mapped sites');
         expect(hooks).toContain('Do not call if [MAPPED_SITES] lists that site');
         expect(hooks).toContain('buildMappedSitesInjection');
@@ -56,7 +58,9 @@ describe('Map Architect component', () => {
         expect(architect).toContain('Live location footer:');
         expect(router).toContain('mapSiteFooterMismatchHint(site, currentLocation)');
         expect(hooks).toContain("unregisterFunctionTool('CreateDungeonMap')");
-        expect(hooks).toContain("enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY']");
+        expect(hooks).toContain("enum: ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY']");
+        expect(hooks).toContain('NONE = no active danger may be invented');
+        expect(panel.match(/<option value="NONE">NONE<\/option>/g)).toHaveLength(2);
         expect(hooks).toContain("enum: ['DUNGEON', 'SETTLEMENT']");
         expect(hooks).toContain('Generating a location map for');
         expect(hooks).toContain('isMapArchitectTextOpener(settings)');
@@ -118,7 +122,7 @@ describe('Map Architect component', () => {
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.areas.items.required).toContain('connections');
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.required).toContain('origin');
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.kind.enum).toEqual(['DUNGEON', 'SETTLEMENT']);
-        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.threat.enum).toEqual(['LOW', 'MODERATE', 'HIGH', 'DEADLY']);
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.threat.enum).toEqual(['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY']);
     });
 
     it('defines a handshake-only brief contract for Auto map create', () => {
@@ -127,40 +131,58 @@ describe('Map Architect component', () => {
         expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.required).toEqual(['entrance', 'kind', 'scale', 'threat', 'premise']);
         expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.kind.enum).toEqual(['DUNGEON', 'SETTLEMENT']);
         expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.scale.enum).toEqual(['SMALL', 'MEDIUM', 'LARGE']);
+        expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.threat.enum).toEqual(['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY']);
         expect(MAP_ARCHITECT_BRIEF_JSON_SCHEMA.value.properties.keywords.maxItems).toBe(5);
         expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('filling only the CreateAreaMap handshake');
         expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('You do not design rooms');
         expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('USER BRIEF');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('This Auto invocation is itself an explicit request');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('peaceful, or a player home/base');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('NONE means no active danger may be invented');
+        expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).toContain('LOW means light but real danger');
         expect(DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT).not.toContain('CREATE ONE PRIVATE MAP');
     });
 
-    it('tells the architect to populate incidental objects instead of leaving them for later', () => {
+    it('gives the architect complete, genre-neutral map-authoring guidance', () => {
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Write every human-readable string in the same language and script');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not translate, transliterate, expand, or retitle them');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('human-readable strings in the campaign language');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Threat is a site fact, never matched to party level');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('NONE: no active hostile occupancy');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('LOW: light but real danger');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Scale is size, not danger');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"threat":"HIGH"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).not.toContain('need not pre-invent');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('copy that exact same string onto the reverse connection');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never give a reciprocal pair two different detail strings');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not default every route to OPEN');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('must include at least one meaningful non-OPEN reciprocal route');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('at least one should normally be LOCKED');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT.match(/A circular titanium iris secured by a flooded biometric reader\./g)).toHaveLength(2);
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Occasional hub/nexus layouts are welcome');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('one area may have many routes');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('KIND: DUNGEON');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('KIND: SETTLEMENT');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain("DUNGEON is the format's room-scale enum");
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('ordinary named building only when that exact building was deliberately requested');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not invent enemies, traps, hazards, sinister secrets, or violent conflict');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Do not turn an explicitly requested standalone building into districts');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('never an alley, house, shop, rooftop, or street');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Areas are districts, gates, plazas');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('The narrator will invent those granular locations during play');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"kind":"DUNGEON"');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"kind":"SETTLEMENT"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('a neutralized mechanism is DEACTIVATED');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"origin":"INITIAL_MAP"');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"state":"LOCKED"');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never make a chapel, inn, shop, or house its own settlement area');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never use kind NPC');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('ONE GROUP asset with optional integer count');
-        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('"count":6');
         expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Never split a pack into many identical CREATURE assets');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('INDEPENDENT SCHEMA SNIPPETS');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('do not imply total area count');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Ambassador Rikka');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('A goblin envoy negotiating safe passage');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Human contractors ordered to seize witnesses');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Species, ancestry, creature type, and appearance do not determine morality');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).not.toContain('Hall of the Ember-Ancestors');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).not.toContain('Morrowfen');
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.properties.count).toMatchObject({
             type: 'integer', minimum: 1, maximum: 99,
         });

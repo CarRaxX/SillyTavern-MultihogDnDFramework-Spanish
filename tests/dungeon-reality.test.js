@@ -26,6 +26,8 @@ import {
     migrateDungeonMapAttachmentToContent,
     migrateDungeonMapSectionToStructured,
     normalizeDungeonMapDocument,
+    normalizeMapSiteThreat,
+    MAP_SITE_THREATS,
     parseDungeonMapDocument,
     coerceAssetState,
     isPlayCanonLockedState,
@@ -103,6 +105,54 @@ describe('Map Architect validation', () => {
         expect(rejected.errors.some(error => error.code === 'THREAT_MISMATCH')).toBe(true);
     });
 
+    it('keeps NONE distinct from LOW threat', () => {
+        expect(MAP_SITE_THREATS).toEqual(['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY']);
+        expect(normalizeMapSiteThreat('NONE')).toBe('NONE');
+        expect(normalizeMapSiteThreat('safe')).toBe('NONE');
+        expect(normalizeMapSiteThreat('peaceful')).toBe('NONE');
+        expect(normalizeMapSiteThreat('LOW')).toBe('LOW');
+        expect(normalizeMapSiteThreat('mild')).toBe('LOW');
+
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        const result = validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        });
+        expect(result.valid).toBe(true);
+        expect(result.document.threat).toBe('NONE');
+    });
+
+    it('rejects active trap, hazard, and alarm assets at NONE threat', () => {
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        none.assets.push({
+            id: 'armed-snare',
+            kind: 'TRAP',
+            name: 'Armed Snare',
+            location: 'cellar-landing',
+            state: 'ARMED',
+            knowledge: 'UNREVEALED',
+            detail: 'A live snare.',
+            origin: 'INITIAL_MAP',
+        });
+        const rejected = validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        });
+        expect(rejected.valid).toBe(false);
+        expect(rejected.errors.some(error => error.code === 'NONE_THREAT_ACTIVE_DANGER')).toBe(true);
+
+        none.assets.at(-1).state = 'DEACTIVATED';
+        expect(validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        }).valid).toBe(true);
+    });
+
     it('copies the first-seen route detail onto a reciprocal pair so directional paraphrases do not fail the map', () => {
         const directional = structuredClone(connectedArchitectMap);
         directional.areas[0].connections[0].detail = 'A low, braced crawlway passes eastward through fractured masonry into the ossuary.';
@@ -120,6 +170,41 @@ describe('Map Architect validation', () => {
         expect(result.valid).toBe(true);
         expect(directional.areas[0].connections[0].detail).toBe(directional.areas[1].connections[0].detail);
         expect(directional.areas[0].connections[0].detail).toContain('eastward');
+    });
+
+    it('mirrors a valid missing reverse passage before strict validation', () => {
+        const oneWay = structuredClone(connectedArchitectMap);
+        oneWay.areas[1].connections = [];
+        expect(validateDungeonMapArchitecture(oneWay, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).errors.some(error => error.code === 'MISSING_RECIPROCAL_CONNECTION')).toBe(true);
+
+        canonicalizeReciprocalConnectionDetails(oneWay.areas);
+
+        expect(oneWay.areas[1].connections).toEqual([{
+            to: 'cellar-landing',
+            state: 'LOCKED',
+            detail: 'Iron-banded door between the landing and passage.',
+        }]);
+        expect(validateDungeonMapArchitecture(oneWay, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).valid).toBe(true);
+    });
+
+    it('does not auto-resolve conflicting reciprocal states', () => {
+        const conflicting = structuredClone(connectedArchitectMap);
+        conflicting.areas[1].connections[0].state = 'OPEN';
+
+        canonicalizeReciprocalConnectionDetails(conflicting.areas);
+
+        expect(conflicting.areas[0].connections[0].state).toBe('LOCKED');
+        expect(conflicting.areas[1].connections[0].state).toBe('OPEN');
+        expect(validateDungeonMapArchitecture(conflicting, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).errors.some(error => error.code === 'CONNECTION_STATE_MISMATCH')).toBe(true);
     });
 
     it('rejects omitted reverse passages and orphaned areas with correction hints', () => {
@@ -279,6 +364,14 @@ describe('Map Architect validation', () => {
         expect(injection).toContain('Site threat is LOW');
         expect(injection).toContain('not party level');
         expect(injection).toContain('Site threat: LOW');
+    });
+
+    it('tells the narrator not to invent danger for a NONE-threat map', () => {
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        const rendered = formatDungeonMapForNarrator(none);
+        expect(rendered).toContain('Site threat: NONE');
+        expect(rendered).toContain('Do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict');
     });
 });
 

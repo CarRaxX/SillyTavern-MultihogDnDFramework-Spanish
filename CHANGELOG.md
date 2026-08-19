@@ -2,6 +2,19 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.30.0] - 2026-08-19
+
+### Added
+- **Threat NONE**: Persistent Maps now distinguish genuinely safe sites from LOW-threat sites. NONE forbids invented active danger and rejects active trap, hazard, or alarm assets during validation; LOW now means light but real danger. Auto inference, tool/text schemas, map-creation forms, narrator context, and documentation all support the new value. Existing LOW maps remain valid.
+- **Opt-in standalone building maps**: an exact named house, shop, inn, headquarters, or recurring player home/base can be deliberately mapped at room scale with the existing DUNGEON enum. Ordinary entry, ownership, lodging, and incidental settlement interiors still do not trigger maps, preventing automatic building-map proliferation.
+
+### Changed
+- **Genre-neutral Map Architect examples**: full fantasy maps were replaced with independent cross-genre schema snippets, including socially complex nonhuman characters, so examples no longer anchor map size, topology, theme, or creature morality.
+- **Restricted route guidance**: medium and large dungeons normally include a meaningful non-OPEN route, with an isolated reciprocal LOCKED example and guidance for keys, controls, clues, bypasses, and organic seals.
+
+### Fixed
+- **Missing reciprocal routes**: valid one-way omissions are mirrored automatically before strict validation, preserving the original state and detail while leaving conflicting or ambiguous topology for correction.
+
 ## [8.28.0] - 2026-08-19
 
 ### Added

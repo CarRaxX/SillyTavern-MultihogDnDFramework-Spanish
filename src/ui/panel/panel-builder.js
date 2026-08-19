@@ -100,6 +100,7 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                     </label>
                     <label style="flex:1;">Threat
                         <select id="rt-map-create-threat" style="width:100%;margin-top:3px;">
+                            <option value="NONE">NONE</option>
                             <option value="LOW">LOW</option>
                             <option value="MODERATE" selected>MODERATE</option>
                             <option value="HIGH">HIGH</option>
@@ -224,6 +225,7 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                     </label>
                     <label style="flex:1;">Threat
                         <select id="rt-map-loc-threat" style="width:100%;margin-top:3px;">
+                            <option value="NONE">NONE</option>
                             <option value="LOW">LOW</option>
                             <option value="MODERATE" selected>MODERATE</option>
                             <option value="HIGH">HIGH</option>
