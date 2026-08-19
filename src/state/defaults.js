@@ -867,15 +867,21 @@ Make multiple entries per turn if necessary. Thoroughness is your primary virtue
 
 <context_maximization>
 
-Your goal is to keep the Active Context saturated. Think of it as a stage: it is your job to have every prop, actor, and set piece in place before the scene begins.
+Your goal is to keep the Active Context saturated with the RIGHT lore. Think of it as a stage: every prop, actor, and set piece must be in place before the scene begins — not whichever entries keywords happened to load.
 
 
 
-- **Saturation Goal:** Keep Active entries as close to MAX as possible at all times. An underloaded context is a failure state.
+- **You Own The Active Set:** Keyword activations and NEWLY ACTIVATED THIS TURN are provisional hints, not locks. You have full authority to deactivate any unpinned entry, including recent keyword hits. Do not defer to them. Do not treat "already active" as "should stay active."
 
-- **Proactive Loading:** Do not wait for a gap to appear. If a name or location is mentioned, or if the party is about to move, activate the relevant entries immediately.
+- **Narrative Relevance Is Paramount:** Scene-true context beats whatever is currently in the pool. A legal count at MAX is not success if ARCHIVE INDEX still holds a more important entry for this scene.
 
-- **Context Rotation:** When the context is full and new entries are needed, deactivate "Exit Contexts" (rooms left, NPCs departed, resolved threads) to make room for "Entry Contexts" (current room, present NPCs, active quest objective). Treat it as a sliding window, not a hard ceiling.
+- **Saturation Goal:** Keep Active entries as close to MAX as possible at all times with the best available set. An underloaded context is a failure state. A full-but-wrong context is also a failure state.
+
+- **Proactive Loading:** Do not wait for a gap to appear. If a name or location is mentioned, or if the party is about to move, activate the relevant entries immediately — even if keywords did not already load them.
+
+- **Context Rotation:** When the context is full (or over budget) and better entries are needed, deactivate "Exit Contexts" (rooms left, NPCs departed, resolved threads, stale or weak keyword hits) to make room for "Entry Contexts" (current room, present NPCs, active quest objective, destinations about to be reached). Treat it as a sliding window, not a hard ceiling. In the SAME commit, deactivate the weaker entries AND activate the missing higher-priority ones.
+
+- **Do Not Lazy-Prune:** If you see a BUDGET VIOLATION (for example 15/12), deactivating only enough to hit 12 and stopping is incomplete whenever ARCHIVE INDEX still holds more important scene-relevant entries. Deactivate extra low-value actives as needed and activate those missing entries in the same pass. Returning to the cap by deletion alone is not curation.
 
 - **Priority Tiering:** Use this order when deciding what to keep vs. rotate out:
 
@@ -893,11 +899,11 @@ Your goal is to keep the Active Context saturated. Think of it as a stage: it is
 
 
 
-If you briefly exceed the budget due to newly activated entries, deactivate the lowest-priority items in the same turn to return within range. It is better to rotate aggressively than to leave the Narrator without context.
+If you briefly exceed the budget due to newly activated entries, deactivate the lowest-priority items in the same turn to return within range AND, in that same turn, activate any higher-priority archive entries the current scene still lacks. It is better to rotate aggressively than to leave the Narrator with a legal-but-stale set.
 
 
 
-Budget violation notices mean you exceeded the limit. When you see one, immediately identify and deactivate the least relevant entries (Exit Contexts first) until you are within budget. List those IDs in the \`deactivate\` field of the same commit call.
+Budget violation notices mean you exceeded the limit. When you see one, getting back within budget is the floor of the job, not the whole job. Identify the least relevant active entries (Exit Contexts and weak keyword hits first), deactivate as many as needed both to return within budget and to free slots for missing higher-priority ARCHIVE INDEX entries, and activate those entries in the same commit. List deactivate and activate IDs together.
 
 </context_maximization>
 
@@ -1031,7 +1037,7 @@ Example: "[Day 1, 11:52] Character signed the contract with Brodrik."
 
 <bravery>
 
-Don't be afraid to hit the budget exactly. It's better to lean towards activating too much than too little.
+Don't be afraid to hit the budget exactly. It's better to lean towards activating too much than too little. Don't be afraid to deactivate a currently-active entry to activate a better one — swapping at MAX is the intended behavior.
 
 </bravery>`),
 
@@ -1091,11 +1097,11 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
 {{modularPrompt}}
 
 ## ATTENTION & MEMORY
-1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
+1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. Do not activate them again — they are already in the pool. Pre-load is not a lock: you MAY [[DEACTIVATE: Name]] a keyword hit if ARCHIVE INDEX has something more relevant to the current scene.
 2. **ACTIVE MEMORY**: Full details of all other currently active entities. You can update them at any time.
 3. **ARCHIVE INDEX**: Complete catalog of inactive entries — Book::UID, labels, and keywords only. You CANNOT see their full biography. If a name is not in ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX, it does not exist.
 4. **RECALL**: To read or update an archive entry, use [[ACTIVATE: Name]]. Its full content becomes visible next turn.
-5. **LIMIT**: You are limited to **{{maxActivations}} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends.
+5. **LIMIT**: You are limited to **{{maxActivations}} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends. Do not stop at a legal count if ARCHIVE INDEX still holds more important scene-relevant entries — deactivate extra weak/stale actives (including keyword hits) and [[ACTIVATE: Name]] the missing ones in the same response. Narrative relevance is paramount regardless of what is currently active. Keyword activations are provisional; you own the active set.
 
 {{relSection}}
 
@@ -1139,8 +1145,8 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
 
 ## RULES
 1. Only record persistent or significant entities/events.
-2. Use ACTIVATE to bring an existing entry into the current scene context.
-3. Use DEACTIVATE to remove an entry that is no longer relevant to the scene.
+2. Use ACTIVATE to bring an existing archive entry into the current scene when it is more relevant than something already active — even if the pool is already at MAX (deactivate a weaker entry in the same response).
+3. Use DEACTIVATE to remove an entry that is no longer relevant to the scene, including keyword-triggered entries you did not personally activate.
 4. Use DELETE to permanently remove duplicate or redundant entries.
 5. Do NOT create any entry for the player character (e.g. "Player" or "Dave Davidson").
 6. CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below ({{sectionNames}}) for NPCs and ignore any other sections.
@@ -1153,8 +1159,9 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
 ## MEMORY LIMIT
 Maximum Active Entities: **{{maxActivations}}**.
 - Entries you record are ACTIVATED AUTOMATICALLY. Do NOT also include them in activate.
-- Nothing is archived automatically. If you exceed the limit you will receive a **BUDGET VIOLATION** in the context and you MUST deactivate enough entries in that same commit call to return within budget. Choose the narratively least relevant entries.
-- Entries whose keywords appeared in the latest Narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — you do not need to activate those again.
+- Nothing is archived automatically. If you exceed the limit you will receive a **BUDGET VIOLATION** in the context and you MUST deactivate enough entries in that same commit call to return within budget.
+- Pruning to the cap is not enough. Keyword / NEWLY ACTIVATED entries are provisional hints, not protected slots. Scene relevance is paramount regardless of what is currently active. If ARCHIVE INDEX has higher-priority entries for this scene, deactivate extra weaker actives in the same commit and activate those missing entries. A legal-but-wrong set is a failure.
+- Entries whose keywords appeared in the latest Narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — do not activate those again (they are already in the pool). You MAY deactivate them if they are less relevant than something still in ARCHIVE INDEX. You have full authority to do so; do not defer to keyword hits.
 - Always use exact Book::UID format (e.g. "Eldoria_NPCs::0") for activate/update/deactivate/delete_ids.
 
 {{relSection}}
@@ -1534,7 +1541,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '8.30.2';
+export const FACTORY_SETTINGS_VERSION = '8.30.3';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */

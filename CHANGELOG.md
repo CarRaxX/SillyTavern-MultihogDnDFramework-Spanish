@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.30.3] - 2026-08-19
+
+### Changed
+- **Lorebook Agent context ownership**: Agent and Basic prompts now treat keyword / NEWLY ACTIVATED hits as provisional. Narrative relevance is paramount; lazy-pruning to the cap without activating missing higher-priority archive entries is an explicit failure. The live budget banner repeats that on every pass, and overflow text requires swap-in-the-same-commit, not trim-only. Reset stored Lorebook Agent prompts to pick up the wording.
+
+### Fixed
+- **Basic Mode deactivate-only commits**: `[[DEACTIVATE: …]]` tags are no longer discarded when they are the only actions in a pass.
+
 ## [8.30.2] - 2026-08-19
 
 ### Changed

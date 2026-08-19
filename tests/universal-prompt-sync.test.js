@@ -150,6 +150,13 @@ describe('Lorebook prompt templates', () => {
         expect(defaults.routerBasicSystemPromptTemplate).toContain('{{combatProfileGuidance}}');
         expect(defaults.routerBasicSystemPromptTemplate).not.toContain('{{example}}');
         expect(defaults.routerBasicSystemPromptTemplate).not.toContain('Barnaby');
+        expect(defaults.routerSystemPromptTemplate).toContain('Do Not Lazy-Prune');
+        expect(defaults.routerSystemPromptTemplate).toContain('Narrative Relevance Is Paramount');
+        expect(defaults.routerSystemPromptTemplate).toContain('You Own The Active Set');
+        expect(defaults.routerAgentSharedContextTemplate).toContain('Pruning to the cap is not enough');
+        expect(defaults.routerAgentSharedContextTemplate).toContain('You MAY deactivate them');
+        expect(defaults.routerBasicSystemPromptTemplate).toContain('Pre-load is not a lock');
+        expect(defaults.routerBasicSystemPromptTemplate).toContain('Keyword activations are provisional');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{fieldInstructions}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{campaignRoot}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{relSection}}');

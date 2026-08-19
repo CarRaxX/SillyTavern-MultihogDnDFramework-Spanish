@@ -1311,11 +1311,19 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         const maxActive = settings.routerMaxActivations || 12;
         const overflow = activeCount - maxActive;
         const budgetLine = `Active entries: ${activeCount} / ${maxActive}`;
+        const curationInstruction =
+            `\nCONTEXT OWNERSHIP: You decide the active set. Keyword / NEWLY ACTIVATED hits are provisional, not locks. ` +
+            `Scene and narrative relevance is paramount regardless of what is currently active. ` +
+            `If ARCHIVE INDEX has a more important entry for this scene, deactivate a weaker active entry ` +
+            `(including a recent keyword hit) and activate the better one in this same pass — even when already at the cap. ` +
+            `Do not lazy-prune to the cap and stop.`;
         const overflowInstruction = overflow > 0
             ? `\nBUDGET VIOLATION: ${activeCount} entr${activeCount !== 1 ? 'ies' : 'y'} active, limit is ${maxActive}. ` +
               `You MUST deactivate at least ${overflow} entr${overflow > 1 ? 'ies' : 'y'} ` +
-              `before this pass ends. Eliminate the narratively least relevant entries first. ` +
-              `Justify each deactivation.`
+              `before this pass ends so the count is legal. That is the floor, not the whole job: ` +
+              `if ARCHIVE INDEX has higher-priority scene-relevant entries still inactive, deactivate extra low-value actives ` +
+              `(keyword hits are not protected) and activate those missing entries in this same pass. ` +
+              `Narrative relevance beats whatever is currently active. Justify each deactivation.`
             : '';
 
         const activeCombatBlock = extractActiveCombatBlock(settings.currentMemo);
@@ -1837,7 +1845,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
-            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
+            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
             const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal);
@@ -1847,12 +1855,13 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             broadcastStep('thought', 'Parsing tags...');
             const basicAction = parseBasicTags(basicResp, archiveBooks);
 
-            const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
+            const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.deactivate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
             if (hasOrdinaryActions) {
                 const summaries = [];
                 if (basicAction.record.length) summaries.push(`New: ${basicAction.record.length}`);
                 if (basicAction.update.length) summaries.push(`Updates: ${basicAction.update.length}`);
                 if (basicAction.activate.length) summaries.push(`Activations: ${basicAction.activate.length}`);
+                if (basicAction.deactivate.length) summaries.push(`Deactivations: ${basicAction.deactivate.length}`);
                 if (basicAction.core?.length || basicAction.appearance?.length || basicAction.equipment?.length) summaries.push(`Core: ${(basicAction.core?.length || 0) + (basicAction.appearance?.length || 0) + (basicAction.equipment?.length || 0)}`);
                 basicAction.reason = (thoughtMatchB ? thoughtMatchB[1].trim() : 'Tag-based update.') + ` (${summaries.join(', ')})`;
                 await applyAction(basicAction, archiveBooks, currentTime, breadcrumb, isManual);
@@ -2151,7 +2160,7 @@ ${recordCategoryGuidance}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockA = questMatchA ? `[QUESTS]${questMatchA[1].trim()}[/QUESTS]` : 'None';
-            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
+            const contextMessage = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
 
             /** @type {Array<{role:string, content:string|null, tool_calls?:any[], tool_call_id?:string}>} */
             const messages = [
