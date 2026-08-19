@@ -5,7 +5,7 @@
 
 import { MODULE_NAME, DEFAULT_PC_SECTIONS, DEFAULT_NPC_SECTIONS } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
-import { buildDefaultSettings } from './defaults.js';
+import { buildDefaultSettings, FACTORY_SETTINGS_VERSION } from './defaults.js';
 import { isOlderThan } from './versions.js';
 import { buildNpcInstruction, buildLocInstruction, buildFacInstruction } from './module-instructions.js';
 import {
@@ -800,6 +800,12 @@ function getSettingsInternal(extensionSettings) {
             s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
         }
         s.settingsVersion = '8.27.0';
+    }
+
+    // Stamp factory version even when a release has no field rewrites
+    // (8.28.0 mapped-site index is prompt/injection only).
+    if (isOlderThan(s.settingsVersion, FACTORY_SETTINGS_VERSION)) {
+        s.settingsVersion = FACTORY_SETTINGS_VERSION;
     }
 
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {
