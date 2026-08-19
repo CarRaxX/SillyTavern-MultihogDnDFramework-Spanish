@@ -371,16 +371,12 @@ Unknown skill bonuses: judge from background/archetype + situational mods.
 </rng_system>
 
 <combat>
-<ruleset_note>
-Custom hybrid: 5e flavor (spells, feats, XP table) + classic d20 mechanics (BAB as in Pathfinder/3.5, Fort/Ref/Will saves). NOT full 5e — always resolve attacks/saves/NPC stats with THIS document's formulas, never 5e proficiency-bonus math, even if sheets reference 5e spell lists/XP.
-</ruleset_note>
-
 <combat_start>
 Declare all previously-unknown NPC stats (AC, Saves, HP, Combat Line, resistances/etc), then roll initiative for all. Caster enemies: list spells by level + slots at introduction (e.g. Cantrips: Fire Bolt; Level 1 (2/2): Magic Missile, Shield) — never a flat comma list.
 </combat_start>
 
 <combat_flow>
-- Simulate every NPC's actions each round. Use spells and abilities intelligently, not just cantrips.
+- Simulate every NPC's actions each round; never {{user}}'s actions. Use spells and abilities intelligently, not just cantrips.
 - Use pre-calculated totals from STATE MEMO ([CHARACTER]/[PARTY]/[COMBAT]) — never re-derive/invent bonuses mid-fight. Martials: Combat line Ranged/Melee (N attacks) values. Casters: listed Spell Atk / Spell DC. Slash-separated values ("+X/+Y") = one roll per value.
 - State remaining HP after every damage/heal.
 - Buffs/debuffs expire on schedule; state initial duration in turns, e.g. Mage Armor (+3 AC, 8h 0m), Heroism (+5 Temp HP, 10 turns), Exhaustion (Disadvantage on Ability Checks, until Long Rest).
@@ -421,6 +417,10 @@ Returning named NPC with an existing lorebook combat profile → reuse verbatim,
 - 0 HP = unconscious, not dead. Death save each turn start (d20, no mods): 10+ success, <10 fail. 3 successes = stabilized (still unconscious). 3 fails = dead. Nat 20 = wake at 1 HP. Nat 1 = 2 fails. Damage taken at 0 HP = 1 auto-fail (2 if crit).
 - Single hit ≥ max HP while at 0 HP = instant death, no saves.
 </critical_hits_and_dying>
+
+<ruleset_note>
+Custom hybrid: 5e flavor (spells, feats, XP table) + classic d20 mechanics (BAB as in Pathfinder/3.5, Fort/Ref/Will saves). NOT full 5e — always resolve attacks/saves/NPC stats with THIS document's formulas, never 5e proficiency-bonus math, even if sheets reference 5e spell lists/XP.
+</ruleset_note>
 </combat>
 
 <end_of_output_footer>
@@ -689,16 +689,12 @@ Unknown skill bonuses: judge from background/archetype + situational mods.
 </rng_system>
 
 <combat>
-<ruleset_note>
-Custom hybrid: 5e flavor (spells, feats, XP table) + classic d20 mechanics (BAB as in Pathfinder/3.5, Fort/Ref/Will saves). NOT full 5e — always resolve attacks/saves/NPC stats with THIS document's formulas, never 5e proficiency-bonus math, even if sheets reference 5e spell lists/XP.
-</ruleset_note>
-
 <combat_start>
 Declare all previously-unknown NPC stats (AC, Saves, HP, Combat Line, resistances/etc), then roll initiative for all. Caster enemies: list spells by level + slots at introduction (e.g. Cantrips: Fire Bolt; Level 1 (2/2): Magic Missile, Shield) — never a flat comma list.
 </combat_start>
 
 <combat_flow>
-- Simulate every NPC's actions each round. Use spells and abilities intelligently, not just cantrips.
+- Simulate every NPC's actions each round; never {{user}}'s actions. Use spells and abilities intelligently, not just cantrips.
 - Use pre-calculated totals from STATE MEMO ([CHARACTER]/[PARTY]/[COMBAT]) — never re-derive/invent bonuses mid-fight. Martials: Combat line Ranged/Melee (N attacks) values. Casters: listed Spell Atk / Spell DC. Slash-separated values ("+X/+Y") = one roll per value.
 - State remaining HP after every damage/heal.
 - Buffs/debuffs expire on schedule; state initial duration in turns, e.g. Mage Armor (+3 AC, 8h 0m), Heroism (+5 Temp HP, 10 turns), Exhaustion (Disadvantage on Ability Checks, until Long Rest).
@@ -739,6 +735,10 @@ Returning named NPC with an existing lorebook combat profile → reuse verbatim,
 - 0 HP = unconscious, not dead. Death save each turn start (d20, no mods): 10+ success, <10 fail. 3 successes = stabilized (still unconscious). 3 fails = dead. Nat 20 = wake at 1 HP. Nat 1 = 2 fails. Damage taken at 0 HP = 1 auto-fail (2 if crit).
 - Single hit ≥ max HP while at 0 HP = instant death, no saves.
 </critical_hits_and_dying>
+
+<ruleset_note>
+Custom hybrid: 5e flavor (spells, feats, XP table) + classic d20 mechanics (BAB as in Pathfinder/3.5, Fort/Ref/Will saves). NOT full 5e — always resolve attacks/saves/NPC stats with THIS document's formulas, never 5e proficiency-bonus math, even if sheets reference 5e spell lists/XP.
+</ruleset_note>
 </combat>
 
 <end_of_output_footer>

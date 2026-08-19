@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.30.1] - 2026-08-19
+
+### Changed
+- **Combat prompt layout**: moved `<ruleset_note>` to the bottom of `<combat>` instead of the top.
+- **Combat flow**: NPC simulation line now explicitly says never {{user}}'s actions. Reset a stored narrator Combat section to pick up the wording.
+
 ## [8.30.0] - 2026-08-19
 
 ### Added
