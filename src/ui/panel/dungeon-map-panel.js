@@ -1,5 +1,6 @@
 import { getSettings, saveChatState } from '../../../state-manager.js';
 import { runtimeState } from '../../app/runtime-state.js';
+import { saveSettings } from '../../app/runtime-bridge.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
@@ -21,7 +22,7 @@ function persistDungeonMapRevealAll(enabled) {
     settings.dungeonMapRevealAll = !!enabled;
     const chatId = runtimeState.currentChatId;
     if (settings.chatLinkEnabled && chatId) saveChatState(chatId);
-    else SillyTavern.getContext().saveSettingsDebounced();
+    else void saveSettings();
 }
 
 function refreshDungeonMapViews() {

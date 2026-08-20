@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseMapArchitectResponse } from '../map-architect-parser.js';
+import { buildMapArchitectReferenceContext } from '../map-architect-context.js';
 import { MAP_ARCHITECT_BRIEF_JSON_SCHEMA, MAP_ARCHITECT_JSON_SCHEMA } from '../map-architect-schema.js';
 import { DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT, DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../map-architect-prompt.js';
 
 describe('Map Architect component', () => {
+    it('builds explicit lorebook and character-card context independently from story lookback', async () => {
+        const context = await buildMapArchitectReferenceContext({
+            loadWorldInfo: async (name) => name === 'Eldoria Lore'
+                ? { entries: { 3: { comment: 'Moon Keep', content: 'An ancient fortress.' } } }
+                : null,
+        }, {
+            lorebookNames: ['Eldoria Lore'],
+            characterCards: [{ name: 'Captain Vale', description: 'A scarred royal scout.', personality: 'Cautious.' }],
+        });
+        expect(context).toContain('USER-SELECTED REFERENCE CONTEXT');
+        expect(context).toContain('### LOREBOOK: Eldoria Lore');
+        expect(context).toContain('#### Moon Keep');
+        expect(context).toContain('### CHARACTER CARD: Captain Vale');
+        expect(context).toContain('Personality: Cautious.');
+    });
+
     it('recovers a valid JSON object from a fenced response', () => {
         const result = parseMapArchitectResponse('```json\n{"version":3,"site":"Crypt","areas":[],"assets":[]}\n```');
         expect(result.error).toBeNull();

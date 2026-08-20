@@ -13,6 +13,7 @@
  */
 
 import { getSettings } from '../../state-manager.js';
+import { saveSettings } from '../app/runtime-bridge.js';
 import {
     clearSettingsSearch,
     handleSettingsSearchKeydown,
@@ -66,11 +67,7 @@ export function setSettingsOverlayAppearance(mode) {
     const s = getSettings();
     s.settingsOverlayAppearance = resolved;
     applySettingsOverlayAppearance(resolved);
-    try {
-        const ctx = SillyTavern.getContext();
-        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-        else if (typeof ctx.saveSettings === 'function') ctx.saveSettings();
-    } catch (_) { /* non-fatal */ }
+    try { void saveSettings(); } catch (_) { /* non-fatal */ }
 }
 
 /**

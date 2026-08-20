@@ -96,6 +96,77 @@ function parseLookbackValue(value, fallback) {
     return Math.max(0, Math.min(100, parsed));
 }
 
+function selectedCharacterCardReference(card) {
+    if (!card || typeof card !== 'object') return null;
+    const result = {};
+    for (const key of ['name', 'description', 'personality', 'scenario', 'mes_example', 'mesExample', 'first_mes', 'firstMessage', 'creator_notes', 'creatorNotes']) {
+        if (card[key] != null) result[key] = String(card[key]);
+    }
+    return result;
+}
+
+async function mapCreationLorebookNames(ctx) {
+    let names = await Promise.resolve(ctx?.getWorldInfoNames?.() ?? []);
+    if (!names.length && ctx?.updateWorldInfoList) {
+        try {
+            await ctx.updateWorldInfoList();
+            names = await Promise.resolve(ctx.getWorldInfoNames?.() ?? []);
+        } catch (_) { /* list refresh is best effort */ }
+    }
+    return [...new Set((names || []).map(name => String(name || '').trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b));
+}
+
+async function populateMapCreationContextOptions(root, ctx) {
+    const lorebooks = root?.querySelector?.('[data-map-context-lorebooks]');
+    const cards = root?.querySelector?.('[data-map-context-character-cards]');
+    if (!lorebooks || !cards) return;
+
+    lorebooks.replaceChildren();
+    try {
+        const names = await mapCreationLorebookNames(ctx);
+        if (!names.length) {
+            lorebooks.textContent = 'No lorebooks found.';
+        } else {
+            for (const name of names) {
+                const label = document.createElement('label');
+                label.className = 'checkbox_label';
+                label.style.cssText = 'display:flex;gap:6px;align-items:center;font-size:0.9em;';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.dataset.mapContextLorebook = name;
+                const text = document.createElement('span');
+                text.textContent = name;
+                label.append(input, text);
+                lorebooks.append(label);
+            }
+        }
+    } catch (_) {
+        lorebooks.textContent = 'Could not load lorebooks.';
+    }
+
+    cards.replaceChildren();
+    const available = (Array.isArray(ctx?.characters) ? ctx.characters : [])
+        .map((card, index) => ({ index, name: String(card?.name || '').trim() }))
+        .filter(({ name }) => name);
+    if (!available.length) {
+        cards.textContent = 'No character cards found.';
+        return;
+    }
+    for (const { index, name } of available) {
+        const label = document.createElement('label');
+        label.className = 'checkbox_label';
+        label.style.cssText = 'display:flex;gap:6px;align-items:center;font-size:0.9em;';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.dataset.mapContextCharacterCard = String(index);
+        const text = document.createElement('span');
+        text.textContent = name;
+        label.append(input, text);
+        cards.append(label);
+    }
+}
+
 async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtml, { runMapArchitect, inferMapArchitectArgs, lookbackDefault } = {}) {
     const site = String(siteRoot || '').trim();
     if (!site) return { ok: false, error: 'No location root to map.' };
@@ -150,6 +221,14 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                     <textarea id="rt-map-create-premise" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;">${escapeHtml(premiseDefault)}</textarea>
                 </label>
             </div>
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer;">Optional reference context</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
+                <label style="display:block;font-weight:600;">Lorebooks</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
+                <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
+            </details>
         </div>
     `;
 
@@ -169,10 +248,16 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                     threat: popupValue(root, '#rt-map-create-threat', defaultMapSiteThreat(kind)).toUpperCase(),
                     premise: popupValue(root, '#rt-map-create-premise', '') || premiseDefault,
                     lookback: parseLookbackValue(popupValue(root, '#rt-map-create-lookback', lookbackValue), lookbackValue),
+                    lorebookNames: [...root.querySelectorAll('input[data-map-context-lorebook]:checked')]
+                        .map(input => String(input.dataset.mapContextLorebook || '').trim()).filter(Boolean),
+                    characterCards: [...root.querySelectorAll('input[data-map-context-character-card]:checked')]
+                        .map(input => selectedCharacterCardReference(ctx.characters?.[Number(input.dataset.mapContextCharacterCard)]))
+                        .filter(Boolean),
                 };
             }
             return true;
         },
+        onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
     if (!form) return { ok: false, error: 'Could not read the map form.' };
@@ -187,6 +272,8 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                 threat: form.threat,
                 premise: form.premise,
                 allowOffsite: true,
+                lorebookNames: form.lorebookNames,
+                characterCards: form.characterCards,
             });
             return { ok: true, siteRoot: site };
         }
@@ -199,12 +286,16 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
             site,
             loreEntry: loreEntry || premiseDefault,
             lookback: form.lookback,
+            lorebookNames: form.lorebookNames,
+            characterCards: form.characterCards,
         });
         await runMapArchitect({
             ...inferred,
             site,
             lookback: form.lookback,
             allowOffsite: true,
+            lorebookNames: form.lorebookNames,
+            characterCards: form.characterCards,
         });
         return { ok: true, siteRoot: site };
     } catch (error) {
@@ -274,6 +365,14 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                     <textarea id="rt-map-loc-premise" placeholder="Established facts for CORE and the map" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
                 </label>
             </div>
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer;">Optional reference context</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
+                <label style="display:block;font-weight:600;">Lorebooks</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
+                <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
+            </details>
         </div>
     `;
 
@@ -290,6 +389,11 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                     mode: popupChecked(root, 'rt-map-loc-mode', 'auto'),
                     userBrief: popupValue(root, '#rt-map-loc-brief'),
                     lookback: parseLookbackValue(popupValue(root, '#rt-map-loc-lookback', lookbackValue), lookbackValue),
+                    lorebookNames: [...root.querySelectorAll('input[data-map-context-lorebook]:checked')]
+                        .map(input => String(input.dataset.mapContextLorebook || '').trim()).filter(Boolean),
+                    characterCards: [...root.querySelectorAll('input[data-map-context-character-card]:checked')]
+                        .map(input => selectedCharacterCardReference(ctx.characters?.[Number(input.dataset.mapContextCharacterCard)]))
+                        .filter(Boolean),
                     locationKeys: parseKeywordInput(popupValue(root, '#rt-map-loc-keys')),
                     kind,
                     entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrance') || 'Entrance',
@@ -300,6 +404,7 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
             }
             return true;
         },
+        onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
     if (!form) return { ok: false, error: 'Could not read the mapped location form.' };
@@ -322,6 +427,8 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                 requireNew: true,
                 locationKeys: form.locationKeys,
                 locationCore: form.premise,
+                lorebookNames: form.lorebookNames,
+                characterCards: form.characterCards,
             });
             return { ok: true, siteRoot: site };
         }
@@ -334,6 +441,8 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
             site,
             userBrief: form.userBrief,
             lookback: form.lookback,
+            lorebookNames: form.lorebookNames,
+            characterCards: form.characterCards,
         });
         await runMapArchitect({
             ...inferred,
@@ -343,6 +452,8 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
             requireNew: true,
             locationKeys: inferred.keywords,
             locationCore: inferred.premise,
+            lorebookNames: form.lorebookNames,
+            characterCards: form.characterCards,
         });
         return { ok: true, siteRoot: site };
     } catch (error) {

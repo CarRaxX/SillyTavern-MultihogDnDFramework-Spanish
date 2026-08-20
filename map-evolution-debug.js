@@ -9,6 +9,7 @@ import {
     saveChatState,
 } from './state-manager.js';
 import { runtimeState } from './src/app/runtime-state.js';
+import { saveSettings } from './src/app/runtime-bridge.js';
 import {
     extractCurrentTimeStr,
     formatInWorldTime,
@@ -113,7 +114,7 @@ function persistMemo(nextMemo) {
     settings.currentMemo = nextMemo;
     const chatId = runtimeState.currentChatId;
     if (settings.chatLinkEnabled && chatId) saveChatState(chatId);
-    else SillyTavern.getContext().saveSettingsDebounced();
+    else void saveSettings();
     if (typeof runtimeState.refreshTrackerViewRef === 'function') {
         runtimeState.refreshTrackerViewRef();
     }

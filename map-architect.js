@@ -22,7 +22,9 @@ import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { MAP_ARCHITECT_BRIEF_JSON_SCHEMA, MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
 import { extractCurrentTimeStr } from './memo-processor.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
+import { buildMapArchitectReferenceContext } from './map-architect-context.js';
 export { parseMapArchitectResponse } from './map-architect-parser.js';
+export { buildMapArchitectReferenceContext } from './map-architect-context.js';
 
 const architectRuns = new Map();
 const MAX_CORRECTION_ATTEMPTS = 2;
@@ -148,7 +150,7 @@ function threatBrief(threat, kind) {
     }[threat] || 'Threat is site danger, not party level.';
 }
 
-function initialUserPrompt(args, context, currentLocation = '', currentTime = '') {
+function initialUserPrompt(args, context, referenceContext = '', currentLocation = '', currentTime = '') {
     return `CREATE ONE PRIVATE MAP
 Exact site root: ${args.site}
 Entrance area: ${args.entrance}
@@ -166,14 +168,16 @@ Write each connection detail once as a direction-neutral description of the pass
 RECENT STORY CONTEXT
 ${context || '(No additional recent context.)'}
 
+${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}
+
 Output only the required JSON object. Follow the ${args.kind} instruction set.`;
 }
 
-function correctionPrompt(args, context, priorOutput, parseError, errors, attempt, currentTime = '') {
+function correctionPrompt(args, context, referenceContext, priorOutput, parseError, errors, attempt, currentTime = '') {
     const issues = parseError
         ? [{ code: 'INVALID_JSON', path: '$', hint: parseError }]
         : errors.map(({ code, path, hint }) => ({ code, path, hint }));
-    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\nCurrent in-world time (authoritative): ${currentTime || 'Unknown'}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
+    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\nCurrent in-world time (authoritative): ${currentTime || 'Unknown'}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\n${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
 }
 
 function existingResult(siteRecord) {
@@ -239,9 +243,10 @@ async function runMapArchitectOnce(rawArgs) {
 
     const lookback = resolveLookback(settings, rawArgs?.lookback);
     const context = recentStoryContext(ctx, lookback, current);
+    const referenceContext = await buildMapArchitectReferenceContext(ctx, rawArgs);
     const currentTime = currentTimeFrom(settings);
     const systemPrompt = String(settings.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).trim();
-    let prompt = initialUserPrompt(args, context, currentLocation, currentTime);
+    let prompt = initialUserPrompt(args, context, referenceContext, currentLocation, currentTime);
     let lastIssues = [];
 
     for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -274,7 +279,7 @@ async function runMapArchitectOnce(rawArgs) {
             ? [{ code: 'INVALID_JSON', path: '$', hint: parsed.error }]
             : validation.errors;
         if (attempt < MAX_CORRECTION_ATTEMPTS) {
-            prompt = correctionPrompt(args, context, output, parsed.error, validation.errors, attempt + 1, currentTime);
+            prompt = correctionPrompt(args, context, referenceContext, output, parsed.error, validation.errors, attempt + 1, currentTime);
         }
     }
 
@@ -286,7 +291,7 @@ async function runMapArchitectOnce(rawArgs) {
  * Lorebook Agent Auto path: one Architect turn fills CreateAreaMap handshake fields.
  * Site is locked; the narrator is not involved.
  */
-export async function inferMapArchitectArgs({ site, loreEntry = '', userBrief = '', lookback } = {}) {
+export async function inferMapArchitectArgs({ site, loreEntry = '', userBrief = '', lookback, lorebookNames = [], characterCards = [] } = {}) {
     const siteRoot = String(site || '').trim();
     if (!siteRoot) throw new Error('Map Architect auto-fill needs a location root.');
 
@@ -303,6 +308,7 @@ export async function inferMapArchitectArgs({ site, loreEntry = '', userBrief = 
 
     const windowSize = resolveLookback(settings, lookback);
     const context = recentStoryContext(ctx, windowSize, current);
+    const referenceContext = await buildMapArchitectReferenceContext(ctx, { lorebookNames, characterCards });
     const lore = String(loreEntry || '').trim() || '(No location lore entry.)';
     const brief = String(userBrief || '').trim() || '(none)';
     const userPrompt = `FILL CREATE_AREA_MAP FIELDS
@@ -316,6 +322,8 @@ ${lore}
 
 RECENT STORY CONTEXT (${windowSize} messages${windowSize === 0 ? '; vacuum — do not invent from chat' : ''})
 ${context || '(No additional recent context.)'}
+
+${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}
 
 Infer entrance, kind, scale, threat, premise, and optional extra keywords as the GM would before calling CreateAreaMap.
 SETTLEMENT = the city/town/village as a whole, not an alley or shop. DUNGEON = a high-risk interior only.
@@ -356,6 +364,8 @@ Output only the JSON object.`;
         premise,
         keywords: extraKeys,
         lookback: windowSize,
+        lorebookNames,
+        characterCards,
     };
 }
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { clearExtensionLocalStorageUiState } from '../src/state/defaults.js';
+import { configureRuntimeActions } from '../src/app/runtime-bridge.js';
 import {
     MAIN_SYSPROMPT_BACKUP_KEY,
     captureMainSyspromptBackup,
@@ -57,6 +58,7 @@ const originalGetContext = globalThis.SillyTavern.getContext;
 describe('main sysprompt backup', () => {
     beforeEach(() => {
         localStorage.clear();
+        configureRuntimeActions({ saveSettings: () => {} });
         globalThis.SillyTavern.getContext = originalGetContext;
         installHost({ textareaValue: '', mainContent: '' });
     });
@@ -182,6 +184,9 @@ describe('main sysprompt backup', () => {
     it('writes Main even when only Prompt Manager is available', () => {
         const saveCalls = [];
         installHost({ textareaValue: null, mainContent: USER_PROMPT, saveCalls });
+        configureRuntimeActions({
+            saveSettings: () => saveCalls.push(globalThis.SillyTavern.getContext().chatCompletionSettings.prompts[0].content),
+        });
         expect(setLiveMainSyspromptText(FRAMEWORK_PROMPT)).toBe(true);
         expect(globalThis.SillyTavern.getContext().chatCompletionSettings.prompts[0].content).toBe(FRAMEWORK_PROMPT);
         expect(saveCalls).toEqual([FRAMEWORK_PROMPT]);

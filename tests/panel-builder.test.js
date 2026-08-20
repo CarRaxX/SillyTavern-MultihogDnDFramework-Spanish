@@ -68,6 +68,13 @@ describe('panel builder', () => {
         expect(source).toContain('rt-map-loc-brief');
         expect(source).toContain('rt-map-loc-lookback');
         expect(source).toContain('0 uses no recent chat');
+        expect(source).toContain('Optional reference context');
+        expect(source).toContain('data-map-context-lorebooks');
+        expect(source).toContain('data-map-context-character-cards');
+        expect(source).toContain('populateMapCreationContextOptions');
+        expect(source).toContain('rt-map-create-mode');
+        expect(source).toContain('lorebookNames: form.lorebookNames');
+        expect(source).toContain('characterCards: form.characterCards');
         expect(source).not.toContain('Keywords are required');
         expect(source).not.toContain('Include the location name.');
         expect(source).toContain('Add Mapped Location');

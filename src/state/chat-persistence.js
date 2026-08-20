@@ -7,6 +7,7 @@ import { getNpcRelationshipMax } from './relationship-math.js';
 import { getSettings, stripChatStateGlobalUiPrefs } from './settings.js';
 import { snapshotStockPromptsForProfile } from './profiles.js';
 import { snapshotChatSetup } from './chat-setup.js';
+import { saveSettings as requestSettingsSave } from '../app/runtime-bridge.js';
 
 // Kept only so legacy recovery code can be re-enabled deliberately. Normal tracker
 // operation must not create or consume a browser-local recovery copy.
@@ -17,6 +18,64 @@ export function getActiveChatId() {
     const ctx = SillyTavern.getContext();
     const tracked = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
     return tracked || ctx.getCurrentChatId?.() || ctx.chatId || null;
+}
+
+/**
+ * Estimate how much irreplaceable story state a live/partition object contains.
+ * This is deliberately conservative: boot must prefer a possibly redundant live
+ * snapshot over replacing visible state with an empty or older chat partition.
+ */
+function chatStateSubstanceScore(state) {
+    if (!state || typeof state !== 'object') return 0;
+    let score = 0;
+    if (String(state.currentMemo || '').trim()) score += 8;
+    if (String(state.lastDelta || '').trim()) score += 2;
+    for (const key of ['memoHistory', 'dungeonMapHistory', 'quests', 'combatDefeatedUi', 'routerLog']) {
+        if (Array.isArray(state[key])) score += Math.min(state[key].length, 20);
+    }
+    for (const key of [
+        'customPortraits',
+        'customLocationImages',
+        'npcRelationshipValues',
+        'npcRelationshipLog',
+        'worldProgressionLocationLastAdvanced',
+        'mapEvolutionLastFiredBySite',
+        'mapEvolutionBacklogBySite',
+        'mapEvolutionThreadsBySite',
+        'mapEvolutionWorldReportApplications',
+    ]) {
+        if (state[key] && typeof state[key] === 'object') {
+            score += Math.min(Object.keys(state[key]).length, 20);
+        }
+    }
+    if (state.dungeonReality?.sites && typeof state.dungeonReality.sites === 'object') {
+        score += Math.min(Object.keys(state.dungeonReality.sites).length, 20);
+    }
+    if (state.playerCharacter) score += 4;
+    if (Array.isArray(state.adventureCompanion?.history)) {
+        score += Math.min(state.adventureCompanion.history.length, 20);
+    }
+    return score;
+}
+
+/**
+ * Decide whether boot should seed the active partition from the already-visible
+ * top-level state instead of projecting a missing/empty/older partition over it.
+ * SillyTavern can run queued whole-settings saves immediately after activation,
+ * so boot must never create a destructive transient state.
+ */
+export function shouldPreserveLiveChatStateOnBoot(settings, chatId) {
+    if (!settings || !chatId) return false;
+    const saved = settings.chatStates?.[chatId];
+    if (!saved) return true;
+
+    const liveScore = chatStateSubstanceScore(settings);
+    const savedScore = chatStateSubstanceScore(saved);
+    if (liveScore > 0 && savedScore === 0) return true;
+
+    const liveStamp = Number(settings.memoPersistedAt) || 0;
+    const savedStamp = Number(saved.memoPersistedAt) || 0;
+    return liveScore > 0 && liveStamp > savedStamp;
 }
 
 /**
@@ -73,7 +132,7 @@ export function persistWorldProgressionTimer() {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -85,7 +144,7 @@ export function persistRouterLastRunWatermark(length) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -97,7 +156,7 @@ export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -109,7 +168,7 @@ export function persistMapUpdaterLastRunWatermark(length) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -121,7 +180,7 @@ export function persistMapUpdaterLastRunTimestamp(epochMs = Date.now()) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -132,7 +191,7 @@ export function persistMapEvolutionState() {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -491,16 +550,10 @@ export function saveChatState(chatId, opts = {}) {
     // Drop any legacy global-UI keys copied into older partitions.
     stripChatStateGlobalUiPrefs(s);
     
-    // Use a synchronous save so data is not lost if the page is closed before
-    // a debounced timer fires (the root cause of the PC/state/relationship loss bug).
-    // saveChatState is always called with an explicit chatId so there is no
-    // cross-chat leakage risk from this call itself.
-    // When called from our saveSettings(), skipDiskWrite avoids a duplicate in-flight save.
+    // All settings writes must pass through the entry point's startup gate. Calling
+    // SillyTavern's saver directly here lets its "settings not ready" retry escape
+    // the gate and write a boot-time Chat Link projection later. When called from
+    // our saveSettings(), skipDiskWrite also avoids a duplicate in-flight save.
     if (opts.skipDiskWrite) return;
-    const ctx = SillyTavern.getContext();
-    if (typeof ctx.saveSettings === 'function') {
-        ctx.saveSettings();
-    } else if (typeof ctx.saveSettingsDebounced === 'function') {
-        ctx.saveSettingsDebounced();
-    }
+    void requestSettingsSave();
 }

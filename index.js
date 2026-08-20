@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
@@ -715,7 +715,6 @@ async function syncCampaignPrefixAndWorldsForChat(newChatId, source) {
     if (!s2.chatStates[newChatId]) s2.chatStates[newChatId] = {};
     s2.chatStates[newChatId].campaignBooks = matchingBooks;
     saveSettings();
-    if (s2.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
     try {
         await activateCampaignBooks({
             debugSource: source,
@@ -1976,7 +1975,7 @@ function onChatChanged(newChatId) {
     // resetRouterTick(true) zeroes keywordActivatedKeys in-place; if saveChatState ran
     // after that, the yellow-pill keyword state for the departing chat would be lost.
     // Guard matches the later chatLinkEnabled block so we only persist when linking is on.
-    if (s.chatLinkEnabled && oldChatId) saveChatState(oldChatId);
+    if (s.chatLinkEnabled && oldChatId) saveChatState(oldChatId, { skipDiskWrite: true });
 
     // Reset the run-every tick so the agent fires promptly on the first generation of each chat.
     // Only clear keyword-activated lore when actually switching to a different chat.
@@ -2141,6 +2140,11 @@ function onChatChanged(newChatId) {
     }
     if (s.chatSetupLinkEnabled) syncAllNarratorTogglesForUnlockState();
     if (migratedPortraitScope) void saveSettings(true);
+
+    // Persist only after the arriving partition has been projected. Saving the
+    // departing partition above used to call ST directly while top-level state
+    // still belonged to the old chat, creating a destructive startup/switch race.
+    saveSettings();
 
     scheduleAgentManifestRefresh();
     updateChatLinkUI();
@@ -6923,8 +6927,16 @@ function organizeConnectionSettingsUI() {
             });
         }
         if (bootChatId && settings.chatLinkEnabled) {
-            const restoredBootChat = loadChatState(bootChatId);
-            if (!restoredBootChat && !settings.chatStates?.[bootChatId]) resetUnseenChatState(settings);
+            // ST and other extensions queue whole-settings saves before settingsReady.
+            // Never expose an empty transient projection during that window. If the
+            // active partition is missing, empty, or older/poorer than the already
+            // visible live state, seed it from live memory instead of clearing it.
+            const preserveLiveBootState = shouldPreserveLiveChatStateOnBoot(settings, bootChatId);
+            const restoredBootChat = preserveLiveBootState ? false : loadChatState(bootChatId);
+            if (preserveLiveBootState || (!restoredBootChat && !settings.chatStates?.[bootChatId])) {
+                saveChatState(bootChatId, { skipDiskWrite: true });
+                console.warn('[RPG Tracker] Preserved live tracker state for an unsafe boot partition:', bootChatId);
+            }
             if (settings.chatSetupLinkEnabled) {
                 syncSettingsUi();
                 syncAllNarratorTogglesForUnlockState();
@@ -6958,15 +6970,26 @@ function organizeConnectionSettingsUI() {
         // cannot overwrite freshly migrated paths before the synchronous disk flush.
         await runPortraitMigrationIfNeeded();
 
-        // Chat Link now has a stable boot partition. Release every save requested
-        // by migrations/UI hydration as one coalesced write, then start any prompt
-        // update action that may itself force-write the full settings payload.
-        await openSettingsPersistenceGate();
-        if (typeof _runPromptDefaultsStartupAction === 'function') {
-            const action = _runPromptDefaultsStartupAction;
-            _runPromptDefaultsStartupAction = null;
-            void action();
-        }
+        // Do not release extension persistence until core SillyTavern declares
+        // settings ready. Before that, core saveSettings() turns every early call
+        // into a delayed global retry that can outlive extension bootstrap.
+        let startupPersistenceReleaseScheduled = false;
+        const scheduleStartupPersistenceRelease = () => {
+            if (startupPersistenceReleaseScheduled) return;
+            startupPersistenceReleaseScheduled = true;
+            setTimeout(() => {
+                void openSettingsPersistenceGate().then(() => {
+                    if (typeof _runPromptDefaultsStartupAction === 'function') {
+                        const action = _runPromptDefaultsStartupAction;
+                        _runPromptDefaultsStartupAction = null;
+                        void action();
+                    }
+                });
+            }, 0);
+        };
+        eventSource.once(event_types.SETTINGS_LOADED, scheduleStartupPersistenceRelease);
+        // APP_READY auto-fires for extensions activated after normal startup.
+        if (event_types.APP_READY) eventSource.once(event_types.APP_READY, scheduleStartupPersistenceRelease);
 
         // ─── Navigation snapshot safety net ───
         // Never write SillyTavern's whole settings blob from lifecycle events. A hidden or

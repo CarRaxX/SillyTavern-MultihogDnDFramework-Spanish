@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { getSettings, hydrateWorldProgressionFromChatState, saveChatState, snapshotStockPromptsForProfile } from '../state-manager.js';
+import { getSettings, hydrateWorldProgressionFromChatState, saveChatState, shouldPreserveLiveChatStateOnBoot, snapshotStockPromptsForProfile } from '../state-manager.js';
 import { testExtensionSettings } from './setup.js';
 
 describe('saveChatState', () => {
@@ -7,6 +7,55 @@ describe('saveChatState', () => {
         for (const key of Object.keys(testExtensionSettings)) {
             delete testExtensionSettings[key];
         }
+    });
+
+    it('preserves substantive live state when the boot chat partition is missing or empty', () => {
+        const s = getSettings();
+        s.currentMemo = 'Live campaign state';
+        s.memoHistory = ['older state'];
+        s.memoPersistedAt = 200;
+        s.chatStates = {};
+
+        expect(shouldPreserveLiveChatStateOnBoot(s, 'active-chat')).toBe(true);
+
+        s.chatStates['active-chat'] = {
+            currentMemo: '',
+            memoHistory: [],
+            memoPersistedAt: 100,
+        };
+        expect(shouldPreserveLiveChatStateOnBoot(s, 'active-chat')).toBe(true);
+    });
+
+    it('loads a substantive active partition instead of replacing it during boot', () => {
+        const s = getSettings();
+        s.currentMemo = 'Top-level checkpoint';
+        s.memoHistory = [];
+        s.memoPersistedAt = 100;
+        s.chatStates = {
+            'active-chat': {
+                currentMemo: 'Saved active campaign',
+                memoHistory: ['one', 'two'],
+                memoPersistedAt: 200,
+            },
+        };
+
+        expect(shouldPreserveLiveChatStateOnBoot(s, 'active-chat')).toBe(false);
+    });
+
+    it('preserves a newer live snapshot even when the saved partition is equally substantial', () => {
+        const s = getSettings();
+        s.currentMemo = 'New live campaign state';
+        s.memoHistory = ['one'];
+        s.memoPersistedAt = 300;
+        s.chatStates = {
+            'active-chat': {
+                currentMemo: 'Older saved campaign state',
+                memoHistory: ['one'],
+                memoPersistedAt: 200,
+            },
+        };
+
+        expect(shouldPreserveLiveChatStateOnBoot(s, 'active-chat')).toBe(true);
     });
 
     it('snapshots stock prompts via snapshotStockPromptsForProfile without throwing', () => {

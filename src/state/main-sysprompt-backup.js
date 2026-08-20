@@ -11,6 +11,8 @@
  * never discarded once a non-empty user prompt has been captured.
  */
 
+import { saveSettings } from '../app/runtime-bridge.js';
+
 export const MAIN_SYSPROMPT_BACKUP_KEY = 'rpg_tracker_main_sysprompt_backup';
 
 const MAIN_TEXTAREA_ID = 'main_prompt_quick_edit_textarea';
@@ -129,7 +131,7 @@ export function setLiveMainSyspromptText(text) {
         wrote = true;
     }
     try {
-        globalThis.SillyTavern?.getContext?.()?.saveSettingsDebounced?.();
+        void saveSettings();
     } catch {
         /* non-fatal */
     }
