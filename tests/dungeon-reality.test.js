@@ -36,6 +36,7 @@ import {
     parseDungeonDeltaBlock,
     reconcileDungeonMapAreaKnowledge,
     resolveActiveDungeonSite,
+    resolveMentionedDungeonSites,
     stripCapturedDungeonMapBlocks,
     stripDungeonRealityBlocksFromPrompt,
     stripDungeonMapSection,
@@ -1115,6 +1116,39 @@ The last guard falls and a loose stone reveals a niche.
         expect(resolveActiveDungeonSite(state, 'Whispering Woods, Trailhead')?.siteRoot).toBe('Whispering Woods');
         expect(resolveActiveDungeonSite(state, 'Whispering Woods, Forgotten Tomb')?.siteRoot).toBe('Forgotten Tomb');
         expect(resolveActiveDungeonSite(state, 'Forest Near the Forgotten Tomb')).toBeNull();
+    });
+
+    it('resolves maps from exact canonical location-name mentions only', () => {
+        const state = {
+            version: 3,
+            sites: {
+                ember: { siteRoot: 'Ember Mine', entryId: 'Campaign_Locations::7', mapChunks: ['map'] },
+                crypt: { siteRoot: "Saint Oren's Crypt", entryId: 'Campaign_Locations::8', mapChunks: ['map'] },
+            },
+        };
+
+        expect(resolveMentionedDungeonSites(state, 'We should travel to Ember Mine next.').map(site => site.siteRoot))
+            .toEqual(['Ember Mine']);
+        expect(resolveMentionedDungeonSites(state, 'Ask about ember mine, then decide.').map(site => site.siteRoot))
+            .toEqual(['Ember Mine']);
+        expect(resolveMentionedDungeonSites(state, 'We are near the Ember Mines.')).toEqual([]);
+        expect(resolveMentionedDungeonSites(state, 'The ember-mining guild can help.')).toEqual([]);
+        expect(resolveMentionedDungeonSites(state, "Go to Saint Oren's Crypt!").map(site => site.siteRoot))
+            .toEqual(["Saint Oren's Crypt"]);
+        expect(resolveMentionedDungeonSites(state, "Go to Oren's Crypt.")).toEqual([]);
+    });
+
+    it('marks an off-site exact-name map injection without claiming the party is there', () => {
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Ember Mine',
+            mapChunks: ['Dungeon Site: Ember Mine\nArea: Lift\nFrayed cable.'],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Oakbridge, Market', { referencedByName: true });
+
+        expect(injection).toContain('Site: Ember Mine');
+        expect(injection).toContain('Current footer location: Oakbridge, Market');
+        expect(injection).toContain('exact mapped-location name in the current player input');
     });
 
     it('strips only captured map blocks and builds an internal canon injection', () => {

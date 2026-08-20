@@ -33,7 +33,7 @@ threat: HIGH
 premise: Abandoned crypt. Ghouls. Do not contradict the cracked west stair.
 [/CREATE_AREA_MAP]
 - ${MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT}
-- A \`[MAPPED_SITES — INTERNAL]\` block lists every site that already has a private map. Do not emit the command for a listed site, or for a nested place of a listed site, including when approaching or re-entering. DUNGEON_REALITY is attached only while the Location footer matches a mapped site; absence of that block does not mean the site is unmapped.
+- A \`[MAPPED_SITES — INTERNAL]\` block lists every site that already has a private map. Do not emit the command for a listed site, or for a nested place of a listed site, including when approaching or re-entering. DUNGEON_REALITY is attached while the Location footer matches a mapped site, or for one turn when the player input contains its exact complete site name; absence of that block does not mean the site is unmapped.
 - If a \`[DUNGEON_REALITY — INTERNAL GM CANON]\` block already exists for that site, its map is attached: do not emit the command again.
 - Treat the Map Architect result and subsequent DUNGEON_REALITY blocks as private objective canon. Reveal only what {{user}} can perceive.`;
 

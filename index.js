@@ -755,6 +755,27 @@ let _saveSettingsPending = false;
 let _saveSettingsPendingForce = false;
 /** Cached core ST saveSettings (not on getContext — only saveSettingsDebounced is). */
 let _coreSaveSettingsFn = null;
+/**
+ * Persistence stays closed while extension bootstrap is projecting the active
+ * chat partition into the live top-level settings object. Prompt/version
+ * migrations and UI hydration can request saves during that window; writing
+ * then can persist a half-bootstrapped or transient unseen-chat reset.
+ */
+let _settingsPersistenceGateOpen = false;
+let _startupSavePending = false;
+let _startupSavePendingForce = false;
+
+/** Open persistence after Chat Link bootstrap and flush one coalesced save. */
+async function openSettingsPersistenceGate() {
+    if (_settingsPersistenceGateOpen) return;
+    _settingsPersistenceGateOpen = true;
+    if (!_startupSavePending) return;
+
+    const force = _startupSavePendingForce;
+    _startupSavePending = false;
+    _startupSavePendingForce = false;
+    await Promise.resolve(saveSettings(force));
+}
 
 /**
  * Resolve SillyTavern's immediate (non-debounced) saveSettings().
@@ -832,6 +853,15 @@ export function saveSettings(force = false, delay = 0) {
             }
         }
     } catch (_) { /* non-fatal */ }
+
+    // Never persist SillyTavern's whole settings blob while boot is still
+    // selecting/loading the active chat. Coalesce all startup requests and
+    // flush once the live chat projection is complete.
+    if (!_settingsPersistenceGateOpen) {
+        _startupSavePending = true;
+        _startupSavePendingForce = _startupSavePendingForce || !!force;
+        return;
+    }
 
     const doSave = async (forceWrite) => {
         _saveSettingsTimer = null;
@@ -5202,6 +5232,8 @@ function organizeConnectionSettingsUI() {
     const ctx = SillyTavern.getContext();
     const { eventSource, event_types, renderExtensionTemplateAsync } = ctx;
     const pm = ctx.getPresetManager ? ctx.getPresetManager() : null;
+    let _runPromptDefaultsDialog = null;
+    let _runPromptDefaultsStartupAction = null;
 
     configureRuntimeActions({
         saveSettings,
@@ -5790,8 +5822,6 @@ function organizeConnectionSettingsUI() {
                                     </details>`;
         }
 
-        let _runPromptDefaultsDialog = null;
-
         // --- Version Upgrade Prompt Reset Dialog ---
         {
             let currentVersion = '4.8.10'; // Fallback
@@ -5834,22 +5864,22 @@ function organizeConnectionSettingsUI() {
 
             if (!settings.lastResetVersion) {
                 // Fresh install — record version and defaults fingerprint silently.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (!storedFingerprint) {
                 // Existing install before fingerprint tracking — adopt current defaults without prompting.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (storedFingerprint === currentFingerprint
                 && settings.lastSeenPromptDefaultsFingerprint !== currentFingerprint) {
                 // Pre-format-neutral snapshots can contain user-selected calendar/clock
                 // examples. They represent the same shipped defaults, so upgrade the
                 // acknowledgement silently instead of showing a false update prompt.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (storedFingerprint !== currentFingerprint) {
                 syncPromptDefaultsUpgradeButton();
 
                 if (settings.autoResetPromptsOnUpdate) {
                     // Silently reset everything automatically
-                    (async () => {
+                    _runPromptDefaultsStartupAction = async () => {
                         const { extensionSettings } = SillyTavern.getContext();
                         const fresh = getSettings();
 
@@ -5933,7 +5963,7 @@ function organizeConnectionSettingsUI() {
                         await acknowledgePromptDefaults(fresh);
                         toastr['info'](`Prompts auto-updated to latest defaults (v${currentVersion}).`, 'RPG Tracker');
                         console.log(`[RPG Tracker] Automatically reset all prompts/sections to defaults for version ${currentVersion}.`);
-                    })();
+                    };
                 } else {
                     const { Popup } = SillyTavern.getContext();
                     if (Popup && Popup.show && Popup.show.confirm) {
@@ -6252,9 +6282,9 @@ function organizeConnectionSettingsUI() {
                             }
                             syncPromptDefaultsUpgradeButton();
                         };
-                        void _runPromptDefaultsDialog();
+                        _runPromptDefaultsStartupAction = _runPromptDefaultsDialog;
                     } else {
-                        void acknowledgePromptDefaults(getSettings());
+                        _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
                     }
                 }
             } else if (settings.lastResetVersion !== currentVersion) {
@@ -6927,6 +6957,16 @@ function organizeConnectionSettingsUI() {
         // Migrate legacy base64 portraits after chat state is loaded so loadChatState
         // cannot overwrite freshly migrated paths before the synchronous disk flush.
         await runPortraitMigrationIfNeeded();
+
+        // Chat Link now has a stable boot partition. Release every save requested
+        // by migrations/UI hydration as one coalesced write, then start any prompt
+        // update action that may itself force-write the full settings payload.
+        await openSettingsPersistenceGate();
+        if (typeof _runPromptDefaultsStartupAction === 'function') {
+            const action = _runPromptDefaultsStartupAction;
+            _runPromptDefaultsStartupAction = null;
+            void action();
+        }
 
         // ─── Navigation snapshot safety net ───
         // Never write SillyTavern's whole settings blob from lifecycle events. A hidden or

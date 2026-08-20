@@ -50,8 +50,8 @@ export function createRouterViewRenderer({
         }
 
         // Match the actual active-lore injection, which never includes a stored
-        // [MAP] attachment. Active-site map canon is injected separately only
-        // while the current Location footer is inside that mapped root.
+        // [MAP] attachment. Map canon is injected separately while the current
+        // footer is inside that root or the player names the exact root this turn.
         let activeTokens = 0;
         for (const k of activeKeys) {
             const [bookName, uid] = k.split('::');

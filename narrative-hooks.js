@@ -36,6 +36,7 @@ import {
     getSiteRootFromLocation,
     looksLikeDungeonSite,
     resolveActiveDungeonSite,
+    resolveMentionedDungeonSites,
     stripCapturedDungeonMapsFromPrompt,
     stripDungeonRealityBlocksFromPrompt,
 } from './dungeon-reality.js';
@@ -56,20 +57,26 @@ let _pendingMapArchitectResult = null;
 let _mapArchitectTextOpenerBusy = false;
 let _mapArchitectNarrationContinue = false;
 
-/** Keep mapped root lore visible to LA exactly while its location root is active. */
-function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation) {
+/** Keep mapped root lore visible while its root is active or named exactly this turn. */
+function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation, mentionedSites = []) {
     const mappedIds = new Set(Object.values(dungeonState?.sites || {}).map(site => site?.entryId).filter(Boolean));
     const activeSite = resolveActiveDungeonSite(dungeonState, currentLocation);
-    const wantedId = activeSite?.entryId || '';
+    const wantedIds = new Set([
+        activeSite?.entryId,
+        ...mentionedSites.map(site => site?.entryId),
+    ].filter(Boolean));
     const pinned = new Set(settings.pinnedRouterKeys || []);
     const before = JSON.stringify({
         active: settings.activeRouterKeys || [],
         keyword: settings.keywordActivatedKeys || [],
     });
     settings.activeRouterKeys = (settings.activeRouterKeys || [])
-        .filter(id => !mappedIds.has(id) || id === wantedId || pinned.has(id));
-    if (wantedId && !settings.activeRouterKeys.includes(wantedId)) settings.activeRouterKeys.push(wantedId);
-    // Map roots are location-gated, never keyword-owned.
+        .filter(id => !mappedIds.has(id) || wantedIds.has(id) || pinned.has(id));
+    for (const wantedId of wantedIds) {
+        if (!settings.activeRouterKeys.includes(wantedId)) settings.activeRouterKeys.push(wantedId);
+    }
+    // Exact map-name mentions are owned by this turn's map layer, not the
+    // general keyword pool (which supports aliases and substring hits).
     if (Array.isArray(settings.keywordActivatedKeys)) {
         settings.keywordActivatedKeys = settings.keywordActivatedKeys.filter(id => !mappedIds.has(id));
     }
@@ -943,6 +950,19 @@ function extractTextContent(msg) {
     return String(raw);
 }
 
+/** Latest explicit player text from the outgoing prompt copy. */
+function findLatestPlayerInputText(chat) {
+    if (!Array.isArray(chat)) return '';
+    for (let index = chat.length - 1; index >= 0; index--) {
+        const message = chat[index];
+        const role = String(message?.role || message?.Role || '').toLowerCase().trim();
+        if (message?.is_user || role === 'user' || role === 'human' || role === 'player') {
+            return extractTextContent(message);
+        }
+    }
+    return '';
+}
+
 /**
  * Formats a lorebook entry block for injection into the GM/narrator prompt.
  * Automatically prepends any active NPC relationship status values if relationship bars are enabled.
@@ -1071,16 +1091,23 @@ export function installInterceptor() {
 
             const currentLocation = findLatestDungeonLocation(_rbChat);
             const mappedSitesInjection = buildMappedSitesInjection(dungeonState.sites);
-            const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation);
-            if (activeSite) {
-                dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation, {
+            const mentionedSites = resolveMentionedDungeonSites(dungeonState, findLatestPlayerInputText(chat));
+            const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation, mentionedSites);
+            const sitesToInject = [activeSite, ...mentionedSites]
+                .filter((site, index, sites) => site && sites.findIndex(candidate =>
+                    (candidate?.entryId || candidate?.siteRoot) === (site.entryId || site.siteRoot)) === index);
+            if (sitesToInject.length) {
+                dungeonInjection = sitesToInject.map(site => buildDungeonRealityInjection(site, currentLocation, {
                     activityText: formatNarratorSiteActivity(
                         settings.mapEvolutionThreadsBySite,
                         settings.mapEvolutionBacklogBySite,
-                        activeSite.siteRoot,
+                        site.siteRoot,
                         { maxTokens: settings.mapEvolutionNarratorCommitTokens },
                     ),
-                });
+                    referencedByName: site !== activeSite,
+                })).filter(Boolean).join('\n\n');
+            }
+            if (activeSite) {
                 dungeonMissingMapWarnings.delete(`${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`);
             } else if (currentLocation && looksLikeDungeonSite(currentLocation)) {
                 const warningKey = `${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`;

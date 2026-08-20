@@ -2249,7 +2249,7 @@ export function buildMappedSitesInjection(sites) {
         ? rows.map(row => `- ${row.siteRoot} (${row.kind})`)
         : ['- None.'];
     const guidance = rows.length
-        ? 'Every site below already has a private map. Do not call CreateAreaMap for these names, or for a nested place of one of them, when approaching, entering, or returning. DUNGEON_REALITY is attached only while the Location footer matches a listed site; this list is the complete index.'
+        ? 'Every site below already has a private map. Do not call CreateAreaMap for these names, or for a nested place of one of them, when approaching, entering, or returning. DUNGEON_REALITY is attached while the Location footer matches a listed site, or for one turn when the player input contains the exact complete site name; this list is the complete index.'
         : 'No private maps exist yet. CreateAreaMap is allowed for a new unmapped dungeon or settlement before first entry, or for an exact named standalone building when the player explicitly requests its persistent layout.';
     return `[MAPPED_SITES — INTERNAL]\n${guidance}\n\n${lines.join('\n')}\n[/MAPPED_SITES]\n`;
 }
@@ -2388,6 +2388,33 @@ export function resolveActiveDungeonSite(state, currentLocation) {
         if (found) return found.site;
     }
     return null;
+}
+
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Find mapped sites named verbatim in text. Matching is case-insensitive, but
+ * otherwise requires the complete canonical site-root label with token
+ * boundaries; aliases, fuzzy variants, and partial words do not qualify.
+ */
+export function resolveMentionedDungeonSites(state, text) {
+    const source = String(text || '').normalize('NFC');
+    if (!source || !state?.sites) return [];
+
+    const matches = [];
+    for (const site of Object.values(state.sites)) {
+        const siteRoot = String(site?.siteRoot || '').trim().normalize('NFC');
+        if (!siteRoot || !Array.isArray(site?.mapChunks) || !site.mapChunks.length) continue;
+        const escaped = escapeRegExp(siteRoot);
+        const leftBoundary = /^[\p{L}\p{N}]/u.test(siteRoot) ? '(?:^|[^\\p{L}\\p{N}])' : '';
+        const rightBoundary = /[\p{L}\p{N}]$/u.test(siteRoot) ? '(?=$|[^\\p{L}\\p{N}])' : '';
+        if (new RegExp(`${leftBoundary}${escaped}${rightBoundary}`, 'iu').test(source)) {
+            matches.push(site);
+        }
+    }
+    return matches;
 }
 
 /** Compact [MAP] occupancy for State Tracker memoHistory stones. */
@@ -2558,8 +2585,8 @@ function extractPlayerObservableChronicle(content) {
         .trim();
 }
 
-/** Build the correctness-critical system block injected while inside the site. */
-export function buildDungeonRealityInjection(site, currentLocation, { activityText = '' } = {}) {
+/** Build the correctness-critical system block for an active or exactly named site. */
+export function buildDungeonRealityInjection(site, currentLocation, { activityText = '', referencedByName = false } = {}) {
     if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) return '';
     const chunks = site.mapChunks
         .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${formatDungeonMapForNarrator(chunk, site.siteRoot)}`)
@@ -2587,7 +2614,10 @@ export function buildDungeonRealityInjection(site, currentLocation, { activityTe
     const activityBlock = activity
         ? `\n\n### Recent site activity\n${activity}`
         : '';
-    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. ${kindCanon}${threatCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). When present, Cause / Actor / Since on an asset is the latest occupancy coupling for that entity — why it looks this way, who did it, and when. Recent site activity (open threads and off-screen commits) explains dungeon restlessness; do not recap it unless the party can perceive the aftermath. Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}${activityBlock}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
+    const activationNote = referencedByName
+        ? '\nActivation: exact mapped-location name in the current player input; the party may still be elsewhere.\n'
+        : '';
+    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}${activationNote}\nThis is objective hidden information for adjudication. ${kindCanon}${threatCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). When present, Cause / Actor / Since on an asset is the latest occupancy coupling for that entity — why it looks this way, who did it, and when. Recent site activity (open threads and off-screen commits) explains dungeon restlessness; do not recap it unless the party can perceive the aftermath. Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}${activityBlock}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
 }
 
 /** Heuristic used only to emit a loud missing-map diagnostic. */
