@@ -4746,7 +4746,7 @@ ${rawDump}`;
 
                 let consolidatedContent = null;
                 try {
-                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt);
+                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression' });
                 } catch (e) {
                     broadcastStep('error', `World Progression consolidation failed: ${e.message} — continuing without consolidation.`);
                 }
@@ -4916,7 +4916,7 @@ ${historicalDump}`;
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${selectedLocations.length} locations, ${historicalReportLines.length} prior reports)...`);
     let reportContent;
     try {
-        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'World Progression' });
     } catch (e) {
         broadcastStep('error', `World Progression generation failed: ${e.message}`);
         return { ok: false, error: e.message };
@@ -5429,7 +5429,7 @@ ${rawDump}`;
 
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Manually consolidating ${toConsolidate.length} reports into "${consolidatedLabel}"...`);
 
-    const consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt);
+    const consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression' });
     if (!consolidatedContent || !consolidatedContent.trim()) {
         throw new Error("LLM returned an empty response during consolidation.");
     }
