@@ -36,6 +36,7 @@ describe('bottom XP bar', () => {
     it('removes the regular XP card and tab only while bottom mode is enabled', () => {
         const settings = getSettings();
         settings.blockOrder = ['XP', 'TIME'];
+        expect(settings.xpBarAtBottom).toBe(true);
         settings.xpBarAtBottom = true;
 
         const stacked = renderMemoAsCards(memo, null, {});

@@ -117,7 +117,7 @@ export function buildDefaultSettings() {
 
         /** Pin XP above the State Tracker footer instead of rendering its module card. */
 
-        xpBarAtBottom: false,
+        xpBarAtBottom: true,
 
         /** Optional State Tracker panel backdrop (data URL or https URL). */
 
