@@ -2466,15 +2466,15 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_loot" />
-                            <span>🎲 Loot (Roll for Loot Quality)</span>
+                            <span>🎲 Loot Rolls</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_random_events" />
-                            <span>🌍 Random Events (Rolls on time skips and travel)</span>
+                            <span>🌍 Random Event Rolls</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_resting" />
-                            <span>💤 Time-Limited Resting and interruption rolls based on location danger</span>
+                            <span>💤 Resting Restrictions (=&gt;9h between rests)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
@@ -2499,12 +2499,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         </div>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />
-                            <span>🧭 CYOA Mode (Numbered action choices at end of outputs)</span>
+                            <span>🧭 CYOA Mode (action choices every turn)</span>
                             <button id="rt_onboarding_cyoa_settings_btn" style="background:none;border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:inherit;font-size:0.75em;padding:1px 6px;cursor:pointer;flex-shrink:0;opacity:0.8;" title="CYOA Settings"><i class="fa-solid fa-gear"></i></button>
                         </div>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_npc_rel_bars" />
-                            <span>💞 Relationship System (tracks each NPC's friendship and affection toward you)</span>
+                            <span>💞 Relationship System (Friendship &amp; Affection)</span>
                         </label>
                     </div>
 

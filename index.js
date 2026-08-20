@@ -3235,13 +3235,13 @@ async function showComponentsExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('🎲', 'Loot',
+                ${card('🎲', 'Loot Rolls',
         `When loot is received, dice rolls are made to determine its quality — whether something is a battered common item or a rare find. Adds meaningful variance to rewards.`
     )}
-                ${card('🌍', 'Events',
+                ${card('🌍', 'Random Event Rolls',
         `Random events are rolled when time skips or travel occurs. A chance encounter, a weather shift, an ambush — things that happen without the player initiating them. Keeps the world feeling alive.`
     )}
-                ${card('💤', 'Resting',
+                ${card('💤', 'Resting Restrictions (=>9h between rests)',
         `Resting is limited to once every 9 hours of in-game time. Prevents exploiting rest as a free heal between every fight, and reflects the reality that you can't just nap on demand.`
     )}
                 ${card('⛺', 'Benched Party',
@@ -3250,10 +3250,10 @@ async function showComponentsExplanation() {
                 ${card('🗺️', 'Persistent Maps (Alpha)',
         `When you enter a mapped site — dungeon, ruin, stronghold, lair, town, or city — a dedicated Map Architect builds a hidden objective map (room-scale for interiors, district-scale for settlements). The GM may invent shops and interiors against that skeleton. Alpha: expect sharp edges. Function calling must be enabled.`
     )}
-                ${card('🧭', 'CYOA Mode',
+                ${card('🧭', 'CYOA Mode (action choices every turn)',
         `Choose-your-own-adventure style: the narrator ends outputs with numbered courses of action and fitting emojis so you can pick what to do next.`
     )}
-                ${card('💞', 'Relationship System',
+                ${card('💞', 'Relationship System (Friendship & Affection)',
         `Tracks friendship, affection, or general reputation deltas between the user and NPCs. Automatically calculates shifts from the chat tone/actions, and visualizes them using custom tracking bars.`
     )}
             </div>`;
