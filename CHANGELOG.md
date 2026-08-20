@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [8.36.1] - 2026-08-20
+## [2026.8.14] - 2026-08-20
 
 ### Added
 - **Time-based map mechanics**: Map Architect, Map Updater, and Map Evolution can now attach absolute in-world timestamps to time-limited assets and resolve their state when those boundaries are reached.
