@@ -6912,57 +6912,45 @@ function organizeConnectionSettingsUI() {
         // cannot overwrite freshly migrated paths before the synchronous disk flush.
         await runPortraitMigrationIfNeeded();
 
-        // ─── Flush-on-unload / tab-hide safety net ───
-        // saveSettings() debounces disk writes by ~2s, and ST's saveSettings() is async
-        // (fetch). Reloading for a code update before the write lands resurrects the last
-        // flushed snapshot — looks like settings "reset to a particular point."
-        // Chat Link makes memo/modules worse: boot runs loadChatState() from chatStates.
-        // Global UI prefs (auto-image-gen, immersion, connections, panel backgrounds) are
-        // intentionally NOT stored in chatStates anymore — only campaign/memo state is.
-        //
-        // Order matters: snapshot chatStates FIRST, then write.
-        // Also flush on visibility hidden so the async save usually finishes before reload.
-        let _flushInFlight = false;
-        const flushPendingSettingsToDisk = (reason = 'flush') => {
-            if (_flushInFlight) return;
-            _flushInFlight = true;
+        // ─── Navigation snapshot safety net ───
+        // Never write SillyTavern's whole settings blob from lifecycle events. A hidden or
+        // older tab may hold a stale snapshot, and visibilitychange/pagehide/beforeunload
+        // would then silently replace personas, connection settings, and every extension's
+        // state (last writer wins). Async unload fetches are unreliable for this ~16 MB file
+        // anyway. Keep only synchronous/local recovery snapshots here; ordinary user actions
+        // already schedule the normal SillyTavern save while the page is alive.
+        let _navigationSnapshotInFlight = false;
+        const snapshotPendingStateForNavigation = (reason = 'navigation') => {
+            if (_navigationSnapshotInFlight) return;
+            _navigationSnapshotInFlight = true;
             try {
                 if (typeof globalThis._rpgFlushRawMemoChanges === 'function') {
                     globalThis._rpgFlushRawMemoChanges();
                 }
-                if (_saveSettingsTimer) {
-                    clearTimeout(_saveSettingsTimer);
-                    _saveSettingsTimer = null;
-                }
                 const s = getSettings();
-                snapshotPortraitMapsForChat(s, runtimeState.currentChatId);
-                // Do this FIRST and unconditionally — localStorage.setItem is synchronous
-                // and cannot be cancelled by the unload that's about to happen, unlike the
-                // disk write below. This is the actual safety net; everything after is best-effort.
-                snapshotMemoToLocalStorage(runtimeState.currentChatId);
+                const chatId = runtimeState.currentChatId || SillyTavern.getContext()?.chatId || null;
+                snapshotPortraitMapsForChat(s, chatId);
+                snapshotMemoToLocalStorage(chatId, { force: true });
                 stampCriticalSettingsSynced(s, writeCriticalSettingsBackup(s));
-                // Snapshot chat-linked fields first so loadChatState() on next boot
-                // cannot overwrite live settings with a stale per-chat copy.
-                if (s.chatLinkEnabled && runtimeState.currentChatId) {
-                    saveChatState(runtimeState.currentChatId);
+                if (s.chatLinkEnabled && chatId && !isPortraitMigrationLocked()) {
+                    // Update the in-memory partition and synchronous module-schema WAL only.
+                    // skipDiskWrite is essential: lifecycle events must not replace settings.json.
+                    saveChatState(chatId, { skipDiskWrite: true });
+                } else {
+                    writeModuleSchemaBackup(chatId);
                 }
-                // Always force a disk write. saveChatState already calls saveSettings when
-                // it runs, but it can no-op (portrait migration lock) — so flush anyway.
-                const flushCtx = SillyTavern.getContext();
-                if (typeof flushCtx.saveSettings === 'function') void flushCtx.saveSettings();
-                else flushCtx.saveSettingsDebounced?.();
-                if (s.debugMode) console.log(`[RPG Tracker] Settings flushed (${reason}).`);
+                if (s.debugMode) console.log(`[RPG Tracker] Local navigation snapshot captured (${reason}); settings.json write skipped.`);
             } catch (err) {
-                console.warn('[RPG Tracker] Settings flush failed:', err);
+                console.warn('[RPG Tracker] Navigation snapshot failed:', err);
             } finally {
-                // Allow another flush after this tick (e.g. hide then unload).
-                setTimeout(() => { _flushInFlight = false; }, 0);
+                // Allow a later lifecycle signal (hide, pagehide, unload) to refresh the WAL.
+                setTimeout(() => { _navigationSnapshotInFlight = false; }, 0);
             }
         };
-        window.addEventListener('beforeunload', () => flushPendingSettingsToDisk('beforeunload'));
-        window.addEventListener('pagehide', () => flushPendingSettingsToDisk('pagehide'));
+        window.addEventListener('beforeunload', () => snapshotPendingStateForNavigation('beforeunload'));
+        window.addEventListener('pagehide', () => snapshotPendingStateForNavigation('pagehide'));
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') flushPendingSettingsToDisk('visibilityhidden');
+            if (document.visibilityState === 'hidden') snapshotPendingStateForNavigation('visibilityhidden');
         });
         // Always run activation when routerEnabled — regardless of chatLinkEnabled —
         // so the correct lorebook stack is live from the very first message.
@@ -11663,4 +11651,3 @@ RULES:
 /**
  * Renders the debug info into the Agent panel's debug drawer.
  */
-
