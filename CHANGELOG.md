@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.19] - 2026-08-21
+
+### Fixed
+- **Visuals/Map viewport retention**: Map Updater refreshes now preserve the map's horizontal and vertical pan position instead of resetting it to the left edge. The detached map window retains its viewport too.
+
 ## [2026.8.14] - 2026-08-20
 
 ### Added

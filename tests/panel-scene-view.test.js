@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSceneViewController } from '../src/ui/panel/panel-scene-view.js';
+import { captureDungeonMapViewport, restoreDungeonMapViewport } from '../src/ui/panel/dungeon-map-panel.js';
 import { runtimeState } from '../src/app/runtime-state.js';
 
 afterEach(() => {
@@ -40,6 +41,23 @@ function mountController(settings, extra = {}) {
 }
 
 describe('Scene View controller', () => {
+    it('restores a map graph viewport after the refresh replaces its scroll container', () => {
+        const original = { scrollLeft: 284, scrollTop: 96 };
+        const replacement = { scrollLeft: 0, scrollTop: 0 };
+        const beforeRefresh = {
+            querySelectorAll: () => [original],
+        };
+        const afterRefresh = {
+            querySelectorAll: () => [replacement],
+        };
+
+        const viewport = captureDungeonMapViewport(beforeRefresh);
+        restoreDungeonMapViewport(afterRefresh, viewport);
+
+        expect(replacement.scrollLeft).toBe(284);
+        expect(replacement.scrollTop).toBe(96);
+    });
+
     it('keeps the Records view visible when location images are disabled and no map is active', () => {
         const settings = { locationImages: false, agentImmersionMode: true };
         const { controller, immersion, manifest, switcher, title } = mountController(settings);

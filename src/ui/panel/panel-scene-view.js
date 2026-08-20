@@ -2,8 +2,10 @@ import { runtimeState } from '../../app/runtime-state.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import {
     bindDungeonMapEmbedEvents,
+    captureDungeonMapViewport,
     isDungeonMapDetached,
     reattachDungeonMapPanel,
+    restoreDungeonMapViewport,
     updateDetachedDungeonMapPanel,
 } from './dungeon-map-panel.js';
 import { createCoalescedRefresh } from './refresh-coalescer.js';
@@ -152,7 +154,11 @@ export function createSceneViewController({
                 if (!showImmersion) return;
                 const container = agentPanel.querySelector('#rt-agent-immersion-view');
                 if (!container || agentPanel.style.display === 'none') return;
+                // Rebuilding the scene also recreates the graph's overflow element.
+                // Retain its pan position across Map Updater and other scene refreshes.
+                const mapViewport = captureDungeonMapViewport(container);
                 container.innerHTML = renderImmersionViewHtml(scene);
+                restoreDungeonMapViewport(container, mapViewport);
                 bindImmersionViewEvents(scene);
             } catch (err) {
                 console.error('[RPG Tracker] runtimeState.refreshImmersionView failed:', err);

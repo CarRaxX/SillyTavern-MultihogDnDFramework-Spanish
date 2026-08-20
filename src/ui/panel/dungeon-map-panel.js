@@ -13,6 +13,37 @@ export const DUNGEON_MAP_GEOMETRY_KEY = 'rpg_tracker_geometry_dungeon_map';
 const PANEL_ID = 'rt-dungeon-map-detached';
 const PAN_THRESHOLD_PX = 5;
 
+function dungeonMapScrollContainers(root) {
+    if (!root) return [];
+    const scrolls = [];
+    if (root.classList?.contains('rt-dungeon-graph-scroll')) scrolls.push(root);
+    if (typeof root.querySelectorAll === 'function') {
+        root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => {
+            if (!scrolls.includes(scroll)) scrolls.push(scroll);
+        });
+    }
+    return scrolls;
+}
+
+/** Save graph viewport offsets before a map refresh replaces its DOM. */
+export function captureDungeonMapViewport(root) {
+    return dungeonMapScrollContainers(root).map(scroll => ({
+        left: scroll.scrollLeft,
+        top: scroll.scrollTop,
+    }));
+}
+
+/** Restore graph viewport offsets after a map refresh recreates its DOM. */
+export function restoreDungeonMapViewport(root, viewport) {
+    if (!Array.isArray(viewport)) return;
+    for (const [index, scroll] of dungeonMapScrollContainers(root).entries()) {
+        const saved = viewport[index];
+        if (!saved) continue;
+        scroll.scrollLeft = saved.left;
+        scroll.scrollTop = saved.top;
+    }
+}
+
 export function isDungeonMapRevealAll(settings = getSettings()) {
     return !!settings?.dungeonMapRevealAll;
 }
@@ -649,7 +680,9 @@ export function updateDetachedDungeonMapPanel(scene, handlers = {}) {
     }
     const body = panel.querySelector('#rt-dungeon-map-detached-body');
     if (body) {
+        const viewport = captureDungeonMapViewport(body);
         body.innerHTML = renderDetachedBody(scene);
+        restoreDungeonMapViewport(body, viewport);
         bindAreaClicks(body, merged.onAreaClick);
         bindDungeonMapPan(body);
     }
