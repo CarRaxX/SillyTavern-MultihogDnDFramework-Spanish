@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.20] - 2026-08-21
+
+### Fixed
+- **Player Card approval responsiveness**: adding a generated Player Card no longer waits for a potentially long Campaign Records refresh before confirming the action.
+
 ## [2026.8.19] - 2026-08-21
 
 ### Fixed
