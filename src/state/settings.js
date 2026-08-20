@@ -1231,6 +1231,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'agentPanelBgImageNight',
     'agentPanelBgOverlayStrength',
     'dayNightCycleEnabled',
+    'xpBarAtBottom',
 ];
 
 /** Strip global UI keys from every chatStates partition (one-shot hygiene on load/save). */

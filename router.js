@@ -200,10 +200,14 @@ function stripSkeletonFromRouterPools() {
  * @param {object} ctx
  */
 async function fetchRouterArchiveBooks(prefix, ctx) {
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-    const allBookNames = await getWorldInfoNamesSafe();
+    const settings = getSettings();
+    const chatId = getRouterChatId(ctx);
+    const ownedNames = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
+    // The per-chat ownership list is the hot path. Union the already-loaded ST
+    // registry for newly linked/legacy books, but never enumerate every lorebook
+    // on disk during an automatic Lorebook Agent pass.
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: false });
+    const allBookNames = [...new Set([...ownedNames, ...registryNames])];
     const inScope = (n) => !prefix || bookBelongsToPrefix(n, prefix);
     const scoped = new Set(prefix ? allBookNames.filter(inScope) : allBookNames);
 
@@ -284,8 +288,13 @@ function broadcastStep(type, content, metadata = {}) {
 
 /**
  * Compatibility helper for older SillyTavern versions.
- * Probes both the frontend cache AND the backend API for ground truth,
- * so that cloned/renamed lorebooks are always discovered.
+ * Uses the frontend registry for the normal path and the dedicated backend
+ * lorebook-list endpoint for a disk-authoritative refresh.
+ *
+ * Do not use /api/settings/get here. That endpoint returns the user's complete
+ * settings payload, which can be hundreds of megabytes on long-running
+ * Multihog installs. Parsing it during every manifest refresh was the main
+ * Persistent Maps slowdown.
  */
 async function getWorldInfoNamesSafe(options = {}) {
     const fullProbe = options.fullProbe !== false;
@@ -307,27 +316,11 @@ async function getWorldInfoNamesSafe(options = {}) {
         return [...frontendNames];
     }
 
-    // 2. Probe the backend API. Once either backend endpoint answers, its result
+    // 2. Probe the dedicated backend list endpoint. Once it answers, its result
     // is authoritative: unioning it with the frontend registry would resurrect
     // deleted lorebooks that still exist only in SillyTavern's in-memory cache.
     const backendNames = new Set();
     let backendResponded = false;
-    try {
-        const r = await fetch('/api/settings/get', { 
-            method: 'POST', 
-            headers: getRequestHeaders(),
-            body: JSON.stringify({})
-        });
-        if (r.ok) {
-            const j = await r.json();
-            if (Array.isArray(j?.world_names)) {
-                backendResponded = true;
-                j.world_names.forEach(n => backendNames.add(n));
-            }
-        }
-    } catch (_) {}
-
-    // 3. Fallback: enumerate all lorebooks from the backend list endpoint
     try {
         const r = await fetch('/api/worldinfo/list', { method: 'POST', headers: getRequestHeaders() });
         if (r.ok) {
@@ -340,6 +333,36 @@ async function getWorldInfoNamesSafe(options = {}) {
     } catch (_) {}
 
     return backendResponded ? [...backendNames] : [...frontendNames];
+}
+
+/**
+ * Cheap existence guard for passive reads. SillyTavern's /worldinfo/get returns
+ * an empty dummy for a missing file and logs an error, so probing a generated
+ * `<prefix>_Locations` name on every map/UI refresh creates an error storm.
+ * The already-loaded frontend registry is authoritative when available.
+ */
+export async function isWorldInfoBookKnown(bookName, ctx = SillyTavern.getContext()) {
+    const wanted = String(bookName || '').trim().toLowerCase();
+    if (!wanted) return false;
+
+    try {
+        const getter = typeof ctx?.getWorldInfoNames === 'function'
+            ? ctx.getWorldInfoNames.bind(ctx)
+            : (typeof ctx?.getLorebookList === 'function' ? ctx.getLorebookList.bind(ctx) : null);
+        if (getter) {
+            const names = await getter();
+            if (Array.isArray(names)) {
+                return names.some(name => String(name || '').toLowerCase() === wanted);
+            }
+        }
+    } catch (_) {
+        // Fall through to the per-chat ownership list on older ST versions.
+    }
+
+    const settings = getSettings();
+    const chatId = getRouterChatId(ctx);
+    const knownBooks = chatId ? settings.chatStates?.[chatId]?.campaignBooks : [];
+    return (knownBooks || []).some(name => String(name || '').toLowerCase() === wanted);
 }
 
 function cloneRouterValue(value, fallback) {
@@ -476,13 +499,13 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
 
     const bookName = `${prefix}_Locations`;
     const collected = capture ? collectDungeonMapCandidates(chat) : { maps: [], errors: [] };
-    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
+    let bookData = bookKnown ? await loadWorldInfoFresh(bookName, ctx) : null;
     if (!bookData) {
         if (!collected.maps.length) {
             return { bookName, sites: {}, changed: false, capturedMaps: 0, errors: collected.errors };
         }
-        const knownNames = await getWorldInfoNamesSafe();
-        if (knownNames.includes(bookName)) {
+        if (bookKnown) {
             throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
         }
         bookData = {
@@ -559,7 +582,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     if (changed) {
         await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map persistence');
         recordLiveDungeonMapSnapshot(getSettings(), collectDungeonMapHistorySnapshot(bookData.entries, bookName));
-        if (typeof ctx.updateWorldInfoList === 'function') {
+        if (!bookKnown && typeof ctx.updateWorldInfoList === 'function') {
             try { await ctx.updateWorldInfoList(); } catch (_) {}
         }
         if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
@@ -569,6 +592,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     return {
         bookName,
         sites: buildDungeonSitesFromLocationEntries(bookData.entries, bookName),
+        bookData,
         changed,
         capturedMaps,
         errors: collected.errors,
@@ -588,10 +612,10 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
     if (!site) throw new Error('Map Architect requires an exact site root.');
 
     const bookName = `${prefix}_Locations`;
-    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
+    let bookData = bookKnown ? await loadWorldInfoFresh(bookName, ctx) : null;
     if (!bookData) {
-        const knownNames = await getWorldInfoNamesSafe();
-        if (knownNames.includes(bookName)) {
+        if (bookKnown) {
             throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
         }
         bookData = {
@@ -681,7 +705,7 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
         settings.chatStates[chatId].campaignBooks = [...campaignBooks];
         void saveSettings();
     }
-    if (typeof ctx.updateWorldInfoList === 'function') {
+    if (!bookKnown && typeof ctx.updateWorldInfoList === 'function') {
         try { await ctx.updateWorldInfoList(); } catch (_) {}
     }
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
@@ -744,9 +768,6 @@ export async function persistManualDungeonMapDocument(siteRoot, mapDocument) {
         settings.chatStates[chatId].campaignBooks = [...campaignBooks];
         void saveSettings();
     }
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) { /* best-effort */ }
-    }
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
 
@@ -763,7 +784,9 @@ export async function locationRootExists(siteRoot) {
     const prefix = getLivePrefix();
     if (!site || !prefix) return false;
     const ctx = SillyTavern.getContext();
-    const bookData = await loadWorldInfoFresh(`${prefix}_Locations`, ctx);
+    const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return false;
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
     if (!bookData?.entries) return false;
     return Object.values(bookData.entries).some(entry => {
         const label = String(entry?.comment || '').trim();
@@ -836,9 +859,6 @@ export async function deleteDungeonMapFromLocationEntry(id) {
     }
     persistMapEvolutionState();
 
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) { /* list refresh is best-effort */ }
-    }
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
     return { ok: true, bookName, entryId: raw, siteRoot };
@@ -869,6 +889,7 @@ export async function captureActiveDungeonMapHistory(ctx = SillyTavern.getContex
     const prefix = getLivePrefix();
     if (!prefix) return null;
     const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return null;
     const book = await loadWorldInfoFresh(bookName, ctx);
     if (!book?.entries) return null;
     return collectDungeonMapHistorySnapshot(book.entries, bookName);
@@ -895,7 +916,7 @@ export async function loadActiveDungeonMapContext() {
     const currentLocation = findLatestDungeonLocation(ctx.chat || []);
     const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if (!synced.bookName) return { prefix, books: {}, context: null, currentLocation };
-    const book = await loadWorldInfoFresh(synced.bookName, ctx);
+    const book = synced.bookData;
     if (!book?.entries) return { prefix, books: {}, context: null, currentLocation };
     const books = { [synced.bookName]: book };
     return {
@@ -914,7 +935,7 @@ export async function loadAllMappedSiteContexts() {
     const currentLocation = findLatestDungeonLocation(ctx.chat || []);
     const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if (!synced.bookName) return { prefix, books: {}, sites: [], currentLocation };
-    const book = await loadWorldInfoFresh(synced.bookName, ctx);
+    const book = synced.bookData;
     if (!book?.entries) return { prefix, books: {}, sites: [], currentLocation };
     const books = { [synced.bookName]: book };
     const sites = listMappedSiteDocuments(book.entries, synced.bookName).map(site => ({
@@ -931,6 +952,7 @@ export async function snapshotCampaignLocationsBook(ctx = SillyTavern.getContext
     const prefix = getLivePrefix();
     if (!prefix) return null;
     const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return null;
     const book = await loadWorldInfoFresh(bookName, ctx);
     if (!book) return null;
     return { bookName, book: JSON.parse(JSON.stringify(book)) };
@@ -957,7 +979,10 @@ async function finalizeRouterHistorySnapshot(runId) {
         snapshot.deletedBookNames = [];
         return;
     }
-    const currentNames = (await getWorldInfoNamesSafe())
+    const chatId = snapshot.chatId || getRouterChatId();
+    const ownedNames = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: false });
+    const currentNames = [...new Set([...ownedNames, ...registryNames])]
         .filter(name => bookBelongsToPrefix(name, prefix) && !isSkeletonBookName(name));
     const before = new Set(getLorebookSnapshotNames(snapshot));
     const after = new Set(currentNames);
@@ -2943,14 +2968,16 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     }
 
     // Bulk-activate all written books after all disk writes are done.
-    // Doing this once at the end avoids race conditions where ST's world info
-    // list hasn't re-indexed yet when the first /world command fires.
+    // Re-index only if this pass actually created a new book. Re-indexing an
+    // already-known book downloads the complete settings payload for no benefit.
     if (booksWritten.size > 0 && typeof ctx.executeSlashCommandsWithOptions === 'function') {
-        await new Promise(r => setTimeout(r, 400));
-        if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
+        const knownBefore = new Set(allBookNames.map(name => String(name || '').toLowerCase()));
+        const createdNewBook = [...booksWritten].some(name => !knownBefore.has(String(name || '').toLowerCase()));
+        if (createdNewBook && typeof ctx.updateWorldInfoList === 'function') {
+            await ctx.updateWorldInfoList();
+        }
         for (const bookName of booksWritten) {
             await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
-            await new Promise(r => setTimeout(r, 100));
         }
         if (settings.debugMode) console.log(`[RPG Tracker] Activated books: ${[...booksWritten].join(', ')}`);
     }
@@ -3726,7 +3753,7 @@ Output a JSON object:
 
 /**
  * Fetches a manifest of all campaign-scoped lorebook entries for the UI.
- * @param {boolean} skipUpdate When true, skips updateWorldInfoList and backend name probes (fast path).
+ * @param {boolean} skipUpdate When true, skips backend name probes (fast path).
  */
 export async function getLorebookManifest(skipUpdate = false) {
     const settings = getSettings();
@@ -3734,12 +3761,6 @@ export async function getLorebookManifest(skipUpdate = false) {
     const prefix = getLivePrefix();
     sanitizeRouterState(settings);
     
-    // Always flush ST's registry from disk first so books written via HTTP API are visible,
-    // unless skipUpdate is explicitly requested for speed.
-    if (!skipUpdate && typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-
     const names = await getWorldInfoNamesSafe({ fullProbe: !skipUpdate });
     // With no prefix, show nothing ? the user hasn't set a campaign yet.
     if (!prefix) return [];
@@ -4621,9 +4642,6 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
     //    Used for: duplicate check, full lore context, and applyAction verification.
     //    No double-fetch - archiveBooks is reused throughout the function.
     const ctx = SillyTavern.getContext();
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
     const allBookNames = await getWorldInfoNamesSafe();
     const archiveBooks = {};
     for (const n of allBookNames) {
@@ -5341,10 +5359,6 @@ export async function runWorldProgressionConsolidationPass(targetCount) {
     };
 
     const ctx = SillyTavern.getContext();
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-
     const allBookNames = await getWorldInfoNamesSafe();
     const archiveBooks = {};
     for (const n of allBookNames) {

@@ -6,6 +6,7 @@ import {
     reattachDungeonMapPanel,
     updateDetachedDungeonMapPanel,
 } from './dungeon-map-panel.js';
+import { createCoalescedRefresh } from './refresh-coalescer.js';
 
 /** Manages the Lorebook Agent Scene View and its Records/Visuals/Map UI. */
 export function createSceneViewController({
@@ -130,7 +131,7 @@ export function createSceneViewController({
         };
         globalThis._rpgSyncAgentImmersionUi = syncAgentImmersionUi;
 
-        runtimeState.refreshImmersionView = async () => {
+        const performImmersionRefresh = async () => {
             const s = getSettings();
             try {
                 const scene = await buildImmersionSceneState(s.currentMemo, s);
@@ -163,6 +164,7 @@ export function createSceneViewController({
                 }
             }
         };
+        runtimeState.refreshImmersionView = createCoalescedRefresh(performImmersionRefresh);
         globalThis._rpgRefreshImmersionView = runtimeState.refreshImmersionView;
         globalThis._rpgCheckRealtimeSceneArt = runRealtimeSceneArtCheck;
 

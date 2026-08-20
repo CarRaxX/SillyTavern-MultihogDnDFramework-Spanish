@@ -1,4 +1,5 @@
 import { runtimeState } from '../../app/runtime-state.js';
+import { stripDungeonMapSection } from '../../../dungeon-reality.js';
 
 /**
  * Renders the Lorebook Agent's active-key pills, router log, and World Progression status.
@@ -48,13 +49,15 @@ export function createRouterViewRenderer({
             if (book) books[bookName] = book;
         }
 
-        // Calculate total active tokens
+        // Match the actual active-lore injection, which never includes a stored
+        // [MAP] attachment. Active-site map canon is injected separately only
+        // while the current Location footer is inside that mapped root.
         let activeTokens = 0;
         for (const k of activeKeys) {
             const [bookName, uid] = k.split('::');
             const entry = books[bookName]?.entries?.[uid];
             if (entry) {
-                activeTokens += Math.round((entry.content || '').length / 4);
+                activeTokens += Math.round(stripDungeonMapSection(entry.content || '').length / 4);
             }
         }
         const activeTokensEl = agentPanel.querySelector('#rt-agent-active-tokens');

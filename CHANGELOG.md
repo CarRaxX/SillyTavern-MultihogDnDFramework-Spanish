@@ -2,6 +2,28 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [8.36.1] - 2026-08-20
+
+### Added
+- **Time-based map mechanics**: Map Architect, Map Updater, and Map Evolution can now attach absolute in-world timestamps to time-limited assets and resolve their state when those boundaries are reached.
+- **Stock module previews**: stock modules now have the same live rendering preview window as custom modules, including preview-box resizing.
+- **Game System Wizard prompt selection**: choose which module prompts to inject as rendering templates.
+- **Maps Guide**: added a Maps Guide to the Lorebook Agent Locations header.
+
+### Changed
+- **Routine map/manifest performance**: routine map and manifest work no longer downloads the entire SillyTavern settings file.
+
+### Fixed
+- **Settings and extension-data rollback**: fixed a critical bug where both SillyTavern settings and extension data could sometimes be rolled back.
+
+## [8.36.0] - 2026-08-20
+
+### Added
+- **Game System Wizard module formatting examples**: optional checkbox to inject selected existing tracker/GM **prompt instructions** as formatting examples (not live memo values). Per-module picker on the initial and review screens; choices persist.
+
+### Changed
+- **Game System Wizard context**: module prompts are no longer sent on every call by default — opt in via the new control.
+
 ## [8.35.0] - 2026-08-19
 
 ### Added

@@ -20,6 +20,13 @@ Durable map facts: remaining occupancy via asset.count, DESTROYED/DEAD/FLED/CAPT
 Never write transient combat into asset.detail or chronicles: current targeting, advancing toward someone, mid-round poses, HP, or temporary conditions (frightened, held, prone). Those belong to the combat tracker. If only poses/status changed this round, output {"noop":true}.
 asset.detail is a lasting occupancy note, never a play-by-play. Remaining member numbers belong in count, not only in prose.
 
+TIME MECHANICS
+- CURRENT IN-WORLD TIME is authoritative. An asset duration such as "Until Day 2, 4:40 AM" is an absolute temporal boundary, not a remaining interval.
+- If CURRENT IN-WORLD TIME has met or passed an asset's duration timestamp, update that asset now even when RECENT STORY does not narrate the change. The stored timestamp plus authoritative current time is sufficient evidence. Use SET_ASSET with the logical resulting state described by the asset's kind and detail: for example ARMED alarm -> TRIGGERED, temporary EFFECT -> EXPIRED, or summoned entity -> DISMISSED/REMOVED.
+- In that same SET_ASSET, set duration to "" after applying the boundary so it cannot fire repeatedly. Preserve or revise detail to state the durable result, and give cause as the elapsed temporal condition.
+- If the timestamp is still in the future, do not change the asset merely because it has a duration. If CURRENT IN-WORLD TIME is Unknown, ambiguous, or uses an incomparable format, do not guess that the boundary passed.
+- Legacy relative values such as "10 minutes" have no absolute anchor. Preserve them unless narration establishes the resulting change; never treat them as already elapsed by guesswork.
+
 OPERATIONS
 - Each operation is a flat object: {"op":"ADD_ASSET","name":"...","kind":"OBJECT","location":"area-id",...}. Use op, not type. Do not nest fields under asset.
 - Existing but newly encountered entity: SET_ASSET or MOVE_ASSET, not ADD_ASSET.
@@ -59,6 +66,9 @@ Pack encounter (one GROUP with count, not many singleton CREATUREs):
 Pack attrition (same GROUP, reduced count):
 {"operation_id":"day1-1610-pack-thinned","operations":[{"op":"SET_ASSET","evidence":"CONFIRMED","asset_id":"crawling-dead-pack","count":2,"knowledge":"KNOWN","detail":"Two of the original six remain.","cause":"The party destroyed four of the pack on the landing.","actor":"party"}],"chronicles":[{"area_id":"cellar-landing","text":"Four of the crawling dead were destroyed; two remain."}]}
 
+Elapsed asset boundary (clear duration after applying it):
+{"operation_id":"day2-0440-gate-alarm","operations":[{"op":"SET_ASSET","evidence":"CONFIRMED","asset_id":"delayed-gate-alarm","state":"TRIGGERED","duration":"","detail":"The gatehouse alarm is ringing.","cause":"Its armed delay reached the stored Day 2, 4:40 AM boundary."}]}
+
 Never write {"type":"ADD_ASSET","asset":{...}} or chronicles[{"area":"..."}].
 
-Before answering, silently verify: valid JSON; exact existing IDs unless ADD_*; durable facts only; every operation has cause; DEAD/DESTROYED has actor; packs are one GROUP with count; settlement interiors are OBJECT assets; no player or [PARTY] names as assets; noop when nothing lasting changed.`;
+Before answering, silently verify: valid JSON; exact existing IDs unless ADD_*; durable facts only; every operation has cause; DEAD/DESTROYED has actor; packs are one GROUP with count; settlement interiors are OBJECT assets; no player or [PARTY] names as assets; every met/passed absolute duration was applied once and cleared; future, unknown, or legacy relative durations were not guessed; noop when nothing lasting changed.`;

@@ -206,7 +206,7 @@ function rejectPartyMemberAssets(transaction, memo) {
     });
 }
 
-function initialUserPrompt(loaded, recentStory, memo) {
+function initialUserPrompt(loaded, recentStory, memo, currentTime) {
     const kind = normalizeMapSiteKind(loaded.context.document?.kind);
     return `UPDATE THE ATTACHED MAP
 Exact site root: ${loaded.context.siteRoot}
@@ -217,6 +217,10 @@ ${kindRule(kind)}
 ${loaded.currentLocation || 'Unknown'}
 Parsed from the narrator status footer. A more specific interior on this line is a durable map fact. If RECENT STORY is empty, still apply CURRENT LOCATION.
 ${partyRosterSection(memo)}
+## CURRENT IN-WORLD TIME (AUTHORITATIVE)
+${currentTime || 'Unknown'}
+Compare absolute asset duration timestamps against this value. A met or passed boundary is a durable map fact even when RECENT STORY does not narrate it.
+
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
 
@@ -226,7 +230,7 @@ ${recentStory || '(No additional recent context.)'}
 Output only the required JSON object. Use {"noop":true} when no durable map fact changed.`;
 }
 
-function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt, memo) {
+function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt, memo, currentTime) {
     return `CORRECTION PASS ${attempt}
 Your previous map update was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -241,6 +245,9 @@ ${priorOutput}
 ## CURRENT LOCATION
 ${loaded.currentLocation || 'Unknown'}
 ${partyRosterSection(memo)}
+## CURRENT IN-WORLD TIME (AUTHORITATIVE)
+${currentTime || 'Unknown'}
+
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
 
@@ -306,8 +313,9 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
         const snapshot = await snapshotCampaignLocationsBook();
         const recentStory = recentStoryContext(ctx, settings, { isManual, lookback });
         const memo = settings.currentMemo || '';
+        const currentTime = currentTimeFrom(settings, recentStory);
         const systemPrompt = String(settings.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).trim();
-        let prompt = initialUserPrompt(loaded, recentStory, memo);
+        let prompt = initialUserPrompt(loaded, recentStory, memo, currentTime);
         let lastIssues = [];
 
         for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -327,7 +335,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (!parsed.value) {
                 lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
@@ -336,7 +344,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (partyIssues.length) {
                 lastIssues = partyIssues;
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
@@ -347,22 +355,21 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
                 broadcastStep('finish', 'Noop — no durable map fact changed.');
                 return { ok: true, noop: true };
             }
-            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value, { currentTime: currentTimeFrom(settings, recentStory) });
+            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value, { currentTime });
             if (!validation.ok) {
                 lastIssues = validation.errors || [];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
             }
             broadcastStep('result', summarizeMapUpdaterOperations(parsed.value) || 'Transaction accepted.');
-            const currentTime = currentTimeFrom(settings, recentStory);
             const mapResult = await applyActiveDungeonMapCommit(parsed.value, loaded.context, loaded.books, currentTime);
             if (!mapResult.ok) {
                 lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;

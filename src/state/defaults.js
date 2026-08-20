@@ -115,6 +115,10 @@ export function buildDefaultSettings() {
 
         dayNightCycleEnabled: false,
 
+        /** Pin XP above the State Tracker footer instead of rendering its module card. */
+
+        xpBarAtBottom: false,
+
         /** Optional State Tracker panel backdrop (data URL or https URL). */
 
         panelBgImage: '',
@@ -1546,7 +1550,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '8.36.0';
+export const FACTORY_SETTINGS_VERSION = '8.36.1';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */

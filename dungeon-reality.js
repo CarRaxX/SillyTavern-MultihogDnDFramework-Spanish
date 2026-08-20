@@ -1874,6 +1874,11 @@ const ASSET_DETAIL_SCHEMA = {
     description: 'Durable occupancy or lasting condition only (what remains, destroyed remains, what is guarded). Numeric remaining members belong in count, not here. Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
 };
 
+const ASSET_DURATION_SCHEMA = {
+    type: 'string',
+    description: 'Absolute in-world temporal boundary in the narrative time format, e.g. "Until Day 2, 4:40 AM." Set to an empty string in SET_ASSET after applying the boundary so the timer is cleared.',
+};
+
 /** Strict JSON Schema fragment added to commit only while a mapped site is active. */
 export function buildDungeonMapCommitSchema() {
     const evidence = { type: 'string', enum: MAP_EVIDENCE };
@@ -1893,7 +1898,7 @@ export function buildDungeonMapCommitSchema() {
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1. Never 0 — use DESTROYED/DEAD.' }, distinct_from: { type: 'array', items: { type: 'string' } } },
+            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: ASSET_DURATION_SCHEMA, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1. Never 0 — use DESTROYED/DEAD.' }, distinct_from: { type: 'array', items: { type: 'string' } } },
             required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge', 'cause'],
         },
         {
@@ -1903,7 +1908,7 @@ export function buildDungeonMapCommitSchema() {
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Updated living members of this one asset. Reduce count for attrition; DESTROYED/DEAD only when none remain. Do not split a pack into singleton CREATUREs.' } },
+            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: ASSET_DURATION_SCHEMA, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Updated living members of this one asset. Reduce count for attrition; DESTROYED/DEAD only when none remain. Do not split a pack into singleton CREATUREs.' } },
             required: ['op', 'evidence', 'asset_id', 'cause'],
         },
         {

@@ -31,7 +31,7 @@ describe('NPC Manager portrait generation', () => {
 
     it('opens a Full NPC Card from the library list without campaign relationship bars', () => {
         const cardStart = source.indexOf('const openLibraryNpcCard = async');
-        const cardEnd = source.indexOf('refreshManifest = async', cardStart);
+        const cardEnd = source.indexOf('const performManifestRefresh = async', cardStart);
         const card = source.slice(cardStart, cardEnd);
         expect(cardStart).toBeGreaterThanOrEqual(0);
         expect(card).toContain('📚 Library');

@@ -6,7 +6,7 @@ import { diffTextLines, diffHasChanges } from './prompt-diff.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride, isCombatActive } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncLocationMappingRuntime, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, onMapArchitectAssistantMessage, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, getMapUpdaterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
-import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
+import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderBottomXpBar, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
@@ -121,7 +121,10 @@ globalThis._rpgRenderRouterUI = () => { if (typeof runtimeState.renderRouterUI =
 /** Rebuilds CAMPAIGN RECORDS; assigned in createPanel when the agent panel is wired. */
 globalThis._rpgRefreshImmersionView = () => { void runtimeState.refreshImmersionView(); };
 globalThis._rpgCheckRealtimeSceneArt = () => { void runRealtimeSceneArtCheck().catch(() => {}); };
-globalThis._rpgRefreshAgentManifest = async () => { if (typeof runtimeState.refreshAgentManifest === 'function') await runtimeState.refreshAgentManifest(); };
+globalThis._rpgRefreshAgentManifest = async () => {
+    if (!isAgentPanelVisible()) return;
+    if (typeof runtimeState.refreshAgentManifest === 'function') await runtimeState.refreshAgentManifest();
+};
 /** Refreshes the NPC card grid; assigned in createPanel so module-level code can call it. */
 
 // Combined refresh: updates both the tracker panel and the Lorebook Terminal NPC grid.
@@ -4153,7 +4156,9 @@ export function refreshRenderedView() {
 
     const el = document.getElementById('rpg-tracker-render');
     if (el) {
-        const capturedXp = captureXpGainAnimationState(el, xpAnimationContext);
+        const bottomXp = /** @type {HTMLElement|null} */ (document.getElementById('rt-bottom-xp-bar'));
+        const xpAnimationHost = s.xpBarAtBottom === true ? bottomXp : el;
+        const capturedXp = captureXpGainAnimationState(xpAnimationHost, xpAnimationContext);
         const capturedBars = captureBarChangeAnimationState(el, xpAnimationContext);
         const questsEnabled = s.syspromptModules?.quests !== false && !!(memo && memo.trim());
         let html;
@@ -4170,7 +4175,12 @@ export function refreshRenderedView() {
         }
 
         el.innerHTML = html;
-        playXpGainAnimation(el, capturedXp, xpAnimationContext);
+        if (bottomXp) {
+            const bottomXpHtml = s.xpBarAtBottom === true ? renderBottomXpBar(displayMemo) : '';
+            bottomXp.innerHTML = bottomXpHtml;
+            bottomXp.style.display = bottomXpHtml ? 'block' : 'none';
+        }
+        playXpGainAnimation(xpAnimationHost, capturedXp, xpAnimationContext);
         playBarChangeAnimations(el, capturedBars, xpAnimationContext);
         bindRenderedCardEvents(el, memo, false);
 
@@ -6365,6 +6375,12 @@ function organizeConnectionSettingsUI() {
             const ta = document.getElementById('rpg-tracker-memo');
             refreshDayNightCycleFromMemo(ta ? ta.value : settings.currentMemo || '');
             applyPanelBackgroundToDom();
+            refreshRenderedView();
+        });
+
+        $('#rpg_tracker_xp_bar_bottom').prop('checked', !!settings.xpBarAtBottom).on('change', function () {
+            settings.xpBarAtBottom = !!$(this).prop('checked');
+            saveSettings();
             refreshRenderedView();
         });
 
@@ -11386,6 +11402,7 @@ RULES:
             $('#rpg_tracker_chat_setup_link_enabled').prop('checked', !!s.chatSetupLinkEnabled);
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
+            $('#rpg_tracker_xp_bar_bottom').prop('checked', !!s.xpBarAtBottom);
             if (typeof globalThis._rpgSyncPanelBgSettingsUi === 'function') {
                 globalThis._rpgSyncPanelBgSettingsUi();
             } else {

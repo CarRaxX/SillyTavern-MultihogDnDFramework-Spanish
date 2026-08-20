@@ -131,10 +131,6 @@ export function wireAgentActivity({
         keysRefreshBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             keysRefreshBtn.querySelector('i')?.classList.add('fa-spin');
-            const _ctx = SillyTavern.getContext();
-            if (typeof _ctx.updateWorldInfoList === 'function') {
-                try { await _ctx.updateWorldInfoList(); } catch (_) { }
-            }
             await runtimeState.renderRouterUI();
             if (typeof runtimeState.refreshAgentManifest === 'function') {
                 await runtimeState.refreshAgentManifest('manual-button');
@@ -184,12 +180,9 @@ export function wireAgentActivity({
 
     document.addEventListener('rt_lore_agent_updated', async (event) => {
         saveSettings();
-        // Refresh ST's lorebook registry before re-rendering. Rollback/redo events
-        // additionally force the manifest down its disk-authoritative path.
-        const _ctx = SillyTavern.getContext();
-        if (typeof _ctx.updateWorldInfoList === 'function') {
-            try { await _ctx.updateWorldInfoList(); } catch (_) { }
-        }
+        // Rollback/redo requests use the manifest's dedicated disk-authoritative
+        // list path. Avoid updateWorldInfoList here: it downloads and parses the
+        // user's complete settings payload and made event bursts extremely costly.
         await runtimeState.renderRouterUI();
         if (typeof runtimeState.refreshAgentManifest === 'function') {
             const source = (/** @type {CustomEvent} */ (event)).detail?.source || 'auto';

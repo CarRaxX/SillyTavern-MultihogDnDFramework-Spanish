@@ -715,6 +715,30 @@ Area: Ossuary Behind Rotten Tapestry
         });
     });
 
+    it('clears a processed absolute asset boundary without retaining an empty duration', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'crypt', name: 'Crypt', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'delayed-alarm', kind: 'ALARM', name: 'Delayed Alarm', location: 'crypt',
+                state: 'ARMED', knowledge: 'KNOWN', detail: 'Rings when its delay elapses.',
+                duration: 'Until Day 2, 4:40 AM', origin: 'INITIAL_MAP',
+            }],
+        };
+        const applied = applyDungeonMapTransaction(map, {
+            operation_id: 'day2-0440-delayed-alarm',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'delayed-alarm',
+                state: 'TRIGGERED', duration: '', detail: 'The alarm is ringing.',
+                cause: 'Its stored Day 2, 4:40 AM boundary was reached.',
+            }],
+        }, { currentTime: 'Day 2, 4:40 AM' });
+        expect(applied.ok).toBe(true);
+        expect(applied.document.assets[0]).toMatchObject({ state: 'TRIGGERED', detail: 'The alarm is ringing.' });
+        expect(applied.document.assets[0]).not.toHaveProperty('duration');
+    });
+
     it('defaults omitted map evidence to CONFIRMED and coerces NPC kind to CREATURE', () => {
         const map = {
             version: 3,

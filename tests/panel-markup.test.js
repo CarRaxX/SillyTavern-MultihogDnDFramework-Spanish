@@ -15,6 +15,7 @@ describe('panel markup', () => {
         });
 
         expect(markup).toContain('id="rpg-tracker-memo"');
+        expect(markup).toContain('id="rt-bottom-xp-bar"');
         expect(markup).toContain('Saved memo');
         expect(markup).toContain('id="rpg-tracker-agent"');
         expect(markup).toContain('rt-panel-collapsed');

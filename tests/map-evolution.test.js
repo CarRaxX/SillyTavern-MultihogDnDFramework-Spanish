@@ -112,6 +112,9 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('DESTROYED/DEAD/DEACTIVATED/TAKEN/CLEARED/REMOVED');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ONE GROUP with count');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('"count":4');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('TIME MECHANICS');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('set duration to ""');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('leave it for Map Updater');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Every operation MUST include cause');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ONE GROUP with count');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"count":5');

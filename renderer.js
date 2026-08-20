@@ -2531,10 +2531,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
         const s = getSettings();
         const order = stripBenchedPartyTag(s.blockOrder || BLOCK_ORDER);
-        const sorted = [
+        let sorted = [
             ...order.filter(k => blocks[k] !== undefined),
             ...stripBenchedPartyTag(Object.keys(blocks).filter(k => !order.includes(k))).sort()
         ];
+        if (s.xpBarAtBottom === true && !filterTag) {
+            sorted = sorted.filter(tag => tag !== 'XP');
+        }
 
         const collapsed = loadCollapsed();
         const detached = loadDetached();
@@ -2888,10 +2891,13 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
 
     const s = getSettings();
     const order = stripBenchedPartyTag(s.blockOrder || BLOCK_ORDER);
-    const sorted = [
+    let sorted = [
         ...order.filter(k => blocks[k] !== undefined),
         ...stripBenchedPartyTag(Object.keys(blocks).filter(k => !order.includes(k))).sort()
     ];
+    if (s.xpBarAtBottom === true) {
+        sorted = sorted.filter(tag => tag !== 'XP');
+    }
 
     const collapsed = loadCollapsed();
     const detached = loadDetached();
@@ -2976,6 +2982,21 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
         ${tabStripHtml}
         <div class="rt-tabmode-content" data-active-tag="${activeTag}">${contentHtml}</div>
     </div>`;
+}
+
+/**
+ * Render only the memo-backed XP row for the persistent bottom-of-panel bar.
+ * Keeping this sourced from blockToItems means it shares parsing, recoloring,
+ * percentage labels, and animation data attributes with the normal XP module.
+ * @param {string} memo
+ * @returns {string}
+ */
+export function renderBottomXpBar(memo) {
+    if (!memo || !memo.trim()) return '';
+    const blocks = parseMemoBlocks(memo);
+    if (blocks.XP === undefined) return '';
+    const xpRow = blockToItems('XP', blocks.XP).find(item => item.includes('class="rt-xp-row"'));
+    return xpRow ? `<div class="rt-bottom-xp-content">${xpRow}</div>` : '';
 }
 
 // ── Quest Log Renderer ─────────────────────────────────────────────────────

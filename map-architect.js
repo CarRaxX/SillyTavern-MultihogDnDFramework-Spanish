@@ -20,6 +20,7 @@ import { locationRootExists, persistArchitectDungeonMap, syncDungeonMapsToLocati
 import { DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT, DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { MAP_ARCHITECT_BRIEF_JSON_SCHEMA, MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
+import { extractCurrentTimeStr } from './memo-processor.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 export { parseMapArchitectResponse } from './map-architect-parser.js';
 
@@ -119,6 +120,11 @@ function resolveLookback(settings, override) {
     return Number.isFinite(fallback) ? Math.max(0, fallback) : 12;
 }
 
+function currentTimeFrom(settings) {
+    const memoTimeMatch = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    return memoTimeMatch ? extractCurrentTimeStr(memoTimeMatch[1]) : '';
+}
+
 function kindBrief(kind) {
     return kind === 'SETTLEMENT'
         ? 'SETTLEMENT = the city/town/village as a whole, district-scale; never an alley, house, or shop.'
@@ -142,7 +148,7 @@ function threatBrief(threat, kind) {
     }[threat] || 'Threat is site danger, not party level.';
 }
 
-function initialUserPrompt(args, context, currentLocation = '') {
+function initialUserPrompt(args, context, currentLocation = '', currentTime = '') {
     return `CREATE ONE PRIVATE MAP
 Exact site root: ${args.site}
 Entrance area: ${args.entrance}
@@ -151,6 +157,7 @@ Scale: ${args.scale}
 Threat: ${args.threat} (${threatBrief(args.threat, args.kind)})
 Established premise: ${args.premise}
 Live location footer: ${currentLocation || '(none yet)'}
+Current in-world time (authoritative): ${currentTime || 'Unknown'}
 
 LANGUAGE
 Copy Exact site root and Entrance area character-for-character. Write every human-readable name, geometry line, route detail, and asset label in that same language and script. Do not translate them into English. JSON keys, kebab-case IDs, and enums stay English.
@@ -162,11 +169,11 @@ ${context || '(No additional recent context.)'}
 Output only the required JSON object. Follow the ${args.kind} instruction set.`;
 }
 
-function correctionPrompt(args, context, priorOutput, parseError, errors, attempt) {
+function correctionPrompt(args, context, priorOutput, parseError, errors, attempt, currentTime = '') {
     const issues = parseError
         ? [{ code: 'INVALID_JSON', path: '$', hint: parseError }]
         : errors.map(({ code, path, hint }) => ({ code, path, hint }));
-    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
+    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\nCurrent in-world time (authoritative): ${currentTime || 'Unknown'}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
 }
 
 function existingResult(siteRecord) {
@@ -232,8 +239,9 @@ async function runMapArchitectOnce(rawArgs) {
 
     const lookback = resolveLookback(settings, rawArgs?.lookback);
     const context = recentStoryContext(ctx, lookback, current);
+    const currentTime = currentTimeFrom(settings);
     const systemPrompt = String(settings.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).trim();
-    let prompt = initialUserPrompt(args, context, currentLocation);
+    let prompt = initialUserPrompt(args, context, currentLocation, currentTime);
     let lastIssues = [];
 
     for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -266,7 +274,7 @@ async function runMapArchitectOnce(rawArgs) {
             ? [{ code: 'INVALID_JSON', path: '$', hint: parsed.error }]
             : validation.errors;
         if (attempt < MAX_CORRECTION_ATTEMPTS) {
-            prompt = correctionPrompt(args, context, output, parsed.error, validation.errors, attempt + 1);
+            prompt = correctionPrompt(args, context, output, parsed.error, validation.errors, attempt + 1, currentTime);
         }
     }
 

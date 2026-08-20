@@ -104,6 +104,8 @@ describe('Map Architect component', () => {
         expect(architect).toContain("{ jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' }");
         expect(architect).toContain('CreateAreaMap');
         expect(architect).toContain('Threat: ${args.threat}');
+        expect(architect).toContain('Current in-world time (authoritative): ${currentTime');
+        expect(architect).toContain('extractCurrentTimeStr');
         expect(architect).not.toContain('CreateDungeonMap');
         expect(architect).toContain('Generating a location map for');
         expect(architect).toContain('Location map ready for');
@@ -164,5 +166,10 @@ describe('Map Architect component', () => {
         expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.properties.count).toMatchObject({
             type: 'integer', minimum: 1, maximum: 99,
         });
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('TIME MECHANICS');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('duration field as an absolute in-world timestamp');
+        expect(DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).toContain('Until Day 2, 4:40 AM');
+        expect(MAP_ARCHITECT_JSON_SCHEMA.value.properties.assets.items.properties.duration.description)
+            .toContain('absolute in-world temporal boundary');
     });
 });

@@ -3,7 +3,7 @@ import { escapeHtml } from './memo-processor.js';
 import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
-import { scanRecentOutputForPresentNpcs } from './router.js';
+import { isWorldInfoBookKnown, scanRecentOutputForPresentNpcs } from './router.js';
 import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
 import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
 import { isDungeonMapDetached, isDungeonMapRevealAll } from './src/ui/panel/dungeon-map-panel.js';
@@ -43,18 +43,30 @@ export async function loadAllLocationPaths(ctx, settings) {
     const bookName = prefix ? `${prefix}_Locations` : 'Locations';
 
     try {
-        if (typeof ctx.updateWorldInfoList === 'function') {
-            await ctx.updateWorldInfoList();
-        }
+        if (!await isWorldInfoBookKnown(bookName, ctx)) return [];
         const book = await ctx.loadWorldInfo(bookName);
-        if (!book?.entries) return [];
-        return Object.values(book.entries)
-            .map(e => normalizeLocationPath((e.comment || '').trim()))
-            .filter(Boolean);
+        return getLocationPathsFromBook(book);
     } catch (err) {
         console.error('[RPG Tracker] loadAllLocationPaths error:', err);
         return [];
     }
+}
+
+/** Return normalized Location paths without cloning or reloading the lorebook. */
+export function getLocationPathsFromBook(book) {
+    if (!book?.entries) return [];
+    return Object.values(book.entries)
+        .map(e => normalizeLocationPath((e.comment || '').trim()))
+        .filter(Boolean);
+}
+
+function findLocationEntryInBook(book, normPath) {
+    if (!book?.entries || !normPath) return null;
+    for (const [uid, entry] of Object.entries(book.entries)) {
+        const label = normalizeLocationPath((entry.comment || '').trim());
+        if (label === normPath) return { uid, entry, label };
+    }
+    return null;
 }
 
 /**
@@ -121,21 +133,19 @@ export async function loadLocationEntryByPath(path, settings) {
     const bookName = prefix ? `${prefix}_Locations` : 'Locations';
 
     try {
+        if (!await isWorldInfoBookKnown(bookName, ctx)) return null;
         const book = await ctx.loadWorldInfo(bookName);
-        if (!book?.entries) return null;
-        for (const [uid, entry] of Object.entries(book.entries)) {
-            const label = normalizeLocationPath((entry.comment || '').trim());
-            if (label !== normPath) continue;
-            const fullId = `${bookName}::${uid}`;
-            return {
-                id: fullId,
-                label: entry.comment || label,
-                content: stripDungeonMapSection(entry.content || ''),
-                keys: entry.key,
-                is_active: (s.activeRouterKeys || []).includes(fullId),
-                book: bookName,
-            };
-        }
+        const match = findLocationEntryInBook(book, normPath);
+        if (!match) return null;
+        const fullId = `${bookName}::${match.uid}`;
+        return {
+            id: fullId,
+            label: match.entry.comment || match.label,
+            content: stripDungeonMapSection(match.entry.content || ''),
+            keys: match.entry.key,
+            is_active: (s.activeRouterKeys || []).includes(fullId),
+            book: bookName,
+        };
     } catch (err) {
         console.error('[RPG Tracker] loadLocationEntryByPath error:', err);
     }
@@ -182,22 +192,25 @@ export async function buildImmersionSceneState(memo, settings) {
     const ctx = SillyTavern.getContext();
 
     const rawLocationText = getCurrentLocationText(memo ?? s.currentMemo, ctx);
-    const allLocationPaths = await loadAllLocationPaths(ctx, s);
+    const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
+    const locationBookName = prefix ? `${prefix}_Locations` : 'Locations';
+    let locationBook = null;
+    try {
+        if (await isWorldInfoBookKnown(locationBookName, ctx)) {
+            // One load per Scene View refresh. worldInfoCache clones on every get,
+            // so the old path could make four full copies of a large Locations book.
+            locationBook = await ctx.loadWorldInfo(locationBookName);
+        }
+    } catch (_) {
+        locationBook = null;
+    }
+    const allLocationPaths = getLocationPathsFromBook(locationBook);
 
     const activeLocLabels = [];
-    const locBooks = {};
     for (const k of s.activeRouterKeys || []) {
         const [bookName, uid] = k.split('::');
-        const lower = (bookName || '').toLowerCase();
-        if (!lower.endsWith('_locations') && !lower.endsWith('_location') && lower !== 'locations' && lower !== 'location') continue;
-        if (!locBooks[bookName]) {
-            try {
-                locBooks[bookName] = await ctx.loadWorldInfo(bookName);
-            } catch {
-                locBooks[bookName] = null;
-            }
-        }
-        const entry = locBooks[bookName]?.entries?.[uid];
+        if (String(bookName || '').toLowerCase() !== locationBookName.toLowerCase()) continue;
+        const entry = locationBook?.entries?.[uid];
         const label = normalizeLocationPath((entry?.comment || '').trim());
         if (label) activeLocLabels.push(label);
     }
@@ -210,8 +223,8 @@ export async function buildImmersionSceneState(memo, settings) {
 
     let locationContent = '';
     if (resolvedPath) {
-        const entry = await loadLocationEntryByPath(resolvedPath, s);
-        locationContent = entry?.content || '';
+        const match = findLocationEntryInBook(locationBook, normalizeLocationPath(resolvedPath));
+        locationContent = stripDungeonMapSection(match?.entry?.content || '');
     }
 
     const locationImage = storagePath ? resolveLocationImageWithMeta(storagePath).src : '';
@@ -227,17 +240,12 @@ export async function buildImmersionSceneState(memo, settings) {
             const overlay = runtimeState.dungeonMapHistoryOverlay;
             if (overlay) {
                 dungeonMap = resolveDungeonMapFromHistorySnapshot(overlay, rawLocationText || resolvedPath);
-            } else {
-                const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
-                const bookName = prefix ? `${prefix}_Locations` : 'Locations';
-                const locBook = locBooks[bookName] || await ctx.loadWorldInfo(bookName);
-                if (locBook?.entries) {
+            } else if (locationBook?.entries) {
                     dungeonMap = resolveDungeonMapForLocation(
-                        locBook.entries,
+                        locationBook.entries,
                         rawLocationText || resolvedPath,
-                        bookName,
+                        locationBookName,
                     );
-                }
             }
         } catch (err) {
             console.error('[RPG Tracker] dungeon map scene resolve failed:', err);

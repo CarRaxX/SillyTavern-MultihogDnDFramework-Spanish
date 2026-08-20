@@ -48,6 +48,7 @@ describe('panel builder', () => {
         expect(source).not.toContain('renderDungeonMapReadableHtml');
         expect(source).not.toContain('revealAll: true');
         expect(source).toContain('stripDungeonMapSection(item.content');
+        expect(source).toContain("Math.round(stripDungeonMapSection(node.item.content || '').length / 4)");
         expect(source).toContain('rt-map-create-mode');
         expect(source).toContain('inferMapArchitectArgs');
         expect(source).toContain("value=\"auto\" checked");
@@ -55,6 +56,10 @@ describe('panel builder', () => {
         expect(source).toContain('Filling map brief for');
         expect(source).toContain('id="rt-map-create-manual" hidden');
         expect(source).toContain('rt-loc-add-mapped-btn');
+        expect(source).toContain('rt-loc-maps-guide-btn');
+        expect(source).toContain('Maps Guide');
+        expect(source).toContain('What Are Maps?');
+        expect(source).toContain('World Progression and Map Evolution interaction');
         expect(source).toContain('promptAndCreateMappedLocation');
         expect(source).toContain('requireNew: true');
         expect(source).toContain('locationKeys');
@@ -65,7 +70,7 @@ describe('panel builder', () => {
         expect(source).toContain('0 uses no recent chat');
         expect(source).not.toContain('Keywords are required');
         expect(source).not.toContain('Include the location name.');
-        expect(source).toContain('Add mapped location');
+        expect(source).toContain('Add Mapped Location');
         expect(source).toContain('onClosing');
         expect(source).toContain('popup.dlg');
         expect(source).toContain('#rt-map-loc-name');
