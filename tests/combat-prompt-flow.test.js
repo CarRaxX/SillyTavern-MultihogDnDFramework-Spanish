@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { RT_PROMPTS } from '../constants.js';
 
-const RULE = "- Simulate every NPC's actions each round. Use spells and abilities intelligently, not just cantrips.";
+const RULE = "- Simulate every NPC's actions each round; never {{user}}'s actions. Use spells and abilities intelligently, not just cantrips.";
 
 describe('combat flow prompt guidance', () => {
     it('ships intelligent NPC spell and ability use in every prompt source', () => {

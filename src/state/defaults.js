@@ -9,6 +9,10 @@ import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from '../../map-evolution-compress-prompt.js';
+import { DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT } from '../../world-progression-prompt.js';
+import { MAIN_SYSPROMPT_BACKUP_KEY } from './main-sysprompt-backup.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -50,7 +54,7 @@ export function prepareShippedLorebookPromptTemplate(template) {
     }).replace(/Day X/g, 'Day N');
 }
 
-/** Shared procedural naming rule for World Skeleton + Add NPC to Story creators. */
+/** Shared procedural naming rule for World Skeleton + NPC/PC Manager creators. */
 export const NEW_NPC_NAMING_RULE = `[New NPC Naming Rule: When introducing a new, unestablished character, silently create their name using these dynamic constraints:
 Style & Culture: Analyze the current scene, local region, and surrounding characters. Match the linguistic flavor, tone, and naming conventions natively found in the immediate environment.
 Mandatory Starting Sounds: First Name Root: '{{random:a,e,i,o,u,ba,be,bi,bo,bu,ca,ce,ci,co,cu,da,de,di,do,du,fa,fe,fi,fo,fu,ga,ge,gi,go,gu,ha,he,hi,ho,hu,ja,je,ji,jo,ju,ka,ke,ki,ko,ku,la,le,li,lo,lu,ma,me,mi,mo,mu,na,ne,ni,no,nu,pa,pe,pi,po,pu,qua,que,qui,quo,ra,re,ri,ro,ru,sa,se,si,so,su,ta,te,ti,to,tu,va,ve,vi,vo,vu,wa,we,wi,wo,wu,ya,ye,yi,yo,yu,za,ze,zi,zo,zu}}{{random:l,n,r,s,t,v,m,d}}' | Last Name Root: '{{random:a,e,i,o,u,ba,be,bi,bo,bu,ca,ce,ci,co,cu,da,de,di,do,du,fa,fe,fi,fo,fu,ga,ge,gi,go,gu,ha,he,hi,ho,hu,ja,je,ji,jo,ju,ka,ke,ki,ko,ku,la,le,li,lo,lu,ma,me,mi,mo,mu,na,ne,ni,no,nu,pa,pe,pi,po,pu,qua,que,qui,quo,ra,re,ri,ro,ru,sa,se,si,so,su,ta,te,ti,to,tu,va,ve,vi,vo,vu,wa,we,wi,wo,wu,ya,ye,yi,yo,yu,za,ze,zi,zo,zu}}{{random:l,n,r,s,t,v,m,d}}'.
@@ -105,9 +109,15 @@ export function buildDefaultSettings() {
 
         agentModulesOpen: true,
 
+        agentMapEvolutionOpen: false,
+
         agentWorldOpen: false,
 
         dayNightCycleEnabled: false,
+
+        /** Pin XP above the State Tracker footer instead of rendering its module card. */
+
+        xpBarAtBottom: true,
 
         /** Optional State Tracker panel backdrop (data URL or https URL). */
 
@@ -182,6 +192,10 @@ export function buildDefaultSettings() {
         stashedMainSysprompt: '',
 
         syspromptStashArmed: false,
+
+        /** Timestamp of the last durable Main-prompt localStorage backup write. */
+
+        mainSyspromptBackupTs: 0,
 
         rngEnabled: true,
 
@@ -266,7 +280,7 @@ export function buildDefaultSettings() {
         locationImages: false,
 
         npcRelationshipBars: true,
-        npcRelationshipUpdateMode: 'regex',
+        npcRelationshipUpdateMode: 'state_tracker',
         // Optional editable instruction for State Tracker relationship commands.
         // Blank uses the built-in prompt.
         npcRelationshipStateTrackerPrompt: '',
@@ -341,6 +355,12 @@ export function buildDefaultSettings() {
         customTheme: null,
 
         savedThemes: {},
+
+        /**
+         * Global reusable NPC templates (CORE text + optional portrait path).
+         * Not chat-linked. Shape: { id, name, keys, content, portraitPath, notes, createdAt, updatedAt }.
+         */
+        npcLibrary: [],
 
         /** Locked chrome for the floating settings window: 'dark' | 'light'. Independent of tracker/ST theme. */
         settingsOverlayAppearance: 'light',
@@ -764,33 +784,15 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionInjectionRole: 0,         // System
 
-        worldProgressionRandomizeNPCs: false,            // toggle to randomize NPC pool
+        worldProgressionLocationsPerReport: 3,   // oldest-unadvanced location dossiers per report
 
-        worldProgressionRandomSkeletonNPCCount: 2,        // skeleton NPCs to spotlight per report
+        worldProgressionLocationRandomize: true, // randomize only equally-old rotation cohorts
 
-        worldProgressionRandomNarrativeNPCCount: 3,       // narrative NPCs to spotlight per report
-
-        worldProgressionRandomizeLocations: false,        // toggle to randomize locations
-
-        worldProgressionRandomSkeletonLocationCount: 2,   // skeleton locations to spotlight per report
-
-        worldProgressionRandomNarrativeLocationCount: 2,  // narrative locations to spotlight per report
-
-        worldProgressionRandomizeFactions: false,         // toggle to randomize factions
-
-        worldProgressionRandomSkeletonFactionCount: 2,    // skeleton factions to spotlight per report
-
-        worldProgressionRandomNarrativeFactionCount: 2,   // narrative factions to spotlight per report
-
-        worldProgressionRandomizeConflicts: false,        // toggle to randomize conflicts
-
-        worldProgressionRandomConflictCount: 3,           // number of conflicts to incorporate
+        worldProgressionLocationLastAdvanced: {}, // per-location macro simulation watermark
 
         worldProgressionSkeletonFactions: 4,       // number of factions in skeleton
 
         worldProgressionSkeletonLocations: 4,      // number of locations in skeleton
-
-        worldProgressionSkeletonNPCs: 0,           // number of NPCs in skeleton
 
         worldProgressionSkeletonConflicts: 3,      // number of conflicts in skeleton
 
@@ -802,39 +804,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionConsolidateInterval: 7,            // number of raw reports before consolidation fires
 
-        worldProgressionSystemPrompt: `You are the World Progression Engine — a living simulation of the game world's off-screen activity. Simulate political scheming, faction moves, economic shifts, environmental changes, creature activity, rival actors pursuing independent agendas, weather events, and emergent consequences of prior world state.
-
-
-
-The report covers the in-world period: **{periodLabel}**
-
-
-
-## RULES
-
-1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.
-
-2. QUESTS and EVENTS are historical records for context only — they are NOT simulatable entities. Never generate entries that describe a quest advancing, stalling, succeeding, or failing. If a quest appears in the designated entities block, ignore it entirely.
-
-3. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects. However, if the ## DESIGNATED ENTITIES FOR THIS PERIOD block is present, you MUST strictly follow it and only change the status, advance the timeline, or create new narrative beats for these designated entities. You are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.
-
-4. Tracked party members currently in [PARTY] are never eligible for this report — they are with {{user}} right now and are handled upstream, not by this rule. For any OTHER NPC who was physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, private thoughts/opinions, off-screen communications. Do not relocate them.
-
-5. Format as 15 bullet-pointed entries (using "- "), with a blank line (newline) between each world event. Dense, no filler, no markdown. Each entry must be exactly 1 sentence. Do NOT prefix the lines with the period or time label.
-
-6. Output ONLY the report content. No preamble, no tags, no meta-commentary.
-
-7. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s). If designated entities are provided, strictly limit your active scope to those, obeying the passive referencing rule for other entities.
-
-8. DO NOT write a cumulative report, stacking old entries in the same report. Only write new events, not a recap of the previous ones; they are preserved in their own file.
-
-9. Cross-category entity bleeding is desirable; often have designated NPCs, locations, factions, and conflicts collide or influence one another in the same narrative beat rather than treating them as isolated line items. However, only do this when it makes sense.
-
-10. You must strictly respect geographical and logistical boundaries to preserve spatial plausibility; isolated or distant entities cannot physically interact and must instead collide via informational, digital, or financial ripples (e.g., radio tracking, digital alerts, automated network scrapers, or news traveling from afar).
-
-11. Character vectors must take place only at or ripple through the designated locations provided for this period; if an active NPC cannot logically travel to a selected location within this time window, their connection must manifest purely as an off-screen reaction or informational dependency.`,
-
-        // ── World Skeleton ─────────────────────────────────────────────────────────
+        worldProgressionSystemPrompt: DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT,
 
         worldProgressionSkeletonAtmosphereSummary: '', // freeform Skeleton Source (legacy key retained for compatibility)
 
@@ -848,20 +818,14 @@ The report covers the in-world period: **{periodLabel}**
 
         worldProgressionSkeletonLorebookOnly: false, // never extrapolate beyond explicitly mentioned source entities
 
-        worldProgressionExclusionList: '',         // comma-separated list of lore entry titles or keys to exclude from focus randomization
-
-        // NOTE: active [PARTY] members are always, unconditionally excluded from World
-
-        // Progression (see router.js) — no setting needed. [BENCHED PARTY] members are
-
-        // eligible for simulation, also unconditionally.
+        worldProgressionExclusionList: '',         // comma-separated location titles or keys excluded from rotation
 
 
 
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given world source material, generate a sparse foundational skeleton for an RPG campaign simulation.
 
 ## OUTPUT FORMAT — MANDATORY
-Use exactly one section header followed by one level-three heading per entity:
+Use exactly one section header followed by one level-three heading per premise:
 
 ## FACTIONS
 ### Faction Name
@@ -871,24 +835,18 @@ One or two sentences covering its nature and current tension.
 ### Location Name
 One or two sentences covering its description and current state.
 
-## NPCS
-### NPC Name
-One or two sentences covering their role and current state.
-
 ## CONFLICTS
 ### Conflict Name
 One or two sentences covering the involved parties and current state.
 
-Generate exactly {factionCount} factions, {locationCount} locations, {npcCount} NPCs, and {conflictCount} conflicts. Omit the NPCS section entirely when its count is 0.
+Generate exactly {factionCount} factions, {locationCount} locations, and {conflictCount} conflicts.
 
 ## RULES
 - The line beginning with \`###\` is the title only. Never put a description, parties involved, labels, or metadata on that line.
 - Put all descriptive text on the following line(s). In conflicts, state the parties naturally in the prose; never use a \`Parties involved:\` subheading.
 - Do not use bold text, bullet lists, tables, JSON, or any headings other than the required \`##\` sections and \`###\` titles.
-- Keep every entity consistent with the provided source material. No player-character references or placeholder names.
-- Maximum two sentences per entity. Output only the structured content.
-
-${NEW_NPC_NAMING_RULE}`,
+- Keep every premise consistent with the provided source material. Named individuals may constrain the result but must never become skeleton entries.
+- Maximum two sentences per premise. Output only the structured content.`,
 
 
         routerSystemPromptTemplate: prepareShippedLorebookPromptTemplate(`<basic_instructions>
@@ -913,15 +871,21 @@ Make multiple entries per turn if necessary. Thoroughness is your primary virtue
 
 <context_maximization>
 
-Your goal is to keep the Active Context saturated. Think of it as a stage: it is your job to have every prop, actor, and set piece in place before the scene begins.
+Your goal is to keep the Active Context saturated with the RIGHT lore. Think of it as a stage: every prop, actor, and set piece must be in place before the scene begins — not whichever entries keywords happened to load.
 
 
 
-- **Saturation Goal:** Keep Active entries as close to MAX as possible at all times. An underloaded context is a failure state.
+- **You Own The Active Set:** Keyword activations and NEWLY ACTIVATED THIS TURN are provisional hints, not locks. You have full authority to deactivate any unpinned entry, including recent keyword hits. Do not defer to them. Do not treat "already active" as "should stay active."
 
-- **Proactive Loading:** Do not wait for a gap to appear. If a name or location is mentioned, or if the party is about to move, activate the relevant entries immediately.
+- **Narrative Relevance Is Paramount:** Scene-true context beats whatever is currently in the pool. A legal count at MAX is not success if ARCHIVE INDEX still holds a more important entry for this scene.
 
-- **Context Rotation:** When the context is full and new entries are needed, deactivate "Exit Contexts" (rooms left, NPCs departed, resolved threads) to make room for "Entry Contexts" (current room, present NPCs, active quest objective). Treat it as a sliding window, not a hard ceiling.
+- **Saturation Goal:** Keep Active entries as close to MAX as possible at all times with the best available set. An underloaded context is a failure state. A full-but-wrong context is also a failure state.
+
+- **Proactive Loading:** Do not wait for a gap to appear. If a name or location is mentioned, or if the party is about to move, activate the relevant entries immediately — even if keywords did not already load them.
+
+- **Context Rotation:** When the context is full (or over budget) and better entries are needed, deactivate "Exit Contexts" (rooms left, NPCs departed, resolved threads, stale or weak keyword hits) to make room for "Entry Contexts" (current room, present NPCs, active quest objective, destinations about to be reached). Treat it as a sliding window, not a hard ceiling. In the SAME commit, deactivate the weaker entries AND activate the missing higher-priority ones.
+
+- **Do Not Lazy-Prune:** If you see a BUDGET VIOLATION (for example 15/12), deactivating only enough to hit 12 and stopping is incomplete whenever ARCHIVE INDEX still holds more important scene-relevant entries. Deactivate extra low-value actives as needed and activate those missing entries in the same pass. Returning to the cap by deletion alone is not curation.
 
 - **Priority Tiering:** Use this order when deciding what to keep vs. rotate out:
 
@@ -939,11 +903,11 @@ Your goal is to keep the Active Context saturated. Think of it as a stage: it is
 
 
 
-If you briefly exceed the budget due to newly activated entries, deactivate the lowest-priority items in the same turn to return within range. It is better to rotate aggressively than to leave the Narrator without context.
+If you briefly exceed the budget due to newly activated entries, deactivate the lowest-priority items in the same turn to return within range AND, in that same turn, activate any higher-priority archive entries the current scene still lacks. It is better to rotate aggressively than to leave the Narrator with a legal-but-stale set.
 
 
 
-Budget violation notices mean you exceeded the limit. When you see one, immediately identify and deactivate the least relevant entries (Exit Contexts first) until you are within budget. List those IDs in the \`deactivate\` field of the same commit call.
+Budget violation notices mean you exceeded the limit. When you see one, getting back within budget is the floor of the job, not the whole job. Identify the least relevant active entries (Exit Contexts and weak keyword hits first), deactivate as many as needed both to return within budget and to free slots for missing higher-priority ARCHIVE INDEX entries, and activate those entries in the same commit. List deactivate and activate IDs together.
 
 </context_maximization>
 
@@ -971,7 +935,7 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 
-- **REQUIRED category field:** Every \`record\` item MUST include \`"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"\` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.
+- **REQUIRED category field:** Every \`record\` item MUST use one of the exact values in the runtime **AVAILABLE RECORD CATEGORIES** section. That authoritative list contains the enabled stock modules and all custom tags for the current pass. Disabled stock categories are not available.
 
 - Use the "category" field for the type. Never rely on the label, \`::\` hierarchy, or [CORE] content to imply the book — those do not route.
 
@@ -985,7 +949,7 @@ When recording a new entry, keep the lorebook category separate from the entity 
 
 
 
-Correct examples:
+Correct field-shape examples (use a category only when it appears in **AVAILABLE RECORD CATEGORIES**):
 
 - {"label": "Lissa", "category": "NPC", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: …\\n[/CORE]"}
 
@@ -1077,7 +1041,7 @@ Example: "[Day 1, 11:52] Character signed the contract with Brodrik."
 
 <bravery>
 
-Don't be afraid to hit the budget exactly. It's better to lean towards activating too much than too little.
+Don't be afraid to hit the budget exactly. It's better to lean towards activating too much than too little. Don't be afraid to deactivate a currently-active entry to activate a better one — swapping at MAX is the intended behavior.
 
 </bravery>`),
 
@@ -1137,11 +1101,11 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
 {{modularPrompt}}
 
 ## ATTENTION & MEMORY
-1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
+1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. Do not activate them again — they are already in the pool. Pre-load is not a lock: you MAY [[DEACTIVATE: Name]] a keyword hit if ARCHIVE INDEX has something more relevant to the current scene.
 2. **ACTIVE MEMORY**: Full details of all other currently active entities. You can update them at any time.
 3. **ARCHIVE INDEX**: Complete catalog of inactive entries — Book::UID, labels, and keywords only. You CANNOT see their full biography. If a name is not in ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX, it does not exist.
 4. **RECALL**: To read or update an archive entry, use [[ACTIVATE: Name]]. Its full content becomes visible next turn.
-5. **LIMIT**: You are limited to **{{maxActivations}} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends.
+5. **LIMIT**: You are limited to **{{maxActivations}} active entries**. Nothing is archived automatically. If you exceed this limit you will see a **BUDGET VIOLATION** line and you MUST use [[DEACTIVATE: Name]] on the least relevant active entries to return within budget before this pass ends. Do not stop at a legal count if ARCHIVE INDEX still holds more important scene-relevant entries — deactivate extra weak/stale actives (including keyword hits) and [[ACTIVATE: Name]] the missing ones in the same response. Narrative relevance is paramount regardless of what is currently active. Keyword activations are provisional; you own the active set.
 
 {{relSection}}
 
@@ -1185,8 +1149,8 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
 
 ## RULES
 1. Only record persistent or significant entities/events.
-2. Use ACTIVATE to bring an existing entry into the current scene context.
-3. Use DEACTIVATE to remove an entry that is no longer relevant to the scene.
+2. Use ACTIVATE to bring an existing archive entry into the current scene when it is more relevant than something already active — even if the pool is already at MAX (deactivate a weaker entry in the same response).
+3. Use DEACTIVATE to remove an entry that is no longer relevant to the scene, including keyword-triggered entries you did not personally activate.
 4. Use DELETE to permanently remove duplicate or redundant entries.
 5. Do NOT create any entry for the player character (e.g. "Player" or "Dave Davidson").
 6. CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below ({{sectionNames}}) for NPCs and ignore any other sections.
@@ -1199,8 +1163,9 @@ Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anyt
 ## MEMORY LIMIT
 Maximum Active Entities: **{{maxActivations}}**.
 - Entries you record are ACTIVATED AUTOMATICALLY. Do NOT also include them in activate.
-- Nothing is archived automatically. If you exceed the limit you will receive a **BUDGET VIOLATION** in the context and you MUST deactivate enough entries in that same commit call to return within budget. Choose the narratively least relevant entries.
-- Entries whose keywords appeared in the latest Narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — you do not need to activate those again.
+- Nothing is archived automatically. If you exceed the limit you will receive a **BUDGET VIOLATION** in the context and you MUST deactivate enough entries in that same commit call to return within budget.
+- Pruning to the cap is not enough. Keyword / NEWLY ACTIVATED entries are provisional hints, not protected slots. Scene relevance is paramount regardless of what is currently active. If ARCHIVE INDEX has higher-priority entries for this scene, deactivate extra weaker actives in the same commit and activate those missing entries. A legal-but-wrong set is a failure.
+- Entries whose keywords appeared in the latest Narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — do not activate those again (they are already in the pool). You MAY deactivate them if they are less relevant than something still in ARCHIVE INDEX. You have full authority to do so; do not defer to keyword hits.
 - Always use exact Book::UID format (e.g. "Eldoria_NPCs::0") for activate/update/deactivate/delete_ids.
 
 {{relSection}}
@@ -1242,9 +1207,9 @@ World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for Wo
 Campaign Root: "{{campaignRoot}}"
   NPCs -> "{{campaignNpcBook}}"
   Locations -> "{{campaignLocBook}}" (etc.)
-**Routing:** every new \`record\` MUST set \`"category"\` to match the target book above (\`NPC\` → NPCs book, \`LOC\` → Locations, etc.). Labels and \`::\` paths do NOT choose the book — only \`category\` does.
-Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with \`"category": "LOC"\`.
-NPC people use a plain name label and \`"category": "NPC"\` (never put people under a \`::\` path).
+**Routing:** every new \`record\` MUST use an exact category from the runtime **AVAILABLE RECORD CATEGORIES** section. Labels and \`::\` paths do NOT choose the book — only \`category\` does.
+When LOC is enabled, location hierarchy uses the " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil") together with \`"category": "LOC"\`.
+When NPC is enabled, NPC people use a plain name label and \`"category": "NPC"\` (never put people under a \`::\` path).
 Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names (e.g. keys: ["The Guilded Anvil", "Khelt", "Rust-Lantern District", "tavern"]).
 **Keyword cap: maximum 6 per entry.** Keep only the most essential trigger words.
 
@@ -1361,6 +1326,8 @@ Rules:
 
         mapArchitectMaxTokens: 25000,
 
+        mapArchitectOpener: "tool",
+
         mapArchitectSystemPrompt: DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT,
 
         mapArchitectConnectionSource: "default",
@@ -1379,17 +1346,77 @@ Rules:
 
         mapArchitectOpenaiModel: "",
 
+        mapRuntimeConnectionSource: "default",
+
+        mapRuntimeConnectionProfileId: "",
+
+        mapRuntimeCompletionPresetId: "",
+
+        mapRuntimeOllamaUrl: "http://localhost:11434",
+
+        mapRuntimeOllamaModel: "",
+
+        mapRuntimeOpenaiUrl: "",
+
+        mapRuntimeOpenaiKey: "",
+
+        mapRuntimeOpenaiModel: "",
+
         mapUpdaterEnabled: true,
+
+        dungeonMapRevealAll: false,
 
         mapUpdaterRunEvery: 1,
 
-        mapUpdaterMaxTokens: 2500,
+        mapUpdaterMaxTokens: 25000,
 
         mapUpdaterSystemPrompt: DEFAULT_MAP_UPDATER_SYSTEM_PROMPT,
 
         mapUpdaterLastRunChatLength: 0,
 
         mapUpdaterLastRunAt: 0,
+
+        mapEvolutionEnabled: true,
+
+        mapEvolutionIntervalHours: 8,
+
+        mapEvolutionOnSiteIntervalHours: 8,
+
+        mapEvolutionIntervalHoursBySite: {},
+
+        mapEvolutionMaxTokens: 25000,
+
+        mapEvolutionCompressEnabled: true,
+
+        mapEvolutionCompressThreshold: 10000,
+
+        mapEvolutionNarratorCommitTokens: 2000,
+
+        mapEvolutionCompressSystemPrompt: DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT,
+
+        mapEvolutionTickScope: "all",
+
+        mapEvolutionTickCount: 1,
+
+        mapEvolutionTickRandomize: true,
+
+        mapEvolutionSelectedRoots: [],
+
+        mapEvolutionSystemPrompt: DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT,
+
+        mapEvolutionLastFiredBySite: {},
+
+        mapEvolutionBacklogBySite: {},
+
+        mapEvolutionThreadsBySite: {},
+
+        mapEvolutionLastSiteRoot: "",
+
+        mapEvolutionPendingExitRoot: "",
+
+        mapEvolutionWorldReportLookback: 5,
+
+        mapEvolutionWorldReportApplications: {},
 
         worldConnectionSource: "default",
 
@@ -1432,6 +1459,11 @@ Rules:
         gameSystemWizardInjectLore: false,
 
         gameSystemWizardInjectMemo: false,
+
+        gameSystemWizardInjectModulePrompts: false,
+
+        /** Selected module example keys: stock:CHARACTER, field:TAG, sysprompt:id */
+        gameSystemWizardModuleExampleKeys: [],
 
         lastResetVersion: "",
 
@@ -1518,7 +1550,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '5.5.17';
+export const FACTORY_SETTINGS_VERSION = '2026.8.14';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */
@@ -1531,7 +1563,9 @@ export function clearExtensionLocalStorageUiState() {
 
         const key = localStorage.key(i);
 
-        if (key?.startsWith('rpg_tracker_')) keys.push(key);
+        // The user's original Quick Prompt Main is not UI chrome — keep it across
+        // factory reset so disabling/resetting the extension cannot delete it.
+        if (key?.startsWith('rpg_tracker_') && key !== MAIN_SYSPROMPT_BACKUP_KEY) keys.push(key);
 
     }
 

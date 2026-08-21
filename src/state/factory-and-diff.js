@@ -195,6 +195,8 @@ export function buildBundledPromptsSnapshot() {
         world: {
             mapArchitectSystemPrompt: defaults.mapArchitectSystemPrompt || '',
             mapUpdaterSystemPrompt: defaults.mapUpdaterSystemPrompt || '',
+            mapEvolutionSystemPrompt: defaults.mapEvolutionSystemPrompt || '',
+            mapEvolutionCompressSystemPrompt: defaults.mapEvolutionCompressSystemPrompt || '',
             worldProgressionSystemPrompt: defaults.worldProgressionSystemPrompt || '',
             worldProgressionSkeletonSystemPrompt: defaults.worldProgressionSkeletonSystemPrompt || '',
         },
@@ -292,6 +294,8 @@ export function getSnapshotCategoryBlocks(snap, category) {
         return [
             { label: 'Map Architect System', text: snap.world?.mapArchitectSystemPrompt || '' },
             { label: 'Map Updater System', text: snap.world?.mapUpdaterSystemPrompt || '' },
+            { label: 'Map Evolution System', text: snap.world?.mapEvolutionSystemPrompt || '' },
+            { label: 'Map Evolution History Compression', text: snap.world?.mapEvolutionCompressSystemPrompt || '' },
             { label: 'World Progression System', text: snap.world?.worldProgressionSystemPrompt || '' },
             { label: 'Skeleton System Prompt', text: snap.world?.worldProgressionSkeletonSystemPrompt || '' },
         ];
@@ -402,6 +406,14 @@ export function getLivePromptCategoryBlocks(settings, category, opts = {}) {
             {
                 label: 'Map Updater System',
                 text: s.mapUpdaterSystemPrompt ?? defaults.mapUpdaterSystemPrompt ?? '',
+            },
+            {
+                label: 'Map Evolution System',
+                text: s.mapEvolutionSystemPrompt ?? defaults.mapEvolutionSystemPrompt ?? '',
+            },
+            {
+                label: 'Map Evolution History Compression',
+                text: s.mapEvolutionCompressSystemPrompt ?? defaults.mapEvolutionCompressSystemPrompt ?? '',
             },
             {
                 label: 'World Progression System',
@@ -545,6 +557,8 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     // ── World Progression ──────────────────────────────────────────────────────
     'mapArchitectSystemPrompt',
     'mapUpdaterSystemPrompt',
+    'mapEvolutionSystemPrompt',
+    'mapEvolutionCompressSystemPrompt',
     'worldProgressionSystemPrompt',
 ];
 
@@ -626,8 +640,8 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
     {
         id: 'mapArchitect',
         label: 'Map Architect',
-        description: 'Dedicated hidden-site generation and occupancy-updater prompts',
-        keys: ['mapArchitectSystemPrompt', 'mapUpdaterSystemPrompt'],
+        description: 'Dedicated hidden-site generation, occupancy, and off-screen evolution prompts',
+        keys: ['mapArchitectSystemPrompt', 'mapUpdaterSystemPrompt', 'mapEvolutionSystemPrompt', 'mapEvolutionCompressSystemPrompt'],
     },
     {
         id: 'worldProgression',

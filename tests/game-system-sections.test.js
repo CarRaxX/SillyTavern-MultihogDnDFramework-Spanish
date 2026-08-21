@@ -69,15 +69,23 @@ describe('effective system-prompt section state', () => {
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         const onboarding = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
 
-        expect(settingsMarkup).toContain('Persistent Maps (Alpha) — function calling MUST be enabled');
+        expect(settingsMarkup).toContain('Persistent Maps (Alpha)');
+        expect(settingsMarkup).toContain('Text command — no function calling');
+        expect(settingsMarkup).toContain('rpg_map_architect_opener');
+        expect(settingsMarkup).toContain('rpg_map_architect_opener_components');
+        expect(settingsMarkup).toContain('id="rpg_map_architect_opener_components"');
+        expect(settingsMarkup).not.toContain('Persistent Maps (Alpha) — function calling MUST be enabled');
         expect(settingsMarkup).not.toContain('Location Mapping (Alpha)');
         expect(settingsMarkup).not.toContain('Dungeon Reality Mapping (Alpha)');
         expect(onboarding).toContain('Persistent Maps (Alpha)');
+        expect(onboarding).toContain('rt_onboarding_map_architect_opener');
         expect(indexSource).toContain('setLocationMappingEnabled(checked, fresh)');
+        expect(indexSource).toContain('syncMapArchitectOpenerNestedVisibility');
         expect(indexSource).toContain('syncLocationMappingRuntime()');
         expect(indexSource).toMatch(/function scheduleAutoApply\(\) \{\s*syncLocationMappingRuntime\(\);/s);
         expect(indexSource).toContain('// Keep CreateAreaMap / Map Updater in sync even when Custom Sysprompt Mode');
-        expect(gameSystemsSource).toContain('if (tag === LOCATION_MAPPING_SECTION_TAG)');
+        expect(gameSystemsSource).toContain('MAP_ARCHITECT_TEXT_OPENER_RULES');
+        expect(gameSystemsSource).toContain('isMapArchitectTextOpener(settings)');
         expect(gameSystemsSource).toContain('el.disabled = false');
         expect(gameSystemsSource).toContain('setLocationMappingEnabled(checked, settings)');
     });

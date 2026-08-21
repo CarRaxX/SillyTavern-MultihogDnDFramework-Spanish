@@ -58,6 +58,8 @@ describe('settings overlay', () => {
         expect(mapIdx).toBeGreaterThan(agentIdx);
         expect(worldIdx).toBeGreaterThan(mapIdx);
 
+        expect(overlaySource).toContain("label: 'Persistent Maps'");
+        expect(overlaySource).toContain('match: /Persistent Maps/i');
         expect(indexSource).toContain('initSettingsOverlay(settingsHtml');
         expect(indexSource).toContain("settings-stub");
         expect(indexSource).toContain("openSettingsOverlay('connections')");

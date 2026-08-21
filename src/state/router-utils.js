@@ -75,6 +75,69 @@ export function computeUnpinnedActiveCount(activeKeys, pinnedKeys) {
 /** Structured NPC [CORE] field headers used to infer category when the model omits it. */
 const NPC_CORE_FIELD_HINT = /\b(Species|Personality|Brief Background|Habits\s*\/\s*Behaviors|Habits & Behaviors|Strengths|Flaws|Worn Equipment|Combat Profile)\s*:/i;
 
+/** Canonical lorebook suffixes for the stock Lorebook Agent categories. */
+const STOCK_ROUTER_CATEGORY_BOOKS = Object.freeze({
+    NPC: 'NPCs',
+    LOC: 'Locations',
+    QUEST: 'Quests',
+    FAC: 'Factions',
+    EVENT: 'Events',
+    WORLD: 'World',
+});
+
+/** @param {unknown} value */
+function normalizeRouterCategoryTag(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+/**
+ * Return the lorebook suffix used when routing a category tag.
+ * Custom tags intentionally retain the router's legacy naming rule.
+ * @param {string} tag
+ * @returns {string}
+ */
+export function getRouterCategoryBookSuffix(tag) {
+    const normalized = normalizeRouterCategoryTag(tag);
+    if (!normalized) return '';
+    return STOCK_ROUTER_CATEGORY_BOOKS[normalized]
+        || (normalized.charAt(0) + normalized.slice(1).toLowerCase());
+}
+
+/**
+ * Categories the Lorebook Agent may use for new records this pass.
+ * Disabled stock modules are deliberately excluded; custom tags are always enabled.
+ * @param {{routerModules?: Record<string, {enabled?: boolean, tag?: string}>, routerCustomTags?: Array<{tag?: string}>}} settings
+ * @returns {string[]}
+ */
+export function getEnabledRouterCategoryTags(settings = {}) {
+    const tags = [];
+    const add = (raw) => {
+        const tag = normalizeRouterCategoryTag(raw);
+        if (tag && !tags.includes(tag)) tags.push(tag);
+    };
+
+    for (const module of Object.values(settings.routerModules || {})) {
+        if (module?.enabled) add(module.tag);
+    }
+    for (const custom of (settings.routerCustomTags || [])) {
+        add(custom?.tag);
+    }
+    return tags;
+}
+
+/**
+ * Build the writable category-to-lorebook map from the current configuration.
+ * @param {{routerModules?: Record<string, {enabled?: boolean, tag?: string}>, routerCustomTags?: Array<{tag?: string}>}} settings
+ * @returns {Record<string, string>}
+ */
+export function buildRouterCategoryMap(settings = {}) {
+    const map = {};
+    for (const tag of getEnabledRouterCategoryTags(settings)) {
+        map[tag] = getRouterCategoryBookSuffix(tag);
+    }
+    return map;
+}
+
 /**
  * Infer lorebook category for a commit.record item when the model omitted/misspelled `category`.
  * Conservative: only returns a tag when the signal is strong.
@@ -103,16 +166,26 @@ export function inferRecordCategory(rec) {
  * Prefers an explicit/recognized category, then comment if it matches a known tag, then inference.
  * @param {{label?: string, content?: string, category?: string, comment?: string}} rec
  * @param {string[]} knownTags Uppercase category tags (NPC, LOC, … plus custom)
+ * @param {string|null} fallbackTag Unambiguous category to use when the model omitted it
  * @returns {{tag: string|null, inferred: boolean}}
  */
-export function resolveRecordCategoryTag(rec, knownTags = []) {
+export function resolveRecordCategoryTag(rec, knownTags = [], fallbackTag = null) {
     const tags = (Array.isArray(knownTags) ? knownTags : [])
         .map(t => String(t || '').toUpperCase())
         .filter(Boolean);
     const matchKnown = (raw) => {
         const cat = String(raw || '').toUpperCase().trim();
         if (!cat) return null;
-        return tags.find(k => cat === k || cat.includes(k)) || null;
+        // Exact match first. Fuzzy "cat includes tag" must never let a shorter
+        // custom tag (OR, ME, WO, …) steal an exact later tag such as WORLD or
+        // HOMEBREW — Object.keys order puts customs before the WORLD override.
+        const exact = tags.find(k => cat === k);
+        if (exact) return exact;
+        let best = null;
+        for (const k of tags) {
+            if (cat.includes(k) && (!best || k.length > best.length)) best = k;
+        }
+        return best;
     };
 
     const explicit = matchKnown(rec?.category);
@@ -124,6 +197,14 @@ export function resolveRecordCategoryTag(rec, knownTags = []) {
     const inferred = inferRecordCategory(rec);
     if (inferred && (!tags.length || tags.includes(inferred))) {
         return { tag: inferred, inferred: true };
+    }
+
+    // A custom-only setup commonly has exactly one writable category. If an older
+    // customized prompt makes the model omit the field or echo a disabled stock
+    // category, routing is still unambiguous and should not produce a warning.
+    const fallback = matchKnown(fallbackTag);
+    if (fallback) {
+        return { tag: fallback, inferred: true };
     }
     return { tag: null, inferred: false };
 }
@@ -305,6 +386,142 @@ export function patchLabeledSection(text, field, newContent, opts = {}) {
     return { ok: true, text: body.replace(targetSubstring, replacement) };
 }
 
+function fieldHasColorMarkup(value) {
+    const v = String(value || '');
+    return /<font\s+color/i.test(v) || /#[0-9a-fA-F]{3,8}\b/.test(v);
+}
+
+function stripMarkupToText(value) {
+    return String(value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractLabeledFieldMap(text) {
+    const map = new Map();
+    let current = null;
+    let buf = [];
+    const flush = () => {
+        if (current) map.set(current, buf.join('\n').trim());
+        buf = [];
+    };
+    for (const raw of String(text || '').split('\n')) {
+        const hm = raw.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:(.*)$/);
+        if (hm) {
+            flush();
+            current = hm[1].trim();
+            buf = [String(hm[2] || '').trim()];
+        } else if (current) {
+            buf.push(raw);
+        }
+    }
+    flush();
+    return map;
+}
+
+function findLabeledFieldValue(map, name) {
+    const target = String(name || '').trim().toLowerCase();
+    for (const [key, value] of map) {
+        if (String(key).trim().toLowerCase() === target) return value;
+    }
+    return undefined;
+}
+
+/**
+ * Escape a literal for safe use inside a RegExp.
+ * @param {string} value
+ */
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * True when `index` starts a whole-token match of `needle` inside `haystack`.
+ * Letter/digit/_ on either side means the match is buried in a longer word
+ * (e.g. "red" inside "Fred" / "coloured") and must not be re-wrapped.
+ * @param {string} haystack
+ * @param {string} needle
+ * @param {number} index
+ */
+function isWholeTokenMatch(haystack, needle, index) {
+    if (index < 0 || !needle) return false;
+    const before = index > 0 ? haystack[index - 1] : '';
+    const after = index + needle.length < haystack.length
+        ? haystack[index + needle.length]
+        : '';
+    const wordish = /[0-9A-Za-z_]/;
+    if (before && wordish.test(before)) return false;
+    if (after && wordish.test(after)) return false;
+    return true;
+}
+
+/**
+ * Re-wrap plain inner text with `<font color=...>` tags copied from older CORE markup.
+ * First whole-token occurrence only, and only when the inner phrase is at least 2 characters.
+ * Substring hits inside longer words are skipped so Full Audit cannot corrupt fields
+ * (e.g. colored "red" must not rewrite "Fred" or "coloured").
+ * @param {string} oldText
+ * @param {string} newText
+ */
+export function restoreFontColorWraps(oldText, newText) {
+    let result = String(newText || '');
+    const source = String(oldText || '');
+    if (!source || !result) return result;
+    const re = /<font\s+color\s*=\s*["']?(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)["']?>([\s\S]*?)<\/font>/gi;
+    let match;
+    while ((match = re.exec(source)) !== null) {
+        const full = match[0];
+        const inner = stripMarkupToText(match[2]);
+        if (inner.length < 2 || result.includes(full)) continue;
+        const finder = new RegExp(escapeRegExp(inner), 'g');
+        let found = finder.exec(result);
+        while (found) {
+            if (isWholeTokenMatch(result, inner, found.index)) {
+                result = `${result.slice(0, found.index)}${full}${result.slice(found.index + inner.length)}`;
+                break;
+            }
+            found = finder.exec(result);
+        }
+    }
+    return result;
+}
+
+/**
+ * When the Lorebook Agent re-records an existing NPC and replaces [CORE], Full Audit
+ * often copies identity from HTML-stripped chat and drops `<font color>` / hex codes.
+ * Restore color-bearing fields (and matching font wraps) from the previous CORE.
+ * @param {string} oldCore
+ * @param {string} newCore
+ * @param {{ extraHeaders?: string[] }} [opts]
+ */
+export function mergePreservedColorMarkup(oldCore, newCore, opts = {}) {
+    const oldText = String(oldCore || '');
+    const newText = String(newCore || '');
+    if (!oldText || !newText || oldText === newText) return newText;
+
+    const extraHeaders = opts.extraHeaders || [];
+    const oldFields = extractLabeledFieldMap(oldText);
+    if (oldFields.size === 0) return restoreFontColorWraps(oldText, newText);
+
+    let merged = newText;
+    for (const [name, oldVal] of oldFields) {
+        if (!fieldHasColorMarkup(oldVal)) continue;
+        const newVal = findLabeledFieldValue(extractLabeledFieldMap(merged), name);
+        if (!newVal) {
+            const patched = patchLabeledSection(merged, name, oldVal, { extraHeaders });
+            if (patched.ok) merged = patched.text;
+            continue;
+        }
+        if (fieldHasColorMarkup(newVal)) continue;
+        const nextVal = stripMarkupToText(oldVal) === stripMarkupToText(newVal)
+            ? oldVal
+            : restoreFontColorWraps(oldVal, newVal);
+        if (nextVal !== newVal) {
+            const patched = patchLabeledSection(merged, name, nextVal, { extraHeaders });
+            if (patched.ok) merged = patched.text;
+        }
+    }
+    return merged;
+}
+
 /**
  * Strips the [CORE]/[/CORE] bookkeeping markers from a lorebook entry before it
  * reaches the GM/narrator. These tags exist purely so the Lorebook Agent knows
@@ -321,7 +538,7 @@ export function patchLabeledSection(text, field, newContent, opts = {}) {
 export function stripCoreMarkersForNarrator(content) {
     if (!content) return content;
     return content
-        // [MAP] is routed through Dungeon Reality's location-gated injection.
+        // [MAP] is routed through Dungeon Reality's location/exact-name injection.
         // Ordinary lore activation must never reveal it out of location.
         .replace(/\[MAP\][\s\S]*?\[\/MAP\]/gi, '')
         .replace(/\[CORE\]\n?/g, '')

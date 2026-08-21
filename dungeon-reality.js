@@ -49,15 +49,106 @@ const ASSET_KIND_ALIASES = {
 };
 const ASSET_STATES = [
     'ACTIVE', 'ALERT', 'IDLE', 'DORMANT', 'FLEEING', 'CAPTURED',
-    'DEAD', 'DESTROYED', 'DISABLED', 'DISARMED', 'ARMED', 'TRIGGERED',
+    'DEAD', 'DESTROYED', 'DISABLED', 'DEACTIVATED', 'ARMED', 'TRIGGERED',
     'LOCKED', 'UNLOCKED', 'OPEN', 'CLOSED', 'BLOCKED', 'CLEARED',
     'INTACT', 'DAMAGED', 'TAKEN', 'AVAILABLE', 'EXHAUSTED', 'EXPIRED',
     'DISMISSED', 'REMOVED', 'UNKNOWN',
 ];
+const ASSET_STATE_ALIASES = {
+    DISARMED: 'DEACTIVATED',
+    INACTIVE: 'DEACTIVATED',
+    PACIFIED: 'DEACTIVATED',
+};
 const CONNECTION_STATES = ['OPEN', 'CLOSED', 'LOCKED', 'BLOCKED', 'DESTROYED', 'UNKNOWN'];
-const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS'];
+const MAP_EVIDENCE = ['CONFIRMED', 'IMPLIED', 'AUTONOMOUS', 'EVOLVED'];
 const MAP_OPERATIONS = ['ADD_AREA', 'SET_AREA', 'ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION'];
+const EVOLVED_OPERATIONS = ['ADD_ASSET', 'MOVE_ASSET', 'SET_ASSET', 'REMOVE_ASSET', 'SET_CONNECTION', 'SET_AREA'];
+const MAP_THREAD_STATUSES = ['open', 'resolved', 'transformed'];
+const KILL_STATES = ['DEAD', 'DESTROYED'];
+const CAUSAL_OPERATION_FIELDS = ['cause', 'actor', 'thread_status'];
+const MAX_CAUSE_LENGTH = 240;
+const MAX_ACTOR_LENGTH = 120;
+const MAX_ASSET_COUNT = 99;
+/** Outcomes established by play. Map Evolution may not reverse them. */
+export const PLAY_CANON_LOCKED_STATES = [
+    'DEAD', 'DESTROYED', 'DEACTIVATED', 'TAKEN', 'CLEARED', 'REMOVED', 'EXPIRED', 'DISMISSED',
+];
 export const MAP_SITE_KINDS = ['DUNGEON', 'SETTLEMENT'];
+export const MAP_SITE_THREATS = ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'];
+export const MAP_KILL_STATES = KILL_STATES;
+export const MAP_ASSET_KINDS = ASSET_KINDS;
+export const MAP_ASSET_STATES = ASSET_STATES;
+const ASSET_STATE_INPUT_ENUM = [...ASSET_STATES, ...Object.keys(ASSET_STATE_ALIASES)];
+
+export function isKillState(state) {
+    return KILL_STATES.includes(String(state || '').toUpperCase());
+}
+
+export function coerceAssetState(value) {
+    const normalized = String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return ASSET_STATE_ALIASES[normalized] || normalized;
+}
+
+export function isPlayCanonLockedState(state) {
+    return PLAY_CANON_LOCKED_STATES.includes(coerceAssetState(state));
+}
+
+function normalizeThreadStatus(value) {
+    const status = String(value || '').trim().toLowerCase();
+    return MAP_THREAD_STATUSES.includes(status) ? status : '';
+}
+
+function readCausalCause(operation, path, errors) {
+    const cause = String(operation?.cause || '').trim();
+    if (!cause) {
+        errors.push(mapError('MISSING_CAUSE', `${path}.cause`, operation?.cause, 'Supply a concise in-world cause so later Map Evolution can continue this thread.'));
+        return '';
+    }
+    if (cause.length > MAX_CAUSE_LENGTH) {
+        errors.push(mapError('CAUSE_TOO_LONG', `${path}.cause`, cause, `Keep cause to ${MAX_CAUSE_LENGTH} characters.`));
+        return cause.slice(0, MAX_CAUSE_LENGTH);
+    }
+    return cause;
+}
+
+function readCausalActor(operation, path, errors, { required = false } = {}) {
+    const actor = String(operation?.actor || '').trim();
+    if (required && !actor) {
+        errors.push(mapError('MISSING_ACTOR', `${path}.actor`, operation?.actor, 'DEAD/DESTROYED requires actor: "party", an existing asset id, or a short off-map name such as a rival pack or collapse.'));
+        return '';
+    }
+    if (actor.length > MAX_ACTOR_LENGTH) {
+        errors.push(mapError('ACTOR_TOO_LONG', `${path}.actor`, actor, `Keep actor to ${MAX_ACTOR_LENGTH} characters.`));
+        return actor.slice(0, MAX_ACTOR_LENGTH);
+    }
+    return actor;
+}
+
+function readAssetCount(value, path, errors) {
+    if (value == null || value === '') return null;
+    const parsed = Math.floor(Number(value));
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_ASSET_COUNT) {
+        errors.push(mapError('INVALID_COUNT', path, value, `count is living members of this one asset (1-${MAX_ASSET_COUNT}). Packs stay one GROUP with count; use DESTROYED/DEAD instead of 0.`));
+        return null;
+    }
+    return parsed;
+}
+
+function applyAssetCount(target, value, path, errors) {
+    const count = readAssetCount(value, path, errors);
+    if (count != null) target.count = count;
+}
+
+function stampCausalFields(target, operation, path, errors, currentTime, { requireActor = false } = {}) {
+    if (!target || typeof target !== 'object') return;
+    const cause = readCausalCause(operation, path, errors);
+    if (cause) target.cause = cause;
+    const actor = readCausalActor(operation, path, errors, { required: requireActor });
+    if (actor) target.actor = actor;
+    else if (requireActor) delete target.actor;
+    const stamp = String(currentTime || '').trim();
+    if (stamp) target.changed_at = stamp;
+}
 
 function mapSlug(value, fallback = 'item') {
     const slug = String(value || '')
@@ -97,6 +188,30 @@ function coerceAssetKind(value) {
 function coerceMapEvidence(value) {
     if (value == null || value === '') return 'CONFIRMED';
     return value;
+}
+
+function defaultAssetOrigin(evidence) {
+    if (evidence === 'EVOLVED') return 'MAP_EVOLUTION';
+    if (evidence === 'IMPLIED') return 'NARRATOR_IMPLIED';
+    return 'NARRATOR_ESTABLISHED';
+}
+
+function operationTouchesFrozenArea(working, operation, frozenAreaIds) {
+    const frozen = new Set((frozenAreaIds || []).filter(Boolean));
+    if (!frozen.size) return false;
+    const areaFrozen = (ref) => {
+        const area = resolveMapArea(working, ref).area;
+        return !!(area && frozen.has(area.id));
+    };
+    if (operation.location && areaFrozen(operation.location)) return true;
+    if (operation.to && areaFrozen(operation.to)) return true;
+    if (operation.from && areaFrozen(operation.from)) return true;
+    if (operation.area_id && areaFrozen(operation.area_id)) return true;
+    if (operation.asset_id) {
+        const asset = resolveMapAsset(working, operation.asset_id).asset;
+        if (asset?.location && frozen.has(asset.location)) return true;
+    }
+    return false;
 }
 
 function normalizeChronicleFields(chronicle) {
@@ -144,6 +259,24 @@ function normalizeMapOperation(operation) {
 
 export function normalizeMapSiteKind(value) {
     return enumValue(value, MAP_SITE_KINDS, 'DUNGEON');
+}
+
+/** Site danger for occupancy/traps — independent of party level and of scale (size). */
+export function defaultMapSiteThreat(kind) {
+    return normalizeMapSiteKind(kind) === 'SETTLEMENT' ? 'MODERATE' : 'HIGH';
+}
+
+export function normalizeMapSiteThreat(value, fallback = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    const upper = raw.toUpperCase();
+    if (MAP_SITE_THREATS.includes(upper)) return upper;
+    if (/DEADLY|LETHAL|EXTREME|NIGHTMARE|SUICIDE|TPK/i.test(raw)) return 'DEADLY';
+    if (/\bNONE\b|NO[-\s]?THREAT|THREATLESS|HARMLESS|SAFE|PEACEFUL|NON[-\s]?DANGEROUS|NO[-\s]?DANGER/i.test(raw)) return 'NONE';
+    if (/\bLOW\b|LIGHT|MILD|ROUTINE|QUIET|SPARSE/i.test(raw)) return 'LOW';
+    if (/MODERATE|STANDARD|TYPICAL|NORMAL|AVERAGE/i.test(raw) || /\bMEDIUM\b/.test(upper)) return 'MODERATE';
+    if (/\bHIGH\b|DANGEROUS|SERIOUS|HEAVY|HARSH/.test(upper) || /high[-\s]?risk/i.test(raw)) return 'HIGH';
+    return fallback;
 }
 
 function scaleAreaBounds(scale, kind) {
@@ -353,7 +486,7 @@ export function normalizeDungeonMapDocument(raw, siteFallback = '') {
         const name = String(asset?.name || asset?.label || asset?.id || `Asset ${index + 1}`).trim();
         const proposed = mapSlug(asset?.id || name, `asset-${index + 1}`);
         const id = assetIds.has(proposed) ? allocateMapId(assetIds, name, 'asset') : (assetIds.add(proposed), proposed);
-        const state = enumValue(asset?.state, ASSET_STATES, 'ACTIVE');
+        const state = enumValue(coerceAssetState(asset?.state), ASSET_STATES, 'ACTIVE');
         const location = state === 'REMOVED' && asset?.location == null
             ? null
             : (resolveArea(asset?.location) || areas[0].id);
@@ -371,15 +504,20 @@ export function normalizeDungeonMapDocument(raw, siteFallback = '') {
         if (lastLocation) normalized.last_location = lastLocation;
         const behavior = String(asset?.behavior || '').trim();
         if (behavior) normalized.behavior = behavior;
-        for (const field of ['faction', 'owner', 'duration']) {
+        for (const field of ['faction', 'owner', 'duration', 'cause', 'actor', 'changed_at']) {
             const value = String(asset?.[field] || '').trim();
             if (value) normalized[field] = value;
         }
+        const count = Math.floor(Number(asset?.count));
+        if (Number.isFinite(count) && count >= 1 && count <= MAX_ASSET_COUNT) normalized.count = count;
         const route = cleanStringList(asset?.route).map(resolveArea).filter(Boolean);
         if (route.length) normalized.route = [...new Set(route)];
         return normalized;
     });
-    return { version: DUNGEON_MAP_FORMAT_VERSION, site, kind: normalizeMapSiteKind(raw.kind), areas, assets };
+    const threat = normalizeMapSiteThreat(raw.threat, '');
+    const document = { version: DUNGEON_MAP_FORMAT_VERSION, site, kind: normalizeMapSiteKind(raw.kind), areas, assets };
+    if (threat) document.threat = threat;
+    return document;
 }
 
 function architectureError(code, path, received, hint) {
@@ -387,11 +525,61 @@ function architectureError(code, path, received, hint) {
 }
 
 /**
+ * Reciprocal routes are one physical passage. Mirror a valid one-way route onto
+ * its target when the reverse is absent. Models also often rewrite detail from
+ * each room (eastward vs westward), so copy the first-seen string onto an
+ * existing reverse when state already matches. Ambiguous/conflicting topology
+ * remains untouched for strict validation.
+ */
+export function canonicalizeReciprocalConnectionDetails(areas) {
+    if (!Array.isArray(areas)) return areas;
+    const areaIds = new Map();
+    const duplicateAreaIds = new Set();
+    for (const area of areas) {
+        const id = String(area?.id || '').trim();
+        if (!id) continue;
+        if (areaIds.has(id)) duplicateAreaIds.add(id);
+        else areaIds.set(id, area);
+    }
+    const seen = new Set();
+    for (const area of areas) {
+        const from = String(area?.id || '').trim();
+        if (!from || duplicateAreaIds.has(from) || !Array.isArray(area?.connections)) continue;
+        for (const connection of area.connections) {
+            const to = String(connection?.to || '').trim();
+            if (!to || to === from || duplicateAreaIds.has(to)) continue;
+            const pair = from < to ? `${from}\0${to}` : `${to}\0${from}`;
+            if (seen.has(pair)) continue;
+            seen.add(pair);
+            const target = areaIds.get(to);
+            if (!target || !Array.isArray(target.connections)) continue;
+            const reverses = target.connections.filter(candidate => String(candidate?.to || '').trim() === from);
+            if (reverses.length === 0) {
+                if (!CONNECTION_STATES.includes(connection?.state) || typeof connection?.detail !== 'string') continue;
+                target.connections.push({
+                    to: from,
+                    state: connection.state,
+                    detail: connection.detail,
+                });
+                continue;
+            }
+            if (reverses.length !== 1) continue;
+            const reverse = reverses[0];
+            if (reverse.state !== connection.state) continue;
+            if (String(reverse.detail || '') !== String(connection.detail || '')) {
+                reverse.detail = String(connection.detail || '');
+            }
+        }
+    }
+    return areas;
+}
+
+/**
  * Strictly validate a newly generated map before it becomes campaign canon.
  * Unlike normalizeDungeonMapDocument(), this never repairs missing topology or
  * silently invents IDs: the Map Architect gets actionable errors and retries.
  */
-export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', scale = '', kind = '' } = {}) {
+export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', scale = '', kind = '', threat = '' } = {}) {
     const errors = [];
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return {
@@ -401,7 +589,7 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
         };
     }
 
-    const allowedTop = new Set(['version', 'site', 'kind', 'areas', 'assets']);
+    const allowedTop = new Set(['version', 'site', 'kind', 'threat', 'areas', 'assets']);
     for (const key of Object.keys(raw)) {
         if (!allowedTop.has(key)) errors.push(architectureError('UNKNOWN_FIELD', `$.${key}`, raw[key], `Remove unsupported top-level field "${key}".`));
     }
@@ -423,6 +611,16 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
             errors.push(architectureError('KIND_MISMATCH', '$.kind', raw.kind, `Use the requested kind exactly: "${requestedKind}".`));
         }
     }
+    const requestedThreat = normalizeMapSiteThreat(threat, '');
+    if (raw.threat != null && raw.threat !== '') {
+        const rawThreat = String(raw.threat || '').trim().toUpperCase();
+        if (!MAP_SITE_THREATS.includes(rawThreat)) {
+            errors.push(architectureError('INVALID_THREAT', '$.threat', raw.threat, 'Use NONE, LOW, MODERATE, HIGH, or DEADLY.'));
+        } else if (requestedThreat && rawThreat !== requestedThreat) {
+            errors.push(architectureError('THREAT_MISMATCH', '$.threat', raw.threat, `Use the requested threat exactly: "${requestedThreat}".`));
+        }
+    }
+    const effectiveThreat = normalizeMapSiteThreat(raw.threat, requestedThreat);
     if (!Array.isArray(raw.areas) || raw.areas.length < 2) {
         errors.push(architectureError('TOO_FEW_AREAS', '$.areas', raw.areas, 'Supply at least two connected areas.'));
     }
@@ -510,7 +708,12 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
             } else if (reverse.state !== connection.state) {
                 errors.push(architectureError('CONNECTION_STATE_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.state, `Use ${connection.state} in both directions.`));
             } else if (String(reverse.detail || '') !== String(connection.detail || '')) {
-                errors.push(architectureError('CONNECTION_DETAIL_MISMATCH', `$.areas[${targetIndex}].connections`, reverse.detail, 'Use the same route detail in both directions so the reciprocal passage has one canonical description.'));
+                errors.push(architectureError(
+                    'CONNECTION_DETAIL_MISMATCH',
+                    `$.areas[${targetIndex}].connections`,
+                    reverse.detail,
+                    `Copy this exact detail onto both ends: "${connection.detail}". The reverse currently says "${reverse.detail}".`,
+                ));
             }
         }
     });
@@ -528,7 +731,7 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
     }
 
     const assetIds = new Set();
-    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration']);
+    const allowedAsset = new Set(['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'cause', 'actor', 'changed_at']);
     for (let index = 0; index < (Array.isArray(raw.assets) ? raw.assets.length : 0); index++) {
         const asset = raw.assets[index];
         const path = `$.assets[${index}]`;
@@ -545,14 +748,25 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
         else assetIds.add(id);
         if (typeof asset.name !== 'string' || !asset.name.trim()) errors.push(architectureError('MISSING_ASSET_NAME', `${path}.name`, asset.name, 'Supply a concise entity name.'));
         if (!ASSET_KINDS.includes(asset.kind)) errors.push(architectureError('INVALID_ASSET_KIND', `${path}.kind`, asset.kind, `Use one of: ${ASSET_KINDS.join(', ')}.`));
-        if (!ASSET_STATES.includes(asset.state)) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        const assetState = coerceAssetState(asset.state);
+        if (!ASSET_STATES.includes(assetState)) errors.push(architectureError('INVALID_ASSET_STATE', `${path}.state`, asset.state, `Use one of: ${ASSET_STATES.join(', ')}.`));
+        const noneSafeThreatStates = ['DORMANT', 'DESTROYED', 'DISABLED', 'DEACTIVATED', 'CLEARED', 'EXPIRED', 'DISMISSED', 'REMOVED'];
+        if (effectiveThreat === 'NONE' && ['TRAP', 'HAZARD', 'ALARM'].includes(asset.kind) && !noneSafeThreatStates.includes(assetState)) {
+            errors.push(architectureError('NONE_THREAT_ACTIVE_DANGER', path, asset, 'Threat NONE cannot contain an active trap, hazard, or alarm. Remove it, use a safely inactive state, or request LOW or higher when real danger exists.'));
+        }
         if (!ASSET_KNOWLEDGE.includes(asset.knowledge)) errors.push(architectureError('INVALID_ASSET_KNOWLEDGE', `${path}.knowledge`, asset.knowledge, `Use one of: ${ASSET_KNOWLEDGE.join(', ')}.`));
         if (!areaIds.has(asset.location)) errors.push(architectureError('UNKNOWN_ASSET_LOCATION', `${path}.location`, asset.location, 'Place every initial asset in an existing area.'));
         if (typeof asset.detail !== 'string') errors.push(architectureError('INVALID_ASSET_DETAIL', `${path}.detail`, asset.detail, 'Supply a concise string; use "" when no detail is needed.'));
         if (asset.origin !== 'INITIAL_MAP') errors.push(architectureError('INVALID_ASSET_ORIGIN', `${path}.origin`, asset.origin, 'Initial Map Architect assets must use origin "INITIAL_MAP".'));
-        for (const field of ['behavior', 'faction', 'owner', 'duration']) {
+        for (const field of ['behavior', 'faction', 'owner', 'duration', 'cause', 'actor', 'changed_at']) {
             if (asset[field] !== undefined && (typeof asset[field] !== 'string' || !asset[field].trim())) {
                 errors.push(architectureError('INVALID_ASSET_METADATA', `${path}.${field}`, asset[field], `Optional ${field} must be a non-empty string when present.`));
+            }
+        }
+        if (asset.count !== undefined) {
+            const count = Math.floor(Number(asset.count));
+            if (!Number.isFinite(count) || count < 1 || count > MAX_ASSET_COUNT) {
+                errors.push(architectureError('INVALID_COUNT', `${path}.count`, asset.count, `count is living members of this one asset (1-${MAX_ASSET_COUNT}). Packs stay one GROUP with count; use DESTROYED/DEAD instead of 0.`));
             }
         }
         if (asset.route !== undefined) {
@@ -563,6 +777,12 @@ export function validateDungeonMapArchitecture(raw, { site = '', entrance = '', 
     const document = errors.length === 0 ? normalizeDungeonMapDocument(raw, site || rawSite) : null;
     if (document && site) document.site = String(site).trim();
     if (document) document.kind = resolvedKind;
+    if (document) {
+        document.threat = normalizeMapSiteThreat(
+            raw.threat,
+            requestedThreat || defaultMapSiteThreat(resolvedKind),
+        );
+    }
     return {
         valid: errors.length === 0,
         errors,
@@ -583,10 +803,48 @@ export function serializeDungeonMapDocument(document) {
     return JSON.stringify(normalizeDungeonMapDocument(document, document?.site), null, 2);
 }
 
+/** Parse user-edited map JSON from the inspector Raw JSON tab. */
+export function parseEditableDungeonMapJson(text, siteRoot = '') {
+    const source = stripJsonFence(text);
+    if (!source) return { ok: false, errors: ['JSON is empty.'], document: null };
+    if (!source.startsWith('{')) {
+        return { ok: false, errors: ['JSON must be one object starting with {.'], document: null };
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(source);
+    } catch (error) {
+        return { ok: false, errors: [String(error?.message || error || 'Invalid JSON.')], document: null };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ok: false, errors: ['JSON must be one object with version, site, areas, and assets.'], document: null };
+    }
+    const site = String(siteRoot || '').trim();
+    const rawSite = String(parsed.site || '').trim();
+    if (site && rawSite && !dungeonSiteRootsMatch(rawSite, site)) {
+        return {
+            ok: false,
+            errors: [`site must stay "${site}". Received "${rawSite}".`],
+            document: null,
+        };
+    }
+    const document = normalizeDungeonMapDocument(parsed, site || rawSite);
+    if (!Array.isArray(document.areas) || !document.areas.length) {
+        return { ok: false, errors: ['Map must include at least one area.'], document: null };
+    }
+    if (!Array.isArray(document.assets)) {
+        return { ok: false, errors: ['Map must include an assets array.'], document: null };
+    }
+    if (site) document.site = site;
+    return { ok: true, errors: [], document };
+}
+
 function formatMapAsset(asset, areasById) {
     const tags = [asset.kind, asset.state, asset.knowledge].filter(Boolean).join(' / ');
-    const lines = [`- ${asset.name} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
+    const countLabel = Number.isInteger(asset.count) ? ` ×${asset.count}` : '';
+    const lines = [`- ${asset.name}${countLabel} [${tags}]${asset.detail ? ` — ${asset.detail}` : ''}`];
     const metadata = [];
+    if (Number.isInteger(asset.count)) metadata.push(`Count: ${asset.count}`);
     if (asset.behavior) metadata.push(`Behavior: ${asset.behavior}`);
     if (asset.route?.length) {
         metadata.push(`Route: ${asset.route.map(id => areasById.get(id)?.name || id).join(' -> ')}`);
@@ -594,6 +852,9 @@ function formatMapAsset(asset, areasById) {
     if (asset.faction) metadata.push(`Faction: ${asset.faction}`);
     if (asset.owner) metadata.push(`Owner: ${asset.owner}`);
     if (asset.duration) metadata.push(`Duration: ${asset.duration}`);
+    if (asset.actor) metadata.push(`Actor: ${asset.actor}`);
+    if (asset.cause) metadata.push(`Cause: ${asset.cause}`);
+    if (asset.changed_at) metadata.push(`Since: ${asset.changed_at}`);
     if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`Origin: ${asset.origin}`);
     if (asset.last_location) metadata.push(`Last location: ${areasById.get(asset.last_location)?.name || asset.last_location}`);
     if (metadata.length) lines.push(`  ${metadata.join('; ')}`);
@@ -643,9 +904,14 @@ export function formatDungeonMapForNarrator(documentOrContent, siteFallback = ''
     const lines = [`Dungeon Site: ${document.site}`];
     const mapKind = normalizeMapSiteKind(document.kind);
     if (mapKind === 'SETTLEMENT') {
-        lines.push('Map kind: SETTLEMENT (district-scale). Invent granular interiors during play if they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).');
+        lines.push('Map kind: SETTLEMENT (district-scale). Invent granular interiors during play if they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior). Do not open a new map for an alley, shop, or house.');
     } else {
         lines.push('Map kind: DUNGEON (room-scale). Prefer this interior; you may add a room if play requires it, so long as it does not contradict established facts.');
+    }
+    if (document.threat) {
+        lines.push(document.threat === 'NONE'
+            ? 'Site threat: NONE. Do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict.'
+            : `Site threat: ${document.threat}. Enemy, trap, and hazard density follow this site danger — not party level.`);
     }
     const routes = formatMapRoutes(document, areasById);
     if (routes.length) lines.push('', 'Routes:', ...routes);
@@ -839,6 +1105,21 @@ export function attachDungeonMapToLocationEntry(entry, map) {
     return true;
 }
 
+/** Strip [MAP] (and any leftover extension blob) while keeping [CORE] and chronicles. */
+export function detachDungeonMapFromLocationEntry(entry) {
+    if (!entry) return false;
+    const hadSection = !!extractDungeonMapSection(entry.content);
+    const hadLegacy = !!(entry.extensions && entry.extensions[DUNGEON_MAP_EXTENSION_KEY]);
+    const hadOps = !!(entry.extensions && entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY]);
+    if (!hadSection && !hadLegacy && !hadOps) return false;
+    if (hadSection) entry.content = stripDungeonMapSection(entry.content);
+    if (entry.extensions) {
+        delete entry.extensions[DUNGEON_MAP_EXTENSION_KEY];
+        delete entry.extensions[DUNGEON_MAP_OPERATION_IDS_KEY];
+    }
+    return true;
+}
+
 /** Upgrade the earlier private-extension representation to normal [MAP] lore. */
 export function migrateDungeonMapAttachmentToContent(entry) {
     const legacy = entry?.extensions?.[DUNGEON_MAP_EXTENSION_KEY];
@@ -1004,6 +1285,20 @@ export function locationContainsSiteRoot(location, siteRoot) {
     return splitLocationSegments(location).some(segment => dungeonSiteRootsMatch(segment, siteRoot));
 }
 
+/**
+ * Map activation keys off footer segments. No live footer yet cannot be checked.
+ * A translated/retitled site (English title vs a Russian footer) must not save.
+ */
+export function mapSiteMatchesLiveFooter(site, currentLocation) {
+    const location = String(currentLocation || '').trim();
+    if (!location) return true;
+    return locationContainsSiteRoot(location, site);
+}
+
+export function mapSiteFooterMismatchHint(site, currentLocation) {
+    return `site must be copied verbatim from a Location footer segment. Live footer: "${currentLocation}". Received: "${site}". Never translate, transliterate, expand, or retitle.`;
+}
+
 /** Conservative fuzzy equality for punctuation/article drift and small typos. */
 export function dungeonLabelsMatch(left, right) {
     const a = normalizeDungeonLabel(left);
@@ -1099,12 +1394,13 @@ export function reconcileDungeonMapAreaKnowledge(entry, allEntries) {
                     { re: /\b(?:captured|bound|imprisoned)\b/, state: 'CAPTURED' },
                 ],
                 TRAP: [
-                    { re: /\b(?:disarmed)\b/, state: 'DISARMED' },
+                    { re: /\b(?:disarmed|deactivated)\b/, state: 'DEACTIVATED' },
                     { re: /\b(?:triggered|sprung)\b/, state: 'TRIGGERED' },
                     { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
                 ],
                 ALARM: [
                     { re: /\b(?:triggered|sounded|raised)\b/, state: 'TRIGGERED' },
+                    { re: /\b(?:disarmed|deactivated)\b/, state: 'DEACTIVATED' },
                     { re: /\b(?:disabled|destroyed)\b/, state: 'DISABLED' },
                 ],
                 BARRIER: [
@@ -1205,13 +1501,13 @@ function validateOperationShape(operation, index, errors) {
         return null;
     }
     const op = validateEnumField(operation.op, MAP_OPERATIONS, `${path}.op`, errors, true);
-    const common = ['op', 'evidence'];
+    const common = ['op', 'evidence', ...CAUSAL_OPERATION_FIELDS];
     const byOperation = {
         ADD_AREA: ['name', 'knowledge', 'geometry', 'connections'],
         SET_AREA: ['area_id', 'knowledge', 'geometry_append', 'geometry_replace'],
-        ADD_ASSET: ['name', 'kind', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'distinct_from'],
+        ADD_ASSET: ['name', 'kind', 'location', 'state', 'knowledge', 'detail', 'origin', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'distinct_from'],
         MOVE_ASSET: ['asset_id', 'to', 'from', 'state', 'knowledge', 'detail'],
-        SET_ASSET: ['asset_id', 'name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'],
+        SET_ASSET: ['asset_id', 'name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration', 'count'],
         REMOVE_ASSET: ['asset_id', 'knowledge', 'detail'],
         SET_CONNECTION: ['from', 'to', 'state', 'detail', 'bidirectional'],
     };
@@ -1238,8 +1534,13 @@ function addOrUpdateConnection(area, to, state, detail) {
 /**
  * Validate and apply a Lorebook Agent map transaction to a cloned document.
  * No caller-owned object is changed when validation fails.
+ * @param {object} document
+ * @param {object} transaction
+ * @param {{ frozenAreaIds?: string[] }} [options]
  */
-export function applyDungeonMapTransaction(document, transaction) {
+export function applyDungeonMapTransaction(document, transaction, options = {}) {
+    const frozenAreaIds = Array.isArray(options?.frozenAreaIds) ? options.frozenAreaIds : [];
+    const currentTime = String(options?.currentTime || '').trim();
     const current = normalizeDungeonMapDocument(clone(document), document?.site);
     const errors = [];
     if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
@@ -1278,6 +1579,14 @@ export function applyDungeonMapTransaction(document, transaction) {
             errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, `${op} requires narrator-established CONFIRMED or IMPLIED evidence.`));
             continue;
         }
+        if (evidence === 'EVOLVED' && !EVOLVED_OPERATIONS.includes(op)) {
+            errors.push(mapError('EVOLUTION_OP_NOT_ALLOWED', `${path}.evidence`, evidence, `${op} is not allowed for Map Evolution. Use ADD_ASSET, MOVE_ASSET, SET_ASSET, REMOVE_ASSET, SET_CONNECTION, or SET_AREA (geometry_append only).`));
+            continue;
+        }
+        if (evidence === 'EVOLVED' && operationTouchesFrozenArea(working, operation, frozenAreaIds)) {
+            errors.push(mapError('PLAYER_BUBBLE_FROZEN', path, operation, 'Map Evolution must not mutate the party\'s current area. Change an unrevealed or vacated room instead.'));
+            continue;
+        }
 
         if (op === 'ADD_AREA') {
             const name = requireMapString(operation.name, `${path}.name`, errors);
@@ -1306,6 +1615,7 @@ export function applyDungeonMapTransaction(document, transaction) {
                 addOrUpdateConnection(area, resolved.area.id, 'OPEN', '');
                 addOrUpdateConnection(resolved.area, area.id, 'OPEN', '');
             }
+            readCausalCause(operation, path, errors);
             continue;
         }
 
@@ -1318,6 +1628,10 @@ export function applyDungeonMapTransaction(document, transaction) {
             const hasMutation = operation.knowledge != null || operation.geometry_append != null || operation.geometry_replace != null;
             if (!hasMutation) {
                 errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_AREA must change knowledge or geometry.'));
+                continue;
+            }
+            if (evidence === 'EVOLVED' && (operation.knowledge != null || operation.geometry_replace != null)) {
+                errors.push(mapError('EVOLUTION_SET_AREA_LIMITED', path, operation, 'Map Evolution may only append durable geometry (geometry_append). Do not change area knowledge or replace geometry.'));
                 continue;
             }
             if (operation.knowledge != null) {
@@ -1336,13 +1650,14 @@ export function applyDungeonMapTransaction(document, transaction) {
                     }
                 }
             }
+            readCausalCause(operation, path, errors);
             continue;
         }
 
         if (op === 'ADD_ASSET') {
             const name = requireMapString(operation.name, `${path}.name`, errors);
             const kind = validateEnumField(coerceAssetKind(operation.kind), ASSET_KINDS, `${path}.kind`, errors, true);
-            const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors, true);
+            const state = validateEnumField(coerceAssetState(operation.state), ASSET_STATES, `${path}.state`, errors, true);
             const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors, true);
             const locationResult = resolveMapArea(working, operation.location);
             if (!locationResult.area) errors.push(mapError('AREA_NOT_FOUND', `${path}.location`, operation.location, 'Use an exact area ID or unambiguous label.', { allowed: working.areas.map(area => area.id), candidates: locationResult.candidates.map(area => area.id) }));
@@ -1361,7 +1676,7 @@ export function applyDungeonMapTransaction(document, transaction) {
                 state,
                 knowledge,
                 detail: String(operation.detail || '').trim(),
-                origin: String(operation.origin || (evidence === 'IMPLIED' ? 'NARRATOR_IMPLIED' : 'NARRATOR_ESTABLISHED')).trim(),
+                origin: String(operation.origin || defaultAssetOrigin(evidence)).trim(),
             };
             const behavior = String(operation.behavior || '').trim();
             if (behavior) asset.behavior = behavior;
@@ -1369,6 +1684,7 @@ export function applyDungeonMapTransaction(document, transaction) {
                 const value = String(operation[field] || '').trim();
                 if (value) asset[field] = value;
             }
+            applyAssetCount(asset, operation.count, `${path}.count`, errors);
             if (operation.route != null) {
                 if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
                 else {
@@ -1383,6 +1699,7 @@ export function applyDungeonMapTransaction(document, transaction) {
             }
             working.assets.push(asset);
             createdAssets.push({ id: asset.id, name: asset.name });
+            stampCausalFields(asset, operation, path, errors, currentTime, { requireActor: isKillState(state) });
             continue;
         }
 
@@ -1393,6 +1710,7 @@ export function applyDungeonMapTransaction(document, transaction) {
                 continue;
             }
             const asset = assetResult.asset;
+            const previousState = asset.state;
             if (evidence === 'AUTONOMOUS' && !asset.behavior && !asset.route?.length) {
                 errors.push(mapError('AUTONOMY_NOT_ALLOWED', `${path}.evidence`, evidence, 'Autonomous asset changes require an explicit behavior or route on the existing asset.'));
                 continue;
@@ -1421,13 +1739,13 @@ export function applyDungeonMapTransaction(document, transaction) {
                     errors.push(mapError('CONNECTION_NOT_TRAVERSABLE', `${path}.to`, operation.to, `The mapped connection is ${connection.state}. Apply SET_CONNECTION earlier in the same transaction if the narrative changed it.`));
                     continue;
                 }
-                if (evidence === 'AUTONOMOUS' && (!connection || ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state))) {
-                    errors.push(mapError('DESTINATION_NOT_CONNECTED', `${path}.to`, operation.to, 'Autonomous movement must follow an open mapped connection.', { allowed: (sourceArea?.connections || []).filter(item => ['OPEN', 'UNKNOWN'].includes(item.state)).map(item => item.to) }));
+                if ((evidence === 'AUTONOMOUS' || evidence === 'EVOLVED') && (!connection || ['LOCKED', 'BLOCKED', 'DESTROYED'].includes(connection.state))) {
+                    errors.push(mapError('DESTINATION_NOT_CONNECTED', `${path}.to`, operation.to, `${evidence === 'EVOLVED' ? 'Map Evolution' : 'Autonomous'} movement must follow an open mapped connection.`, { allowed: (sourceArea?.connections || []).filter(item => ['OPEN', 'UNKNOWN'].includes(item.state)).map(item => item.to) }));
                     continue;
                 }
                 asset.location = destination.area.id;
                 if (operation.state != null) {
-                    const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors);
+                    const state = validateEnumField(coerceAssetState(operation.state), ASSET_STATES, `${path}.state`, errors);
                     if (state) asset.state = state;
                 }
                 if (operation.knowledge != null) {
@@ -1435,6 +1753,9 @@ export function applyDungeonMapTransaction(document, transaction) {
                     if (knowledge) asset.knowledge = knowledge;
                 }
                 if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                stampCausalFields(asset, operation, path, errors, currentTime, {
+                    requireActor: isKillState(operation.state) && !isKillState(previousState),
+                });
                 continue;
             }
             if (op === 'REMOVE_ASSET') {
@@ -1446,18 +1767,25 @@ export function applyDungeonMapTransaction(document, transaction) {
                     if (knowledge) asset.knowledge = knowledge;
                 }
                 if (operation.detail != null) asset.detail = String(operation.detail || '').trim();
+                stampCausalFields(asset, operation, path, errors, currentTime);
                 continue;
             }
 
-            const mutableFields = ['name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration'];
+            const mutableFields = ['name', 'state', 'knowledge', 'detail', 'behavior', 'route', 'faction', 'owner', 'duration', 'count', 'cause', 'actor'];
             if (!mutableFields.some(field => operation[field] != null)) {
                 errors.push(mapError('EMPTY_OPERATION', path, operation, 'SET_ASSET must change at least one mutable field.'));
                 continue;
             }
             if (operation.name != null) asset.name = requireMapString(operation.name, `${path}.name`, errors) || asset.name;
             if (operation.state != null) {
-                const state = validateEnumField(operation.state, ASSET_STATES, `${path}.state`, errors);
-                if (state) asset.state = state;
+                const state = validateEnumField(coerceAssetState(operation.state), ASSET_STATES, `${path}.state`, errors);
+                if (state) {
+                    if (evidence === 'EVOLVED' && isPlayCanonLockedState(asset.state) && !isPlayCanonLockedState(state)) {
+                        errors.push(mapError('PLAY_CANON_LOCKED', `${path}.state`, state, `Asset state is ${asset.state}. Map Evolution cannot revive play-established outcomes; add a new distinct entity instead.`));
+                        continue;
+                    }
+                    asset.state = state;
+                }
             }
             if (operation.knowledge != null) {
                 const knowledge = validateEnumField(operation.knowledge, ASSET_KNOWLEDGE, `${path}.knowledge`, errors);
@@ -1468,6 +1796,7 @@ export function applyDungeonMapTransaction(document, transaction) {
             for (const field of ['faction', 'owner', 'duration']) {
                 if (operation[field] != null) asset[field] = String(operation[field] || '').trim();
             }
+            if (operation.count != null) applyAssetCount(asset, operation.count, `${path}.count`, errors);
             if (operation.route != null) {
                 if (!Array.isArray(operation.route)) errors.push(mapError('INVALID_FIELD', `${path}.route`, operation.route, 'Use an array of exact area IDs or labels.'));
                 else {
@@ -1480,6 +1809,9 @@ export function applyDungeonMapTransaction(document, transaction) {
                     asset.route = [...new Set(route)];
                 }
             }
+            stampCausalFields(asset, operation, path, errors, currentTime, {
+                requireActor: isKillState(operation.state) && !isKillState(previousState),
+            });
             continue;
         }
 
@@ -1497,6 +1829,7 @@ export function applyDungeonMapTransaction(document, transaction) {
             const detail = String(operation.detail || '').trim();
             addOrUpdateConnection(from.area, to.area.id, state, detail);
             if (operation.bidirectional !== false) addOrUpdateConnection(to.area, from.area.id, state, detail);
+            readCausalCause(operation, path, errors);
         }
     }
 
@@ -1538,47 +1871,55 @@ export function applyDungeonMapTransaction(document, transaction) {
 
 const ASSET_DETAIL_SCHEMA = {
     type: 'string',
-    description: 'Durable occupancy or lasting condition only (remaining count, destroyed remains, what is guarded). Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
+    description: 'Durable occupancy or lasting condition only (what remains, destroyed remains, what is guarded). Numeric remaining members belong in count, not here. Never HP, targeting, mid-round poses, or temporary combat statuses such as frightened/held/prone.',
+};
+
+const ASSET_DURATION_SCHEMA = {
+    type: 'string',
+    description: 'Absolute in-world temporal boundary in the narrative time format, e.g. "Until Day 2, 4:40 AM." Set to an empty string in SET_ASSET after applying the boundary so the timer is cleared.',
 };
 
 /** Strict JSON Schema fragment added to commit only while a mapped site is active. */
 export function buildDungeonMapCommitSchema() {
     const evidence = { type: 'string', enum: MAP_EVIDENCE };
+    const cause = { type: 'string', minLength: 1, maxLength: 240, description: 'Concise in-world reason for this change. Required. For deaths use killed-by, e.g. "Killed by the party on the landing" or "Killed by Salt-Road Delvers over spoils".' };
+    const actor = { type: 'string', minLength: 1, maxLength: 120, description: 'Who caused this change: "party", an existing asset id, or a short off-map name. Required when state is DEAD or DESTROYED.' };
+    const thread_status = { type: 'string', enum: MAP_THREAD_STATUSES, description: 'open (unfinished plot), resolved (plot ended, including return to baseline), or transformed (plot continues in a new shape). Omission defaults to open — set resolved/transformed explicitly when the plot ends or changes shape.' };
     const operationVariants = [
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_AREA'] }, evidence, name: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry: { type: 'array', items: { type: 'string' } }, connections: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'name', 'knowledge'],
+            properties: { op: { type: 'string', enum: ['ADD_AREA'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry: { type: 'array', items: { type: 'string' } }, connections: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'knowledge', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_AREA'] }, evidence, area_id: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry_append: { type: 'array', items: { type: 'string' } }, geometry_replace: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'area_id'],
+            properties: { op: { type: 'string', enum: ['SET_AREA'] }, evidence, cause, actor, thread_status, area_id: { type: 'string' }, knowledge: { type: 'string', enum: AREA_KNOWLEDGE }, geometry_append: { type: 'array', items: { type: 'string' } }, geometry_replace: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'area_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' }, distinct_from: { type: 'array', items: { type: 'string' } } },
-            required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge'],
+            properties: { op: { type: 'string', enum: ['ADD_ASSET'] }, evidence, cause, actor, thread_status, name: { type: 'string' }, kind: { type: 'string', enum: ASSET_KINDS }, location: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, origin: { type: 'string' }, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: ASSET_DURATION_SCHEMA, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1. Never 0 — use DESTROYED/DEAD.' }, distinct_from: { type: 'array', items: { type: 'string' } } },
+            required: ['op', 'evidence', 'name', 'kind', 'location', 'state', 'knowledge', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
-            required: ['op', 'evidence', 'asset_id', 'to'],
+            properties: { op: { type: 'string', enum: ['MOVE_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, to: { type: 'string' }, from: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id', 'to', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATES }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: { type: 'string' } },
-            required: ['op', 'evidence', 'asset_id'],
+            properties: { op: { type: 'string', enum: ['SET_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string', enum: ASSET_STATE_INPUT_ENUM }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA, behavior: { type: 'string' }, route: { type: 'array', items: { type: 'string' } }, faction: { type: 'string' }, owner: { type: 'string' }, duration: ASSET_DURATION_SCHEMA, count: { type: 'integer', minimum: 1, maximum: 99, description: 'Updated living members of this one asset. Reduce count for attrition; DESTROYED/DEAD only when none remain. Do not split a pack into singleton CREATUREs.' } },
+            required: ['op', 'evidence', 'asset_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
-            required: ['op', 'evidence', 'asset_id'],
+            properties: { op: { type: 'string', enum: ['REMOVE_ASSET'] }, evidence, cause, actor, thread_status, asset_id: { type: 'string' }, knowledge: { type: 'string', enum: ASSET_KNOWLEDGE }, detail: ASSET_DETAIL_SCHEMA },
+            required: ['op', 'evidence', 'asset_id', 'cause'],
         },
         {
             type: 'object', additionalProperties: false,
-            properties: { op: { type: 'string', enum: ['SET_CONNECTION'] }, evidence, from: { type: 'string' }, to: { type: 'string' }, state: { type: 'string', enum: CONNECTION_STATES }, detail: { type: 'string' }, bidirectional: { type: 'boolean' } },
-            required: ['op', 'evidence', 'from', 'to', 'state'],
+            properties: { op: { type: 'string', enum: ['SET_CONNECTION'] }, evidence, cause, actor, thread_status, from: { type: 'string' }, to: { type: 'string' }, state: { type: 'string', enum: CONNECTION_STATES }, detail: { type: 'string' }, bidirectional: { type: 'boolean' } },
+            required: ['op', 'evidence', 'from', 'to', 'state', 'cause'],
         },
     ];
     return {
@@ -1633,8 +1974,13 @@ export function listDungeonMapAssets(document, filters = {}) {
 /**
  * Compact ID-bearing snapshot for the Map Updater. Keeps stable IDs without
  * dumping full geometry for every room on every turn.
+ * @param {object} document
+ * @param {string} [currentLocation]
+ * @param {{ includeCurrentGeometry?: boolean, occupancyHints?: boolean }} [options]
  */
-export function formatDungeonMapForUpdater(document, currentLocation = '') {
+export function formatDungeonMapForUpdater(document, currentLocation = '', options = {}) {
+    const includeCurrentGeometry = options.includeCurrentGeometry !== false;
+    const occupancyHints = options.occupancyHints !== false;
     const map = normalizeDungeonMapDocument(document, document?.site);
     const kind = normalizeMapSiteKind(map.kind);
     const placement = resolveCurrentMapPlacement(map, currentLocation);
@@ -1647,18 +1993,17 @@ export function formatDungeonMapForUpdater(document, currentLocation = '') {
     });
     const assetLines = (map.assets || []).map(asset => {
         const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location}`, asset.state, asset.knowledge];
+        if (Number.isInteger(asset.count)) bits.push(`count=${asset.count}`);
+        if (asset.faction) bits.push(`faction=${asset.faction}`);
         if (asset.behavior) bits.push(`behavior=${asset.behavior}`);
         if (Array.isArray(asset.route) && asset.route.length) bits.push(`route=${asset.route.join('>')}`);
+        if (asset.actor) bits.push(`actor=${asset.actor}`);
+        if (asset.changed_at) bits.push(`since=${asset.changed_at}`);
+        if (asset.cause) bits.push(`cause=${asset.cause}`);
         if (asset.detail) bits.push(asset.detail);
         return bits.join(' | ');
     });
-    const currentGeometry = currentArea
-        ? `${currentArea.id} (${currentArea.name})\n${(currentArea.geometry || []).map(line => `- ${line}`).join('\n') || '- (no geometry)'}`
-        : '(Current location did not match an area id/name.)';
-    const interiorHint = (kind === 'SETTLEMENT' && unmatchedInterior && !interiorAsset)
-        ? `\n\n## SETTLEMENT INTERIOR NOT ON MAP\n"${unmatchedInterior}" is in CURRENT LOCATION but is not an area and not an OBJECT asset. ADD_ASSET kind OBJECT, knowledge KNOWN, location = ${currentArea?.id || 'the current district'}. Do not output {"noop":true} for this.`
-        : '';
-    return [
+    const sections = [
         `KIND: ${kind}`,
         `SITE: ${map.site}`,
         '',
@@ -1669,10 +2014,55 @@ export function formatDungeonMapForUpdater(document, currentLocation = '') {
         '## ASSETS',
         'id | kind | name | location | state | knowledge | notes',
         assetLines.join('\n') || '(none)',
-        '',
-        '## CURRENT AREA GEOMETRY',
-        currentGeometry,
-    ].join('\n') + interiorHint;
+    ];
+    if (includeCurrentGeometry) {
+        const currentGeometry = currentArea
+            ? `${currentArea.id} (${currentArea.name})\n${(currentArea.geometry || []).map(line => `- ${line}`).join('\n') || '- (no geometry)'}`
+            : '(Current location did not match an area id/name.)';
+        sections.push('', '## CURRENT AREA GEOMETRY', currentGeometry);
+    }
+    const interiorHint = (occupancyHints && kind === 'SETTLEMENT' && unmatchedInterior && !interiorAsset)
+        ? `\n\n## SETTLEMENT INTERIOR NOT ON MAP\n"${unmatchedInterior}" is in CURRENT LOCATION but is not an area and not an OBJECT asset. ADD_ASSET kind OBJECT, knowledge KNOWN, location = ${currentArea?.id || 'the current district'}. Do not output {"noop":true} for this.`
+        : '';
+    return sections.join('\n') + interiorHint;
+}
+
+/** Compact occupancy snapshot for Map Evolution: no occupancy interior hints, no current-room geometry dump. */
+export function formatDungeonMapForEvolution(document, currentLocation = '') {
+    const snapshot = formatDungeonMapForUpdater(document, currentLocation, {
+        includeCurrentGeometry: false,
+        occupancyHints: false,
+    });
+    const living = formatLivingOccupantsForEvolution(document);
+    return living ? `${snapshot}\n\n${living}` : snapshot;
+}
+
+function formatLivingOccupantsForEvolution(document) {
+    const map = normalizeDungeonMapDocument(document, document?.site);
+    const inert = new Set([...PLAY_CANON_LOCKED_STATES, 'CAPTURED']);
+    const living = (map.assets || []).filter(asset =>
+        (asset.kind === 'CREATURE' || asset.kind === 'GROUP') && !inert.has(asset.state),
+    );
+    if (!living.length) return '';
+    const byLocation = new Map();
+    for (const asset of living) {
+        const loc = asset.location || '(unplaced)';
+        if (!byLocation.has(loc)) byLocation.set(loc, []);
+        byLocation.get(loc).push(asset.id);
+    }
+    const lines = living.map(asset => {
+        const bits = [asset.id, asset.kind, asset.name, `loc=${asset.location || '—'}`, asset.state];
+        if (Number.isInteger(asset.count)) bits.push(`count=${asset.count}`);
+        const roommates = (byLocation.get(asset.location || '(unplaced)') || []).filter(id => id !== asset.id);
+        if (roommates.length) bits.push(`same-room=${roommates.join(',')}`);
+        return bits.join(' | ');
+    });
+    return [
+        '## LIVING OCCUPANTS',
+        'Consider each independently. Hours elapsed: several may act in this one transaction. One patrol MOVE is not enough when more than one row exists. same-room means they share a space — they may talk, work, pursue a joint project, hang around, ignore each other, or fight. Do not assume they are enemies.',
+        'id | kind | name | location | state | notes',
+        ...lines,
+    ].join('\n');
 }
 
 function normalizeChunkForComparison(chunk) {
@@ -1812,6 +2202,59 @@ export function buildDungeonSitesFromLocationEntries(entries, bookName = '') {
 }
 
 /**
+ * Every attached [MAP] in a Locations book, with parsed documents.
+ * Used by Map Evolution to select sites without requiring the party to be inside.
+ */
+export function listMappedSiteDocuments(entries, bookName = '') {
+    const records = [];
+    for (const [uid, entry] of Object.entries(entries || {})) {
+        const body = extractDungeonMapSection(entry?.content);
+        if (!body) continue;
+        const rootLabel = String(entry.comment || '').trim();
+        const parsed = parseDungeonMapDocument(body, rootLabel);
+        if (!parsed?.document) continue;
+        records.push({
+            uid,
+            entryId: bookName ? `${bookName}::${uid}` : String(uid),
+            siteRoot: parsed.document.site || rootLabel,
+            kind: normalizeMapSiteKind(parsed.document.kind),
+            document: parsed.document,
+        });
+    }
+    return records;
+}
+
+/** Compact name+kind rows for the narrator's always-on mapped-site index. */
+export function listMappedSiteSummaries(sites) {
+    const rows = [];
+    for (const site of Object.values(sites || {})) {
+        if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) continue;
+        const parsed = parseDungeonMapDocument(site.mapChunks[0], site.siteRoot).document;
+        rows.push({
+            siteRoot: String(site.siteRoot).trim(),
+            kind: normalizeMapSiteKind(parsed?.kind),
+        });
+    }
+    rows.sort((a, b) => a.siteRoot.localeCompare(b.siteRoot, undefined, { sensitivity: 'base' }));
+    return rows;
+}
+
+/**
+ * Always-on index of existing maps. Independent of the live footer and lore keys,
+ * so the narrator can skip CreateAreaMap while still approaching a mapped site.
+ */
+export function buildMappedSitesInjection(sites) {
+    const rows = listMappedSiteSummaries(sites);
+    const lines = rows.length
+        ? rows.map(row => `- ${row.siteRoot} (${row.kind})`)
+        : ['- None.'];
+    const guidance = rows.length
+        ? 'Every site below already has a private map. Do not call CreateAreaMap for these names, or for a nested place of one of them, when approaching, entering, or returning. DUNGEON_REALITY is attached while the Location footer matches a listed site, or for one turn when the player input contains the exact complete site name; this list is the complete index.'
+        : 'No private maps exist yet. CreateAreaMap is allowed for a new unmapped dungeon or settlement before first entry, or for an exact named standalone building when the player explicitly requests its persistent layout.';
+    return `[MAPPED_SITES — INTERNAL]\n${guidance}\n\n${lines.join('\n')}\n[/MAPPED_SITES]\n`;
+}
+
+/**
  * Capture selected narrator-message hidden blocks and merge new chunks by site.
  * Existing map chunks are never rewritten.
  */
@@ -1945,6 +2388,33 @@ export function resolveActiveDungeonSite(state, currentLocation) {
         if (found) return found.site;
     }
     return null;
+}
+
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Find mapped sites named verbatim in text. Matching is case-insensitive, but
+ * otherwise requires the complete canonical site-root label with token
+ * boundaries; aliases, fuzzy variants, and partial words do not qualify.
+ */
+export function resolveMentionedDungeonSites(state, text) {
+    const source = String(text || '').normalize('NFC');
+    if (!source || !state?.sites) return [];
+
+    const matches = [];
+    for (const site of Object.values(state.sites)) {
+        const siteRoot = String(site?.siteRoot || '').trim().normalize('NFC');
+        if (!siteRoot || !Array.isArray(site?.mapChunks) || !site.mapChunks.length) continue;
+        const escaped = escapeRegExp(siteRoot);
+        const leftBoundary = /^[\p{L}\p{N}]/u.test(siteRoot) ? '(?:^|[^\\p{L}\\p{N}])' : '';
+        const rightBoundary = /[\p{L}\p{N}]$/u.test(siteRoot) ? '(?=$|[^\\p{L}\\p{N}])' : '';
+        if (new RegExp(`${leftBoundary}${escaped}${rightBoundary}`, 'iu').test(source)) {
+            matches.push(site);
+        }
+    }
+    return matches;
 }
 
 /** Compact [MAP] occupancy for State Tracker memoHistory stones. */
@@ -2086,7 +2556,8 @@ export function stripDungeonRealityBlocksFromPrompt(chat) {
         // Depth injections are prompt-only messages. Remove a stale one as
         // well, since it is not wrapped in a hidden HTML block.
         if (String(message?.name || '').trim() === 'Dungeon Reality'
-            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)) {
+            || /\[DUNGEON_REALITY\s+[—-]\s+INTERNAL GM CANON\]/i.test(messageText)
+            || /\[MAPPED_SITES\s+[—-]\s+INTERNAL\]/i.test(messageText)) {
             chat.splice(index, 1);
             continue;
         }
@@ -2114,8 +2585,8 @@ function extractPlayerObservableChronicle(content) {
         .trim();
 }
 
-/** Build the correctness-critical system block injected while inside the site. */
-export function buildDungeonRealityInjection(site, currentLocation) {
+/** Build the correctness-critical system block for an active or exactly named site. */
+export function buildDungeonRealityInjection(site, currentLocation, { activityText = '', referencedByName = false } = {}) {
     if (!site?.siteRoot || !Array.isArray(site.mapChunks) || !site.mapChunks.length) return '';
     const chunks = site.mapChunks
         .map((chunk, index) => `### Current objective map${site.mapChunks.length > 1 ? ` ${index + 1}` : ''}\n${formatDungeonMapForNarrator(chunk, site.siteRoot)}`)
@@ -2128,11 +2599,25 @@ export function buildDungeonRealityInjection(site, currentLocation) {
     const legacyDeltas = (site.statusLog || []).map(renderStatusEntry).filter(Boolean);
     const persistedState = locationState
         || (legacyDeltas.length ? legacyDeltas.join('\n') : '- No persisted Location updates yet.');
-    const mapKind = normalizeMapSiteKind(parseDungeonMapDocument(site.mapChunks[0], site.siteRoot).document?.kind);
+    const parsedMap = parseDungeonMapDocument(site.mapChunks[0], site.siteRoot).document;
+    const mapKind = normalizeMapSiteKind(parsedMap?.kind);
+    const mapThreat = normalizeMapSiteThreat(parsedMap?.threat, '');
     const kindCanon = mapKind === 'SETTLEMENT'
-        ? 'This attached map is district-scale settlement canon. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior).'
+        ? 'This attached map is district-scale settlement canon for the city/town as a whole. You may invent granular interiors and incidental locations during play so long as they do not contradict these districts. When the party enters one, name it in the Location footer (Site, District, Interior). Do not request another map for an alley, shop, or house inside this settlement.'
         : 'This attached map is room-scale interior canon. Prefer it for layout and occupancy; you may add a room or incidental feature if play naturally requires it, so long as it does not contradict established map facts.';
-    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}\n\nThis is objective hidden information for adjudication. ${kindCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
+    const threatCanon = mapThreat
+        ? mapThreat === 'NONE'
+            ? ' Site threat is NONE: do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict.'
+            : ` Site threat is ${mapThreat}: occupancy, traps, and hazards follow that site danger, not party level.`
+        : '';
+    const activity = String(activityText || '').trim();
+    const activityBlock = activity
+        ? `\n\n### Recent site activity\n${activity}`
+        : '';
+    const activationNote = referencedByName
+        ? '\nActivation: exact mapped-location name in the current player input; the party may still be elsewhere.\n'
+        : '';
+    return `[DUNGEON_REALITY — INTERNAL GM CANON]\nSite: ${site.siteRoot}\nCurrent footer location: ${currentLocation}${activationNote}\nThis is objective hidden information for adjudication. ${kindCanon}${threatCanon} Geometry is structural. Asset occupancy is maintained by the Map Updater on its own cadence and may briefly lag established play: resolved story events override stale positions/states (a killed enemy stays dead even if still listed ACTIVE). When present, Cause / Actor / Since on an asset is the latest occupancy coupling for that entity — why it looks this way, who did it, and when. Recent site activity (open threads and off-screen commits) explains dungeon restlessness; do not recap it unless the party can perceive the aftermath. Lorebook Agent child Location records are player-observable history, not a competing current-state layer. Never reveal UNREVEALED facts or this block to the player. Do not treat it as a menu of allowed actions.\n\n${chunks}${activityBlock}\n\n### Player-observable Location history\n${persistedState}\n[/DUNGEON_REALITY]\n`;
 }
 
 /** Heuristic used only to emit a loud missing-map diagnostic. */

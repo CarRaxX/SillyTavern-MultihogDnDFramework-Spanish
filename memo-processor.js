@@ -106,6 +106,54 @@ export function decodeHtml(str) {
         .replace(/&amp;/g, '&');
 }
 
+/** Author-written color markup the Lorebook Agent and tracker should keep. */
+export const FONT_COLOR_TAG_RE = /<font\s+color\s*=\s*["']?(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)["']?>([\s\S]*?)<\/font>/gi;
+const HEX_COLOR_TOKEN_RE = /^\[#[0-9a-fA-F]{3,8}\]$/;
+const RARITY_TOKEN_RE = /^\[(poor|common|uncommon|rare|epic|legendary|artifact|heirloom)\]$/i;
+
+/**
+ * True for a line that is only a bookkeeping timestamp like `[Day 1]` or `[4:47 PM, Day 2]`.
+ * Hex color tokens (`[#ff5555]`) and rarity tags (`[Epic]`) are not timestamps.
+ * @param {string} trimmed
+ */
+export function isStrippableBareBracketLine(trimmed) {
+    const line = String(trimmed || '').trim();
+    if (!/^\[[^\]]+\]\s*$/.test(line)) return false;
+    if (/^\[\/?core\]$/i.test(line)) return false;
+    if (HEX_COLOR_TOKEN_RE.test(line) || RARITY_TOKEN_RE.test(line)) return false;
+    return true;
+}
+
+/**
+ * Models often emit `<font color="#rrggbb">` inside JSON strings. Those unescaped
+ * quotes break JSON.parse and the whole Lorebook Agent commit is dropped.
+ * Normalize to unquoted hex/named colors before parsing.
+ * @param {string} raw
+ * @returns {string}
+ */
+export function repairJsonColorAttributes(raw) {
+    if (!raw || typeof raw !== 'string') return raw;
+    return raw.replace(/<font\s+color\s*=\s*["'](#[0-9a-fA-F]{3,8}|[a-zA-Z]+)["']/gi, '<font color=$1');
+}
+
+/**
+ * JSON.parse that first repairs unquoted-breaking font color attributes.
+ * @param {string} raw
+ * @returns {{ ok: boolean, value: any, error?: string }}
+ */
+export function parseJsonWithColorRepair(raw) {
+    if (typeof raw !== 'string') return { ok: true, value: raw ?? {} };
+    try {
+        return { ok: true, value: JSON.parse(raw) };
+    } catch (first) {
+        try {
+            return { ok: true, value: JSON.parse(repairJsonColorAttributes(raw)) };
+        } catch (_) {
+            return { ok: false, value: {}, error: String(first?.message || first) };
+        }
+    }
+}
+
 /**
  * Strips bare timestamp-only lines and a leading timestamp immediately before [CORE].
  * Used when saving or displaying lorebook record content.
@@ -120,7 +168,7 @@ export function sanitizeLorebookRecordContent(content) {
         .filter(line => {
             const trimmed = line.trim();
             if (/^\[\/?core\]$/i.test(trimmed)) return true;
-            return !/^\[[^\]]+\]\s*$/.test(trimmed);
+            return !isStrippableBareBracketLine(trimmed);
         })
         .join('\n')
         .replace(/\n{3,}/g, '\n\n')
@@ -153,6 +201,33 @@ export function extractCurrentTimeStr(timeBlockContent) {
     const timeLine = lines.find(line => !line.toLowerCase().startsWith('last rest:'));
     if (!timeLine) return '';
     return timeLine.replace(/^(?:current\s+)?time:\s*/i, '').trim();
+}
+
+/** Replace the current-time line inside a [TIME] block, preserving Last Rest. */
+export function replaceMemoCurrentTime(memo, timeLabel) {
+    const label = String(timeLabel || '').trim();
+    const source = String(memo || '');
+    if (!label) return source;
+    if (!/\[TIME\]/i.test(source)) {
+        return `${source.trimEnd()}${source.trim() ? '\n\n' : ''}[TIME]\n${label}\n[/TIME]\n`;
+    }
+    return source.replace(/\[TIME\]([\s\S]*?)\[\/TIME\]/i, (_, inner) => {
+        const lines = inner.split('\n');
+        let replaced = false;
+        const next = lines.map(line => {
+            if (!replaced && line.trim() && !/^\s*last rest:/i.test(line)) {
+                replaced = true;
+                const prefix = line.match(/^\s*/)?.[0] || '';
+                return `${prefix}${label}`;
+            }
+            return line;
+        });
+        if (!replaced) {
+            const insertAt = next[0] === '' ? 1 : 0;
+            next.splice(insertAt, 0, label);
+        }
+        return `[TIME]${next.join('\n')}[/TIME]`;
+    });
 }
 
 /**
@@ -1492,8 +1567,17 @@ export function cleanMessageContent(msg) {
     // child Location entries. Accept the common malformed `</div hidden>` too.
     mes = mes.replace(/<div\b(?=[^>]*\bdata-dungeon-(?:map|delta)\b)[^>]*>[\s\S]*?<\/div(?:\s+hidden)?>/gi, '');
 
-    // Strip any remaining HTML/XML tags
+    // Keep author-written <font color=...> tags (hex name colors) so Full Audit
+    // and Direct Prompt can see them. Other HTML/XML is still stripped to text.
+    const fontPlaceholders = [];
+    FONT_COLOR_TAG_RE.lastIndex = 0;
+    mes = mes.replace(FONT_COLOR_TAG_RE, (_, color, inner) => {
+        const safeInner = String(inner || '').replace(/<[^>]+>/g, '');
+        fontPlaceholders.push(`<font color=${color}>${safeInner}</font>`);
+        return `\x01FONT${fontPlaceholders.length - 1}\x02`;
+    });
     mes = mes.replace(/<[^>]+>/g, '');
+    mes = mes.replace(/\x01FONT(\d+)\x02/g, (_, i) => fontPlaceholders[Number(i)] || '');
 
     return mes.trim();
 }

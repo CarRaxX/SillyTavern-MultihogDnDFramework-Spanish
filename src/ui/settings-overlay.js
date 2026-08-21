@@ -13,6 +13,7 @@
  */
 
 import { getSettings } from '../../state-manager.js';
+import { saveSettings } from '../app/runtime-bridge.js';
 import {
     clearSettingsSearch,
     handleSettingsSearchKeydown,
@@ -26,7 +27,7 @@ const TAB_DEFS = [
     { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Sistemas de Juego', match: /(?:Game Systems|Sistemas de Juego)/i },
     { id: 'statetracker', icon: 'fa-brain', label: 'Rastreador de Estado', match: /(?:State Tracker|Rastreador de Estado|Configuración de Ficha)/i },
     { id: 'agent', icon: 'fa-route', label: 'Agente de Lorebook', match: /(?:Lorebook Agent|Agente de Lorebook)/i },
-    { id: 'maparchitect', icon: 'fa-map', label: 'Arquitecto de Mapas', match: /(?:Map Architect|Arquitecto de Mapas)/i },
+    { id: 'maparchitect', icon: 'fa-map', label: 'Mapas Persistentes', match: /(?:Persistent Maps|Mapas Persistentes|Arquitecto de Mapas|Map Architect)/i },
     { id: 'worldprog', icon: 'fa-globe', label: 'Progresión del Mundo', match: /(?:World Progression|Progresión del Mundo)/i },
     { id: 'companion', icon: 'fa-comments', label: 'Acompañante de Aventura', match: /(?:Adventure Companion|Acompañante de Aventura)/i },
 ];
@@ -66,11 +67,7 @@ export function setSettingsOverlayAppearance(mode) {
     const s = getSettings();
     s.settingsOverlayAppearance = resolved;
     applySettingsOverlayAppearance(resolved);
-    try {
-        const ctx = SillyTavern.getContext();
-        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-        else if (typeof ctx.saveSettings === 'function') ctx.saveSettings();
-    } catch (_) { /* non-fatal */ }
+    try { void saveSettings(); } catch (_) { /* non-fatal */ }
 }
 
 /**

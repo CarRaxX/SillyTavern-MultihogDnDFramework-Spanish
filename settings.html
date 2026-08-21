@@ -48,13 +48,13 @@
                         <!-- MAIN PROMPT BACKUP -->
                         <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Copia de Seguridad del Prompt Principal</small>
                         <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; padding: 0 4px; margin-bottom: 6px;">
-                            Cuando el Rastreador de Estado está activo, el framework escribe su prompt del sistema en <b>Quick Prompt → Main</b>. Esta copia de seguridad guarda el texto anterior de Main para que puedas recuperarlo al desactivar el rastreador con el botón <b>⏻</b>.
+                            Cuando el Rastreador de Estado está activo (y el Modo Sysprompt Personalizado desactivado), el framework escribe su prompt del sistema en <b>Quick Prompt → Main</b>, reemplazando lo que hubiera. Tu texto anterior de Main se guarda automáticamente <b>antes</b> de esa sobreescritura en este navegador. La copia se conserva al hacer clic en <b>⏻</b>, desmarcar <b>Habilitar Rastreador de Estado</b>, desactivar la extensión o recargar. Para volver a tu juego de rol normal no-D&amp;D, haz clic en <b>⏻</b> en el panel. Usa los botones de abajo para actualizar la copia guardada tras editar Main manualmente.
                         </div>
                         <label class="checkbox_label" style="padding-left: 4px;">
                             <input id="rpg_main_sysprompt_backup_enabled" type="checkbox" />
                             <span>Habilitar copia de seguridad y restauración de Main</span>
                             <i class="fa-solid fa-circle-question interactable"
-                                title="Activado por defecto. Guarda el texto de Main antes de sobreescribirlo y lo restaura al desactivar el rastreador."></i>
+                                title="Activado por defecto. Guarda una instantánea de tu Quick Prompt Main antes de que el framework lo sobreescriba y se almacena en este navegador para que no se pierda. La restauración ocurre al hacer clic en ⏻ (o desmarcar Habilitar Rastreador de Estado). También puedes guardar o restaurar manualmente con los botones de abajo."></i>
                         </label>
                         <div id="rpg_main_sysprompt_backup_controls" class="flex-container flexFlowColumn gap-1" style="padding-left: 4px; margin-top: 4px;">
                             <div class="flex-container gap-1" style="width: 100%;">
@@ -94,6 +94,11 @@
                             <input id="rpg_tracker_daynight_cycle" type="checkbox" />
                             <span>Ciclo Día/Noche</span>
                             <i class="fa-solid fa-circle-question interactable" title="Cambia los colores del panel y la insignia según la hora dentro del juego de [TIME]."></i>
+                        </label>
+                        <label class="checkbox_label" style="padding-left: 20px;">
+                            <input id="rpg_tracker_xp_bar_bottom" type="checkbox" />
+                            <span>Render XP bar at bottom of State Tracker</span>
+                            <i class="fa-solid fa-circle-question interactable" title="Moves XP out of its normal module card and pins it above the tracker footer, like an MMO experience bar. XP gain animations are retained and appear below the bar while XP is earned."></i>
                         </label>
                         <div id="rpg_tracker_panel_bg_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px; background: rgba(255,255,255,0.03);">
                             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
@@ -219,7 +224,7 @@
                                 <input id="rpg_tracker_npc_portraits" type="checkbox" />
                                 <span>Mostrar Retratos de PNJs</span>
                                 <i class="fa-solid fa-circle-question interactable"
-                                    title="Cuando está desactivado, la sección de PNJs utiliza una vista de lista compacta y la autogeneración de retratos se desactiva."></i>
+                                    title="Cuando está desactivado, la sección de PNJs del Agente de Lorebook utiliza la vista de lista compacta (como Eventos/Ubicaciones) y la autogeneración de retratos se desactiva. El Gestor de PNJ/PJ en el encabezado de PNJs sigue estando disponible."></i>
                             </label>
 
                             <div style="display: flex; align-items: center; gap: 8px; padding-left: 4px; margin-top: 4px;">
@@ -458,6 +463,9 @@
                                     <input id="rpg_tracker_debug" type="checkbox" />
                                     <span>Modo Depuración</span>
                                 </label>
+                                <small style="display: block; margin: 2px 0 8px; opacity: 0.65; font-size: 0.78em; line-height: 1.25;">
+                                    To inspect Tracker / Map Architect / Map Evolution prompts and replies, open the wand menu and choose <b>Multihog Context Debugger</b>.
+                                </small>
                                 <label class="checkbox_label">
                                     <input id="rpg_tracker_auto_reset_prompts" type="checkbox" />
                                     <span>Actualizar Prompts Automáticamente tras Actualización</span>
@@ -549,6 +557,7 @@
                     <div id="rpg_connection_slot_adventure_companion" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_game_system_wizard" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_map_architect" class="rt-connection-drawer-slot"></div>
+                    <div id="rpg_connection_slot_map_runtime" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_world_progression" class="rt-connection-drawer-slot"></div>
                     <div id="rpg_connection_slot_portraits" class="rt-connection-drawer-slot"></div>
                 </div>
@@ -653,17 +662,28 @@
                                 <button id="rt_components_help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;">¿Qué es esto?</button>
                             </div>
                             <div class="flex-container flexFlowColumn gap-1" style="margin-bottom: 8px; padding-left: 5px;">
-                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_loot" /><span>🎲 Botín</span></label>
-                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Eventos</span></label>
-                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Descanso</span></label>
-                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Grupo en Reserva</span></label>
-                                <label class="checkbox_label" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra/ruina (a escala de habitaciones) o pueblo/ciudad (a escala de distritos). Las llamadas a funciones DEBEN estar habilitadas o no podrá ejecutarse CreateAreaMap. No se recomienda junto con Progresión del Mundo hasta que se añada compatibilidad."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha) — llamadas a funciones obligatorias</span></label>
+                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_loot" /><span>🎲 Tiradas de Botín</span></label>
+                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Eventos Aleatorios</span></label>
+                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Restricciones de Descanso (≥9h entre descansos)</span></label>
+                                <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Grupo en Reserva (Benched Party)</span></label>
+                                <label class="checkbox_label" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra/ruina (a escala de habitaciones) o pueblo/ciudad (a escala de distritos). Nuevos mapas requieren CreateAreaMap (llamadas a funciones) o el abridor por comando de texto abajo."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha)</span></label>
+                                <div id="rpg_map_architect_opener_components" class="flex-container flexFlowColumn gap-1" style="padding-left: 20px; display: none;">
+                                    <small style="display:block; font-weight:bold; opacity:0.65; text-transform:uppercase; font-size:0.7em; letter-spacing:0.4px;">Abridor del Arquitecto de Mapas</small>
+                                    <label class="checkbox_label" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
+                                        <input type="radio" name="rpg_map_architect_opener_components" value="tool" id="rpg_map_architect_opener_components_tool" />
+                                        <span>Llamada a función (CreateAreaMap) — requiere function calling</span>
+                                    </label>
+                                    <label class="checkbox_label" title="Para modelos o presets sin llamadas a funciones. El narrador emite un bloque [CREATE_AREA_MAP] y se detiene; el Arquitecto de Mapas se ejecuta y luego continúa la narración.">
+                                        <input type="radio" name="rpg_map_architect_opener_components" value="text" id="rpg_map_architect_opener_components_text" />
+                                        <span>Comando de texto — sin llamadas a funciones</span>
+                                    </label>
+                                </div>
                                 <div style="display:flex;align-items:center;gap:4px;">
-                                <label class="checkbox_label" style="flex:1;" title="Inyecta las instrucciones de opciones CYOA (y etiquetas de ritmo activas) en el contexto de cada turno justo arriba de la cola RNG."><input type="checkbox" id="rpg_sysprompt_mod_cyoa_mode" /><span>🧭 Modo CYOA</span></label>
+                                <label class="checkbox_label" style="flex:1;" title="Inyecta las instrucciones de opciones CYOA (y etiquetas de ritmo activas) en el contexto de cada turno justo arriba de la cola RNG — no en el prompt del sistema Main."><input type="checkbox" id="rpg_sysprompt_mod_cyoa_mode" /><span>🧭 Modo CYOA (opciones de acción cada turno)</span></label>
                                 <button id="rpg_cyoa_settings_btn" class="menu_button interactable" style="padding:1px 7px;font-size:11px;flex-shrink:0;" title="Ajustes del Modo CYOA"><i class="fa-solid fa-gear"></i></button>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:4px;">
-                                <label class="checkbox_label" style="flex:1;"><input type="checkbox" id="rpg_sysprompt_mod_npc_rel_bars" /><span>💞 Sistema de Relaciones</span></label>
+                                <label class="checkbox_label" style="flex:1;"><input type="checkbox" id="rpg_sysprompt_mod_npc_rel_bars" /><span>💞 Sistema de Relaciones (Amistad y Afecto)</span></label>
                                 <button id="rpg_relationship_settings_btn" class="menu_button interactable" style="padding:1px 7px;font-size:11px;flex-shrink:0;" title="Ajustes del Sistema de Relaciones"><i class="fa-solid fa-gear"></i></button>
                                 </div>
                             </div>
@@ -768,7 +788,7 @@
                         <input id="rpg_tracker_enabled" type="checkbox" />
                         <span>Habilitar Rastreador de Estado</span>
                         <i class="fa-solid fa-circle-question interactable"
-                            title="Cuando está activado (y el modo de prompt personalizado está desactivado), el prompt del sistema del framework se escribe en Quick Prompt Main. Tu prompt Main anterior se guarda automáticamente antes de la primera sobreescritura y se restaura al hacer clic en el botón ⏻ del panel."></i>
+                            title="Cuando está activado (y el modo de prompt personalizado desactivado), el prompt del sistema del framework se escribe en Quick Prompt Main. Tu prompt Main anterior se guarda automáticamente en este navegador y se restaura al hacer clic en el botón ⏻ del panel (o desmarcar esta casilla)."></i>
                     </label>
 
                     <label class="checkbox_label" style="margin-bottom: 8px;" title="Fuerza al modelo de estado a emitir el estado COMPLETO y verificado para cada módulo en cada pase. Recomendado para modelos locales o más pequeños (Gemma 4 12B, Llama, Qwen) que puedan desincronizarse.">
@@ -1297,44 +1317,22 @@
                 </div>
             </div>
 
-            <!-- SUB-DRAWER: MAP ARCHITECT -->
+            <!-- SUB-DRAWER: PERSISTENT MAPS -->
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
                     <i class="fa-solid fa-map" style="margin-right: 8px; opacity: 0.7;"></i>
-                    <b>Arquitecto de Mapas</b>
+                    <b>Mapas Persistentes</b>
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
                         <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4; margin-bottom: 8px;">
-                            Cuando el narrador entra por primera vez en una mazmorra o asentamiento sin mapear, llama a este agente especializado una sola vez. Las mazmorras obtienen un mapa completo a escala de habitaciones; las ciudades y pueblos obtienen un mapa a escala de distritos. El arquitecto valida cada pasaje y referencia de entidad, lo guarda en la entrada raíz de Ubicación y devuelve una versión privada compacta al narrador.
-                        </div>
-                        <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
-                            <label style="flex:1; min-width:140px;">Historial del Chat
-                                <input id="rpg_map_architect_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" class="text_pole" title="Mensajes recientes del chat proporcionados al Arquitecto de Mapas como contexto establecido." />
-                            </label>
-                            <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
-                                <input id="rpg_map_architect_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" class="text_pole" title="Longitud máxima de generación para el mapa JSON completo." />
-                            </label>
+                            Mapas ocultos para mazmorras (a escala de habitaciones) y asentamientos (a escala de distritos). El <b>Arquitecto de Mapas</b> crea el primer mapa con su propia conexión (un modelo más potente). El <b>Actualizador de Mapas</b> y la <b>Evolución de Mapas</b> comparten una segunda conexión para la ocupación y cambios fuera de pantalla. Cada pase tiene su propio cajón.
                         </div>
 
                         <div class="inline-drawer">
                             <div class="inline-drawer-toggle inline-drawer-header">
-                                <b>Prompt del Arquitecto</b>
-                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
-                            </div>
-                            <div class="inline-drawer-content">
-                                <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
-                                    <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado únicamente durante las llamadas a CreateAreaMap.</span>
-                                    <button id="rpg_map_architect_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado del Arquitecto de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
-                                </div>
-                                <textarea id="rpg_map_architect_system_prompt" class="text_pole" rows="14" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para el Arquitecto de Mapas"></textarea>
-                            </div>
-                        </div>
-
-                        <div class="inline-drawer">
-                            <div class="inline-drawer-toggle inline-drawer-header">
-                                <b>Ajustes de Conexión</b>
+                                <b>Ajustes de Conexión (Arquitecto de Mapas)</b>
                                 <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
                             </div>
                             <div class="inline-drawer-content">
@@ -1373,13 +1371,91 @@
 
                         <div class="inline-drawer">
                             <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Ajustes de Conexión (Actualizador y Evolución)</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <label>Fuente de Conexión</label>
+                                    <select id="rpg_map_runtime_connection_source" class="text_pole">
+                                        <option value="default">API Principal</option>
+                                        <option value="profile">Perfil de Conexión (recomendado)</option>
+                                        <option value="ollama">Ollama</option>
+                                        <option value="openai">OpenAI Compatible</option>
+                                    </select>
+                                    <div id="rpg_map_runtime_profile_group" style="display:none;">
+                                        <select id="rpg_map_runtime_connection_profile" class="text_pole"></select>
+                                    </div>
+                                    <div id="rpg_map_runtime_ollama_group" style="display:none;">
+                                        <input id="rpg_map_runtime_ollama_url" type="text" class="text_pole" placeholder="URL" />
+                                        <div class="flex-container gap-1">
+                                            <select id="rpg_map_runtime_ollama_model" class="text_pole" style="flex:1;"></select>
+                                            <button id="rpg_map_runtime_ollama_refresh" class="menu_button interactable" title="Actualizar modelos de Ollama"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                        </div>
+                                    </div>
+                                    <div id="rpg_map_runtime_openai_group" style="display:none;">
+                                        <input id="rpg_map_runtime_openai_url" type="text" class="text_pole" placeholder="URL" />
+                                        <input id="rpg_map_runtime_openai_key" type="password" class="text_pole" placeholder="Clave API" />
+                                        <div class="flex-container gap-1">
+                                            <select id="rpg_map_runtime_openai_model" class="text_pole" style="flex:1;"></select>
+                                            <button id="rpg_map_runtime_openai_refresh" class="menu_button interactable" title="Actualizar modelos compatibles con OpenAI"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                        </div>
+                                        <input id="rpg_map_runtime_openai_model_manual" type="text" class="text_pole" placeholder="Nombre manual del modelo" />
+                                    </div>
+                                    <label>Ajuste Preestablecido (Preset)</label>
+                                    <select id="rpg_map_runtime_completion_preset" class="text_pole"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Arquitecto de Mapas</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
+                                        Cuando el narrador entra por primera vez en una mazmorra o asentamiento sin mapear, llama a este agente especializado una sola vez. Las mazmorras obtienen un mapa completo a escala de habitaciones; las ciudades y pueblos obtienen un mapa a escala de distritos. El arquitecto valida cada pasaje y referencia de entidad, lo guarda en la entrada raíz de Ubicación y devuelve una versión privada compacta al narrador.
+                                    </div>
+                                    <small style="display:block; font-weight:bold; opacity:0.65; text-transform:uppercase; font-size:0.7em; letter-spacing:0.4px;">Abridor</small>
+                                    <label class="checkbox_label" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
+                                        <input type="radio" name="rpg_map_architect_opener" value="tool" id="rpg_map_architect_opener_tool" />
+                                        <span>Llamada a función (CreateAreaMap) — requiere function calling</span>
+                                    </label>
+                                    <label class="checkbox_label" title="Para modelos o presets sin llamadas a funciones. El narrador emite un bloque [CREATE_AREA_MAP] y se detiene; el Arquitecto de Mapas se ejecuta y luego continúa la narración.">
+                                        <input type="radio" name="rpg_map_architect_opener" value="text" id="rpg_map_architect_opener_text" />
+                                        <span>Comando de texto — sin llamadas a funciones</span>
+                                    </label>
+                                    <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.35; margin: 0 0 8px;">
+                                        Comando de texto: el GM debe emitir únicamente un bloque <code>[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]</code> y detenerse. El Arquitecto de Mapas se ejecuta y el narrador continúa desde la entrada.
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                        <label style="flex:1; min-width:140px;">Revisión de Historia (Lookback)
+                                            <input id="rpg_map_architect_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" class="text_pole" title="Mensajes recientes del chat proporcionados al Arquitecto de Mapas como contexto establecido." />
+                                        </label>
+                                        <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
+                                            <input id="rpg_map_architect_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Longitud máxima de generación para el mapa JSON completo." />
+                                        </label>
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado únicamente durante las llamadas a CreateAreaMap / comando de texto.</span>
+                                        <button id="rpg_map_architect_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado del Arquitecto de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
+                                    </div>
+                                    <textarea id="rpg_map_architect_system_prompt" class="text_pole" rows="14" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para el Arquitecto de Mapas"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
                                 <b>Actualizador de Mapas</b>
                                 <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
                             </div>
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
-                                        Tras crear un mapa, esta pasada especializada mantiene la ocupación de salas actualizada. No registra biografías ni relaciones de PNJs (eso corresponde al Agente de Lorebook). Utiliza la conexión del Arquitecto de Mapas superior. Por defecto se ejecuta en cada turno.
+                                        Tras crear un mapa, esta pasada especializada mantiene la ocupación de salas actualizada. No registra biografías ni relaciones de PNJs (eso corresponde al Agente de Lorebook). Utiliza la conexión del Actualizador y Evolución. Por defecto se ejecuta en cada turno.
                                     </div>
                                     <label class="checkbox_label">
                                         <input id="rpg_map_updater_enabled" type="checkbox" checked />
@@ -1390,7 +1466,7 @@
                                             <input id="rpg_map_updater_run_every" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="50" class="text_pole" title="Frecuencia con la que el Actualizador de Mapas se ejecuta automáticamente dentro de un lugar mapeado. 1 = cada turno." />
                                         </label>
                                         <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
-                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="400" max="16000" class="text_pole" title="Longitud máxima de generación para una actualización de ocupación de mapa." />
+                                            <input id="rpg_map_updater_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Longitud máxima de generación para una actualización de ocupación de mapa." />
                                         </label>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
@@ -1398,6 +1474,126 @@
                                         <button id="rpg_map_updater_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado del Actualizador de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
                                     </div>
                                     <textarea id="rpg_map_updater_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para el Actualizador de Mapas"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header">
+                                <b>Evolución de Mapas</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div class="flex-container flexFlowColumn gap-1">
+                                    <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
+                                        Independiente de la ocupación. Hace avanzar las ubicaciones mapeadas fuera de pantalla según el tiempo transcurrido en el mundo. Durante un intervalo normal, salida del lugar o pase manual, cada mapa también interpreta cualquier prosa relevante no consumida de los Informes del Mundo. Utiliza la conexión de Actualizador y Evolución de Mapas.
+                                    </div>
+                                    <label class="checkbox_label">
+                                        <input id="rpg_map_evolution_enabled" type="checkbox" checked />
+                                        <span>Evolucionar lugares mapeados automáticamente (incluyendo realización perezosa de Informes del Mundo)</span>
+                                    </label>
+                                    <div class="rpg-wp-status-card" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; margin-bottom: 4px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82em; opacity: 0.85; margin-bottom: 10px;">
+                                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Última Evolución</span>
+                                                <span id="rpg_map_evolution_last_fired" style="font-family: monospace; font-weight: bold;">—</span>
+                                            </div>
+                                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Última Evolución (En el Juego)</span>
+                                                <span id="rpg_map_evolution_last_report_val" style="font-family: monospace; font-weight: bold;">—</span>
+                                            </div>
+                                            <div style="display: flex; flex-direction: column; gap: 2px; grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; margin-top: 4px;">
+                                                <span style="font-size: 0.78em; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.03em;">Próxima Evolución Programada</span>
+                                                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                                    <span id="rpg_map_evolution_next_report_val" style="font-family: monospace; font-weight: bold;">—</span>
+                                                    <button id="rpg_map_evolution_btn_override_next" class="menu_button interactable" style="margin: 0; padding: 2px 8px; font-size: 0.85em; width: auto;" title="Modificar el tiempo dentro del juego en que se activará la próxima evolución">Modificar</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button id="rpg_map_evolution_reset_timeline" class="menu_button interactable" title="Limpia las marcas de tiempo de última evolución para que la Evolución de Mapas empiece de cero desde el tiempo actual" style="margin: 0; background: rgba(234, 67, 53, 0.08); border-color: rgba(234, 67, 53, 0.3); color: rgba(234,67,53,0.8); font-size: 0.8em; font-weight: bold; width: 100%;">
+                                            <i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> Restablecer Línea Temporal
+                                        </button>
+                                        <button id="rpg_map_evolution_testing_ground" class="menu_button interactable" title="Abrir el sandbox de Evolución de Mapas: avanza el tiempo, genera entidades y ejecuta ciclos sin jugar" style="margin: 6px 0 0; width: 100%; font-size: 0.8em; font-weight: bold;">
+                                            <i class="fa-solid fa-flask" style="margin-right: 5px;"></i> Entorno de Pruebas
+                                        </button>
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                        <label style="flex:1; min-width:140px;">Otros mapas (horas en el mundo)
+                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" value="12" class="text_pole" title="Frecuencia con la que los lugares mapeados donde no está el grupo pueden evolucionar." />
+                                        </label>
+                                        <label style="flex:1; min-width:140px;">Mapa actual (horas en el mundo)
+                                            <input id="rpg_map_evolution_onsite_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="168" value="12" class="text_pole" title="Frecuencia con la que el lugar mapeado donde está el grupo puede evolucionar. 0 omite ciclos automáticos solo para ese lugar." />
+                                        </label>
+                                        <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
+                                            <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Longitud máxima de generación para un pase de Evolución de Mapas." />
+                                        </label>
+                                    </div>
+                                    <label class="checkbox_label">
+                                        <input id="rpg_map_evolution_compress_enabled" type="checkbox" checked />
+                                        <span>Comprimir historial de hilos cerrados cuando supere el umbral de tokens</span>
+                                    </label>
+                                    <label>Umbral de tokens para historial
+                                        <input id="rpg_map_evolution_compress_threshold" type="text" inputmode="numeric" pattern="[0-9]*" min="500" max="100000" value="10000" class="text_pole" title="Tras cada pase de Evolución, si el historial de hilos cerrados supera esta cantidad de tokens (~4 caracteres c/u), se comprime. Los hilos abiertos se conservan intactos. Por defecto 10000." />
+                                    </label>
+                                    <label>Límite de memoria de commits para el DM (tokens)
+                                        <input id="rpg_map_evolution_narrator_commit_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="200" max="20000" value="2000" class="text_pole" title="Cuánta memoria de Evolución de Mapas (commits de material recientes) se transfiere al narrador mientras el grupo esté dentro. Por defecto 2000." />
+                                    </label>
+                                    <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
+                                        Limita cuánta <b>memoria de Evolución de Mapas</b> se transfiere al <b>narrador</b> en el informe de actividad reciente del lugar. No limita el archivo ni la compresión propia de Evolución.
+                                    </div>
+                                    <label style="font-size:0.85em;">Revisión de Informes del Mundo (Lookback)
+                                        <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="Cuántos informes recientes y últimos informes dirigidos a esta ubicación verifica cada mapa." />
+                                    </label>
+                                    <label>Mapas por ciclo de intervalo
+                                        <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Qué lugares mapeados puede evolucionar el intervalo automático.">
+                                            <option value="active">Solo mapa actual</option>
+                                            <option value="count">N mapas de todos los sitios mapeados</option>
+                                            <option value="all" selected>Todos los sitios mapeados pendientes</option>
+                                            <option value="selected">Mapas seleccionados</option>
+                                        </select>
+                                    </label>
+                                    <div id="rpg_map_evolution_n_row" class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                        <label style="flex:1; min-width:140px;">Cuántos
+                                            <input id="rpg_map_evolution_tick_count" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="50" class="text_pole" title="Cuántos mapas pendientes evolucionar por ciclo. 0 = todos los mapas pendientes del conjunto." />
+                                        </label>
+                                        <label class="checkbox_label" style="flex:1; min-width:180px; padding-bottom:4px;">
+                                            <input id="rpg_map_evolution_tick_randomize" type="checkbox" checked />
+                                            <span>Aleatorizar qué mapas pendientes se eligen</span>
+                                        </label>
+                                    </div>
+                                    <div id="rpg_map_evolution_interval_selected_hint" style="display:none; font-size:0.78em; opacity:0.65; line-height:1.35;">
+                                        Los ciclos de intervalo usan los mapas marcados abajo en Ejecutar ahora.
+                                    </div>
+                                    <div id="rpg_map_evolution_selected_row" class="flex-container flexFlowColumn gap-1" style="margin-top:4px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
+                                        <div class="flex-container gap-1" style="align-items:center; flex-wrap:wrap;">
+                                            <b style="font-size:0.9em; flex:1;">Lugares Mapeados</b>
+                                            <button id="rpg_map_evolution_selected_refresh" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Recargar lugares mapeados de este chat">Actualizar</button>
+                                        </div>
+                                        <span style="font-size:0.78em; opacity:0.65; line-height:1.35;"><b>Ejecutar ahora</b> es la casilla: evoluciona los mapas marcados de inmediato, o (si Mapas por ciclo es Mapas seleccionados) limita los ciclos automáticos a esas marcas.</span>
+                                        <div class="flex-container gap-1" style="flex-wrap:wrap;">
+                                            <button id="rpg_map_evolution_selected_all" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;">Todos</button>
+                                            <button id="rpg_map_evolution_selected_none" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;">Ninguno</button>
+                                            <button id="rpg_map_evolution_selected_current" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;">Actual</button>
+                                            <button id="rpg_map_evolution_evolve_now" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Evolucionar los mapas marcados ahora">Evolucionar mapas marcados ahora</button>
+                                        </div>
+                                        <span style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:4px;"><b>Intervalo por mapa</b> es opcional. Déjalo en blanco para usar Otros mapas / Mapa actual arriba. 0 omite ciclos automáticos para ese lugar.</span>
+                                        <div id="rpg_map_evolution_site_list_header" class="flex-container" style="align-items:center; gap:8px; padding:4px 6px 0; font-size:0.72em; opacity:0.5; text-transform:uppercase; letter-spacing:0.03em;">
+                                            <span style="width:18px; flex:0 0 18px;" title="Ejecutar ahora"></span>
+                                            <span style="flex:1; min-width:0;">Mapa</span>
+                                            <span style="width:72px; flex:0 0 72px; text-align:right;">Horas</span>
+                                        </div>
+                                        <div id="rpg_map_evolution_selected_list" style="max-height:220px; overflow-y:auto; border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:5px;"></div>
+                                    </div>
+                                    <div class="flex-container gap-1" style="align-items:center; margin-bottom:4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado para evolución fuera de pantalla y realización agéntica de prosa de informes.</span>
+                                        <button id="rpg_map_evolution_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado de Evolución de Mapas"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
+                                    </div>
+                                    <textarea id="rpg_map_evolution_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para Evolución de Mapas"></textarea>
+                                    <div class="flex-container gap-1" style="align-items:center; margin:8px 0 4px;">
+                                        <span style="font-size:0.78em; opacity:0.65; flex:1;">Utilizado solo cuando el historial de hilos cerrados supera el umbral de tokens. Los hilos abiertos nunca se comprimen.</span>
+                                        <button id="rpg_map_evolution_reset_compress_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Restablecer al prompt predeterminado de compresión de historial"><i class="fa-solid fa-arrow-rotate-left"></i> Restablecer</button>
+                                    </div>
+                                    <textarea id="rpg_map_evolution_compress_prompt" class="text_pole" rows="6" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; box-sizing:border-box;" placeholder="Prompt del sistema para compresión de historial de Evolución de Mapas"></textarea>
                                 </div>
                             </div>
                         </div>
@@ -1419,10 +1615,6 @@
                             Los informes son redactados por el LLM y se guardan en el libro de lore <code style="font-size:0.9em;">{prefix}_World</code>.
                             La activación es <b>determinista</b>: JavaScript verifica el bloque <code>[TIME]</code> tras cada actualización del Rastreador de Estado.
                         </div>
-                        <div style="font-size: 0.8em; line-height: 1.4; margin-bottom: 8px; border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 6px; padding: 8px 10px; background: rgba(234, 179, 8, 0.08); color: #f5d76e;">
-                            No se recomienda usar Progresión del Mundo al mismo tiempo que <b>Mapas Persistentes</b> hasta que se añada compatibilidad completa. Elige uno u otro por ahora.
-                        </div>
-
                         <!-- QUICK START GUIDE -->
                         <div class="inline-drawer" style="margin-bottom: 10px;">
                             <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em; padding: 6px 10px; background: rgba(0, 180, 216, 0.08) !important; border-color: rgba(0, 180, 216, 0.2) !important;">
@@ -1431,20 +1623,20 @@
                                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                             </div>
                             <div class="inline-drawer-content" style="padding: 10px; font-size: 0.82em; line-height: 1.45; background: rgba(0, 0, 0, 0.15);">
-                                <p style="margin: 0 0 10px; opacity: 0.85;">Crear un Esqueleto del Mundo es opcional pero recomendable: proporciona contenido inicial para la simulación del mundo más allá del entorno del jugador.</p>
+                                <p style="margin: 0 0 10px; opacity: 0.85;">Crear un Esqueleto del Mundo es opcional pero recomendable: proporciona lugares y premisas iniciales más allá del entorno inmediato del jugador. La Progresión del Mundo lee más adelante el expediente completo de lore de cada ubicación seleccionada, pero nunca recibe su mapa oculto.</p>
                                 <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
-                                    <li><b>Crear la Fuente del Esqueleto</b>: Escribe desde una semilla temática corta hasta una descripción detallada del mundo. <i>Generar Automáticamente</i> extrae un trasfondo generalizado del chat reciente. También puedes usar libros de lore existentes como fuente.</li>
-                                    <li><b>Generar el Esqueleto</b>: Haz clic en <i>Generar Esqueleto</i>. Esto crea facciones, ubicaciones, PNJs y conflictos fuera de escena para simular la actividad del mundo (línea base del Día 0). Se pueden editar en SillyTavern.</li>
-                                    <li><b>Configurar Aleatorización de Enfoque</b> (Opcional pero Recomendado): Habilítalo para forzar diversidad en la cobertura de informes en lugar de centrarse solo en la zona inmediata del jugador.</li>
-                                    <li><b>Generar el Primer Informe</b>: Ejecuta un informe de inmediato usando <i>Generar Ahora</i> o permite que se ejecute automáticamente conforme avanza la campaña.</li>
+                                    <li><b>Crear la Fuente del Esqueleto</b>: Escribe desde una semilla temática corta hasta una descripción granular del mundo. <i>Generar Automáticamente</i> extrae de forma segura un trasfondo generalizado del chat reciente sin trasladar entidades con nombre al esqueleto. También puedes usar libros de lore existentes abajo.</li>
+                                    <li><b>Generar el Esqueleto</b>: Haz clic en <i>Generar Esqueleto</i>. Las ubicaciones se convierten en sujetos de macro-simulación; las facciones y conflictos proporcionan contexto regional. Las entidades con nombre informan los expedientes de ubicación pero nunca avanzan de forma independiente por Progresión del Mundo.</li>
+                                    <li><b>Configurar Rotación de Ubicaciones</b>: Elige cuántas ubicaciones cubre un informe. Las ubicaciones que llevan más tiempo sin avanzar se seleccionan primero, con aleatorización opcional entre candidatas con la misma antigüedad.</li>
+                                    <li><b>Generar el Primer Informe</b>: Ejecuta un informe de inmediato usando <i>Generar Ahora</i> o permite que se active automáticamente. Su prosa influye en el narrador de inmediato; los mapas relevantes la realizan más tarde en su pase normal de Evolución de Mapas.</li>
                                 </ol>
                                 <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);">
                                     <div style="font-size: 0.78em; font-weight: bold; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Información Adicional</div>
                                     <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; opacity: 0.9;">
-                                        <li>Los miembros del grupo en reserva <code>[BENCHED]</code> también pueden formar parte de los informes de Progresión del Mundo.</li>
-                                        <li>Un intervalo de 24h suele ser adecuado para la generación automática, pero puedes experimentar con otros valores.</li>
-                                        <li>Siempre puedes ejecutar la Progresión del Mundo manualmente en cualquier momento.</li>
-                                        <li>La posición de inyección afecta la prominencia de los informes ante el narrador.</li>
+                                        <li>La Progresión del Mundo puede leer personajes, edificios y sub-ubicaciones con nombre como restricciones dentro de un expediente de ubicación, pero no hace avanzar esas entidades granulares.</li>
+                                        <li>Un intervalo de 24h suele ser adecuado para la generación automática de Informes del Mundo, pero te animamos a experimentar con intervalos más cortos (o más largos).</li>
+                                        <li>Siempre puedes activar la Progresión del Mundo manualmente en cualquier momento.</li>
+                                        <li>La posición de inyección afecta la prominencia de los Informes del Mundo (ajustable en <b>Ajustes de Inyección en el Contexto</b> abajo). Cuanto más abajo se posicione (más cerca del mensaje más reciente), más prominente será para el narrador.</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1495,7 +1687,7 @@
                         <label class="checkbox_label" style="font-size: 0.92em; font-weight: bold; margin-bottom: 6px;">
                             <input id="rpg_world_progression_enabled" type="checkbox" />
                             <span>Habilitar Progresión del Mundo</span>
-                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Cuando está habilitado, la Progresión del Mundo se ejecuta automáticamente tras las actualizaciones del Rastreador de Estado cuando transcurre el intervalo en el juego. Requiere que el Agente de Lorebook esté activo y un prefijo de campaña válido. No se recomienda junto con Mapas Persistentes hasta que se añada compatibilidad."></i>
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Cuando está habilitado, la Progresión del Mundo se ejecuta automáticamente tras las actualizaciones del Rastreador de Estado cuando transcurre el intervalo en el juego. Requiere que el Agente de Lorebook esté activo y un prefijo de campaña válido."></i>
                         </label>
 
                         <!-- QUICK CONTROLS & STATUS CARD -->
@@ -1544,12 +1736,12 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; margin-bottom: 6px;">
-                                        El Esqueleto del Mundo es una base de datos oculta de entidades fuera de escena (facciones, ubicaciones, PNJs, conflictos) que no se inyectan directamente en el chat. La IA simula la actividad de estas entidades expandiendo el mundo.
+                                        El Esqueleto del Mundo es un conjunto oculto de premisas macro del Día 0. Las semillas de ubicación se convierten en sujetos de simulación; las facciones, instituciones y conflictos proporcionan contexto regional. Los individuos con nombre pertenecen al lore ordinario de PNJs una vez establecidos mediante el juego, nunca en el esqueleto.
                                     </div>
                                     
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; margin-bottom: 2px; flex-wrap: wrap; gap: 6px;">
                                         <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin: 0; display: flex; align-items: center;">Fuente del Esqueleto (Atmósfera / Lore)
-                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Describe el mundo a cualquier nivel de detalle: atmósfera, culturas, historia, facciones, ubicaciones, personajes, tecnología o magia. O bien usa Generar Automáticamente desde el chat reciente."></i>
+                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Describe la atmósfera, culturas, historia, facciones, ubicaciones, conflictos, tecnología, magia u otros datos macro del mundo. Los individuos con nombre en el material fuente siguen siendo restricciones canónicas pero no se extraen en el esqueleto. Opcional cuando las entradas de libros de lore existentes o del esqueleto proporcionan la fuente."></i>
                                         </label>
                                         <div style="display: flex; align-items: center; gap: 4px;">
                                             <span style="font-size: 0.75em; opacity: 0.7;">Revisión:</span>
@@ -1590,12 +1782,6 @@
                                             <input id="rpg_world_progression_skeleton_locations" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="4" style="width: 100%; text-align: center;" />
                                         </div>
                                         <div>
-                                            <label style="font-size: 0.75em; font-weight: bold; opacity: 0.8; display: block; margin-bottom: 2px;">PNJs
-                                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7;" title="Número de PNJs iniciales en el esqueleto. Macro: {npcCount}"></i>
-                                            </label>
-                                            <input id="rpg_world_progression_skeleton_npcs" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="0" style="width: 100%; text-align: center;" />
-                                        </div>
-                                        <div>
                                             <label style="font-size: 0.75em; font-weight: bold; opacity: 0.8; display: block; margin-bottom: 2px;">Conflictos
                                                 <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7;" title="Número de conflictos iniciales en el esqueleto. Macro: {conflictCount}"></i>
                                             </label>
@@ -1616,7 +1802,7 @@
                                             <i class="fa-solid fa-arrow-rotate-left"></i> Restablecer
                                         </button>
                                     </div>
-                                    <div style="font-size: 0.72em; opacity: 0.5; margin-bottom: 3px;">Variables disponibles: <code>{factionCount}</code>, <code>{locationCount}</code>, <code>{npcCount}</code>, <code>{conflictCount}</code></div>
+                                    <div style="font-size: 0.72em; opacity: 0.5; margin-bottom: 3px;">Variables disponibles: <code>{factionCount}</code>, <code>{locationCount}</code>, <code>{conflictCount}</code></div>
                                     <textarea id="rpg_world_progression_skeleton_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; background:rgba(0,0,0,0.3); color:var(--SmartThemeBodyColor); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:6px; box-sizing:border-box; margin-bottom: 6px;" placeholder="Prompt del sistema para generar el Esqueleto del Mundo…"></textarea>
 
                                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top: 4px;">
@@ -1644,100 +1830,29 @@
                             </div>
                         </div>
 
-                        <!-- SUB-DRAWER: FOCUS RANDOMIZATION -->
+                        <!-- SUB-DRAWER: LOCATION ROTATION -->
                         <div class="inline-drawer">
                             <div class="inline-drawer-toggle inline-drawer-header">
                                 <i class="fa-solid fa-shuffle" style="opacity: 0.7; margin-right: 8px;"></i>
-                                <b>Aleatorización de Enfoque</b>
+                                <b>Rotación de Ubicaciones</b>
                                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                             </div>
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.75em; opacity: 0.65; margin-bottom: 6px;">
-                                        Destaca aleatoriamente un subconjunto de entidades del lore en cada informe para evitar repeticiones y fomentar la diversidad de la IA.
+                                        La Progresión del Mundo hace avanzar las condiciones a escala de ubicación, no cronologías de entidades individuales. Selecciona primero los expedientes de ubicación menos recientemente cubiertos.
                                     </div>
-
-                                    <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_npcs" type="checkbox" />
-                                        <span>Aleatorizar selección del grupo de PNJs</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Selecciona aleatoriamente un grupo de PNJs del lore activo y del esqueleto para enfocar en el próximo informe."></i>
+                                    <label style="font-size:0.85em; font-weight:bold;">Ubicaciones por informe
+                                        <input id="rpg_world_progression_locations_per_report" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="12" class="text_pole" value="3" title="Cuántos expedientes de ubicación reciben su propia sección en cada informe." />
                                     </label>
-
-                                    <div id="rpg_world_progression_random_npc_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Grupo del esqueleto: <span id="rpg_world_progression_skeleton_npc_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> disponibles</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">PNJs del Esqueleto
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de PNJs fuera de escena para destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_npc_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="PNJs del esqueleto a destacar por informe" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">PNJs Narrativos
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de PNJs del lore activo para destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_npc_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="3" style="max-width: 80px;" title="PNJs narrativos a destacar por informe" />
-                                            </div>
-                                        </div>
-                                    </div>
-
                                     <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_locations" type="checkbox" />
-                                        <span>Aleatorizar selección del grupo de Ubicaciones</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Selecciona aleatoriamente ubicaciones del lore activo y del esqueleto para enfocar."></i>
+                                        <input id="rpg_world_progression_location_randomize" type="checkbox" checked />
+                                        <span>Aleatorizar ubicaciones con la misma antigüedad</span>
                                     </label>
-
-                                    <div id="rpg_world_progression_random_location_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Grupo del esqueleto: <span id="rpg_world_progression_skeleton_location_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> disponibles</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Ubicaciones del Esqueleto
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de ubicaciones fuera de escena a destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_location_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Ubicaciones del esqueleto a destacar por informe" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Ubicaciones Narrativas
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de ubicaciones activas a destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_location_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Ubicaciones narrativas a destacar por informe" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <label class="checkbox_label">
-                                        <input id="rpg_world_progression_randomize_factions" type="checkbox" />
-                                        <span>Aleatorizar selección del grupo de Facciones</span>
-                                        <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Selecciona aleatoriamente facciones del lore activo y del esqueleto para enfocar."></i>
-                                    </label>
-
-                                    <div id="rpg_world_progression_random_faction_count_container" style="margin-top: 4px; margin-left: 12px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 8px; margin-bottom: 6px;">
-                                        <div style="font-size: 0.75em; opacity: 0.55; margin-bottom: 4px;">Grupo del esqueleto: <span id="rpg_world_progression_skeleton_faction_pool_count" style="font-weight: bold; opacity: 0.85;">0</span> disponibles</div>
-                                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Facciones del Esqueleto
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de facciones fuera de escena a destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_skeleton_faction_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Facciones del esqueleto a destacar por informe" />
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 0.82em; font-weight: bold; opacity: 0.75; display: block; margin-bottom: 2px;">Facciones Narrativas
-                                                    <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Número de facciones activas a destacar por informe."></i>
-                                                </label>
-                                                <input id="rpg_world_progression_random_narrative_faction_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="2" style="max-width: 80px;" title="Facciones narrativas a destacar por informe" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div style="margin-top: 6px; font-size: 0.85em; opacity: 0.7;">
-                                        <i class="fa-solid fa-circle-info"></i> Los miembros del grupo activos en [PARTY] quedan excluidos automáticamente. Los miembros en [BENCHED PARTY] pueden ser seleccionados.
-                                    </div>
-
-                                    <div style="margin-top: 6px;">
-                                        <label style="font-size: 0.85em; font-weight: bold; display: block; margin-bottom: 2px;">Lista de Exclusión de Informes del Mundo
-                                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Lista separada por comas de títulos o claves de entradas para excluir del enfoque aleatorio."></i>
-                                        </label>
-                                        <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="ej. gary, player_party, hero" title="Lista separada por comas de títulos o claves a excluir" style="width: 100%; box-sizing: border-box;" />
+                                    <div style="font-size:0.75em; opacity:0.6;">La aleatorización nunca permite que una ubicación recientemente cubierta se adelante a una más antigua.</div>
+                                    <div style="margin-top:6px;">
+                                        <label style="font-size:0.85em; font-weight:bold; display:block; margin-bottom:2px;">Lista de Exclusión de Ubicaciones</label>
+                                        <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="ej. isla tutorial, reino de los sueños" title="Títulos o claves de ubicaciones separadas por comas para excluir de la rotación" style="width:100%; box-sizing:border-box;" />
                                     </div>
                                 </div>
                             </div>

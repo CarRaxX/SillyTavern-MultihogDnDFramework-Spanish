@@ -17,6 +17,8 @@ import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
 import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
+import { formatNarratorSiteActivity } from './map-evolution-lib.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
@@ -28,32 +30,53 @@ import { isEffectiveSectionEnabled, isLocationMappingEnabled } from './src/state
 import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/state/narrative-pacing.js';
 import {
     buildDungeonRealityInjection,
+    buildMappedSitesInjection,
     findLatestDungeonLocation,
+    getDungeonMessageText,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
     resolveActiveDungeonSite,
+    resolveMentionedDungeonSites,
     stripCapturedDungeonMapsFromPrompt,
     stripDungeonRealityBlocksFromPrompt,
 } from './dungeon-reality.js';
 import { runMapArchitect } from './map-architect.js';
+import {
+    applyMapArchitectTextOpenerCyoaCaveat,
+    buildMapArchitectContinueBrief,
+    clearAssistantReasoning,
+    createAreaMapCommandIsComplete,
+    isMapArchitectTextOpener,
+    seedMapArchitectContinueText,
+    stripCreateAreaMapCommand,
+} from './map-architect-opener.js';
 export { isPercentFormula, resolveDiceCompare };
 
 const dungeonMissingMapWarnings = new Set();
+let _pendingMapArchitectResult = null;
+let _mapArchitectTextOpenerBusy = false;
+let _mapArchitectNarrationContinue = false;
 
-/** Keep mapped root lore visible to LA exactly while its location root is active. */
-function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation) {
+/** Keep mapped root lore visible while its root is active or named exactly this turn. */
+function syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation, mentionedSites = []) {
     const mappedIds = new Set(Object.values(dungeonState?.sites || {}).map(site => site?.entryId).filter(Boolean));
     const activeSite = resolveActiveDungeonSite(dungeonState, currentLocation);
-    const wantedId = activeSite?.entryId || '';
+    const wantedIds = new Set([
+        activeSite?.entryId,
+        ...mentionedSites.map(site => site?.entryId),
+    ].filter(Boolean));
     const pinned = new Set(settings.pinnedRouterKeys || []);
     const before = JSON.stringify({
         active: settings.activeRouterKeys || [],
         keyword: settings.keywordActivatedKeys || [],
     });
     settings.activeRouterKeys = (settings.activeRouterKeys || [])
-        .filter(id => !mappedIds.has(id) || id === wantedId || pinned.has(id));
-    if (wantedId && !settings.activeRouterKeys.includes(wantedId)) settings.activeRouterKeys.push(wantedId);
-    // Map roots are location-gated, never keyword-owned.
+        .filter(id => !mappedIds.has(id) || wantedIds.has(id) || pinned.has(id));
+    for (const wantedId of wantedIds) {
+        if (!settings.activeRouterKeys.includes(wantedId)) settings.activeRouterKeys.push(wantedId);
+    }
+    // Exact map-name mentions are owned by this turn's map layer, not the
+    // general keyword pool (which supports aliases and substring hits).
     if (Array.isArray(settings.keywordActivatedKeys)) {
         settings.keywordActivatedKeys = settings.keywordActivatedKeys.filter(id => !mappedIds.has(id));
     }
@@ -514,20 +537,22 @@ export function registerMapArchitectTool() {
 
         const settings = getSettings();
         if (!isLocationMappingEnabled(settings)) return;
+        if (isMapArchitectTextOpener(settings)) return;
         registerFunctionTool({
             name: 'CreateAreaMap',
             displayName: 'Map Architect',
-            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village (kind SETTLEMENT, district-scale). Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
+            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village as a whole (kind SETTLEMENT, district-scale). Do not call for an alley, house, shop, rooftop, warehouse, street, or other sub-place of a city. Do not call for wilderness, roads, countryside, or other places between mapped sites. A house is DUNGEON only if that building itself is a high-risk dungeon/ruin/lair. SETTLEMENT site is the city/town name, not the current alley. Do not call if [MAPPED_SITES] lists that site or a parent of the place being entered, even when no DUNGEON_REALITY block is attached yet. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'Exact root Location label used in the location footer and external campaign archive, e.g. "Abbey Undercroft" or "Riverford".' },
-                    entrance: { type: 'string', description: 'Short natural label for the area the player is entering now (dungeon room, city gate, market square, docks, etc.). This becomes the first VISITED map area.' },
-                    kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'], description: 'DUNGEON = room-scale interior (ruins, lairs, strongholds). SETTLEMENT = district-scale town/city/village. Required.' },
-                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Approximate scope. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
+                    site: { type: 'string', description: 'For SETTLEMENT, copy the town/city/village name from the Location footer, not the current street, alley, or interior. For DUNGEON, copy the dungeon/ruin name. Copy character-for-character. Never translate, transliterate, expand, or retitle. A distinct site title must already appear in the footer.' },
+                    entrance: { type: 'string', description: 'Copy the named entrance exactly as printed: a settlement gate/square/docks, or the dungeon door. Never translate it. This becomes the first VISITED map area.' },
+                    kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'], description: 'DUNGEON = room-scale high-risk interior (ruins, lairs, strongholds) — not an ordinary house or shop. SETTLEMENT = the city/town/village as a whole, district-scale — not an alley or building. Required.' },
+                    scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Geographic size, not danger. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
+                    threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'], description: 'Site danger for occupancy and trap density. Independent of party level and of scale. LOW = sparse/empty, MODERATE = some hostiles, HIGH = frequent hostiles and traps, DEADLY = layered overlapping threats. A LARGE LOW ruin can be vast and empty.' },
                     premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },
                 },
-                required: ['site', 'entrance', 'kind', 'scale', 'premise'],
+                required: ['site', 'entrance', 'kind', 'scale', 'threat', 'premise'],
             },
             action: async args => runMapArchitect(args),
             formatMessage: args => {
@@ -542,11 +567,12 @@ export function registerMapArchitectTool() {
     }
 }
 
-/** Unregister CreateAreaMap and abort Map Updater when Location Mapping is off. */
+/** Unregister CreateAreaMap and abort Map Updater / Map Evolution when Persistent Maps is off. */
 export function syncLocationMappingRuntime() {
     registerMapArchitectTool();
     if (isLocationMappingEnabled(getSettings())) return;
     stopMapUpdaterPass();
+    stopMapEvolutionPass();
     if (runtimeState.hasActiveDungeonMap) {
         runtimeState.hasActiveDungeonMap = false;
         globalThis._rpgSyncAgentImmersionUi?.();
@@ -924,6 +950,19 @@ function extractTextContent(msg) {
     return String(raw);
 }
 
+/** Latest explicit player text from the outgoing prompt copy. */
+function findLatestPlayerInputText(chat) {
+    if (!Array.isArray(chat)) return '';
+    for (let index = chat.length - 1; index >= 0; index--) {
+        const message = chat[index];
+        const role = String(message?.role || message?.Role || '').toLowerCase().trim();
+        if (message?.is_user || role === 'user' || role === 'human' || role === 'player') {
+            return extractTextContent(message);
+        }
+    }
+    return '';
+}
+
 /**
  * Formats a lorebook entry block for injection into the GM/narrator prompt.
  * Automatically prepends any active NPC relationship status values if relationship bars are enabled.
@@ -1015,6 +1054,7 @@ export function installInterceptor() {
     delete globalThis._rpgPromptManagerInterceptorActive;
     globalThis.rpgTrackerInterceptor = async function (chat, contextSize, abort, type) {
         const settings = getSettings();
+        const dungeonEnabled = isLocationMappingEnabled(settings);
 
         // The manifest interceptor is the sole injection path.
         const skipInjection = false;
@@ -1022,7 +1062,6 @@ export function installInterceptor() {
         // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
         const _rbCtx = SillyTavern.getContext();
         const _rbChat = _rbCtx?.chat;
-        const dungeonEnabled = isLocationMappingEnabled(settings);
         const dungeonChatId = getActiveChatId();
         const replacingLatestNarratorMessage = ['swipe', 'regenerate']
             .includes(String(type || '').toLowerCase());
@@ -1051,9 +1090,24 @@ export function installInterceptor() {
             }
 
             const currentLocation = findLatestDungeonLocation(_rbChat);
-            const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation);
+            const mappedSitesInjection = buildMappedSitesInjection(dungeonState.sites);
+            const mentionedSites = resolveMentionedDungeonSites(dungeonState, findLatestPlayerInputText(chat));
+            const activeSite = syncDungeonLoreAgentActivation(settings, dungeonState, currentLocation, mentionedSites);
+            const sitesToInject = [activeSite, ...mentionedSites]
+                .filter((site, index, sites) => site && sites.findIndex(candidate =>
+                    (candidate?.entryId || candidate?.siteRoot) === (site.entryId || site.siteRoot)) === index);
+            if (sitesToInject.length) {
+                dungeonInjection = sitesToInject.map(site => buildDungeonRealityInjection(site, currentLocation, {
+                    activityText: formatNarratorSiteActivity(
+                        settings.mapEvolutionThreadsBySite,
+                        settings.mapEvolutionBacklogBySite,
+                        site.siteRoot,
+                        { maxTokens: settings.mapEvolutionNarratorCommitTokens },
+                    ),
+                    referencedByName: site !== activeSite,
+                })).filter(Boolean).join('\n\n');
+            }
             if (activeSite) {
-                dungeonInjection = buildDungeonRealityInjection(activeSite, currentLocation);
                 dungeonMissingMapWarnings.delete(`${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`);
             } else if (currentLocation && looksLikeDungeonSite(currentLocation)) {
                 const warningKey = `${dungeonChatId}::${getSiteRootFromLocation(currentLocation)}`;
@@ -1062,7 +1116,18 @@ export function installInterceptor() {
                     console.error(`[RPG Tracker] Dungeon Reality is enabled and the party appears to be inside "${currentLocation}", but no captured site map is available. Adjudication is missing its objective map until the GM emits a valid <div hidden> map with a footer location.`);
                 }
             }
+            dungeonInjection = dungeonInjection
+                ? `${mappedSitesInjection}\n${dungeonInjection}`
+                : mappedSitesInjection;
         }
+        const narrationContinue = _mapArchitectNarrationContinue;
+        if (_pendingMapArchitectResult) {
+            dungeonInjection = dungeonInjection
+                ? `${_pendingMapArchitectResult}\n\n${dungeonInjection}`
+                : _pendingMapArchitectResult;
+            _pendingMapArchitectResult = null;
+        }
+        if (narrationContinue) _mapArchitectNarrationContinue = false;
         const _rbLastAi = _rbChat ? [..._rbChat].reverse().find(m => !m.is_user && !m.is_system) : null;
         if (_rbLastAi) {
             applyMemoSwipeRollback(_rbLastAi, settings);
@@ -1201,7 +1266,13 @@ export function installInterceptor() {
             const bundleParts = [];
             const modeTags = buildNarrativeModeTags(settings.narrativePacing);
             if (modeTags) bundleParts.push(modeTags);
-            if (cyoaActive) bundleParts.push(buildCyoaModeBlock(settings.cyoaConfig || {}));
+            if (cyoaActive) {
+                let cyoaBlock = buildCyoaModeBlock(settings.cyoaConfig || {});
+                if (isLocationMappingEnabled(settings) && isMapArchitectTextOpener(settings) && !narrationContinue) {
+                    cyoaBlock = applyMapArchitectTextOpenerCyoaCaveat(cyoaBlock);
+                }
+                bundleParts.push(cyoaBlock);
+            }
             if (bundleParts.length) {
                 injections += `${bundleParts.join('\n\n')}\n\n`;
                 if (settings.debugMode) {
@@ -1267,148 +1338,134 @@ export function installInterceptor() {
 
 
 
-        // Pre-generation keyword scan.
-        // This interceptor (manifest generate_interceptor) fires BEFORE addPromptManagerInterceptor
-        // in the ST pipeline. Running the keyword scan here ensures that any entries activated by
-        // the current user message land in activeRouterKeys before Path 1 reads it.
-        //
-        // In Path 1 (skipInjection=true): scan runs, activeRouterKeys is updated, text building
-        //   is skipped. Path 1 will pick up all activeRouterKeys (including newly triggered ones)
-        //   and inject them as a single system message at the configured depth.
-        //
-        // In Path 2 (skipInjection=false): scan runs and we also build lore text and inject it
-        //   directly into the user message (legacy path for old ST builds).
-        //
-        // Skipped entirely when routerNativeKeywordActivation is enabled (ST handles keywords).
-        if (settings.routerEnabled && !settings.routerNativeKeywordActivation) {
-            if (content) {
-                const t0 = performance.now().toFixed(1);
-                console.group(`[RPG|INTERCEPT] rpgTrackerInterceptor keyword pre-scan @ ${t0}ms`);
-                console.log('skipInjection (Path 1 active):', skipInjection);
-                console.log('activeRouterKeys BEFORE scan:', JSON.stringify(settings.activeRouterKeys || []));
-                const triggered = await scanAssistantOutputForKeywords(content, { sweepEnabled: false }).catch(() => []);
-                console.log('activeRouterKeys AFTER scan:', JSON.stringify(settings.activeRouterKeys || []));
-                console.log('newly triggered this scan:', triggered);
-                console.log(`scan finished @ ${performance.now().toFixed(1) }ms`);
+        // Keyword scan is extension-managed only. Native Keyword Activation leaves
+        // matching to SillyTavern. Agent-owned cards still inject below either way —
+        // otherwise [NPC_RELATIONS] can list an NPC whose card never appears (ST
+        // native WI only injects when the book is selected and keys match).
+        let triggered = [];
+        if (settings.routerEnabled && !settings.routerNativeKeywordActivation && content) {
+            const t0 = performance.now().toFixed(1);
+            console.group(`[RPG|INTERCEPT] rpgTrackerInterceptor keyword pre-scan @ ${t0}ms`);
+            console.log('skipInjection (Path 1 active):', skipInjection);
+            console.log('activeRouterKeys BEFORE scan:', JSON.stringify(settings.activeRouterKeys || []));
+            triggered = await scanAssistantOutputForKeywords(content, { sweepEnabled: false }).catch(() => []);
+            console.log('activeRouterKeys AFTER scan:', JSON.stringify(settings.activeRouterKeys || []));
+            console.log('newly triggered this scan:', triggered);
+            console.log(`scan finished @ ${performance.now().toFixed(1) }ms`);
 
-                // Trigger UI refresh so the Agent Panel updates immediately with yellow pills
-                if (triggered.length > 0 && typeof globalThis._rpgRenderRouterUI === 'function') {
-                    globalThis._rpgRenderRouterUI();
-                }
+            if (triggered.length > 0 && typeof globalThis._rpgRenderRouterUI === 'function') {
+                globalThis._rpgRenderRouterUI();
+            }
+            console.groupEnd();
+        }
 
-                // In Path 1, the scan above already updated activeRouterKeys.
-                // Path 1's addPromptManagerInterceptor will read activeRouterKeys and inject
-                // all entries (including the newly triggered ones) at the configured depth.
-                // No text building or user-message mutation needed here.
-                if (!skipInjection) {
-                    // Path 2: build lore text to inject directly into the user message.
-                    if (triggered.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let loreBlock = '';
-                            const bookCache = {};
-                            for (const id of triggered) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    loreBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (loreBlock) {
-                                loreInjections += `\n<font color="#d4a028">## NEWLY ACTIVATED LORE (KEYWORD MATCH)</font>\n${loreBlock.trim()}\n`;
-                                console.log(`[RPG|INTERCEPT] Same-turn lore injected for ${triggered.length} entries.`);
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Same-turn lore injection failed:', e);
-                        }
-                    }
-
-                    // Persistent keyword-activated entries
-                    const triggeredSet = new Set(triggered);
-                    const persistent = (settings.keywordActivatedKeys || []).filter(id => !triggeredSet.has(id));
-                    if (persistent.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let persistBlock = '';
-                            const bookCache = {};
-                            for (const id of persistent) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    persistBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (persistBlock) {
-                                loreInjections += `\n<font color="#d4a028">## ACTIVE LORE (KEYWORD)</font>\n${persistBlock.trim()}\n`;
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Persistent keyword lore re-injection failed:', e);
-                        }
-                    }
-
-                    // Agent-owned entries (not keyword-triggered)
-                    const alreadyInjected = new Set([...triggered, ...(settings.keywordActivatedKeys || [])]);
-                    const agentOwned = (settings.activeRouterKeys || [])
-                        .filter(id => !alreadyInjected.has(id))
-                        .filter(id => {
-                            const [bookName] = id.split('::');
-                            const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
-                            return !isWorld;
-                        });
-                    if (agentOwned.length > 0) {
-                        try {
-                            const ctx = SillyTavern.getContext();
-                            let agentBlock = '';
-                            const bookCache = {};
-                            for (const id of agentOwned) {
-                                const [bookName, uid] = id.split('::');
-                                if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
-                                const entry = bookCache[bookName]?.entries?.[uid];
-                                if (entry?.content) {
-                                    agentBlock += buildInjectedEntryText(id, entry, settings);
-                                }
-                            }
-                            if (agentBlock) {
-                                loreInjections += `\n## ACTIVE LORE (AGENT)\n${agentBlock.trim()}\n`;
-                            }
-                        } catch (e) {
-                            console.warn('[RPG Tracker] Agent-owned lore injection failed:', e);
-                        }
-                    }
-
-                // World Progression reports injection
-                if (settings.worldProgressionEnabled && (settings.activeWorldKeys || []).length > 0) {
+        if (settings.routerEnabled && !skipInjection) {
+            if (!settings.routerNativeKeywordActivation) {
+                if (triggered.length > 0) {
                     try {
                         const ctx = SillyTavern.getContext();
-                        let worldBlock = '';
+                        let loreBlock = '';
                         const bookCache = {};
-                        const sortedKeys = [...settings.activeWorldKeys].sort((a, b) => {
-                            const [, uidA] = a.split('::');
-                            const [, uidB] = b.split('::');
-                            return Number(uidA) - Number(uidB);
-                        });
-                        for (const id of sortedKeys) {
+                        for (const id of triggered) {
                             const [bookName, uid] = id.split('::');
                             if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
                             const entry = bookCache[bookName]?.entries?.[uid];
                             if (entry?.content) {
-                                worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
+                                loreBlock += buildInjectedEntryText(id, entry, settings);
                             }
                         }
-                        if (worldBlock) {
-                            wpInjections = `\n## WORLD PROGRESSION REPORTS\n${worldBlock.trim()}\n`;
+                        if (loreBlock) {
+                            loreInjections += `\n<font color="#d4a028">## NEWLY ACTIVATED LORE (KEYWORD MATCH)</font>\n${loreBlock.trim()}\n`;
+                            console.log(`[RPG|INTERCEPT] Same-turn lore injected for ${triggered.length} entries.`);
                         }
                     } catch (e) {
-                        console.warn('[RPG Tracker] World progression injection failed:', e);
+                        console.warn('[RPG Tracker] Same-turn lore injection failed:', e);
+                    }
+                }
+
+                const triggeredSet = new Set(triggered);
+                const persistent = (settings.keywordActivatedKeys || []).filter(id => !triggeredSet.has(id));
+                if (persistent.length > 0) {
+                    try {
+                        const ctx = SillyTavern.getContext();
+                        let persistBlock = '';
+                        const bookCache = {};
+                        for (const id of persistent) {
+                            const [bookName, uid] = id.split('::');
+                            if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                            const entry = bookCache[bookName]?.entries?.[uid];
+                            if (entry?.content) {
+                                persistBlock += buildInjectedEntryText(id, entry, settings);
+                            }
+                        }
+                        if (persistBlock) {
+                            loreInjections += `\n<font color="#d4a028">## ACTIVE LORE (KEYWORD)</font>\n${persistBlock.trim()}\n`;
+                        }
+                    } catch (e) {
+                        console.warn('[RPG Tracker] Persistent keyword lore re-injection failed:', e);
                     }
                 }
             }
 
-            console.groupEnd();
+            // Agent-owned entries (not keyword-triggered). Always inject when the
+            // router is on — including native keyword mode and empty user messages.
+            const alreadyInjected = settings.routerNativeKeywordActivation
+                ? new Set()
+                : new Set([...triggered, ...(settings.keywordActivatedKeys || [])]);
+            const agentOwned = (settings.activeRouterKeys || [])
+                .filter(id => !alreadyInjected.has(id))
+                .filter(id => {
+                    const [bookName] = id.split('::');
+                    const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                    return !isWorld;
+                });
+            if (agentOwned.length > 0) {
+                try {
+                    const ctx = SillyTavern.getContext();
+                    let agentBlock = '';
+                    const bookCache = {};
+                    for (const id of agentOwned) {
+                        const [bookName, uid] = id.split('::');
+                        if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                        const entry = bookCache[bookName]?.entries?.[uid];
+                        if (entry?.content) {
+                            agentBlock += buildInjectedEntryText(id, entry, settings);
+                        }
+                    }
+                    if (agentBlock) {
+                        loreInjections += `\n## ACTIVE LORE (AGENT)\n${agentBlock.trim()}\n`;
+                    }
+                } catch (e) {
+                    console.warn('[RPG Tracker] Agent-owned lore injection failed:', e);
+                }
+            }
+
+            if (settings.worldProgressionEnabled && (settings.activeWorldKeys || []).length > 0) {
+                try {
+                    const ctx = SillyTavern.getContext();
+                    let worldBlock = '';
+                    const bookCache = {};
+                    const sortedKeys = [...settings.activeWorldKeys].sort((a, b) => {
+                        const [, uidA] = a.split('::');
+                        const [, uidB] = b.split('::');
+                        return Number(uidA) - Number(uidB);
+                    });
+                    for (const id of sortedKeys) {
+                        const [bookName, uid] = id.split('::');
+                        if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
+                        const entry = bookCache[bookName]?.entries?.[uid];
+                        if (entry?.content) {
+                            worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
+                        }
+                    }
+                    if (worldBlock) {
+                        wpInjections = `\n## WORLD PROGRESSION REPORTS\n${worldBlock.trim()}\n`;
+                    }
+                } catch (e) {
+                    console.warn('[RPG Tracker] World progression injection failed:', e);
+                }
+            }
         }
-    }
 
         if (settings.debugMode) console.groupEnd();
 
@@ -1814,6 +1871,10 @@ async function maybeRollbackAgentsForSwipe(msg, { lorebook = true } = {}) {
     if (mapRolled) {
         const primeTo = Math.max(0, (getSettings().mapUpdaterRunEvery || 1) - 1);
         setMapUpdaterAutoTick(primeTo, 'swipe_map_updater_rollback_prime');
+    } else {
+        // Occupancy snapshots earlier in the same turn; restoring evolution after
+        // occupancy rollback would undo that occupancy restore.
+        await maybeRollbackMapEvolutionForSwipe(msg);
     }
     if (lorebook) await maybeRollbackRouterPassForSwipe(msg);
 }
@@ -2309,6 +2370,173 @@ export let _rpgIsGenerating = false;
  * @param {any[]} chat
  * @returns {any|null}
  */
+function applyAssistantMessageText(ctx, message, text) {
+    message.mes = text;
+    if (typeof message.content === 'string') message.content = text;
+    if (Array.isArray(message.swipes) && message.swipes.length) {
+        const idx = Math.max(0, Math.min(message.swipes.length - 1, Number(message.swipe_id) || 0));
+        message.swipes[idx] = text;
+    }
+    const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+    const index = chat.indexOf(message);
+    if (index >= 0 && typeof ctx.updateMessageBlock === 'function') {
+        try { ctx.updateMessageBlock(index, message); } catch (_) { /* UI refresh is best effort */ }
+    }
+    if (typeof ctx.saveChat === 'function') {
+        try { void ctx.saveChat(); } catch (_) { /* persistence is best effort */ }
+    }
+}
+
+function logMapArchitectTextOpener(status, extra = {}) {
+    recordSchedulerEvent(`map_architect_text_opener_${status}`, extra);
+    console.log(`[RPG Tracker] Map Architect text opener: ${status}`, extra);
+}
+
+/**
+ * Scan assistant messages after the latest user turn for a [CREATE_AREA_MAP] fence.
+ * Tool-call system rows can sit after the stub, so "latest assistant" is not enough.
+ */
+function findCreateAreaMapCandidate(chat) {
+    if (!Array.isArray(chat)) return null;
+    let lastUser = -1;
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]?.is_user) {
+            lastUser = i;
+            break;
+        }
+    }
+    for (let i = chat.length - 1; i > lastUser; i--) {
+        const message = chat[i];
+        if (!message || message.is_user || message.extra?.rpgMapArchitectTextOpenerRan) continue;
+        const cleaned = cleanMessageContent(message);
+        const raw = getDungeonMessageText(message);
+        const strippedClean = stripCreateAreaMapCommand(cleaned);
+        const strippedRaw = stripCreateAreaMapCommand(raw);
+        const stripped = strippedClean.command ? strippedClean : strippedRaw;
+        if (stripped.command) return { message, stripped, index: i };
+    }
+    return null;
+}
+
+/**
+ * Text-command CreateAreaMap fallback: strip the fence, run Map Architect, continue the narrator.
+ * Returns true when the normal ST/LA/updater cadence must be skipped for this generation.
+ */
+async function maybeRunMapArchitectTextOpener({ chat, settings, currentType, source = 'generation_ended' }) {
+    const type = String(currentType || '').toLowerCase();
+    const textMode = isMapArchitectTextOpener(settings);
+    const mappingOn = isLocationMappingEnabled(settings);
+    if (!mappingOn) {
+        if (textMode) logMapArchitectTextOpener('skip', { reason: 'persistent_maps_off', source, generationType: type });
+        return false;
+    }
+    if (_mapArchitectTextOpenerBusy) {
+        logMapArchitectTextOpener('skip', { reason: 'busy', source, generationType: type });
+        return true;
+    }
+    if (['impersonate', 'quiet'].includes(type)) {
+        logMapArchitectTextOpener('skip', { reason: 'generation_type', source, generationType: type });
+        return false;
+    }
+
+    const candidate = findCreateAreaMapCandidate(chat);
+    if (!candidate) {
+        const latest = getLatestAssistantCandidate(chat);
+        const preview = String(latest?.mes || '').slice(0, 240);
+        const fenceMentioned = /CREATE_AREA_MAP/i.test(preview);
+        if (textMode || fenceMentioned) {
+            logMapArchitectTextOpener('skip', {
+                reason: 'no_fence',
+                source,
+                generationType: type,
+                textMode,
+                fenceMentioned,
+                preview,
+            });
+        }
+        return false;
+    }
+
+    const { message, stripped, index } = candidate;
+    logMapArchitectTextOpener('fence_found', {
+        source,
+        generationType: type,
+        index,
+        site: stripped.command.args?.site || '',
+        speaker: message.name || '',
+        isSystem: !!message.is_system,
+    });
+
+    _mapArchitectTextOpenerBusy = true;
+    try {
+        message.extra = message.extra || {};
+        message.extra.rpgMapArchitectTextOpenerRan = true;
+        applyAssistantMessageText(SillyTavern.getContext(), message, stripped.text);
+
+        const args = stripped.command.args;
+        if (!createAreaMapCommandIsComplete(args)) {
+            logMapArchitectTextOpener('skip', { reason: 'incomplete_command', source, generationType: type, args });
+            globalThis.toastr?.error?.(
+                'Map Architect text command is missing site, entrance, kind, or premise. Stay outside and try again next turn.',
+                'Map Architect',
+                { timeOut: 10000 },
+            );
+            return true;
+        }
+
+        const siteLabel = args.site;
+        logMapArchitectTextOpener('running', { source, generationType: type, site: siteLabel });
+        await runMapArchitect(args);
+        clearAssistantReasoning(message);
+        applyAssistantMessageText(
+            SillyTavern.getContext(),
+            message,
+            seedMapArchitectContinueText(stripped.text, args.entrance),
+        );
+        _pendingMapArchitectResult = buildMapArchitectContinueBrief(args);
+        _mapArchitectNarrationContinue = true;
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.generate !== 'function') {
+            console.error('[RPG Tracker] Cannot continue after Map Architect text opener: generate() is unavailable.');
+            _pendingMapArchitectResult = null;
+            _mapArchitectNarrationContinue = false;
+            return true;
+        }
+        setTimeout(() => {
+            void Promise.resolve(ctx.generate('continue')).catch(error => {
+                console.error('[RPG Tracker] Continue after Map Architect text opener failed:', error);
+                _pendingMapArchitectResult = null;
+                _mapArchitectNarrationContinue = false;
+            });
+        }, 75);
+        return true;
+    } catch (error) {
+        _pendingMapArchitectResult = null;
+        _mapArchitectNarrationContinue = false;
+        console.error('[RPG Tracker] Map Architect text opener failed:', error);
+        return true;
+    } finally {
+        _mapArchitectTextOpenerBusy = false;
+    }
+}
+
+/**
+ * Backup path when GENERATION_ENDED never emits (ST only emits it if #mes_stop was visible).
+ * MESSAGE_RECEIVED still fires after the assistant message is saved.
+ */
+export async function onMapArchitectAssistantMessage(messageId, type) {
+    const ctx = SillyTavern.getContext();
+    const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+    const message = Number.isInteger(messageId) ? chat[messageId] : null;
+    if (message?.is_user) return false;
+    return maybeRunMapArchitectTextOpener({
+        chat,
+        settings: getSettings(),
+        currentType: type || _lastGenerationType,
+        source: 'message_received',
+    });
+}
+
 function getLatestAssistantCandidate(chat) {
     if (!Array.isArray(chat)) return null;
     for (let i = chat.length - 1; i >= 0; i--) {
@@ -2361,9 +2589,16 @@ export function isLatestAssistantFromActiveChar(chat, ctx) {
 
 /**
  * Fires on GENERATION_STARTED. Stores the type of generation.
+ * ST also emits this for prompt-build dry runs — those must not look like a live turn.
  * @param {string} type
+ * @param {object} [_options]
+ * @param {boolean} [dryRun]
  */
-export function onGenerationStarted(type) {
+export function onGenerationStarted(type, _options, dryRun) {
+    if (dryRun === true) {
+        recordSchedulerEvent('generation_started_dry_run', { generationType: type ?? null });
+        return;
+    }
     _lastGenerationType = type;
     _rpgIsGenerating = true;
     recordSchedulerEvent('generation_started', { generationType: type ?? null });
@@ -2477,20 +2712,33 @@ export async function onGenerationEnded() {
         console.warn('[RPG Tracker] CYOA render finalization failed:', error);
     }
     const settings = getSettings();
+    const currentType = _lastGenerationType;
+    const ctx = SillyTavern.getContext();
+    const { chat } = ctx;
+
+    // Fence handshake beats ST/LA, including while a previous tracker pass is still running
+    // and even when the latest row is a tool-call system message.
+    if (await maybeRunMapArchitectTextOpener({ chat, settings, currentType, source: 'generation_ended' })) {
+        recordSchedulerEvent('generation_ended_aborted', {
+            reason: 'map_architect_text_opener',
+            generationType: currentType ?? null,
+        });
+        setTimeout(() => { _lastGenerationType = null; }, 0);
+        return;
+    }
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
     const routerActive = !!settings.routerEnabled;
     if ((!settings.enabled && !routerActive) || isStateRunning) {
         recordSchedulerEvent('generation_ended_aborted', {
             reason: (!settings.enabled && !routerActive) ? 'disabled' : 'state_running',
-            generationType: _lastGenerationType ?? null,
+            generationType: currentType ?? null,
         });
         return;
     }
 
     // Check if the generation was for Impersonation or Quiet tasks.
     // In these cases, the chat history did not actually change.
-    const currentType = _lastGenerationType;
     recordSchedulerEvent('generation_ended_enter', {
         generationType: currentType ?? null,
         chatLength: SillyTavern.getContext()?.chat?.length ?? 0,
@@ -2508,9 +2756,6 @@ export async function onGenerationEnded() {
         recordSchedulerEvent('generation_ended_aborted', { reason: 'generation_type', generationType: currentType });
         return;
     }
-
-    const ctx = SillyTavern.getContext();
-    const { chat } = ctx;
 
     // Only auto-run State Tracker / Lorebook Agent when the latest assistant speaker is {{char}}.
     // Fake announcement speakers (e.g. "System Notifications") must not tick run-every or fire passes.
@@ -2634,12 +2879,9 @@ export async function onGenerationEnded() {
         }
     }
 
-    // Step 3: World Progression deterministic check — runs AFTER the State Tracker has updated
-    // currentMemo, so the [TIME] block reflects the current in-world clock.
-    await maybeRunWorldProgression();
-
     // Map Updater cadence is independent of Lorebook Agent. It can run every turn
-    // while LA stays on a slower record/relationship schedule.
+    // while LA stays on a slower record/relationship schedule. Occupancy runs before
+    // World Progression / Map Evolution so Evolution cannot move something play just destroyed.
     const countsTowardRunEvery = currentType !== 'swipe' && currentType !== 'regenerate';
     const mapEvery = Math.max(1, Number(settings.mapUpdaterRunEvery) || 1);
     if (countsTowardRunEvery) {
@@ -2668,6 +2910,10 @@ export async function onGenerationEnded() {
             noop: mapResult?.noop === true,
         });
     }
+
+    // World Progression then Map Evolution — TIME is already on the memo; occupancy is current.
+    await maybeRunWorldProgression();
+    await maybeRunMapEvolution();
 
     // Step 4: Run-every throttle — only fire the Lorebook Agent every N new turns.
     // Swipe/regenerate generations reuse an existing message slot and must not advance the

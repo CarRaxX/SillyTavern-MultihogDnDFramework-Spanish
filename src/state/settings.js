@@ -5,7 +5,7 @@
 
 import { MODULE_NAME, DEFAULT_PC_SECTIONS, DEFAULT_NPC_SECTIONS } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
-import { buildDefaultSettings } from './defaults.js';
+import { buildDefaultSettings, FACTORY_SETTINGS_VERSION } from './defaults.js';
 import { isOlderThan } from './versions.js';
 import { buildNpcInstruction, buildLocInstruction, buildFacInstruction } from './module-instructions.js';
 import {
@@ -21,6 +21,7 @@ import {
 } from './realtime-visualization-guard.js';
 import { migrateChatSetupCatalogs } from './chat-setup.js';
 import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js';
+import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -130,6 +131,11 @@ function getSettingsInternal(extensionSettings) {
         s.agentConsoleOpen = localStorage.getItem('rpg_tracker_agent_console_open') === 'true';
     } else {
         localStorage.setItem('rpg_tracker_agent_console_open', String(s.agentConsoleOpen));
+    }
+    if (localStorage.getItem('rpg_tracker_agent_map_evo_open') !== null) {
+        s.agentMapEvolutionOpen = localStorage.getItem('rpg_tracker_agent_map_evo_open') === 'true';
+    } else {
+        localStorage.setItem('rpg_tracker_agent_map_evo_open', String(s.agentMapEvolutionOpen));
     }
     if (localStorage.getItem('rpg_tracker_agent_world_open') !== null) {
         s.agentWorldOpen = localStorage.getItem('rpg_tracker_agent_world_open') === 'true';
@@ -513,7 +519,7 @@ function getSettingsInternal(extensionSettings) {
         if (s.routerSystemPromptTemplate.includes('<formatting>')) {
             s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
                 'When recording a new entry, keep the lorebook category separate from the entity label.',
-                'When recording a new entry, keep the lorebook category separate from the entity label.\n\n- **REQUIRED category field:** Every `record` item MUST include `"category": "NPC"|"LOC"|"FAC"|"QUEST"|"EVENT"` (or an enabled custom tag). This field alone chooses which lorebook receives the entry (NPCs / Locations / Factions / …). Omitting it dumps the entry into the wrong book.\n- Location labels may use `" :: "` hierarchy AND must still set `"category": "LOC"`. NPC people get `"category": "NPC"` with a plain name label (no `::`).'
+                'When recording a new entry, keep the lorebook category separate from the entity label.\n\n- **REQUIRED category field:** Every `record` item MUST use one of the exact values in the runtime **AVAILABLE RECORD CATEGORIES** section. That authoritative list contains the enabled stock modules and all custom tags for the current pass. Disabled stock categories are not available.\n- When LOC is enabled, location labels may use `" :: "` hierarchy and must still set `"category": "LOC"`. When NPC is enabled, NPC people get `"category": "NPC"` with a plain name label (no `::`).'
             );
             if (!s.routerSystemPromptTemplate.includes('MISSING required "category": "NPC"')) {
                 s.routerSystemPromptTemplate = s.routerSystemPromptTemplate.replace(
@@ -784,6 +790,24 @@ function getSettingsInternal(extensionSettings) {
         s.settingsVersion = '5.5.17';
     }
 
+    // 8.27.0: strengthen the Map Architect's MODERATE threat wording. Only
+    // migrate the untouched shipped default; preserve prompts customized by users.
+    if (isOlderThan(s.settingsVersion, '8.27.0')) {
+        const previousModerateLine = '  - MODERATE: some occupancy. Hostiles in a minority of rooms. A few traps or hazards on key routes. Safe pauses are possible.';
+        const currentModerateLine = '  - MODERATE: moderate occupancy. Hostiles here and there. Some traps and hazards. Safe pauses are not too unlikely.';
+        const legacyDefault = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT.replace(currentModerateLine, previousModerateLine);
+        if (s.mapArchitectSystemPrompt === legacyDefault) {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '8.27.0';
+    }
+
+    // Stamp factory version even when a release has no field rewrites
+    // (8.28.0 mapped-site index is prompt/injection only).
+    if (isOlderThan(s.settingsVersion, FACTORY_SETTINGS_VERSION)) {
+        s.settingsVersion = FACTORY_SETTINGS_VERSION;
+    }
+
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {
         // We check by ID rather than name, because the legacy version might have had "Appearance" instead of "Appearance/Species"
         const idsMatch = s.pcCoreSections.every((sec, idx) => sec.id === DEFAULT_PC_SECTIONS[idx].id);
@@ -815,6 +839,19 @@ function getSettingsInternal(extensionSettings) {
 
     enforceRealtimeVisualizationDisabled(s);
 
+    // Old shipped default (2500) is too small for a JSON map pass — the output
+    // stream is killed. Treat it as unset so existing chats pick up 25000.
+    if (Number(s.mapUpdaterMaxTokens) === 2500) s.mapUpdaterMaxTokens = 25000;
+    if (Number(s.mapEvolutionMaxTokens) === 2500) s.mapEvolutionMaxTokens = 25000;
+    s.mapEvolutionCompressEnabled = s.mapEvolutionCompressEnabled !== false;
+    const compressThreshold = Math.floor(Number(s.mapEvolutionCompressThreshold));
+    s.mapEvolutionCompressThreshold = Number.isFinite(compressThreshold)
+        ? Math.max(500, Math.min(100000, compressThreshold))
+        : 10000;
+    const narratorCommitTokens = Math.floor(Number(s.mapEvolutionNarratorCommitTokens));
+    s.mapEvolutionNarratorCommitTokens = Number.isFinite(narratorCommitTokens)
+        ? Math.max(200, Math.min(20000, narratorCommitTokens))
+        : 2000;
     // Old shipped default was 0 (no cap). Raise existing 0s once to 6.
     // The flag must NOT live in defaults: seeding it true skipped this for everyone
     // who already had 0 saved. After this flag is persisted, 0 stays a valid choice.
@@ -838,6 +875,98 @@ function getSettingsInternal(extensionSettings) {
         s.maxActiveKeysMigratedTo12 = true;
     }
 
+    // One-time floor so old saved 6000/etc. pick up 25000. After this flag is set,
+    // the user can lower the budget again without it bouncing back.
+    if (!s.mapArchitectMaxTokensFloored) {
+        const architectTokens = Number(s.mapArchitectMaxTokens);
+        if (!Number.isFinite(architectTokens) || architectTokens < 25000) s.mapArchitectMaxTokens = 25000;
+        s.mapArchitectMaxTokensFloored = true;
+    }
+    if (!s.mapRuntimeConnectionSeeded) {
+        s.mapRuntimeConnectionSource = s.mapArchitectConnectionSource ?? 'default';
+        s.mapRuntimeConnectionProfileId = s.mapArchitectConnectionProfileId || '';
+        s.mapRuntimeCompletionPresetId = s.mapArchitectCompletionPresetId || '';
+        s.mapRuntimeOllamaUrl = s.mapArchitectOllamaUrl || 'http://localhost:11434';
+        s.mapRuntimeOllamaModel = s.mapArchitectOllamaModel || '';
+        s.mapRuntimeOpenaiUrl = s.mapArchitectOpenaiUrl || '';
+        s.mapRuntimeOpenaiKey = s.mapArchitectOpenaiKey || '';
+        s.mapRuntimeOpenaiModel = s.mapArchitectOpenaiModel || '';
+        s.mapRuntimeConnectionSeeded = true;
+    }
+    const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
+    s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'all';
+    const tickCount = Number(s.mapEvolutionTickCount);
+    s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
+    s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
+    if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
+    s.mapEvolutionOnSiteIntervalHours = (() => {
+        const hours = Math.floor(Number(s.mapEvolutionOnSiteIntervalHours));
+        if (!Number.isFinite(hours)) return 8;
+        if (hours === 0) return 0;
+        return Math.max(1, Math.min(168, hours));
+    })();
+    if (!s.mapEvolutionIntervalHoursBySite || typeof s.mapEvolutionIntervalHoursBySite !== 'object' || Array.isArray(s.mapEvolutionIntervalHoursBySite)) {
+        s.mapEvolutionIntervalHoursBySite = {};
+    }
+    s.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, Number(s.mapEvolutionWorldReportLookback) || 5));
+    if (!s.mapEvolutionBacklogBySite || typeof s.mapEvolutionBacklogBySite !== 'object' || Array.isArray(s.mapEvolutionBacklogBySite)) {
+        s.mapEvolutionBacklogBySite = {};
+    }
+    if (!s.mapEvolutionThreadsBySite || typeof s.mapEvolutionThreadsBySite !== 'object' || Array.isArray(s.mapEvolutionThreadsBySite)) {
+        s.mapEvolutionThreadsBySite = {};
+    }
+    s.dungeonMapRevealAll = !!s.dungeonMapRevealAll;
+    if (!s.mapEvolutionWorldReportApplications || typeof s.mapEvolutionWorldReportApplications !== 'object') {
+        s.mapEvolutionWorldReportApplications = {};
+    }
+    s.worldProgressionLocationsPerReport = Math.max(1, Math.min(12, Number(s.worldProgressionLocationsPerReport) || 3));
+    s.worldProgressionLocationRandomize = s.worldProgressionLocationRandomize !== false;
+    if (!s.worldProgressionLocationLastAdvanced || typeof s.worldProgressionLocationLastAdvanced !== 'object') {
+        s.worldProgressionLocationLastAdvanced = {};
+    }
+
+    // Replace only recognizable shipped entity-centric prompts. User-authored
+    // prompts remain intact and are still constrained by the runtime contract.
+    if (!s.locationCentricWorldProgressionMigrated) {
+        const prompt = String(s.worldProgressionSystemPrompt || '');
+        if (prompt.includes('Prioritize named ACTIVE WORLD LORE NPCs')
+            && prompt.includes('DESIGNATED ENTITIES FOR THIS PERIOD')) {
+            s.worldProgressionSystemPrompt = defaults.worldProgressionSystemPrompt;
+        }
+        s.locationCentricWorldProgressionMigrated = true;
+    }
+
+    // Retire the old entity-level World Skeleton. Recognizable shipped prompts
+    // move to the macro-only default; custom prompts remain editable but are
+    // constrained at runtime and their NPC output is rejected by the parser.
+    if (!s.macroOnlyWorldSkeletonMigrated) {
+        const prompt = String(s.worldProgressionSkeletonSystemPrompt || '');
+        if (prompt.includes('## NPCS')
+            && prompt.includes('{npcCount}')
+            && prompt.includes('Generate exactly {factionCount} factions')) {
+            s.worldProgressionSkeletonSystemPrompt = defaults.worldProgressionSkeletonSystemPrompt;
+        }
+        const retiredEntityFocusKeys = [
+            'worldProgressionSkeletonNPCs',
+            'worldProgressionRandomizeNPCs',
+            'worldProgressionRandomSkeletonNPCCount',
+            'worldProgressionRandomNarrativeNPCCount',
+            'worldProgressionRandomizeLocations',
+            'worldProgressionRandomSkeletonLocationCount',
+            'worldProgressionRandomNarrativeLocationCount',
+            'worldProgressionRandomizeFactions',
+            'worldProgressionRandomSkeletonFactionCount',
+            'worldProgressionRandomNarrativeFactionCount',
+            'worldProgressionRandomizeConflicts',
+            'worldProgressionRandomConflictCount',
+        ];
+        const targets = [s, ...Object.values(s.chatStates || {}), ...Object.values(s.profiles || {})];
+        for (const target of targets) {
+            if (!target || typeof target !== 'object') continue;
+            for (const key of retiredEntityFocusKeys) delete target[key];
+        }
+        s.macroOnlyWorldSkeletonMigrated = true;
+    }
     return extensionSettings[MODULE_NAME];
 }
 
@@ -1028,6 +1157,8 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'maxActiveKeysMigratedTo12',
     'mapArchitectLookback',
     'mapArchitectMaxTokens',
+    'mapArchitectMaxTokensFloored',
+    'mapArchitectOpener',
     'mapArchitectSystemPrompt',
     'mapArchitectConnectionSource',
     'mapArchitectConnectionProfileId',
@@ -1037,10 +1168,32 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapArchitectOpenaiUrl',
     'mapArchitectOpenaiKey',
     'mapArchitectOpenaiModel',
+    'mapRuntimeConnectionSource',
+    'mapRuntimeConnectionProfileId',
+    'mapRuntimeCompletionPresetId',
+    'mapRuntimeOllamaUrl',
+    'mapRuntimeOllamaModel',
+    'mapRuntimeOpenaiUrl',
+    'mapRuntimeOpenaiKey',
+    'mapRuntimeOpenaiModel',
+    'mapRuntimeConnectionSeeded',
     'mapUpdaterEnabled',
     'mapUpdaterRunEvery',
     'mapUpdaterMaxTokens',
     'mapUpdaterSystemPrompt',
+    'mapEvolutionEnabled',
+    'mapEvolutionIntervalHours',
+    'mapEvolutionOnSiteIntervalHours',
+    'mapEvolutionMaxTokens',
+    'mapEvolutionCompressEnabled',
+    'mapEvolutionCompressThreshold',
+    'mapEvolutionNarratorCommitTokens',
+    'mapEvolutionCompressSystemPrompt',
+    'mapEvolutionTickScope',
+    'mapEvolutionTickCount',
+    'mapEvolutionTickRandomize',
+    'mapEvolutionSelectedRoots',
+    'mapEvolutionSystemPrompt',
     'worldConnectionSource',
     'worldConnectionProfileId',
     'worldCompletionPresetId',
@@ -1078,6 +1231,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'agentPanelBgImageNight',
     'agentPanelBgOverlayStrength',
     'dayNightCycleEnabled',
+    'xpBarAtBottom',
 ];
 
 /** Strip global UI keys from every chatStates partition (one-shot hygiene on load/save). */

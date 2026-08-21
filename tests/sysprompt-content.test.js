@@ -67,23 +67,30 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         ];
 
         for (const source of sources) {
-            expect(source).toContain('call `CreateAreaMap` exactly once');
+            expect(source).toContain('When to map. Before narrating entry into an unmapped site');
+            expect(source).toContain('settlement is implied anywhere in the scene');
+            expect(source).toContain('Only map a standalone building as DUNGEON');
+            expect(source).toContain('Isolated low-risk interiors need not be mapped');
+            expect(source).toContain('When establishing a footer for the first time, invent the site name now');
+            expect(source).toContain('copied character-for-character from the Location footer — never translated, expanded, or retitled');
             expect(source).toContain('kind DUNGEON');
             expect(source).toContain('kind SETTLEMENT');
             expect(source).toContain('SETTLEMENT maps are district-scale');
-            expect(source).toContain('You may invent granular interiors and incidental locations');
-            expect(source).toContain('When {{user}} actually enters an invented interior');
-            expect(source).toContain('that interior MUST be the last segment');
-            expect(source).toContain('You may add a room or incidental feature if play naturally requires it');
-            expect(source).not.toContain('Do not invent missing rooms or hidden occupancy');
-            expect(source).toContain('Do not design or emit the hidden map yourself');
+            expect(source).toContain('districts and major landmarks only');
+            expect(source).toContain('Never map a sub-place');
+            expect(source).toContain('Wilderness, roads, and other travel terrain between sites are never mapped');
+            expect(source).toContain('this segment is flavor, not a new mapped site');
+            expect(source).toContain('You may add a minor room or feature if play requires it');
+            expect(source).toContain('never design, emit, or describe the hidden map yourself');
             expect(source).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
+            expect(source).toContain('[MAPPED_SITES — INTERNAL]');
+            expect(source).toContain('re-entering via a different threshold is still the same site');
             expect(source).not.toContain('<div hidden data-dungeon-map>');
             expect(source).not.toContain('one valid JSON object');
             expect(source).not.toContain('CreateDungeonMap');
-            expect(source).toContain('an external agent owns validated current-map updates');
-            expect(source).toContain('Established story events override stale map states');
-            expect(source).toContain('a killed enemy stays dead even if still listed ACTIVE');
+            expect(source).toContain('external Map Updater agent');
+            expect(source).not.toContain('Occupancy on the attached map may lag');
+            expect(source).not.toContain('own cadence (often every turn)');
             expect(source).not.toContain('use the latest DUNGEON_REALITY block and do not invent catch-up facts');
             expect(source).not.toContain('Lorebook Agent');
         }

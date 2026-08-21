@@ -42,8 +42,8 @@ export async function buildSkeletonLorebookSourceContext(bookNames, loadWorldInf
     if (!formattedBooks.length) return '';
 
     const sourceRule = options.lorebookOnly
-        ? 'Create entries only for factions, locations, NPCs, and conflicts explicitly mentioned in this material. Do not invent, infer, or extrapolate additional entities. Ignore the requested category counts and output the eligible entities established by the source material.'
-        : 'Ground the generated factions, locations, NPCs, and conflicts in it; preserve its facts and tone, and do not contradict it. You may derive skeleton entities from named material or create compatible additions.';
+        ? 'Create entries only for factions, locations, and conflicts explicitly mentioned in this material. Do not invent, infer, or extrapolate additional premises. Ignore the requested category counts and output the eligible macro premises established by the source material. Named individuals remain source constraints and must never become skeleton entries.'
+        : 'Ground the generated factions, locations, and conflicts in it; preserve its facts and tone, and do not contradict it. Named individuals remain source constraints and must never become skeleton entries. You may derive macro premises from the material or create compatible additions.';
 
     return `## EXISTING LOREBOOK SOURCE MATERIAL
 Treat the following material as established world canon. ${sourceRule}

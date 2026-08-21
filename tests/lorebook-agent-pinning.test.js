@@ -61,6 +61,19 @@ describe('router.js pin enforcement', () => {
         expect(routerSource).toContain('Active entries: ${activeCount} / ${maxActive}');
     });
 
+    it('budget banner forbids lazy-prune-to-cap and treats keyword hits as provisional', () => {
+        expect(routerSource).toContain('CONTEXT OWNERSHIP: You decide the active set');
+        expect(routerSource).toContain('Do not lazy-prune to the cap and stop');
+        expect(routerSource).toContain('That is the floor, not the whole job');
+        expect(routerSource).toContain('keyword hits are not protected');
+        expect(routerSource).toContain('${budgetLine}${curationInstruction}${overflowInstruction}');
+    });
+
+    it('Basic Mode applies deactivate-only tag passes', () => {
+        expect(routerSource).toContain('basicAction.deactivate.length > 0');
+        expect(routerSource).toContain('Deactivations: ${basicAction.deactivate.length}');
+    });
+
     it('keyword auto-expire and overflow eviction skip pinned ids', () => {
         expect(routerSource).toContain('if (pinnedSet.has(id)) continue; // user-pinned entries never auto-expire');
         expect(routerSource).toContain('if (pinnedSet.has(id)) continue; // never evict user-pinned entries');

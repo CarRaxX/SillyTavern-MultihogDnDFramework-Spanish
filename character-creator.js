@@ -317,7 +317,12 @@ export async function addPlayerCardToLorebookAgent(name, bio, wordCount = 150) {
         timestamp: Date.now(),
     };
     saveChatState(currentChatId);
-    await refreshAgentManifestNow();
+    // The card is ready as soon as it is stored above. Campaign Records can be
+    // rebuilding a large lorebook or Scene View, so never make the approval UI
+    // wait for that unrelated work to finish.
+    void refreshAgentManifestNow().catch(error => {
+        console.warn('[RPG Tracker] Could not refresh Campaign Records after adding Player Card:', error);
+    });
     return true;
 }
 

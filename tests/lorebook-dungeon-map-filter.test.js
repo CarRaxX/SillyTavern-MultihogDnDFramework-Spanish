@@ -35,6 +35,7 @@ The altar is visibly scorched.`,
         expect(routerSource).toContain('Map occupancy (areas, assets, routes, interiors) is maintained by the Map Updater');
         expect(routerSource).toContain('LOCATION_FOOTER_LAG_NOTE');
         expect(hookSource).toContain('syncDungeonLoreAgentActivation');
+        expect(hookSource).toContain('buildMappedSitesInjection');
         expect(hookSource).toContain('stripDungeonRealityBlocksFromPrompt');
         expect(hookSource).toContain('runMapUpdaterPass');
         expect(routerSource).toContain('const dungeonRealityEnabled = isLocationMappingEnabled');

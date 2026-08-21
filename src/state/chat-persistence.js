@@ -7,6 +7,7 @@ import { getNpcRelationshipMax } from './relationship-math.js';
 import { getSettings, stripChatStateGlobalUiPrefs } from './settings.js';
 import { snapshotStockPromptsForProfile } from './profiles.js';
 import { snapshotChatSetup } from './chat-setup.js';
+import { saveSettings as requestSettingsSave } from '../app/runtime-bridge.js';
 
 // Kept only so legacy recovery code can be re-enabled deliberately. Normal tracker
 // operation must not create or consume a browser-local recovery copy.
@@ -20,9 +21,68 @@ export function getActiveChatId() {
 }
 
 /**
- * When Chat Link is on, restore the WP timer label from chatStates if the live
- * field was cleared (e.g. after debounced settings reload) but the partition still has it.
- * @returns {boolean} true if a label was hydrated
+ * Estimate how much irreplaceable story state a live/partition object contains.
+ * This is deliberately conservative: boot must prefer a possibly redundant live
+ * snapshot over replacing visible state with an empty or older chat partition.
+ */
+function chatStateSubstanceScore(state) {
+    if (!state || typeof state !== 'object') return 0;
+    let score = 0;
+    if (String(state.currentMemo || '').trim()) score += 8;
+    if (String(state.lastDelta || '').trim()) score += 2;
+    for (const key of ['memoHistory', 'dungeonMapHistory', 'quests', 'combatDefeatedUi', 'routerLog']) {
+        if (Array.isArray(state[key])) score += Math.min(state[key].length, 20);
+    }
+    for (const key of [
+        'customPortraits',
+        'customLocationImages',
+        'npcRelationshipValues',
+        'npcRelationshipLog',
+        'worldProgressionLocationLastAdvanced',
+        'mapEvolutionLastFiredBySite',
+        'mapEvolutionBacklogBySite',
+        'mapEvolutionThreadsBySite',
+        'mapEvolutionWorldReportApplications',
+    ]) {
+        if (state[key] && typeof state[key] === 'object') {
+            score += Math.min(Object.keys(state[key]).length, 20);
+        }
+    }
+    if (state.dungeonReality?.sites && typeof state.dungeonReality.sites === 'object') {
+        score += Math.min(Object.keys(state.dungeonReality.sites).length, 20);
+    }
+    if (state.playerCharacter) score += 4;
+    if (Array.isArray(state.adventureCompanion?.history)) {
+        score += Math.min(state.adventureCompanion.history.length, 20);
+    }
+    return score;
+}
+
+/**
+ * Decide whether boot should seed the active partition from the already-visible
+ * top-level state instead of projecting a missing/empty/older partition over it.
+ * SillyTavern can run queued whole-settings saves immediately after activation,
+ * so boot must never create a destructive transient state.
+ */
+export function shouldPreserveLiveChatStateOnBoot(settings, chatId) {
+    if (!settings || !chatId) return false;
+    const saved = settings.chatStates?.[chatId];
+    if (!saved) return true;
+
+    const liveScore = chatStateSubstanceScore(settings);
+    const savedScore = chatStateSubstanceScore(saved);
+    if (liveScore > 0 && savedScore === 0) return true;
+
+    const liveStamp = Number(settings.memoPersistedAt) || 0;
+    const savedStamp = Number(saved.memoPersistedAt) || 0;
+    return liveScore > 0 && liveStamp > savedStamp;
+}
+
+/**
+ * When Chat Link is on, restore World Progression / Map Evolution runtime
+ * watermarks from chatStates if a debounced settings reload cleared the live
+ * fields while the active partition still has them.
+ * @returns {boolean} true if any runtime state was hydrated
  */
 export function hydrateWorldProgressionFromChatState() {
     const s = getSettings();
@@ -30,10 +90,39 @@ export function hydrateWorldProgressionFromChatState() {
     const chatId = getActiveChatId();
     if (!chatId) return false;
     const stored = s.chatStates?.[chatId];
-    if (!stored?.worldProgressionLastFiredPeriodLabel) return false;
-    if (s.worldProgressionLastFiredPeriodLabel) return false;
-    s.worldProgressionLastFiredPeriodLabel = stored.worldProgressionLastFiredPeriodLabel;
-    return true;
+    if (!stored) return false;
+
+    let hydrated = false;
+    if (!s.worldProgressionLastFiredPeriodLabel && stored.worldProgressionLastFiredPeriodLabel) {
+        s.worldProgressionLastFiredPeriodLabel = stored.worldProgressionLastFiredPeriodLabel;
+        hydrated = true;
+    }
+    if (!Object.keys(s.worldProgressionLocationLastAdvanced || {}).length
+        && Object.keys(stored.worldProgressionLocationLastAdvanced || {}).length) {
+        s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(stored.worldProgressionLocationLastAdvanced));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionLastFiredBySite || {}).length
+        && Object.keys(stored.mapEvolutionLastFiredBySite || {}).length) {
+        s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(stored.mapEvolutionLastFiredBySite));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionBacklogBySite || {}).length
+        && Object.keys(stored.mapEvolutionBacklogBySite || {}).length) {
+        s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(stored.mapEvolutionBacklogBySite));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionThreadsBySite || {}).length
+        && Object.keys(stored.mapEvolutionThreadsBySite || {}).length) {
+        s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(stored.mapEvolutionThreadsBySite));
+        hydrated = true;
+    }
+    if (!Object.keys(s.mapEvolutionWorldReportApplications || {}).length
+        && Object.keys(stored.mapEvolutionWorldReportApplications || {}).length) {
+        s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(stored.mapEvolutionWorldReportApplications));
+        hydrated = true;
+    }
+    return hydrated;
 }
 
 /** Persist the WP timer to the active chat partition or global settings. */
@@ -43,7 +132,7 @@ export function persistWorldProgressionTimer() {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -55,7 +144,7 @@ export function persistRouterLastRunWatermark(length) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -67,7 +156,7 @@ export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -79,7 +168,7 @@ export function persistMapUpdaterLastRunWatermark(length) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
     }
 }
 
@@ -91,7 +180,18 @@ export function persistMapUpdaterLastRunTimestamp(epochMs = Date.now()) {
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId);
     } else {
-        SillyTavern.getContext().saveSettingsDebounced();
+        void requestSettingsSave();
+    }
+}
+
+/** Persist Map Evolution per-site timers and last-site watermark. */
+export function persistMapEvolutionState() {
+    const s = getSettings();
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        void requestSettingsSave();
     }
 }
 
@@ -358,6 +458,19 @@ export function saveChatState(chatId, opts = {}) {
         routerLastRunAt: s.routerLastRunAt ?? 0,
         mapUpdaterLastRunChatLength: s.mapUpdaterLastRunChatLength ?? 0,
         mapUpdaterLastRunAt: s.mapUpdaterLastRunAt ?? 0,
+        mapEvolutionLastFiredBySite: JSON.parse(JSON.stringify(s.mapEvolutionLastFiredBySite || {})),
+        mapEvolutionBacklogBySite: JSON.parse(JSON.stringify(s.mapEvolutionBacklogBySite || {})),
+        mapEvolutionThreadsBySite: JSON.parse(JSON.stringify(s.mapEvolutionThreadsBySite || {})),
+        dungeonMapRevealAll: !!s.dungeonMapRevealAll,
+        mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
+        mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
+        mapEvolutionTickScope: s.mapEvolutionTickScope || 'all',
+        mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
+        mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
+        mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),
+        mapEvolutionIntervalHoursBySite: JSON.parse(JSON.stringify(s.mapEvolutionIntervalHoursBySite || {})),
+        mapEvolutionWorldReportLookback: s.mapEvolutionWorldReportLookback ?? 5,
+        mapEvolutionWorldReportApplications: JSON.parse(JSON.stringify(s.mapEvolutionWorldReportApplications || {})),
         pcCharacterBlockSeeded: !!s.pcCharacterBlockSeeded,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,
@@ -373,20 +486,11 @@ export function saveChatState(chatId, opts = {}) {
         worldProgressionInjectionPosition: s.worldProgressionInjectionPosition ?? 4,
         worldProgressionInjectionDepth: s.worldProgressionInjectionDepth ?? 3,
         worldProgressionInjectionRole: s.worldProgressionInjectionRole ?? 0,
-        worldProgressionRandomizeNPCs: s.worldProgressionRandomizeNPCs ?? false,
-        worldProgressionRandomSkeletonNPCCount: s.worldProgressionRandomSkeletonNPCCount ?? 2,
-        worldProgressionRandomNarrativeNPCCount: s.worldProgressionRandomNarrativeNPCCount ?? 3,
-        worldProgressionRandomizeLocations: s.worldProgressionRandomizeLocations ?? false,
-        worldProgressionRandomSkeletonLocationCount: s.worldProgressionRandomSkeletonLocationCount ?? 2,
-        worldProgressionRandomNarrativeLocationCount: s.worldProgressionRandomNarrativeLocationCount ?? 2,
-        worldProgressionRandomizeFactions: s.worldProgressionRandomizeFactions ?? false,
-        worldProgressionRandomSkeletonFactionCount: s.worldProgressionRandomSkeletonFactionCount ?? 2,
-        worldProgressionRandomNarrativeFactionCount: s.worldProgressionRandomNarrativeFactionCount ?? 2,
-        worldProgressionRandomizeConflicts: s.worldProgressionRandomizeConflicts ?? false,
-        worldProgressionRandomConflictCount: s.worldProgressionRandomConflictCount ?? 3,
+        worldProgressionLocationsPerReport: s.worldProgressionLocationsPerReport ?? 3,
+        worldProgressionLocationRandomize: s.worldProgressionLocationRandomize !== false,
+        worldProgressionLocationLastAdvanced: JSON.parse(JSON.stringify(s.worldProgressionLocationLastAdvanced || {})),
         worldProgressionSkeletonFactions: s.worldProgressionSkeletonFactions ?? 4,
         worldProgressionSkeletonLocations: s.worldProgressionSkeletonLocations ?? 4,
-        worldProgressionSkeletonNPCs: s.worldProgressionSkeletonNPCs ?? 0,
         worldProgressionSkeletonConflicts: s.worldProgressionSkeletonConflicts ?? 3,
         // World Progression per-chat time tracking
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
@@ -446,16 +550,10 @@ export function saveChatState(chatId, opts = {}) {
     // Drop any legacy global-UI keys copied into older partitions.
     stripChatStateGlobalUiPrefs(s);
     
-    // Use a synchronous save so data is not lost if the page is closed before
-    // a debounced timer fires (the root cause of the PC/state/relationship loss bug).
-    // saveChatState is always called with an explicit chatId so there is no
-    // cross-chat leakage risk from this call itself.
-    // When called from our saveSettings(), skipDiskWrite avoids a duplicate in-flight save.
+    // All settings writes must pass through the entry point's startup gate. Calling
+    // SillyTavern's saver directly here lets its "settings not ready" retry escape
+    // the gate and write a boot-time Chat Link projection later. When called from
+    // our saveSettings(), skipDiskWrite also avoids a duplicate in-flight save.
     if (opts.skipDiskWrite) return;
-    const ctx = SillyTavern.getContext();
-    if (typeof ctx.saveSettings === 'function') {
-        ctx.saveSettings();
-    } else if (typeof ctx.saveSettingsDebounced === 'function') {
-        ctx.saveSettingsDebounced();
-    }
+    void requestSettingsSave();
 }

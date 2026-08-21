@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { formatDungeonMapForUpdater } from '../dungeon-reality.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
+import {
+    extractPartyMemberNames,
+    formatPartyRosterForMapUpdater,
+    isPartyMemberAssetName,
+    partyNameFromHeader,
+} from '../map-updater-lib.js';
 
 describe('Map Updater', () => {
     it('treats noop and empty operations as a skip', () => {
@@ -112,8 +118,22 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"op":"ADD_ASSET"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"area_id":"shrine-quarter"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
-        expect(updater).toContain('mapArchitectConnectionSource');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never ADD_ASSET the player or anyone listed in the supplied [PARTY] names');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never ADD_ASSET six identical ghouls');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('TIME MECHANICS');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('set duration to ""');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('stored timestamp plus authoritative current time is sufficient evidence');
+        expect(updater).toContain('formatPartyRosterForMapUpdater');
+        expect(updater).toContain('## CURRENT IN-WORLD TIME (AUTHORITATIVE)');
+        expect(updater).toContain('initialUserPrompt(loaded, recentStory, memo, currentTime)');
+        expect(updater).toContain('PARTY_MEMBER_NOT_AN_ASSET');
+        expect(updater).toContain('mapRuntimeConnectionSource');
+        expect(updater).not.toContain('mapArchitectConnectionSource');
         expect(updater).toContain('mapUpdaterMaxTokens');
+        expect(updater).toContain('Number(settings.mapUpdaterMaxTokens) || 25000');
+        const defaults = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
+        expect(defaults).toContain('mapUpdaterMaxTokens: 25000');
+        expect(settingsMarkup).toMatch(/id="rpg_map_updater_max_tokens"[^>]*max="32000"/);
         expect(updater).toContain('export async function runMapUpdaterPass({ isManual = false, lookback = null } = {})');
         expect(updater).toContain('if (settings.mapUpdaterEnabled === false && !isManual)');
         expect(updater).toContain('export function resolveMapUpdaterStoryWindow');
@@ -122,6 +142,9 @@ describe('Map Updater', () => {
         expect(hooks).toContain('runMapUpdaterPass');
         expect(hooks).toContain('mapUpdaterRunEvery');
         expect(hooks).toContain('maybeRollbackMapUpdaterForSwipe');
+        expect(hooks).toContain('maybeRunMapEvolution');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(settingsMarkup).toContain('id="rpg_map_updater_run_every"');
         expect(settingsMarkup).toContain('id="rpg_map_updater_enabled"');
         expect(settingsMarkup).toContain('<b>Map Updater</b>');
@@ -162,5 +185,25 @@ describe('Map Updater', () => {
         const sendIdx = updater.indexOf('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
         expect(loopRecheckIdx).toBeGreaterThan(startIdx);
         expect(sendIdx).toBeGreaterThan(loopRecheckIdx);
+    });
+
+    it('strips [PARTY] to names only, splitting members on Status', () => {
+        const memo = `[TIME]Day 1, 08:00[/TIME]
+[PARTY]
+- Seraphina (Forest Fey Warden/Healer): 42/42 HP
+Combat: BAB: +3 | Ranged (1 attack): +6 | Melee (1 attack): +3 | Base AC: 13 | Total AC: 13
+Gear: Thorn-Wrapped Staff (1d6 Bludgeoning) | Simple Sundress (no armor)
+Status: Healthy
+- Kael (Fighter): 30/30 HP
+Combat: BAB: +4
+Status: Healthy
+[/PARTY]`;
+        expect(extractPartyMemberNames(memo)).toEqual(['Seraphina', 'Kael']);
+        expect(formatPartyRosterForMapUpdater(memo)).toBe('[PARTY]\n- Seraphina\n- Kael\n[/PARTY]');
+        expect(partyNameFromHeader('- Seraphina')).toBe('Seraphina');
+        expect(partyNameFromHeader('Elara (Ranger): 26/45 HP')).toBe('Elara');
+        expect(isPartyMemberAssetName('Seraphina', ['Seraphina', 'Kael'])).toBe(true);
+        expect(isPartyMemberAssetName('Seraphina Nightshade', ['Seraphina'])).toBe(true);
+        expect(isPartyMemberAssetName('Odran', ['Seraphina'])).toBe(false);
     });
 });

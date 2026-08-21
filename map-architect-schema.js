@@ -15,6 +15,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
             version: { type: 'integer', enum: [3] },
             site: { type: 'string', minLength: 1 },
             kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
             areas: {
                 type: 'array',
                 minItems: 2,
@@ -57,7 +58,7 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
                             type: 'string',
                             enum: [
                                 'ACTIVE', 'ALERT', 'IDLE', 'DORMANT', 'FLEEING', 'CAPTURED',
-                                'DEAD', 'DESTROYED', 'DISABLED', 'DISARMED', 'ARMED', 'TRIGGERED',
+                                'DEAD', 'DESTROYED', 'DISABLED', 'DEACTIVATED', 'DISARMED', 'ARMED', 'TRIGGERED',
                                 'LOCKED', 'UNLOCKED', 'OPEN', 'CLOSED', 'BLOCKED', 'CLEARED',
                                 'INTACT', 'DAMAGED', 'TAKEN', 'AVAILABLE', 'EXHAUSTED', 'EXPIRED',
                                 'DISMISSED', 'REMOVED', 'UNKNOWN',
@@ -70,12 +71,39 @@ export const MAP_ARCHITECT_JSON_SCHEMA = Object.freeze({
                         route: { type: 'array', items: { type: 'string', minLength: 1 } },
                         faction: { type: 'string', minLength: 1 },
                         owner: { type: 'string', minLength: 1 },
-                        duration: { type: 'string', minLength: 1 },
+                        duration: { type: 'string', minLength: 1, description: 'Optional absolute in-world temporal boundary in the narrative time format, e.g. "Until Day 2, 4:40 AM." The asset detail states what happens at that boundary.' },
+                        count: { type: 'integer', minimum: 1, maximum: 99, description: 'Living members of this one asset. Packs, patrols, garrisons, and swarms are one GROUP with count >= 2. Named individuals are CREATURE and omit count or use 1.' },
                     },
                     required: ['id', 'kind', 'name', 'location', 'state', 'knowledge', 'detail', 'origin'],
                 },
             },
         },
         required: ['version', 'site', 'areas', 'assets'],
+    },
+});
+
+/** Handshake-only contract: infer CreateAreaMap fields without emitting a map. */
+export const MAP_ARCHITECT_BRIEF_JSON_SCHEMA = Object.freeze({
+    name: 'map_architect_brief_v1',
+    description: 'Handshake fields for one Persistent Map, without the map itself.',
+    strict: false,
+    returnInvalid: true,
+    value: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            entrance: { type: 'string', minLength: 1 },
+            kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'] },
+            scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'] },
+            threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'] },
+            premise: { type: 'string', minLength: 1 },
+            keywords: {
+                type: 'array',
+                items: { type: 'string', minLength: 1 },
+                maxItems: 5,
+                description: 'Optional extra lorebook trigger words besides the locked site name. Do not include the site name.',
+            },
+        },
+        required: ['entrance', 'kind', 'scale', 'threat', 'premise'],
     },
 });

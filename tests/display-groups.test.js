@@ -10,6 +10,7 @@ import { getSettings, CHAT_STATE_GLOBAL_UI_KEYS } from '../state-manager.js';
 import { renderMemoAsCards, renderTabModeView } from '../renderer.js';
 import {
     buildDisplayGroupRenderPlan,
+    moveDisplayGroupInOrder,
     normalizeDisplayGroups,
 } from '../src/features/display-groups.js';
 
@@ -59,15 +60,29 @@ describe('Display Groups BETA safety and planning', () => {
         ]);
     });
 
-    it('defensively rejects malformed, overlapping, and special-module membership', () => {
+    it('defensively rejects malformed, overlapping, and dedicated-module membership', () => {
         expect(normalizeDisplayGroups([
-            { id: 'first', name: 'First', members: ['FUEL', 'COMBAT'] },
+            { id: 'first', name: 'First', members: ['FUEL', 'CHARACTER', 'COMBAT'] },
             { id: 'second', name: 'Second', members: ['FUEL', 'QUESTS', 'OXYGEN'] },
             { id: '', name: 'Broken', members: ['OTHER'] },
         ])).toEqual([
-            { id: 'first', name: 'First', icon: '🗂️', enabled: true, members: ['FUEL'] },
+            { id: 'first', name: 'First', icon: '🗂️', enabled: true, members: ['FUEL', 'CHARACTER'] },
             { id: 'second', name: 'Second', icon: '🗂️', enabled: true, members: ['OXYGEN'] },
         ]);
+    });
+
+    it('moves a Display Group as one unit while preserving unrelated module order', () => {
+        expect(moveDisplayGroupInOrder(['A', 'B', 'C', 'D'], ['B', 'C'], 'down')).toEqual(['A', 'D', 'B', 'C']);
+        expect(moveDisplayGroupInOrder(['A', 'B', 'C', 'D'], ['B', 'C'], 'up')).toEqual(['B', 'C', 'A', 'D']);
+    });
+
+    it('uses the saved member order inside a Display Group', () => {
+        const [entry] = buildDisplayGroupRenderPlan(
+            ['ALPHA', 'BETA'],
+            [{ id: 'group', name: 'Group', members: ['BETA', 'ALPHA'] }],
+            true,
+        );
+        expect(entry).toMatchObject({ kind: 'group', tags: ['BETA', 'ALPHA'] });
     });
 
     it('keeps definitions and the master switch global rather than chat-linked', () => {
@@ -178,6 +193,8 @@ describe('Display Group rendering', () => {
         expect(managerSource).toContain('rt-display-groups-enabled');
         expect(managerSource).toContain('rt-display-groups-show-gaps');
         expect(managerSource).toContain('Show gaps between grouped modules');
+        expect(managerSource).toContain('MODULE ORDER IN THIS GROUP');
+        expect(managerSource).toContain('rt-dg-member-order');
         expect(managerSource).toContain('width:100%;min-width:0;max-height:72vh');
         expect(managerSource).toContain('overflow-x:hidden');
         expect(managerSource).toContain('allowVerticalScrolling: true');

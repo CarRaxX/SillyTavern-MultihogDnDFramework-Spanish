@@ -7,6 +7,7 @@ const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.m
 const persistenceSource = readFileSync(new URL('../src/state/chat-persistence.js', import.meta.url), 'utf8');
 const loaderSource = readFileSync(new URL('../src/features/chat/chat-state-loader.js', import.meta.url), 'utf8');
 const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+const characterCreatorSource = readFileSync(new URL('../character-creator.js', import.meta.url), 'utf8');
 
 describe('extractCharacterBlock', () => {
     it('extracts a [CHARACTER] block from the memo', () => {
@@ -40,5 +41,12 @@ describe('cold-start PC [CHARACTER] seed wiring', () => {
         // Both basic and agent user prompts include the seed section placeholder.
         const seedUsages = routerSource.match(/\$\{pcCharacterSeedSection\}/g) || [];
         expect(seedUsages.length).toBeGreaterThanOrEqual(2);
+    });
+});
+
+describe('Player Card approval responsiveness', () => {
+    it('does not block approval on the Campaign Records refresh', () => {
+        expect(characterCreatorSource).toContain('void refreshAgentManifestNow().catch(error =>');
+        expect(characterCreatorSource).not.toContain('await refreshAgentManifestNow();');
     });
 });

@@ -35,6 +35,12 @@ describe('getEligibleCoreFieldNames', () => {
         expect(fields.every(f => !isEquipmentField(f))).toBe(true);
     });
 
+    it('manual passes expose custom hex/color NPC sections', () => {
+        const sections = [...DEFAULT_NPC_SECTIONS, { name: 'Color Code' }];
+        expect(getEligibleCoreFieldNames(sections, true)).toContain('Color Code');
+        expect(getEligibleCoreFieldNames(sections, false)).toEqual(['Combat Profile']);
+    });
+
     it('falls back to Combat Profile when sections are empty on automatic passes', () => {
         expect(getEligibleCoreFieldNames([], false)).toEqual(['Combat Profile']);
     });

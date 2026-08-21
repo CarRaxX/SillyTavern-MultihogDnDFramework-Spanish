@@ -1,13 +1,84 @@
-import { getSettings } from '../../../state-manager.js';
+import { getSettings, saveChatState } from '../../../state-manager.js';
 import { runtimeState } from '../../app/runtime-state.js';
+import { saveSettings } from '../../app/runtime-bridge.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { canResizePanels, makeDraggable, makeResizableBR, resolveViewportClampedGeometry } from '../../../ui-geometry.js';
 import { buildDungeonMapGraph, renderDungeonMapGraphSvg, renderDungeonMapReadableHtml } from '../../../dungeon-map-graph.js';
+import { renderDungeonGraphAssetTipHtml } from '../../../dungeon-map-icons.js';
+import { serializeDungeonMapDocument, parseEditableDungeonMapJson } from '../../../dungeon-reality.js';
+import { describeEvolutionBacklog, formatEvolutionElapsedMinutes, stripEvolutionDigestSitePrefix } from '../../../map-evolution-lib.js';
 
 export const DUNGEON_MAP_DETACHED_KEY = 'rpg_tracker_dungeon_map_detached';
 export const DUNGEON_MAP_GEOMETRY_KEY = 'rpg_tracker_geometry_dungeon_map';
 const PANEL_ID = 'rt-dungeon-map-detached';
 const PAN_THRESHOLD_PX = 5;
+
+function dungeonMapScrollContainers(root) {
+    if (!root) return [];
+    const scrolls = [];
+    if (root.classList?.contains('rt-dungeon-graph-scroll')) scrolls.push(root);
+    if (typeof root.querySelectorAll === 'function') {
+        root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => {
+            if (!scrolls.includes(scroll)) scrolls.push(scroll);
+        });
+    }
+    return scrolls;
+}
+
+/** Save graph viewport offsets before a map refresh replaces its DOM. */
+export function captureDungeonMapViewport(root) {
+    return dungeonMapScrollContainers(root).map(scroll => ({
+        left: scroll.scrollLeft,
+        top: scroll.scrollTop,
+    }));
+}
+
+/** Restore graph viewport offsets after a map refresh recreates its DOM. */
+export function restoreDungeonMapViewport(root, viewport) {
+    if (!Array.isArray(viewport)) return;
+    for (const [index, scroll] of dungeonMapScrollContainers(root).entries()) {
+        const saved = viewport[index];
+        if (!saved) continue;
+        scroll.scrollLeft = saved.left;
+        scroll.scrollTop = saved.top;
+    }
+}
+
+export function isDungeonMapRevealAll(settings = getSettings()) {
+    return !!settings?.dungeonMapRevealAll;
+}
+
+function persistDungeonMapRevealAll(enabled) {
+    const settings = getSettings();
+    settings.dungeonMapRevealAll = !!enabled;
+    const chatId = runtimeState.currentChatId;
+    if (settings.chatLinkEnabled && chatId) saveChatState(chatId);
+    else void saveSettings();
+}
+
+function refreshDungeonMapViews() {
+    if (typeof runtimeState.refreshImmersionView === 'function') {
+        void runtimeState.refreshImmersionView();
+    }
+    const panel = document.getElementById(PANEL_ID);
+    if (panel?._dungeonMapScene) {
+        updateDetachedDungeonMapPanel(panel._dungeonMapScene, panel._dungeonMapHandlers || {});
+    }
+}
+
+function currentLocationFromMemo() {
+    const memo = String(getSettings().currentMemo || '');
+    const match = memo.match(/\[LOCATION\]([\s\S]*?)\[\/LOCATION\]/i);
+    if (!match) return '';
+    return match[1].split('\n').map(line => line.trim()).find(Boolean) || '';
+}
+
+function dungeonMapGraphOptions(currentLocation = '') {
+    return {
+        playerFacing: !isDungeonMapRevealAll(),
+        currentLocation: currentLocation || '',
+    };
+}
 
 export function isDungeonMapDetached() {
     try {
@@ -43,10 +114,9 @@ function renderDetachedBody(scene) {
     if (!map?.document) {
         return '<div class="rt-dungeon-graph-empty">No hay una ubicación mapeada en la posición actual.</div>';
     }
-    const graph = buildDungeonMapGraph(map.document, {
-        playerFacing: true,
-        currentLocation: scene.rawLocationText || scene.resolvedPath || '',
-    });
+    const graph = buildDungeonMapGraph(map.document, dungeonMapGraphOptions(
+        scene.rawLocationText || scene.resolvedPath || '',
+    ));
     if (!graph.nodes.length) {
         return '<div class="rt-dungeon-graph-empty">Aún no hay habitaciones reveladas.</div>';
     }
@@ -81,8 +151,15 @@ function bindAreaClicks(root, onAreaClick) {
 /** Pointer-drag pans the overflow container instead of selecting SVG text. */
 export function bindDungeonMapPan(root) {
     if (!root) return;
-    root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => {
-        if (!(scroll instanceof HTMLElement) || scroll.dataset.panBound === '1') return;
+    const scrolls = [];
+    if (root instanceof HTMLElement && root.classList.contains('rt-dungeon-graph-scroll')) {
+        scrolls.push(root);
+    }
+    if (typeof root.querySelectorAll === 'function') {
+        root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => scrolls.push(scroll));
+    }
+    for (const scroll of scrolls) {
+        if (!(scroll instanceof HTMLElement) || scroll.dataset.panBound === '1') continue;
         scroll.dataset.panBound = '1';
         let dragging = false;
         let moved = false;
@@ -119,6 +196,7 @@ export function bindDungeonMapPan(root) {
             startY = event.clientY;
             startLeft = scroll.scrollLeft;
             startTop = scroll.scrollTop;
+            event.stopPropagation();
             try { scroll.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
         });
         scroll.addEventListener('pointermove', (event) => {
@@ -128,6 +206,7 @@ export function bindDungeonMapPan(root) {
             if (!moved && (Math.abs(dx) > PAN_THRESHOLD_PX || Math.abs(dy) > PAN_THRESHOLD_PX)) {
                 moved = true;
                 scroll.classList.add('rt-dungeon-graph-panning');
+                hideDungeonMapAssetTip();
             }
             if (!moved) return;
             scroll.scrollLeft = startLeft - dx;
@@ -139,7 +218,112 @@ export function bindDungeonMapPan(root) {
         scroll.addEventListener('lostpointercapture', endDrag);
         scroll.addEventListener('dragstart', (event) => event.preventDefault());
         scroll.addEventListener('selectstart', (event) => event.preventDefault());
+    }
+    bindDungeonMapAssetPopups(root);
+}
+
+const ASSET_TIP_ID = 'rt-dungeon-graph-asset-tip';
+
+function resolveAssetTipHost(anchor) {
+    return (anchor instanceof Element && anchor.closest('dialog, .popup')) || document.body;
+}
+
+function ensureDungeonMapAssetTip(host = document.body) {
+    let tip = document.getElementById(ASSET_TIP_ID);
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = ASSET_TIP_ID;
+        tip.className = 'rt-dungeon-graph-asset-tip';
+        tip.hidden = true;
+        window.addEventListener('resize', hideDungeonMapAssetTip);
+    }
+    if (tip.parentElement !== host) host.appendChild(tip);
+    return tip;
+}
+
+export function hideDungeonMapAssetTip() {
+    const tip = document.getElementById(ASSET_TIP_ID);
+    if (!tip || tip.hidden) return;
+    tip.hidden = true;
+    tip.replaceChildren();
+}
+
+function positionDungeonMapAssetTip(tip, anchor) {
+    const host = tip.parentElement || document.body;
+    const anchoredInHost = host !== document.body;
+    const rect = anchor.getBoundingClientRect();
+    const hostRect = anchoredInHost
+        ? host.getBoundingClientRect()
+        : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const pad = 8;
+    const gap = 8;
+    tip.style.position = anchoredInHost ? 'absolute' : 'fixed';
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    const tipRect = tip.getBoundingClientRect();
+    const scrollLeft = anchoredInHost ? host.scrollLeft : 0;
+    const scrollTop = anchoredInHost ? host.scrollTop : 0;
+    let left = rect.left - hostRect.left + (rect.width - tipRect.width) / 2 + scrollLeft;
+    let top = rect.top - hostRect.top - tipRect.height - gap + scrollTop;
+    const placeBelow = top < pad;
+    if (placeBelow) top = rect.top - hostRect.top + rect.height + gap + scrollTop;
+    const maxLeft = (anchoredInHost ? host.clientWidth || hostRect.width : window.innerWidth) - tipRect.width - pad;
+    const maxTop = (anchoredInHost ? host.clientHeight || hostRect.height : window.innerHeight) - tipRect.height - pad;
+    left = Math.max(pad, Math.min(left, maxLeft));
+    top = Math.max(pad, Math.min(top, maxTop));
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+    tip.style.setProperty('--tip-arrow-left', `${Math.round(rect.left - hostRect.left - left + rect.width / 2 + scrollLeft)}px`);
+    tip.classList.toggle('rt-dungeon-graph-asset-tip-below', placeBelow);
+}
+
+function showDungeonMapAssetTip(icon) {
+    const tip = ensureDungeonMapAssetTip(resolveAssetTipHost(icon));
+    tip.innerHTML = renderDungeonGraphAssetTipHtml({
+        name: icon.getAttribute('data-asset-name'),
+        kind: icon.getAttribute('data-asset-kind'),
+        state: icon.getAttribute('data-asset-state'),
+        knowledge: icon.getAttribute('data-asset-knowledge'),
+        detail: icon.getAttribute('data-asset-detail'),
+        count: icon.getAttribute('data-asset-count'),
     });
+    tip.hidden = false;
+    positionDungeonMapAssetTip(tip, icon);
+}
+
+function iconFromEventTarget(target) {
+    return target instanceof Element ? target.closest('.rt-dungeon-graph-icon') : null;
+}
+
+export function bindDungeonMapAssetPopups(root) {
+    if (!root) return;
+    const scrolls = [];
+    if (root instanceof HTMLElement && root.classList.contains('rt-dungeon-graph-scroll')) {
+        scrolls.push(root);
+    }
+    if (typeof root.querySelectorAll === 'function') {
+        root.querySelectorAll('.rt-dungeon-graph-scroll').forEach(scroll => scrolls.push(scroll));
+    }
+    for (const scroll of scrolls) {
+        if (!(scroll instanceof HTMLElement) || scroll.dataset.assetTipBound === '1') continue;
+        scroll.dataset.assetTipBound = '1';
+        scroll.addEventListener('pointerover', (event) => {
+            const icon = iconFromEventTarget(event.target);
+            if (!icon || !scroll.contains(icon)) return;
+            showDungeonMapAssetTip(icon);
+        });
+        scroll.addEventListener('pointerout', (event) => {
+            const from = iconFromEventTarget(event.target);
+            const to = iconFromEventTarget(event.relatedTarget);
+            if (from && from !== to) hideDungeonMapAssetTip();
+        });
+        scroll.addEventListener('scroll', hideDungeonMapAssetTip, { passive: true });
+        const popupContent = scroll.closest('.popup-content');
+        if (popupContent instanceof HTMLElement && popupContent.dataset.assetTipScroll !== '1') {
+            popupContent.dataset.assetTipScroll = '1';
+            popupContent.addEventListener('scroll', hideDungeonMapAssetTip, { passive: true });
+        }
+    }
 }
 
 function escapePopupText(value) {
@@ -151,36 +335,245 @@ function escapePopupText(value) {
         .replace(/'/g, '&#039;');
 }
 
+/** Render the bounded per-site Evolution ledger without leaking material details while Reveal All is off. */
+export function renderMapEvolutionHistoryHtml(backlogBySite, siteRoot, { revealAll = false } = {}) {
+    const history = describeEvolutionBacklog(backlogBySite, siteRoot, -1, { lookback: 20 });
+    if (!history.entries.length) {
+        return '<div class="rt-dungeon-map-evolution-empty">No Map Evolution passes have been recorded for this site.</div>';
+    }
+    const rows = history.entries.map(entry => {
+        const material = entry.kind === 'commit';
+        const label = material ? 'Material commit' : 'Quiet checkpoint';
+        const icon = material ? 'fa-code-commit' : 'fa-pause';
+        const passes = !material && entry.passes > 1 ? ` · ${entry.passes} passes` : '';
+        const elapsed = entry.elapsedMinutes >= 0
+            ? formatEvolutionElapsedMinutes(entry.elapsedMinutes)
+            : 'Unknown elapsed time';
+        const details = material && !revealAll
+            ? 'Material details hidden. Turn on Reveal All to inspect this commit.'
+            : stripEvolutionDigestSitePrefix(entry.summary, siteRoot);
+        const operation = material && revealAll && entry.operationId
+            ? `<code>${escapePopupText(entry.operationId)}</code>`
+            : '';
+        return `<div class="rt-dungeon-map-evolution-entry rt-dungeon-map-evolution-${entry.kind}">
+            <div class="rt-dungeon-map-evolution-entry-head">
+                <span><i class="fa-solid ${icon}"></i> ${label}${passes}</span>
+                <time>${escapePopupText(entry.at)}</time>
+            </div>
+            <div class="rt-dungeon-map-evolution-elapsed">${escapePopupText(elapsed)}</div>
+            <div class="rt-dungeon-map-evolution-summary">${escapePopupText(details)}</div>
+            ${operation}
+        </div>`;
+    });
+    return rows.join('');
+}
+
 /**
- * Player-facing readable inspector. UNREVEALED rooms/assets stay hidden unless Reveal all is on.
+ * Shared mapped-site inspector used by both Visuals/Map and Lorebook Location entries.
+ * UNREVEALED rooms/assets, raw JSON, and material Evolution details stay hidden
+ * unless Reveal All is on. Reveal All is remembered per chat and also reveals
+ * the Visuals/Map graph.
  * @param {object} mapDocument
- * @param {{ siteLabel?: string, playerFacing?: boolean }} [options]
+ * @param {{ siteLabel?: string, currentLocation?: string }} [options]
  */
-export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '', playerFacing = true } = {}) {
+export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '', currentLocation = '' } = {}) {
     const ctx = globalThis.SillyTavern?.getContext?.();
     if (!ctx?.callGenericPopup || !mapDocument) return;
     const site = siteLabel || mapDocument.site || 'Site map';
-    let revealAll = !playerFacing;
+    let currentDocument = mapDocument;
+    let revealAll = isDungeonMapRevealAll();
+    let currentView = 'readable';
+    let rawDirty = false;
+    const locationLabel = currentLocation || currentLocationFromMemo();
     const popupDom = document.createElement('div');
     popupDom.className = 'rt-dungeon-map-popup';
     popupDom.innerHTML = `
         <div class="rt-dungeon-map-title"><i class="fa-solid fa-map-location-dot"></i> ${escapePopupText(site)} <small class="rt-dungeon-alpha-tag">ALPHA</small></div>
-        <div class="rt-dungeon-map-subtitle">${playerFacing
-            ? 'Revealed rooms, routes, and known assets. Unrevealed areas stay hidden unless you turn on Reveal all.'
-            : 'Private current state for this mapped site.'}</div>
-        ${playerFacing ? '<label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"> Reveal all</label>' : ''}
-        <div class="rt-dungeon-map-readable"></div>`;
+        <div class="rt-dungeon-map-subtitle">Revealed rooms, routes, and known assets. Unrevealed map facts and material Evolution details stay hidden unless you turn on Reveal All.</div>
+        <div class="rt-dungeon-map-toolbar">
+            <label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"${revealAll ? ' checked' : ''}> Reveal All</label>
+        </div>
+        <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Map view">
+            <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Map Entries</button>
+            <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" ${revealAll ? '' : 'disabled '}title="${revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON'}"><i class="fa-solid fa-code"></i> Raw JSON</button>
+        </div>
+        <div class="rt-dungeon-graph-scroll rt-dungeon-map-popup-graph" data-map-graph></div>
+        <div class="rt-dungeon-map-readable" data-map-panel="readable"></div>
+        <div class="rt-dungeon-map-raw-wrap" data-map-panel="raw" hidden>
+            <div class="rt-dungeon-map-raw-toolbar">
+                <button type="button" class="menu_button interactable rt-dungeon-map-raw-save"><i class="fa-solid fa-floppy-disk"></i> Save JSON</button>
+                <span class="rt-dungeon-map-raw-status" role="status" aria-live="polite"></span>
+            </div>
+            <textarea class="rt-dungeon-map-raw" spellcheck="false" aria-label="Map JSON editor"></textarea>
+        </div>
+        <section class="rt-dungeon-map-evolution-section">
+            <div class="rt-dungeon-map-evolution-header">
+                <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
+                <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Map Evolution: Run Now</button>
+                <button type="button" class="menu_button interactable rt-dungeon-map-testing-ground"><i class="fa-solid fa-flask"></i> Testing Ground</button>
+            </div>
+            <div class="rt-dungeon-map-run-status" role="status" aria-live="polite"></div>
+            <div class="rt-dungeon-map-evolution-privacy">Material summaries follow Reveal All; quiet checkpoints never reveal hidden map contents.</div>
+            <div class="rt-dungeon-map-evolution-history"></div>
+        </section>`;
     const readable = popupDom.querySelector('.rt-dungeon-map-readable');
-    const paint = () => {
-        if (readable) readable.innerHTML = renderDungeonMapReadableHtml(mapDocument, { revealAll });
+    const rawWrap = popupDom.querySelector('.rt-dungeon-map-raw-wrap');
+    const raw = popupDom.querySelector('.rt-dungeon-map-raw');
+    const rawSave = popupDom.querySelector('.rt-dungeon-map-raw-save');
+    const rawStatus = popupDom.querySelector('.rt-dungeon-map-raw-status');
+    const rawButton = popupDom.querySelector('[data-map-view="raw"]');
+    const graphHost = popupDom.querySelector('[data-map-graph]');
+    const history = popupDom.querySelector('.rt-dungeon-map-evolution-history');
+    const runButton = popupDom.querySelector('.rt-dungeon-map-evolve-now');
+    const runStatus = popupDom.querySelector('.rt-dungeon-map-run-status');
+    const setMapView = (view) => {
+        currentView = view === 'raw' && revealAll ? 'raw' : 'readable';
+        for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+            const active = button.dataset.mapView === currentView;
+            button.classList.toggle('rt-dungeon-map-view-btn-active', active);
+            button.setAttribute('aria-selected', String(active));
+        }
+        for (const panel of popupDom.querySelectorAll('[data-map-panel]')) {
+            panel.hidden = panel.dataset.mapPanel !== currentView;
+        }
     };
+    const paint = () => {
+        if (readable) readable.innerHTML = renderDungeonMapReadableHtml(currentDocument, { revealAll });
+        if (raw && !rawDirty) raw.value = serializeDungeonMapDocument(currentDocument);
+        if (graphHost) {
+            const graph = buildDungeonMapGraph(currentDocument, {
+                playerFacing: !revealAll,
+                currentLocation: locationLabel,
+            });
+            graphHost.innerHTML = renderDungeonMapGraphSvg(graph, { compact: false, siteRoot: site });
+            bindDungeonMapPan(graphHost);
+        }
+        if (history) history.innerHTML = renderMapEvolutionHistoryHtml(
+            getSettings().mapEvolutionBacklogBySite,
+            site,
+            { revealAll },
+        );
+        if (rawButton) {
+            rawButton.disabled = !revealAll;
+            rawButton.title = revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON';
+        }
+        if (rawSave) rawSave.disabled = !revealAll;
+        if (!revealAll && currentView === 'raw') setMapView('readable');
+    };
+    const reloadInspectorFromLiveMap = async ({ resetRaw = true } = {}) => {
+        const fresh = typeof runtimeState.loadMappedEvolutionSiteRef === 'function'
+            ? await runtimeState.loadMappedEvolutionSiteRef(site)
+            : null;
+        if (fresh?.document) currentDocument = fresh.document;
+        if (resetRaw) rawDirty = false;
+        paint();
+        refreshDungeonMapViews();
+        if (typeof runtimeState.refreshTrackerViewRef === 'function') {
+            runtimeState.refreshTrackerViewRef();
+        }
+    };
+    const live = typeof runtimeState.loadMappedEvolutionSiteRef === 'function'
+        ? await runtimeState.loadMappedEvolutionSiteRef(site)
+        : null;
+    if (live?.document) currentDocument = live.document;
     paint();
     popupDom.querySelector('.rt-dungeon-map-reveal-all')?.addEventListener('change', (event) => {
         revealAll = !!event.target.checked;
+        persistDungeonMapRevealAll(revealAll);
         paint();
+        refreshDungeonMapViews();
+    });
+    for (const button of popupDom.querySelectorAll('[data-map-view]')) {
+        button.addEventListener('click', () => {
+            if (button.dataset.mapView === 'raw' && rawDirty && raw) {
+                const parsed = parseEditableDungeonMapJson(raw.value, site);
+                if (parsed.ok && parsed.document) currentDocument = parsed.document;
+            }
+            setMapView(button.dataset.mapView);
+        });
+    }
+    raw?.addEventListener('input', () => {
+        rawDirty = true;
+        if (rawStatus) rawStatus.textContent = 'Unsaved changes.';
+    });
+    rawSave?.addEventListener('click', async () => {
+        if (!revealAll || !raw) return;
+        const parsed = parseEditableDungeonMapJson(raw.value, site);
+        if (!parsed.ok) {
+            if (rawStatus) rawStatus.textContent = parsed.errors.join(' ');
+            if (typeof globalThis.toastr?.error === 'function') {
+                globalThis.toastr.error(parsed.errors.join(' '), 'Map JSON', { timeOut: 8000 });
+            }
+            return;
+        }
+        rawSave.disabled = true;
+        if (rawStatus) rawStatus.textContent = 'Saving…';
+        try {
+            const routerSpec = '../../../router.js';
+            const { persistManualDungeonMapDocument } = await import(routerSpec);
+            await persistManualDungeonMapDocument(site, parsed.document);
+            currentDocument = parsed.document;
+            rawDirty = false;
+            if (rawStatus) rawStatus.textContent = 'Saved.';
+            if (typeof globalThis.toastr?.success === 'function') {
+                globalThis.toastr.success(`Map JSON saved for ${site}.`, 'Map Inspector', { timeOut: 4000 });
+            }
+            await reloadInspectorFromLiveMap({ resetRaw: true });
+        } catch (error) {
+            const message = String(error?.message || error);
+            if (rawStatus) rawStatus.textContent = message;
+            if (typeof globalThis.toastr?.error === 'function') {
+                globalThis.toastr.error(message, 'Map JSON', { timeOut: 10000 });
+            }
+        } finally {
+            rawSave.disabled = !revealAll;
+        }
+    });
+    runButton?.addEventListener('click', async () => {
+        if (runtimeState.isLoreOrMapAgentBusyRef?.()) {
+            if (runStatus) runStatus.textContent = 'Another lore or map agent is already running.';
+            return;
+        }
+        if (typeof runtimeState.runMapEvolutionPassRef !== 'function') {
+            if (runStatus) runStatus.textContent = 'Map Evolution is not available yet.';
+            return;
+        }
+        runButton.disabled = true;
+        if (runStatus) runStatus.textContent = `Running Map Evolution for ${site}…`;
+        try {
+            const result = await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true, siteRoots: [site] });
+            if (result?.ok) {
+                await reloadInspectorFromLiveMap();
+                const applied = Number(result.applied) || 0;
+                const noops = Number(result.noops) || 0;
+                if (runStatus) runStatus.textContent = applied
+                    ? `Map Evolution committed ${applied} material update${applied === 1 ? '' : 's'} for ${site}.`
+                    : noops
+                        ? `Map Evolution considered ${site} and made no material change.`
+                        : `Map Evolution completed for ${site}.`;
+            } else {
+                const skipped = String(result?.skipped || '');
+                if (runStatus) runStatus.textContent = skipped === 'busy'
+                    ? 'Another lore or map agent is already running.'
+                    : skipped === 'location_mapping_off'
+                        ? 'Persistent Maps is off.'
+                        : `Map Evolution could not complete for ${site}.`;
+            }
+        } catch (error) {
+            if (runStatus) runStatus.textContent = `Map Evolution failed: ${String(error?.message || error)}`;
+        } finally {
+            runButton.disabled = false;
+        }
+    });
+    popupDom.querySelector('.rt-dungeon-map-testing-ground')?.addEventListener('click', async () => {
+        const { openMapEvolutionTestingGround } = await import('./panel-map-evolution-debug.js');
+        await openMapEvolutionTestingGround({ siteRoot: site });
+        await reloadInspectorFromLiveMap();
     });
     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
         okButton: 'Close', cancelButton: false, wide: true, large: true,
+        allowVerticalScrolling: true,
+        leftAlign: true,
     });
 }
 
@@ -189,7 +582,7 @@ function openSceneMapDetails(scene) {
     if (!mapDocument) return;
     void openDungeonMapReadablePopup(mapDocument, {
         siteLabel: scene.dungeonMap?.siteRoot || mapDocument.site || '',
-        playerFacing: true,
+        currentLocation: scene.rawLocationText || scene.resolvedPath || '',
     });
 }
 
@@ -208,10 +601,10 @@ export function ensureDetachedDungeonMapPanel(handlers = {}) {
     panel.innerHTML = `
         <div class="rpg-tracker-header rt-detached-header" id="rt-dungeon-map-detached-header">
             <div class="rpg-tracker-header-left">
-                <span><i class="fa-solid fa-map-location-dot"></i> Mapa de Ubicación <small class="rt-dungeon-alpha-tag">ALPHA</small></span>
+                <span><i class="fa-solid fa-map-location-dot"></i> Mapa de Ubicación</span>
             </div>
             <div class="rpg-tracker-header-right">
-                <button type="button" class="rt-dungeon-map-details rpg-tracker-icon-btn" title="Abrir detalles de la ubicación" aria-label="Abrir detalles de la ubicación"><i class="fa-solid fa-list"></i></button>
+                <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
                 <button type="button" class="rpg-tracker-icon-btn rt-reattach-btn" title="Reacoplar">✕</button>
             </div>
         </div>
@@ -287,7 +680,9 @@ export function updateDetachedDungeonMapPanel(scene, handlers = {}) {
     }
     const body = panel.querySelector('#rt-dungeon-map-detached-body');
     if (body) {
+        const viewport = captureDungeonMapViewport(body);
         body.innerHTML = renderDetachedBody(scene);
+        restoreDungeonMapViewport(body, viewport);
         bindAreaClicks(body, merged.onAreaClick);
         bindDungeonMapPan(body);
     }

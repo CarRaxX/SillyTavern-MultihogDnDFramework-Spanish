@@ -161,4 +161,117 @@ describe('sendStateRequest default (generateRaw) mode disables trimNames', () =>
 
         expect(capturedOverride.custom_url).toBe('http://127.0.0.1:1234/v1');
     });
+
+    it('keeps live OpenRouter routing authoritative when applying a completion preset', async () => {
+        let effectivePayload = null;
+        const profile = {
+            api: 'openrouter',
+            model: 'openai/gpt-5.6-luna',
+            preset: 'Default',
+        };
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            chatCompletionSettings: {
+                openrouter_providers: ['OpenAI'],
+                openrouter_quantizations: [],
+                openrouter_allow_fallbacks: true,
+                openrouter_use_fallback: false,
+                openrouter_middleout: 'off',
+            },
+            getPresetManager: (type) => (type && type !== 'openai' ? null : {
+                getCompletionPresetByName: name => (name === 'Default' ? {
+                    openrouter_providers: ['DeepSeek'],
+                    openrouter_allow_fallbacks: false,
+                } : null),
+            }),
+            ConnectionManagerRequestService: {
+                getProfile: () => profile,
+                sendRequest: async (_profileId, _messages, _maxTokens, _options, override) => {
+                    // Mirrors ChatCompletionService's final merge order: the
+                    // request override is applied after the completion preset.
+                    effectivePayload = {
+                        provider: ['DeepSeek'],
+                        allow_fallbacks: false,
+                        ...override,
+                    };
+                    return { content: '{"ok":true}', reasoning: '' };
+                },
+            },
+        });
+
+        await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1', completionPresetId: 'Default' },
+            'system prompt',
+            'user prompt',
+        );
+
+        expect(effectivePayload).toMatchObject({
+            provider: ['OpenAI'],
+            quantizations: [],
+            allow_fallbacks: true,
+            use_fallback: false,
+            middleout: 'off',
+        });
+    });
+
+    it('streams keep-alive jobs so provider idle timeouts cannot drop a finished reply', async () => {
+        let capturedOptions = null;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            ConnectionManagerRequestService: {
+                getProfile: () => ({ preset: '' }),
+                sendRequest: async (_profileId, _messages, _maxTokens, options) => {
+                    capturedOptions = options;
+                    return async function* () {
+                        yield { text: 'Hel' };
+                        yield { text: 'Hello map' };
+                    };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'profile', connectionProfileId: 'profile-1' },
+            'system prompt',
+            'user prompt',
+            null,
+            { stream: true },
+        );
+
+        expect(capturedOptions.stream).toBe(true);
+        expect(result).toBe('Hello map');
+    });
+
+    it('streams Main API Chat Completion instead of quiet generateRaw when asked', async () => {
+        let usedRaw = false;
+        globalThis.SillyTavern.getContext = () => ({
+            ...originalGetContext(),
+            mainApi: 'openai',
+            chatCompletionSettings: { chat_completion_source: 'nanogpt', nanogpt_model: 'gemini-pro' },
+            generateRaw: async () => {
+                usedRaw = true;
+                throw new Error('quiet generateRaw must not be used for keep-alive jobs');
+            },
+            ChatCompletionService: {
+                processRequest: async (data) => {
+                    expect(data.stream).toBe(true);
+                    expect(data.model).toBe('gemini-pro');
+                    return async function* () {
+                        yield { text: '{"ok":true}' };
+                    };
+                },
+            },
+        });
+
+        const result = await sendStateRequest(
+            { connectionSource: 'default' },
+            'system prompt',
+            'user prompt',
+            null,
+            { stream: true },
+        );
+
+        expect(usedRaw).toBe(false);
+        expect(result).toBe('{"ok":true}');
+    });
 });

@@ -95,6 +95,18 @@ export function wireAgentWorldProgression({
             });
         }
 
+        // ── Agent World Locations per report ──
+        const worldLocationsInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-world-locations'));
+        if (worldLocationsInp) {
+            worldLocationsInp.addEventListener('change', () => {
+                const s = getSettings();
+                s.worldProgressionLocationsPerReport = Math.max(1, Math.min(12, parseInt(worldLocationsInp.value, 10) || 3));
+                worldLocationsInp.value = String(s.worldProgressionLocationsPerReport);
+                saveSettings();
+                $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport);
+            });
+        }
+
         // ── Agent World Fire Now button ──
         const worldFireNowBtn = agentPanel.querySelector('#rt-agent-world-fire-now');
         if (worldFireNowBtn) {

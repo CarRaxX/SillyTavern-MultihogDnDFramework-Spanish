@@ -93,13 +93,15 @@ For the narrator, I'd recommend trying at least the following:
 
 ### Initial Setup
 
-1. Create a character card for your "narrator" (e.g. Game Master). Leave the card fields empty, as the framework handles all logic via the system prompt.
+1. Ensure **Function Calling** is enabled in your Chat Completion preset if you want Hybrid RNG (`RollTheDice`) and the default Persistent Maps opener (`CreateAreaMap`). You can skip function calling: set the Map Architect opener to **Text command** under Narrator Configuration → Components (when Persistent Maps is on) or Settings → Persistent Maps → Map Architect, and use Pre-Seeded RNG. You can turn Persistent Maps off under Components / Game Systems.
 
-2. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to have the extension randomize everything you leave unspecified beyond your name and adventure genre.
+2. Set up your connections in the extension's connection settings. A lightweight, relatively fast and cheap model is recommended for everything but the main narrator/GM.
 
-3. If you decide to use the hybrid RNG mode that combines tool calls with the pre-seeded RNG Queue used by the extension, ensure function calling is enabled. Otherwise the `RollTheDice` tool will not work. **Persistent Maps** also needs function calling: without it, `CreateAreaMap` cannot run and new site maps cannot be created.
+3. Create a character card for your "narrator" (e.g. Game Master). Leave the card content empty, as the framework handles all logic via the system/Main ST prompt.
 
-It's also recommended to go to Connections & Models and hook up the various components to suitable models. The respective drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection), of course. DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
+4. Use one of the character creation options above to roll a new character. You can either use the Character Creator option to clearly specify your character, use Other Ways to Begin for a more rough description, or use Instant Action to get started quicker.
+
+The respective connection drawers contain hints as to what kind of a model to pick. If there's no hint, then it doesn't matter much. Preferably choose a relatively strong model for the narrator/GM (ST main API connection). DeepSeek V4 Pro/MiMo 2.5 Pro tier or better.
 
 ### Narrator character
 
@@ -126,7 +128,7 @@ The Character Creator random-name button uses the combined cross-genre name libr
 
 ### Chat-Linked Mode
 
-On by default. Each chat keeps its own memo, quests, portraits, Lorebook Agent watermarks, World Progression timer, and related campaign data under that chat ID. Switching chats saves the old partition and loads the new one. Campaign lorebook prefix is derived from the chat filename (sanitized) unless overridden.
+On by default. Each chat keeps its own memo, quests, portraits, Lorebook Agent watermarks, World Progression timer, Map Evolution Last Evolved clocks, per-site Evolution backlogs, and related campaign data under that chat ID. Switching chats saves the old partition and loads the new one. Campaign lorebook prefix is derived from the chat filename (sanitized) unless overridden.
 
 **Lock Control Room & Modules to each chat** is also enabled by default. It saves the active System Prompt Control Room sections and State Tracker modules for each chat, so a new chat begins from the stock setup without requiring you to restore a cartridge or manually rebuild anything.
 
@@ -171,8 +173,10 @@ On generation end (skipped for quiet/impersonate, while a pass is already runnin
 2. **State Tracker** pass (throttled by “run every N”; default every turn) — parses the new narrative and updates the memo.
 3. **Combat API Override** sync (switch/restore narrator profile if combat started/ended).
 4. Dynamic RNG prompt sync (Hybrid mode combat boundary).
-5. **World Progression** TIME check (deterministic; see that section).
-6. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
+5. **Map Updater** occupancy (if Persistent Maps is on and its run-every threshold is met).
+6. **World Progression** TIME check (deterministic; see that section).
+7. **Map Evolution** — checks the normal 8-hour default interval/site-exit cadence for the configured map pool (current map, N maps, every due mapped site by default, or a selected checklist), lazily interpreting relevant unconsumed World Report prose when a map actually evolves.
+8. **Lorebook Agent** tick / pass when its “run every N” threshold is met.
 
 Important: the State Tracker runs **after** the reply. The memo injected on the *next* turn is what was updated from the *previous* reply.
 
@@ -403,6 +407,7 @@ With Deadlines + Frustration enabled, overdue NPC quests decay giver mood via `F
 - **Full Audit** — chunked pass over large chat history to rebuild a complete memo.
 - **Rendering Tags Library** — live previews of `((TAG))` markers used in module lines.
 - Mobile: open from the wand menu.
+- **Context Debugger** — wand menu item **Multihog Context Debugger** (wrench icon). Floating overlay of the last 10 State Tracker, Map Architect, and Map Evolution prompts and AI replies. Prompt/reply blocks start collapsed; click a row to expand it. Not a button on the tracker panel.
 
 ### Connection settings
 
@@ -500,8 +505,8 @@ Splitting Body from Worn Equipment means the Lorebook Agent can keep gear in syn
 
 Optional friendship/affection on NPC cards. Update methods (only one active):
 
-1. **Narrator Regex** (default) — parses annotations like `*(Friendship: Name +X — …)*` / Affection from narrator output.
-2. **State Tracker Tags** — tracker emits `[RELATIONS]` command lines; code applies deltas. (Those blocks are stripped before memo merge so they don’t leak into the GM memo.)
+1. **Narrator Regex** — parses annotations like `*(Friendship: Name +X — …)*` / Affection from narrator output.
+2. **State Tracker Tags** (default) — tracker emits `[RELATIONS]` command lines; code applies deltas. (Those blocks are stripped before memo merge so they don’t leak into the GM memo.)
 
 Caps default around ±150 (per-chat override possible in Campaign Records under the gear ⚙️ in the NPCs header).
 
@@ -511,6 +516,12 @@ Caps default around ±150 (per-chat override possible in Campaign Records under 
 - Auto-gen toggles for linked PC, party, combat enemies, lorebook NPCs, locations.
 - **Visuals/Map** (Lorebook Agent tab): location hero image when scene art is on, present NPC/PC tiles, and — while inside a mapped site — a knowledge-filtered site graph. Real-Time Visualization Mode is the *scene-art* generator; it is **not** required just to see the map tab. The Campaign Records / Visuals/Map switch appears when location images are on **or** the party is inside a mapped site. See **Persistent Maps** below.
 - Real-time scene-art triggers: on location enter/change and/or every N outputs.
+
+### NPC Library
+
+The extension keeps a **global character library** (not chat-linked). Bookmark any campaign NPC or Player Card from Campaign Records (card bookmark, compact-list bookmark, or **Save to Library** on the Full Card). Open **NPC/PC Manager** from the NPCs header: view the Full Card, **Add as is**, **Play as PC** (installs the Player Card and asks the State Tracker to swap `[CHARACTER]`), Fit into Story (AI adaptation as an NPC), **Add to Party**, export, or remove. **Edit Text** on a library card saves back to the library. Click the Full Card portrait to replace, generate, crop, or clear it (library storage only). Library rows show a portrait aligned with the action stack and the appearance plus personality blurb.
+
+Export writes a single `.mnpc.json` package. The portrait is copied into that JSON as base64 so you can share one file; import restores the image into library storage. Campaign relationship numbers and chronicle/lore after `[CORE]` are not saved — only CORE identity, keywords, and the portrait.
 
 ### Slash command
 
@@ -527,31 +538,35 @@ LA also has its own **💬** Direct Prompt in the agent panel.
 
 ## Persistent Maps (Alpha)
 
-Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)** — function calling **must** be enabled or `CreateAreaMap` cannot run. Turning that checkbox off also stops Map Architect and Map Updater API calls. Using Persistent Maps at the same time as **World Progression** is not recommended until compatibility is added.
+Persistent Maps is **alpha**. The mapped-site loop works in play, but expect sharp edges and keep backups of important chats. Toggle it under **Components** as **Persistent Maps (Alpha)**. New maps need either function calling (`CreateAreaMap`) or the **Text command** opener that appears under that checkbox (same control lives under Settings → Persistent Maps → Map Architect). Turning that checkbox off also stops Map Architect, Map Updater, and Map Evolution API calls.
 
-It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
+It exists so dangerous interiors (dungeons, ruins, tombs, fortresses) have an objective hidden layout *before* the player tests doors, traps, stealth, and enemies, so explicitly selected standalone buildings such as a recurring player home can retain a room-scale layout, and so towns and cities have a district-scale skeleton before the party explores them. The map is current truth at its own scale. Child Location entries are player-observable history, not a second competing map.
 
-The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are. If they enable **Inject current site map** in CHAT options, the Companion receives the same knowledge as Visuals/Map with Reveal all off: visited interiors, discovered names, and unexplored neighbors as unknown. It must not invent hidden rooms, traps, or occupants.
+The Adventure Companion cannot flip the Components checkbox or open Visuals/Map itself. Tell the player where those controls are. If they enable **Inject current site map** in CHAT options, the Companion receives the same knowledge as Visuals/Map with **Reveal All** off: visited interiors, discovered names, and unexplored neighbors as unknown. It must not invent hidden rooms, traps, or occupants.
 
 ### How a map is created
 
-1. The narrator calls `CreateAreaMap` **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`).
-2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map.
+1. The narrator requests a map **once**, before narrating entry into an unmapped high-risk interior (`kind: DUNGEON`) or an unmapped town/city/village (`kind: SETTLEMENT`). It does not map ordinary buildings merely because the party enters, owns, rents, or visits them. If the player explicitly requests a persistent layout for one exact named building or recurring home/base, that building may use `kind: DUNGEON` as the room-scale enum even when it is mundane and peaceful.
+   - **Tool call (default):** `CreateAreaMap`. Requires function calling. SillyTavern pauses the turn until Map Architect returns.
+   - **Text command:** Narrator Configuration → Components (when Persistent Maps is on) or Settings → Persistent Maps → Map Architect → **Text command**. The narrator outputs only a `[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]` block (site, entrance, kind, scale, threat, premise) and stops — including with CYOA Mode on, so choices are not appended on that turn. Scale is size; threat (`NONE` / `LOW` / `MODERATE` / `HIGH` / `DEADLY`) is site danger for enemy/trap density, never party level. `NONE` means no active danger may be invented; `LOW` means light but real danger. The extension strips that block, runs Map Architect, injects the private result, and continues the same assistant message. Prose after the fence is discarded so invented rooms cannot race the map. CYOA choices resume on the continued narration turn.
+2. A dedicated **Map Architect** agent (own connection, prompt, model, lookback — default 12 recent chat messages, output budget) builds a complete version-3 JSON map. Map Architect, Map Updater, and Map Evolution output budgets default to 25,000 tokens and remain configurable. Map Architect and Map Evolution stream their replies — there is no Multihog idle timeout — so a long OpenRouter / nano-gpt job is not dropped after ~60s of silence while the model is still writing.
 3. A validator checks site/entrance identity, kind, scale, stable IDs, asset references, reciprocal passages, and that every room or district is reachable from the entrance. Invalid output gets up to two correction passes and is never partially saved.
 4. On success, JSON is stored in the **root Location** lorebook entry as a hidden `[MAP]` block. The narrator only receives compact private prose, not the raw JSON.
 
-New maps need function calling. After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Architect connection. Lorebook Agent continues NPC/location/relationship records on a separate, usually slower cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
+After a map exists, the **Map Updater** keeps occupancy current on its own cadence (default: every turn) using the Map Updater & Evolution connection. **Map Evolution** is a separate pass on that same connection: it advances mapped sites off-screen on normal interval, site-exit, or manual passes. The default Evolution interval is **8 in-world hours** for both the current map and other mapped sites, and the default automatic scope is **every due mapped site**; both can be changed from Settings or the Lorebook Agent's Map Evolution drawer. A **Current map** interval overrides only the site the party is in. The mapped-site list can set an optional per-map interval (blank inherits Other maps / Current map; `0` skips automatic ticks). The checkbox is only Run now / Selected maps — it does not turn a per-map timer on. Evolution's writer does not change with presence. Each request receives that site's Last Evolved timestamp, current in-world time, exact elapsed duration, a bounded backlog of its prior material commits and quiet checkpoints, and open causal threads (who killed whom, who occupied a vacuum, and similar attributed events). Closed-thread history is kept until it exceeds a user-settable token threshold (default 10,000; ~4 characters per token); a second call then compresses resolved/transformed events while currently open threads stay verbatim. Consecutive no-op passes accumulate their elapsed time, so very frequent Evolution cannot keep resetting the model to “not enough time; do nothing.” Each selected map also receives any relevant unconsumed World Report prose and decides how to realize it locally. A report never launches an immediate all-map reconciliation. Lorebook Agent continues NPC/location/relationship records on a separate cadence and no longer emits `commit.map` or `[MAP_COMMIT]`.
 
-Repeated `CreateAreaMap` calls do not replace an already attached map.
+The blue **MAP** badge on a root Location record and the details button in **Visuals/Map** open one shared inspector. **Reveal All** is remembered per chat. Until it is on, unrevealed map entries, raw JSON, and the content of material Evolution commits remain hidden, and Visuals/Map stays knowledge-filtered. Turning it on also fully reveals the Visuals/Map graph (named rooms instead of fog stubs) and unlocks an editable **Raw JSON** tab with **Save JSON** for direct map edits. The inspector shows that same graph below the Map Entries / Raw JSON tabs, lists Evolution history, provides **Map Evolution: Run Now** (always scoped to only the map being viewed), and opens the **Testing Ground** sandbox for that site.
 
-Dungeon maps are **room-scale**. Settlement maps are **district-scale**: gates, plazas, wards, and a few major landmarks — not every shop or interior. The GM may invent granular locations (a specific inn, alley, house) against that skeleton.
+Repeated `CreateAreaMap` calls do not replace an already attached map. Every Persistent Maps turn also injects a compact `[MAPPED_SITES]` list of every site that already has a map (independent of the current footer and lore keys), so the narrator will not request a map while approaching or re-entering a known site. The live `[DUNGEON_REALITY]` block is still attached only while the footer matches.
+
+`DUNGEON` maps are **room-scale**. Besides dangerous complexes, this enum can represent an explicitly requested standalone house, shop, inn, headquarters, or other building; use `NONE` for a peaceful building so the Architect cannot treat `LOW` as permission to add danger. `SETTLEMENT` maps are **district-scale**: gates, plazas, wards, and a few major landmarks — not every shop or interior. The GM may invent granular locations (a specific inn, alley, house) against that skeleton without creating another map.
 
 ### What the map stores
 
 - **Areas** (rooms/passages): geometry, routes, and knowledge `UNREVEALED` | `DISCOVERED` | `VISITED`.
 - **Assets** (creatures, traps, loot, hazards, corpses): one site-level identity with a current `location`, plus knowledge `UNREVEALED` | `SUSPECTED` | `KNOWN`.
 
-Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain). Asset `detail` is a lasting occupancy note (who remains, who was destroyed), not the current combat beat — mid-round targeting, poses, HP, and temporary conditions stay in the combat tracker. The State Tracker `[ LIVE ]` arrows roll that occupancy back with the memo snapshot.
+Killed creatures stay on the map as `DESTROYED` / `DEAD` in the room where they fell, with `cause`, `actor`, and `changed_at` when the writer supplied them. Location chronicles are history; `[MAP]` is current occupancy. Taken loot is the weaker case (it left the room, but identity should remain). Asset `detail` is a lasting occupancy note (who remains, who was destroyed), not the current combat beat — mid-round targeting, poses, HP, and temporary conditions stay in the combat tracker. Cause/actor/since are why it became true, who did it, and when. The State Tracker `[ LIVE ]` arrows roll that occupancy back with the memo snapshot.
 
 ### When the map is active
 
@@ -563,26 +578,25 @@ Activation uses **whole location segments**, not substring matches and not first
 | `Whispering Woods, Forgotten Tomb` | Forgotten Tomb on (region wrapping) |
 | `Forest Near the Hall of the Ember-Ancestors` | **off** (nearby mention only) |
 
-Leaving the site stops narrator injection without deleting the map; returning resumes it.
+Leaving the site stops `DUNGEON_REALITY` injection without deleting the map; returning resumes it. The `[MAPPED_SITES]` index stays in context so the narrator still knows which maps exist. While inside, the GM receives compact occupancy prose (including each asset's latest Cause / Actor / Since when present) plus a short Recent site activity briefing — open causal threads, recent material Evolution commits up to a token ceiling (default 2000; never mid-cut), and DIGEST rows — not the full Evolution ledger. Commit lines omit the site name.
 
 ### Player vs GM views
 
-- **Visuals/Map** (Lorebook Agent): player-facing node graph — visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled `?` stubs. Drag to pan; click a revealed room to open its location record. The list button opens the readable inspector (rooms, geometry, routes, assets). Unrevealed rooms and assets stay hidden unless **Reveal all** is on. The graph can be popped out into its own window.
-- **MAP badge** on a mapped root in Campaign Records: private GM inspector, including unrevealed facts and Raw JSON.
+- **Visuals/Map** (Lorebook Agent): knowledge-filtered node graph by default — visited rooms named, discovered rooms dim, unrevealed neighbors as unlabeled `?` stubs. With **Reveal All** on (remembered per chat), every room is named. Drag to pan; click a revealed room to open its location record. The list button opens the shared map inspector (graph, rooms, geometry, routes, assets). Unrevealed rooms and assets stay hidden unless **Reveal All** is on. The graph can be popped out into its own window.
+- **MAP badge** on a mapped root in Campaign Records: opens that same shared inspector, restoring the remembered **Reveal All** state. The inspector shows the site graph below Map Entries / Raw JSON, plus Map Evolution History, a site-scoped **Map Evolution: Run Now** action, and **Testing Ground**. Raw JSON and material Evolution details are also protected by Reveal All in both entry paths. The adjacent **X** removes only the private `[MAP]` from that Location root (CORE stays; Evolution history for the site is cleared). Unmapped location roots show a muted **+ MAP** control. **Auto** spends one Map Architect turn to infer entrance, kind, scale, threat, and premise from the location lore plus recent story, then generates the map. **Manual** is the same fields filled by you. The Locations header **Add mapped location** button creates a new root and its map. **Auto** takes a name, optional brief, and story lookback (0 = no chat). **Manual** is the same fields filled by you; the location name is always added as a keyword. The narrator, CYOA, and chat are not involved.
+
 
 The Visuals/Map tab does **not** require Real-Time Visualization or location scene art. Those are for generated pictures. The map tab appears when location images are on **or** the party is inside a mapped site.
 
 ### Map Architect settings
 
-Settings → **Map Architect** (left rail, just below Lorebook Agent): story lookback, output budget, architect prompt, and **Map Updater** (run every N messages, occupancy prompt). Connection profile, model, and preset are under **Connections & Models**, with a shortcut on the Map Architect tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` contract is. The Lorebook Agent panel also has **Map every:** next to **Run every:** so occupancy can fire every turn while lore records stay less frequent. The header play button (**Run Research Now**) expands into **Lorebook Agent** or **Map Updater**.
+Settings → **Persistent Maps** (left rail, just below Lorebook Agent): two connections (Map Architect vs shared Map Updater & Evolution), then nested drawers for **Map Architect** (opener: tool call vs text command, story lookback, output budget, architect prompt), **Map Updater** (run every N messages, occupancy prompt), and **Map Evolution** (last/next in-world schedule with Override and Reset Timeline, 8-hour default interval for other maps and for the current map, optional per-map hours on the site list, maps-per-tick scope, checklist, evolution prompt, and **Testing Ground**). The displayed schedule summarizes the per-site Last Evolved clocks using each map's own interval; every actual request uses the selected map's own clock to compute elapsed time and combines it with that map's retained Evolution trajectory and open causal threads (killed-by, occupations, and other attributed events). **Reset Timeline** clears those per-site Last Evolved clocks but deliberately keeps the retained Evolution history/backlog and threads. **Testing Ground** is the balancing sandbox: advance or set `[TIME]`, spawn or kill entities with cause and actor, evolve one map, simulate N ticks without playing through the campaign, or undo/redo the last Evolution or Simulate pass (restores the map, `[TIME]`, Last Evolved, and Evolution memory, then optionally runs that same pass again). The Lorebook Agent panel has a collapsible **Map Evolution** drawer beside **World Progression** with its ON/OFF badge, Last evolved / Next evolution readout, other-maps and current-map intervals, automatic scope for scheduled passes (current map, N maps, every due map, or selected maps), randomization/count controls where applicable, **Evolve Now**, **Reset Timeline**, and **Testing Ground**. Its **Evolve Now** runs the current mapped site immediately; the map inspector's Run Now remains scoped to only the site being viewed, while the automatic scope governs scheduled passes. World Progression has a matching agent-panel drawer with its interval, locations-per-report control, and **Fire Now** action. Connection profile, model, and preset are under **Connections & Models**, with shortcuts on the Persistent Maps tab. The full map-authoring spec is **not** stuffed into every GM prompt — only the short `CreateAreaMap` or `[CREATE_AREA_MAP]` opener contract is. The header play button (**Run Research Now**) still expands into **Lorebook Agent**, **Map Updater**, or **Map Evolution** for broader manual passes.
 
 ---
 
 ## World Progression
 
 World Progression (WP) is the fourth major simulation pillar: a macroscopic backbone so the GM thinks beyond the player’s bubble.
-
-Using World Progression at the same time as **Persistent Maps** is not recommended until compatibility is added (soon). Pick one or the other for now.
 
 Every X **in-world** hours (default 24), WP injects a World Report into context (stored in `{prefix}_World`, injection every turn while active). Example flavor:
 
@@ -593,18 +607,24 @@ Every X **in-world** hours (default 24), WP injects a World Report into context 
 
 JavaScript checks `[TIME]` in the State Memo after State Tracker updates. The AI writes the report; it does **not** decide whether to generate one. WP requires Lorebook Agent enabled. First successful TIME parse stamps a baseline and does not fire; later elapsed intervals fire reports. Manual **Generate Now** is always available.
 
+WP is location-centric and deliberately divorced from granular map entities. It receives a rotating set of selected locations' readable lore dossiers, including sublocations and pertinent entity facts, but every `[MAP]` block is stripped. Entity facts are constraints and continuity context, not simulation subjects. WP writes directional prose about location-scale conditions plus a `Wider Currents` section for regional or global patterns; it does not write JSON deltas or decide rooms, assets, patrols, or encounters. Map Evolution and the GM independently realize those pressures at their own levels.
+
+The same report creates two pressures. It biases the narrator immediately through normal World Report injection, rumor, and improvisation. It also waits as prose for relevant maps. During a map's next ordinary Evolution pass, Evolution interprets that prose against current reality, chooses a concrete manifestation, and records the report as materialized, already realized through play, or considered. This avoids immediate fan-out and duplicate realization.
+
+Previous trends are causal state, not a command to escalate. WP may intensify, persist, plateau, fragment, transform, backfire, resolve, reverse abruptly, or supersede a trend when plausible. “Build on previous trends” means preserve causal continuity, not linearly continue the same direction forever; a credible reversal is allowed when the macro situation changes.
+
 ### Quick Start Guide
 
 1. **Skeleton Source** — this replaces the former Atmosphere Summary and can be a short thematic seed or a detailed description of what you want the world and skeleton to be. Auto-Generate remains intentionally conservative: it derives a generalized backdrop from recent chat without copying named characters, party members, locations, factions, or plot events.
-2. **Generate Skeleton** — factions, locations, NPCs, conflicts as Day 0 baseline in `{prefix}_Skeleton`. **Source from Existing Lorebooks** now lets you choose lorebooks from a list, using the same selection pattern as State Tracker lorebook injection. Selected books are supplied as source material. With normal extrapolation enabled, specify how many NPCs, Locations, Factions, and Conflicts you want and the LLM may build compatible new entities from those books. Alternatively, enable **Only use entities explicitly mentioned in source lorebooks (no extrapolation)**; the count fields are disabled and the generator creates entities only for what actually appears in the injected lorebook(s). Edit the generated skeleton afterward in the native SillyTavern Lorebook UI for full customization.
-3. **Focus Randomization** (recommended) — lottery across skeleton vs organic pools so reports don’t fixate on the player bubble. Active `[PARTY]` is excluded; `[BENCHED PARTY]` members remain eligible.
-4. **Generate the First Report** — Generate Now (skeleton-only if early) or wait for the interval (later runs include organic lore).
+2. **Generate Skeleton** — the macro-only skeleton creates locations, factions, and conflicts. It has no NPC output category, does not create named NPCs, and does not promote granular entities into simulation subjects. Legacy NPC skeleton entries may remain on disk from older campaigns, but WP ignores them; established ordinary NPC lore may still constrain a location dossier.
+3. **Location Rotation** — choose how many location dossiers each report covers (default 3). The oldest-unadvanced dossiers go first; optional randomization only breaks ties among equally old locations. This setting is available in Settings and in the World Progression drawer in the Lorebook Agent panel.
+4. **Generate the First Report** — Generate Now or wait for the interval. The report enters narrator context immediately and becomes lazy input to later Map Evolution passes.
 
 ### Tips
 
 - 24h in-world is a solid default; try shorter/longer intervals.
 - Injection position/depth changes how prominently reports sit near recent messages.
-- WP is optional but deepens simulation and lets dormant entities resurface.
+- WP is optional but deepens simulation by making locations and wider currents change beyond the player bubble.
 
 ---
 
@@ -671,7 +691,7 @@ Configurable narrator-side behaviors include:
 - **Narrative Pacing** modes: Normal (no length instructions), Shorter Outputs (modest length), High-Agency, and Downtime
 - **Benched Party** handling (ties into WP eligibility)
 - **Relationship Tracking** sections in the GM prompt
-- **Persistent Maps** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); requires function calling for `CreateAreaMap`
+- **Persistent Maps** (alpha): hidden maps for dungeons (room-scale) and towns/cities (district-scale); `CreateAreaMap` or the text-command opener
 - **CYOA** choice presentation
 - End-of-output footer reminders so the GM closes turns in the format ST expects
 
@@ -713,8 +733,8 @@ The framework’s backbone is still **time + memo + optional lore/world layers**
 | Wrong campaign data or setup in a new chat | Check that Chat-Linked Mode and **Lock Control Room & Modules to each chat** are enabled. GLOBAL items intentionally share activation; CHAT-BOUND items restore that chat's saved setup. Lock-off mode is a temporary carry-over bypass. |
 | Tracker formatting broken after paste | Use 💬 Direct Prompt: “Reformat this sheet to stock module layout.” |
 | Modules disappear / drift on a local or small tracker model | Enable **Full Review Mode** (State Tracker & Modules, below Enable State Tracker). Delta-only updates are hard for weaker models; Full Review dumps every enabled module each pass. Also raise response length. |
-| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Persistent Maps** is on under Components, function calling is enabled if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
-| CreateAreaMap never fires / no map is stored | Function calling must be enabled. The narrator must call the tool once before entry (`DUNGEON` or `SETTLEMENT`); Map Architect failures are real errors and must not be retried in the same turn. |
+| Visuals/Map tab missing | Location images **or** being inside a mapped site should show it — Real-Time Visualization is not required. Confirm **Persistent Maps** is on under Components, function calling **or** the text-command opener is set if you still need a first map, and the footer location is a whole mapped segment (not a nearby mention). |
+| CreateAreaMap never fires / no map is stored | Tool opener: function calling must be enabled and the narrator must call `CreateAreaMap` once before entry. Text opener: Settings → Map Architect → **Text command**; the narrator must emit `[CREATE_AREA_MAP]...[/CREATE_AREA_MAP]` and stop. Map Architect failures are real errors and must not be retried in the same turn. |
 
 ---
 

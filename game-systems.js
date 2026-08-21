@@ -30,12 +30,17 @@ import {
     fetchBaseSyspromptRaw,
 } from './src/app/runtime-bridge.js';
 import { isBaseSectionEnabled, isEffectiveSectionEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
+import { isMapArchitectTextOpener, MAP_ARCHITECT_TEXT_OPENER_RULES, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
 import { normalizeGmContent, unwrapManagedSectionContent } from './src/state/sysprompt-content.js';
 import { buildNarrativePacingSection } from './src/state/narrative-pacing.js';
 import {
+    bindGameSystemWizardModuleExamplePicker,
     buildGameSystemWizardLoreContext,
+    buildGameSystemWizardModuleExamplesContext,
     buildGameSystemWizardStoryContext,
     normalizeGameSystemWizardContextPrefs,
+    readGameSystemWizardModuleExampleKeysFromUi,
+    renderGameSystemWizardModuleExamplePickerHtml,
 } from './src/features/game-system-wizard-context.js';
 import {
     buildGameSystemWizardPreviewMemo,
@@ -221,10 +226,12 @@ async function sendWizardStateRequest(settings, systemPrompt, userPrompt, signal
     return { raw, names };
 }
 
-/** Adds the Wizard's selected chat, Lorebook Agent, and State Tracker context. */
+/** Adds the Wizard's selected chat, Lorebook Agent, module examples, and State Tracker context. */
 async function buildWizardMechanicUserPrompt(settings, taskText) {
     const ctx = SillyTavern.getContext();
-    const parts = [buildExistingTagsContext(settings)];
+    const parts = [];
+    const moduleContext = buildGameSystemWizardModuleExamplesContext(settings);
+    if (moduleContext) parts.push(moduleContext);
     const story = buildGameSystemWizardStoryContext(ctx?.chat, settings);
     if (story) {
         parts.push(`RECENT STORY CONTEXT (use only when relevant to the requested mechanic):\n<story_context>\n${story}\n</story_context>`);
@@ -300,43 +307,6 @@ export function extractTopLevelSections(rawText) {
     return sections;
 }
 
-function buildExistingTagsContext(settings) {
-    let context = "=== ACTIVE / ENABLED SYSTEMS & TRACKING FIELDS ===\n\n";
-
-    // 1. Stock Modules
-    const BLOCK_ORDER = ['CHARACTER', 'PARTY', 'COMBAT', 'INVENTORY', 'ABILITIES', 'SPELLS', 'XP', 'TIME', 'QUESTS'];
-    BLOCK_ORDER.forEach(tag => {
-        if (tag === 'QUESTS' && settings.syspromptModules?.quests === false) return;
-        if (!settings.modules || settings.modules[tag] !== false) {
-            const modLower = tag === 'TIME' ? resolveTimePromptKey(settings) : tag.toLowerCase();
-            const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower]) 
-                ? settings.stockPrompts[modLower] 
-                : DEFAULT_STOCK_PROMPTS[modLower] || '';
-            context += `[${tag}] (Stock Module)\nPrompt:\n${promptContent}\n\n`;
-        }
-    });
-
-    // 2. Custom Fields / Tracker Modules
-    if (settings.customFields && settings.customFields.length > 0) {
-        settings.customFields.forEach(f => {
-            if (f.enabled) {
-                context += `[${f.tag.toUpperCase()}] (Custom Tracker Module: ${f.label})\nPrompt:\n${f.prompt}\nTemplate:\n${f.template}\n\n`;
-            }
-        });
-    }
-
-    // 3. Custom GM Sections
-    if (settings.customSyspromptLibrary && settings.customSyspromptLibrary.length > 0) {
-        settings.customSyspromptLibrary.forEach(p => {
-            if (p.enabled && !isBlankSectionContent(p.content)) {
-                context += `<${p.tag}> (Custom GM/Narrator Section)\nInstructions:\n${p.content}\n\n`;
-            }
-        });
-    }
-
-    return context.trim();
-}
-
 // ─────────────────────────────────────────────────────────────────────────
 // System Prompt Control Room — ordering + row-resolution helpers.
 //
@@ -378,7 +348,7 @@ const NARRATOR_TOGGLE_IDS = {
     dungeon_reality_and_hidden_mapping: 'rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping',
 };
 
-const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). Function calling MUST be enabled or CreateAreaMap cannot run. Expect sharp edges. Not recommended together with World Progression until compatibility is added.';
+const LOCATION_MAPPING_TOGGLE_TITLE = 'Alpha: builds a hidden location map before exploring a dungeon/ruin (room-scale) or town/city (district-scale). New maps use CreateAreaMap (function calling) or the text-command opener below. Expect sharp edges.';
 
 export function isSectionUnlocked(settings, tag) {
     return (settings.customSyspromptLibrary || []).some(p =>
@@ -410,6 +380,7 @@ function syncNarratorToggleUi(tag, settings) {
     if (tag === LOCATION_MAPPING_SECTION_TAG) {
         el.disabled = false;
         if (label) label.title = LOCATION_MAPPING_TOGGLE_TITLE;
+        syncMapArchitectOpenerNestedVisibility(el.checked);
         return;
     }
     el.disabled = unlocked;
@@ -512,6 +483,12 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
 
     if (tag === 'party_bench') {
         return '';
+    }
+
+    if (tag === LOCATION_MAPPING_SECTION_TAG && isMapArchitectTextOpener(settings)) {
+        const restStart = innerContent.search(/- DUNGEON maps are room-scale/);
+        const rest = restStart >= 0 ? innerContent.slice(restStart).trim() : '';
+        return `<${LOCATION_MAPPING_SECTION_TAG}>\n${MAP_ARCHITECT_TEXT_OPENER_RULES}${rest ? `\n${rest}` : ''}\n</${LOCATION_MAPPING_SECTION_TAG}>`;
     }
 
     if (tag === 'end_of_output_footer') {
@@ -1610,6 +1587,12 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
                 </label>
             </div>
 
+            ${renderGameSystemWizardModuleExamplePickerHtml(settings, {
+                idPrefix: 'rt_gs_preview',
+                injectEnabled: previewContextPrefs.injectModulePrompts,
+                selectedKeys: previewContextPrefs.moduleExampleKeys,
+            })}
+
             ${buildWizardPromptEditorHtml('rt-gs-wizard-system-prompt', getEffectiveWizardSystemPrompt(settings))}
 
             <div style="border:1px solid rgba(255,255,255,0.1); border-radius:6px; padding:10px; background:rgba(0,0,0,0.15);">
@@ -1659,17 +1642,23 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
         const previewLookbackAll = $id('rt_gs_preview_lookback_all');
         const previewLore = $id('rt_gs_preview_inject_lore');
         const previewMemo = $id('rt_gs_preview_inject_memo');
+        const previewRoot = $id('rt-gs-preview');
+        bindGameSystemWizardModuleExamplePicker(previewRoot, 'rt_gs_preview');
         const syncPreviewContextPrefs = () => {
             const prefs = normalizeGameSystemWizardContextPrefs({
                 gameSystemWizardLookback: previewLookback?.value,
                 gameSystemWizardLookbackAll: !!previewLookbackAll?.checked,
                 gameSystemWizardInjectLore: !!previewLore?.checked,
                 gameSystemWizardInjectMemo: !!previewMemo?.checked,
+                gameSystemWizardInjectModulePrompts: !!previewRoot?.querySelector('#rt_gs_preview_inject_modules')?.checked,
+                gameSystemWizardModuleExampleKeys: readGameSystemWizardModuleExampleKeysFromUi(previewRoot),
             });
             settings.gameSystemWizardLookback = prefs.lookback;
             settings.gameSystemWizardLookbackAll = prefs.lookbackAll;
             settings.gameSystemWizardInjectLore = prefs.injectLore;
             settings.gameSystemWizardInjectMemo = prefs.injectMemo;
+            settings.gameSystemWizardInjectModulePrompts = prefs.injectModulePrompts;
+            settings.gameSystemWizardModuleExampleKeys = prefs.moduleExampleKeys;
             if (previewLookback) {
                 previewLookback.value = String(prefs.lookback);
                 previewLookback.disabled = prefs.lookbackAll;
@@ -1682,6 +1671,10 @@ async function showGameSystemPreview(parsed, { description = '', isEdit = false,
         previewLookbackAll?.addEventListener('change', syncPreviewContextPrefs);
         previewLore?.addEventListener('change', syncPreviewContextPrefs);
         previewMemo?.addEventListener('change', syncPreviewContextPrefs);
+        previewRoot?.querySelector('#rt_gs_preview_inject_modules')?.addEventListener('change', syncPreviewContextPrefs);
+        previewRoot?.querySelectorAll('input[data-module-example-key]').forEach(box => {
+            box.addEventListener('change', syncPreviewContextPrefs);
+        });
         if (previewLookback) previewLookback.disabled = previewContextPrefs.lookbackAll;
         const previewSectionPages = {};
         let previewFullView = false;
@@ -2190,6 +2183,11 @@ async function promptGameSystemWizardDescription(initialDescription = '') {
                 </label>
                 <span style="font-size:10px; opacity:0.5; flex-basis:100%;">Use these when asking the Wizard to invent a system from the current campaign. Set lookback to 0 for no chat history.</span>
             </div>
+            ${renderGameSystemWizardModuleExamplePickerHtml(settings, {
+                idPrefix: 'rt_gs_wizard',
+                injectEnabled: contextPrefs.injectModulePrompts,
+                selectedKeys: contextPrefs.moduleExampleKeys,
+            })}
             ${buildWizardExampleChipsHtml()}
             ${buildWizardPromptEditorHtml('rt_gs_wizard_system_prompt', getEffectiveWizardSystemPrompt(settings))}
         </div>
@@ -2203,6 +2201,8 @@ async function promptGameSystemWizardDescription(initialDescription = '') {
         const lookbackAllInput = document.getElementById('rt_gs_wizard_lookback_all');
         const loreInput = document.getElementById('rt_gs_wizard_inject_lore');
         const memoInput = document.getElementById('rt_gs_wizard_inject_memo');
+        const wizardRoot = document.getElementById('rt_gs_wizard_desc')?.closest('div')?.parentElement;
+        bindGameSystemWizardModuleExamplePicker(wizardRoot, 'rt_gs_wizard');
         bindWizardExampleChips(ta);
         if (ta) {
             if (!description) description = ta.value.trim();
@@ -2220,6 +2220,8 @@ async function promptGameSystemWizardDescription(initialDescription = '') {
                 gameSystemWizardLookbackAll: !!lookbackAllInput?.checked,
                 gameSystemWizardInjectLore: !!loreInput?.checked,
                 gameSystemWizardInjectMemo: !!memoInput?.checked,
+                gameSystemWizardInjectModulePrompts: !!wizardRoot?.querySelector('#rt_gs_wizard_inject_modules')?.checked,
+                gameSystemWizardModuleExampleKeys: readGameSystemWizardModuleExampleKeysFromUi(wizardRoot),
             });
             if (lookbackInput) {
                 lookbackInput.value = String(contextPrefs.lookback);
@@ -2232,6 +2234,10 @@ async function promptGameSystemWizardDescription(initialDescription = '') {
         lookbackAllInput?.addEventListener('change', syncContextPrefs);
         loreInput?.addEventListener('change', syncContextPrefs);
         memoInput?.addEventListener('change', syncContextPrefs);
+        wizardRoot?.querySelector('#rt_gs_wizard_inject_modules')?.addEventListener('change', syncContextPrefs);
+        wizardRoot?.querySelectorAll('input[data-module-example-key]').forEach(box => {
+            box.addEventListener('change', syncContextPrefs);
+        });
         syncContextPrefs();
     }, 100);
 
@@ -2241,6 +2247,8 @@ async function promptGameSystemWizardDescription(initialDescription = '') {
     settings.gameSystemWizardLookbackAll = contextPrefs.lookbackAll;
     settings.gameSystemWizardInjectLore = contextPrefs.injectLore;
     settings.gameSystemWizardInjectMemo = contextPrefs.injectMemo;
+    settings.gameSystemWizardInjectModulePrompts = contextPrefs.injectModulePrompts;
+    settings.gameSystemWizardModuleExampleKeys = contextPrefs.moduleExampleKeys;
     saveSettings();
     const promptTa = document.getElementById('rt_gs_wizard_system_prompt');
     if (promptTa) {

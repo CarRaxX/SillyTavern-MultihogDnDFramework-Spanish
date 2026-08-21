@@ -23,7 +23,6 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-update-btn" title="Actualizar Estado Ahora">🔄</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-pause-btn" title="Pausar Rastreador">⏸</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-portraits-menu-btn" title="Acciones de Retrato IA">🖼️</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-debug-btn" title="Depurador de Contexto" style="display:none;">🛠️</button>
                     <button class="rpg-tracker-icon-btn rt-overflow-trigger" id="rt-overflow-btn" title="Más acciones">⋯</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-collapse-btn" title="Plegar Panel"><i class="fa-solid ${settings.trackerCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i></button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-close-btn" title="Ocultar panel">✕</button>
@@ -36,10 +35,11 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENTE EN PAUSA' : ''}</div>
                     <div class="rpg-tracker-header-right">
                         <div id="rt-research-menu-wrap" style="position:relative; display:inline-flex;">
-                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Ejecutar Investigación Ahora — Agente de Lorebook o Actualizador de Mapas" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
+                            <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Ejecutar Investigación Ahora — Agente de Lorebook, Actualizador de Mapas o Evolución de Mapas" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
                             <div id="rt-research-dropdown" class="rt-update-menu rt-research-dropdown" style="display:none;">
                                 <div class="rt-menu-item" id="rt-research-lorebook"><b>Agente de Lorebook</b><small>PNJs, ubicaciones, relaciones</small></div>
                                 <div class="rt-menu-item" id="rt-research-map-updater"><b>Actualizador de Mapas</b><small>Ocupación de mazmorras y pueblos</small></div>
+                                <div class="rt-menu-item" id="rt-research-map-evolution"><b>Evolución de Mapas</b><small>Elegir mapas a evolucionar ahora</small></div>
                             </div>
                         </div>
                         <button class="rpg-tracker-stop-btn" id="rt-agent-stop-btn" title="Detener Agente" style="display:none;">■</button>
@@ -87,6 +87,7 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                 <textarea class="rpg-tracker-memo-area" id="rpg-tracker-memo">${settings.currentMemo}</textarea>
                 <div class="rpg-tracker-render-view" id="rpg-tracker-render" style="display:none;"></div>
                 <div class="rt-tutorial-view" id="rt-tutorial-view" style="display:none;" aria-label="CHAT"></div>
+                <div class="rt-bottom-xp-bar" id="rt-bottom-xp-bar" style="display:none;" aria-label="Experience progress"></div>
                 </div>
                 <div class="rt-panel-mode-pane" id="rt-panel-agent-pane" style="display:none;">
             <div class="rpg-tracker-panel rpg-tracker-agent-panel rt-agent-integrated ${agentPanelCollapsedClass}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent">
@@ -142,8 +143,8 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-run-every" value="${settings.routerRunEvery || 3}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
                                 <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Map Updater cadence while inside a mapped dungeon or settlement. Independent of Lorebook Agent. 1 = occupancy updates every turn.">
-                                <span style="font-size: 0.769em; opacity: 0.7;">Map every:</span>
+                            <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Cadencia del Actualizador de Mapas al estar dentro de una mazmorra o asentamiento mapeado. Independiente del Agente de Lorebook. 1 = actualiza ocupación cada turno.">
+                                <span style="font-size: 0.769em; opacity: 0.7;">Mapa cada:</span>
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-updater-run-every" value="${settings.mapUpdaterRunEvery ?? 1}" min="1" max="50" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
                                 <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                             </div>
@@ -179,44 +180,109 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     <!-- Modular Repertoire Collapsible Header -->
                     <div id="rt-agent-modules-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
                         <div style="font-weight: bold; font-size: 0.846em; display: flex; align-items: center; gap: 6px; color: var(--rt-text-muted);">
-                            <i class="fa-solid ${settings.agentModulesOpen !== false ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-modules-toggle-icon"></i> ${t('agent.modularRepertoire', 'Modular Repertoire (Prompt Rules)')}
+                            <i class="fa-solid ${settings.agentModulesOpen !== false ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-modules-toggle-icon"></i> ${t('agent.modularRepertoire', 'Repertorio Modular (Reglas de Prompt)')}
                         </div>
                     </div>
 
                     <!-- Modular Repertoire Drawer -->
                     <div id="rt-agent-modules-drawer" style="display: ${settings.agentModulesOpen !== false ? 'block' : 'none'}; margin-bottom: 10px; flex-shrink: 0;">
-                        <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.enabledModulesStock', 'Enabled Modules (Stock):')}</div>
+                        <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.enabledModulesStock', 'Módulos Habilitados:')}</div>
                         <div id="rt-agent-stock-modules-list" style="margin-bottom: 10px;"></div>
 
-                        <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.customTags', 'Custom Tags:')}</div>
+                        <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.customTags', 'Etiquetas Personalizadas:')}</div>
                         <div id="rt-agent-custom-tags-list"></div>
-                        <button id="rt-agent-add-custom-tag" style="width: 100%; background: #333; border: 1px solid #444; color: #ddd; font-size: 0.769em; padding: 2px; border-radius: 3px; cursor: pointer; margin-top: 4px; flex-shrink: 0;">${t('agent.addCustomTag', '+ Add Custom Tag')}</button>
+                        <button id="rt-agent-add-custom-tag" style="width: 100%; background: #333; border: 1px solid #444; color: #ddd; font-size: 0.769em; padding: 2px; border-radius: 3px; cursor: pointer; margin-top: 4px; flex-shrink: 0;">${t('agent.addCustomTag', '+ Añadir Etiqueta Personalizada')}</button>
                     </div>
 
                     <!-- Console Collapsible Header -->
                     <div id="rt-agent-console-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
                         <div style="font-weight: bold; font-size: 0.846em; display: flex; align-items: center; gap: 6px; color: var(--rt-text-muted);">
-                            <i class="fa-solid ${settings.agentConsoleOpen !== false ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-console-toggle-icon"></i> ${t('agent.console', 'Console')}
+                            <i class="fa-solid ${settings.agentConsoleOpen !== false ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-console-toggle-icon"></i> ${t('agent.console', 'Consola')}
                         </div>
                     </div>
 
                     <!-- Console Section Drawer -->
                     <div id="rt-agent-console-drawer" style="display: ${settings.agentConsoleOpen !== false ? 'block' : 'none'}; margin-bottom: 10px; flex-shrink: 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.lorebookTerminal', 'Lorebook Terminal:')}</div>
-                            <button id="rt-agent-router-terminal-clear" style="background: transparent; border: none; color: #ff5555; font-size: 0.692em; cursor: pointer; opacity: 0.7;">${t('common.clear', 'Clear')}</button>
+                            <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.lorebookTerminal', 'Terminal del Lorebook:')}</div>
+                            <button id="rt-agent-router-terminal-clear" style="background: transparent; border: none; color: #ff5555; font-size: 0.692em; cursor: pointer; opacity: 0.7;">${t('common.clear', 'Limpiar')}</button>
                         </div>
                         <div id="rt-agent-router-terminal" style="background: var(--rt-card-bg); border: var(--rt-border); border-radius: 4px; padding: 8px; min-height: 80px; max-height: 200px; overflow-y: auto; margin-bottom: 10px; font-family: var(--rt-font-mono);">
-                            <div style="opacity: 0.4; font-size: 0.769em; font-style: italic; color: var(--rt-text-muted);">${t('agent.waitingForActivity', 'Waiting for agent activity...')}</div>
+                            <div style="opacity: 0.4; font-size: 0.769em; font-style: italic; color: var(--rt-text-muted);">${t('agent.waitingForActivity', 'Esperando actividad del agente...')}</div>
                         </div>
 
                         <hr style="border-color: rgba(255,255,255,0.05); margin: 10px 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.logHistory', 'Agent Log History:')}</div>
-                            <button id="rt-agent-router-log-clear" style="background: transparent; border: none; color: #ff5555; font-size: 0.692em; cursor: pointer; opacity: 0.7;">${t('common.clear', 'Clear')}</button>
+                            <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">${t('agent.logHistory', 'Historial del Agente:')}</div>
+                            <button id="rt-agent-router-log-clear" style="background: transparent; border: none; color: #ff5555; font-size: 0.692em; cursor: pointer; opacity: 0.7;">${t('common.clear', 'Limpiar')}</button>
                         </div>
                         <div id="rt-agent-router-log" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; max-height: 150px; overflow-y: auto;">
                         </div>
+                    </div>
+
+                    <!-- Map Evolution Collapsible Header -->
+                    <div id="rt-agent-map-evo-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
+                        <div style="font-weight: bold; font-size: 0.846em; display: flex; align-items: center; gap: 6px; color: var(--rt-text-muted);">
+                            <i class="fa-solid ${settings.agentMapEvolutionOpen ? 'fa-chevron-down' : 'fa-chevron-right'}" id="rt-agent-map-evo-toggle-icon"></i>
+                            🗺️ Evolución de Mapas
+                        </div>
+                        <span id="rt-agent-map-evo-enabled-badge" style="font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; ${settings.mapEvolutionEnabled !== false ? 'background:rgba(52,168,83,0.18); color:#34a853; border:1px solid rgba(52,168,83,0.3);' : 'background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);'}" title="Clic para alternar Evolución de Mapas">${settings.mapEvolutionEnabled !== false ? 'ON' : 'OFF'}</span>
+                    </div>
+
+                    <!-- Map Evolution Drawer -->
+                    <div id="rt-agent-map-evo-drawer" style="display: ${settings.agentMapEvolutionOpen ? 'block' : 'none'}; margin-bottom: 10px; flex-shrink: 0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+                            <div style="background:var(--rt-card-bg); border:var(--rt-border); border-radius:4px; padding:5px 8px;">
+                                <div style="font-size:0.692em; opacity:0.5; color:var(--rt-text-muted); margin-bottom:2px;">Última evolución</div>
+                                <div id="rt-agent-map-evo-last-fired" style="font-size:0.769em; color:var(--rt-text);">—</div>
+                            </div>
+                            <div style="background:var(--rt-card-bg); border:var(--rt-border); border-radius:4px; padding:5px 8px;">
+                                <div style="font-size:0.692em; opacity:0.5; color:var(--rt-text-muted); margin-bottom:2px;">Siguiente evolución</div>
+                                <div id="rt-agent-map-evo-next-fire" style="font-size:0.769em; color:var(--rt-text);">—</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Otros mapas:</span>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-evo-interval" value="${settings.mapEvolutionIntervalHours ?? 8}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="Intervalo para lugares mapeados donde no está el grupo.">
+                                <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Mapa actual:</span>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-evo-onsite-interval" value="${settings.mapEvolutionOnSiteIntervalHours ?? 8}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="Intervalo para el lugar mapeado donde está el grupo. 0 omite ciclos automáticos allí. Mismo redactor de Evolución.">
+                                <span style="font-size:0.769em; opacity:0.5;">horas en el mundo</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+                            <label style="font-size:0.769em; opacity:0.7; display:flex; flex-direction:column; gap:3px;">
+                                Mapas por ciclo de intervalo
+                                <select id="rt-agent-map-evo-tick-scope" style="width:100%; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; font-size:0.769em; padding:3px 4px;">
+                                    <option value="active"${(settings.mapEvolutionTickScope || 'all') === 'active' ? ' selected' : ''}>Solo mapa actual</option>
+                                    <option value="count"${settings.mapEvolutionTickScope === 'count' ? ' selected' : ''}>N mapas de todos los sitios mapeados</option>
+                                    <option value="all"${(settings.mapEvolutionTickScope || 'all') === 'all' ? ' selected' : ''}>Todos los sitios mapeados pendientes</option>
+                                    <option value="selected"${settings.mapEvolutionTickScope === 'selected' ? ' selected' : ''}>Mapas seleccionados</option>
+                                </select>
+                            </label>
+                            <div id="rt-agent-map-evo-n-row" style="display:${(settings.mapEvolutionTickScope === 'count' || settings.mapEvolutionTickScope === 'selected') ? 'flex' : 'none'}; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <label style="font-size:0.769em; opacity:0.7; display:flex; align-items:center; gap:5px;">
+                                    Cuántos
+                                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-map-evo-tick-count" value="${settings.mapEvolutionTickCount ?? 1}" style="width:44px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="0 = todos los mapas pendientes del conjunto">
+                                </label>
+                                <label style="font-size:0.769em; opacity:0.7; display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none;">
+                                    <input type="checkbox" id="rt-agent-map-evo-tick-randomize" ${settings.mapEvolutionTickRandomize !== false ? 'checked' : ''} style="margin:0; cursor:pointer;">
+                                    Aleatorizar mapas pendientes
+                                </label>
+                            </div>
+                            <div id="rt-agent-map-evo-selected-hint" style="display:${settings.mapEvolutionTickScope === 'selected' ? 'block' : 'none'}; font-size:0.692em; opacity:0.55; line-height:1.35;">
+                                Los mapas seleccionados usan la lista de verificación bajo Ajustes → Mapas Persistentes → Evolución de Mapas.
+                            </div>
+                        </div>
+                        <button id="rt-agent-map-evo-fire-now" style="width:100%; background:rgba(156,39,176,0.15); border:1px solid rgba(156,39,176,0.3); color:#ce93d8; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                            <i class="fa-solid fa-map-location-dot"></i> Evolucionar Ahora
+                        </button>
+                        <button id="rt-agent-map-evo-reset-timeline" title="Limpia las marcas de tiempo de última evolución para que la Evolución de Mapas empiece de cero desde ahora" style="width:100%; background:rgba(234,67,53,0.1); border:1px solid rgba(234,67,53,0.25); color:rgba(234,67,53,0.75); border-radius:4px; padding:4px; font-size:0.692em; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; margin-top:5px;">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Restablecer Línea Temporal
+                        </button>
+                        <button id="rt-agent-map-evo-testing-ground" title="Avanza el tiempo, genera entidades y ejecuta ciclos de evolución sin jugar" style="width:100%; background:rgba(125,211,252,0.1); border:1px solid rgba(125,211,252,0.28); color:#7dd3fc; border-radius:4px; padding:4px; font-size:0.692em; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; margin-top:5px;">
+                            <i class="fa-solid fa-flask"></i> Entorno de Pruebas
+                        </button>
                     </div>
 
                     <!-- World Progression Collapsible Header -->
@@ -245,8 +311,10 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                             <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-interval" value="${settings.worldProgressionIntervalHours || 24}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;">
                             <span style="font-size:0.769em; opacity:0.5;">${t('agent.inWorldHours', 'in-world hours')}</span>
                         </div>
-                        <div style="font-size:0.692em; line-height:1.35; margin-bottom:8px; padding:6px 8px; border-radius:4px; border:1px solid rgba(234,179,8,0.35); background:rgba(234,179,8,0.08); color:#f5d76e;">
-                            Not recommended together with Persistent Maps until compatibility is added (soon).
+                        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                            <span style="font-size:0.769em; opacity:0.7; white-space:nowrap;">Locations:</span>
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-world-locations" value="${settings.worldProgressionLocationsPerReport ?? 3}" style="width:50px; background:var(--rt-card-bg); color:var(--rt-text); border:var(--rt-border); border-radius:3px; text-align:center; font-size:0.769em; padding:2px;" title="How many location dossiers receive their own section in each report.">
+                            <span style="font-size:0.769em; opacity:0.5;">per report</span>
                         </div>
                         <button id="rt-agent-world-fire-now" style="width:100%; background:rgba(52,168,83,0.15); border:1px solid rgba(52,168,83,0.3); color:#34a853; border-radius:4px; padding:5px; font-size:0.769em; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
                             <i class="fa-solid fa-globe"></i> ${t('agent.fireNow', 'Fire Now')}

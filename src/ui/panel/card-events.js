@@ -2,10 +2,11 @@ import { getRuntimeActions, sectionPages } from '../../app/runtime-bridge.js';
 import { runtimeState } from '../../app/runtime-state.js';
 import { pickGenreCharacterName } from '../../state/character-names.js';
 import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../../state/section-enabled.js';
+import { applyMapArchitectOpenerToUi, normalizeMapArchitectOpener, syncMapArchitectOpenerNestedVisibility } from '../../../map-architect-opener.js';
 
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const runtime = getRuntimeActions();
-    const { applyPortraitData, autoApplySysprompt, bindCharacterCreationConnectionSettings, bindQuickStartEvents, blockToItems, buildCombatAndSkillScalingHint, buildNpcInstruction, buildOnboardingActiveBlocks, buildOnboardingTimeHint, buildOnboardingXpHint, buildStartingGearHint, createDetachedPanel, extractCharNameFromMemo, fileToDataUrl, generatePersonaBio, getCharacterCreationConnectionSettings, getPageSize, getSettings, handleCategorySettings, handleCharacterCreatorGenerate, handleRecolor, loadBenchedExpanded, loadCollapsed, loadDetached, maybeCreateOnboardingPersona, openConnectionsModelsSettings, parseMemoBlocks, refreshAgentManifest, refreshNpcManifest, refreshRenderedView, registerDiceFunctionTool, removeArchivedQuest, resolveActivePersonaDescription, saveActiveTab, saveBenchedExpanded, saveCollapsed, saveDetached, saveSettings, scaleImageTo512Square, scheduleAutoApply, sendDirectPrompt, setInitialDateValue, setInitialTimeValue, setUse24hTime, setUseDdMmYyFormat, showCharacterRollPanel, showLorebookAgentDocumentation, showNarrativePacingExplanation, showPcImportPanel, showPersonaConfirmOverlay, showPortraitSettingsMenu, showQuestsHardcoreExplanation, showRngExplanation, showSettingsHelpPopup, syncOnboardingPersonaPrefsFromDom, syncOnboardingUI } = runtime;
+    const { applyPortraitData, autoApplySysprompt, bindCharacterCreationConnectionSettings, bindQuickStartEvents, blockToItems, buildCombatAndSkillScalingHint, buildNpcInstruction, buildOnboardingActiveBlocks, buildOnboardingTimeHint, buildOnboardingXpHint, buildStartingGearHint, createDetachedPanel, extractCharNameFromMemo, fileToDataUrl, generatePersonaBio, getCharacterCreationConnectionSettings, getPageSize, getSettings, handleCategorySettings, handleCharacterCreatorGenerate, handleRecolor, loadBenchedExpanded, loadCollapsed, loadDetached, maybeCreateOnboardingPersona, openAdventureCompanion, openConnectionsModelsSettings, parseMemoBlocks, refreshAgentManifest, refreshNpcManifest, refreshRenderedView, registerDiceFunctionTool, removeArchivedQuest, resolveActivePersonaDescription, saveActiveTab, saveBenchedExpanded, saveCollapsed, saveDetached, saveSettings, scaleImageTo512Square, scheduleAutoApply, sendDirectPrompt, setInitialDateValue, setInitialTimeValue, setUse24hTime, setUseDdMmYyFormat, showCharacterRollPanel, showLorebookAgentDocumentation, showNarrativePacingExplanation, showPcImportPanel, showPersonaConfirmOverlay, showPortraitSettingsMenu, showQuestsHardcoreExplanation, showRngExplanation, showSettingsHelpPopup, syncOnboardingPersonaPrefsFromDom, syncOnboardingUI } = runtime;
     const _sectionPages = sectionPages;
 
     const refresh = onRefresh || refreshRenderedView;
@@ -37,6 +38,16 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             onboardingDrawerToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
     });
+
+    const openChatBtn = el.querySelector('#rt-onboarding-open-chat');
+    if (openChatBtn && !openChatBtn._bound) {
+        openChatBtn._bound = true;
+        openChatBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openAdventureCompanion();
+        });
+    }
 
     // The onboarding panel is rendered dynamically, after the static settings
     // controls have been bound. Route its CYOA cog through the popup hook instead.
@@ -669,6 +680,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 if (settingKey === LOCATION_MAPPING_SECTION_TAG) {
                     // Keep the optional Components toggle authoritative for
                     // the live Scene View and any detached map window.
+                    syncMapArchitectOpenerNestedVisibility(!!cb.checked);
                     runtimeState.hasActiveDungeonMap = false;
                     globalThis._rpgSyncAgentImmersionUi?.();
                     void globalThis._rpgRefreshImmersionView?.();
@@ -682,6 +694,17 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     syncOptionalMod('#rt_onboarding_mod_party_bench', 'party_bench');
     syncOptionalMod('#rt_onboarding_mod_dungeon_reality_and_hidden_mapping', 'dungeon_reality_and_hidden_mapping');
     syncOptionalMod('#rt_onboarding_mod_cyoa_mode', 'CYOA_mode');
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
+    el.querySelectorAll('input[name="rt_onboarding_map_architect_opener"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            syncSettingsAndUI(settings => {
+                settings.mapArchitectOpener = normalizeMapArchitectOpener(input.value);
+            });
+            applyMapArchitectOpenerToUi(input.value);
+        });
+    });
 
     // Onboarding Relationship System Sync
     const onboardingRelBarsCb = el.querySelector('#rt_onboarding_mod_npc_rel_bars');
@@ -795,9 +818,10 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const wordCount = parseInt(String(wordsRaw || '150'), 10) || 150;
             const personaOpts = { chatLookback: 3, preferCharacterBlock: true };
             const extraHints = '\n\nSource: existing [CHARACTER] sheet. Match its stats, class, gear, and traits. Use the last 3 story messages only for voice, relationships, and current situation.';
-            const prev = btn.textContent;
+            const prev = btn.dataset.idleLabel || btn.textContent.trim() || 'Create PC Card';
+            btn.dataset.idleLabel = prev;
             btn.disabled = true;
-            btn.textContent = '⏳';
+            btn.textContent = 'Creating…';
             try {
                 toastr['info'](`Generating Lorebook Agent persona for "${charName}"…`, 'RPG Tracker');
                 const bio = await generatePersonaBio(charName, wordCount, extraHints, personaOpts);
@@ -808,7 +832,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 }
             } finally {
                 btn.disabled = false;
-                btn.textContent = prev || '👤';
+                btn.textContent = prev;
             }
         });
     });

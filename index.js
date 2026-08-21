@@ -1,17 +1,20 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride, isCombatActive } from './llm-client.js';
-import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncLocationMappingRuntime, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, getMapUpdaterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
+import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncLocationMappingRuntime, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, onMapArchitectAssistantMessage, handleRelationshipSwipeChange, applyStateTrackerRelationshipCommands, resetRouterTick, getRouterTick, getMapUpdaterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
-import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
+import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderTabModeView, renderBottomXpBar, renderQuestLog, renderLorebookTerminal, loadActiveTab, saveActiveTab, getTimeOfDayInfo, renderDayNightBadge, MARKER_TYPE_MAP, getMarkerLibraryKeys, loadBenchedExpanded, saveBenchedExpanded } from './renderer.js';
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
-import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned } from './router.js';
+import { inferMapArchitectArgs, runMapArchitect } from './map-architect.js';
+import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, deleteDungeonMapFromLocationEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
 import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
+import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
@@ -26,7 +29,15 @@ import { openDisplayGroupsManager } from './display-groups.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent, isSectionUnlocked, isEffectiveSectionEnabled } from './game-systems.js';
 import { setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
+import { applyMapArchitectOpenerToUi, normalizeMapArchitectOpener, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
 import { openManageGameCartridges, promptAndSaveCurrentAsCartridge } from './game-cartridges.js';
+import {
+    deleteNpcFromLibrary,
+    exportNpcToFile,
+    fetchSrcAsDataUrl,
+    importNpcPackages,
+    saveNpcToLibrary,
+} from './npc-library.js';
 import { RENDERING_TAGS_LIBRARY, sectionPages, configureRuntimeActions } from './src/app/runtime-bridge.js';
 import { bindRenderedCardEvents } from './src/ui/panel/card-events.js';
 import { createDetachedPanel } from './src/ui/panel/detached-panel.js';
@@ -62,6 +73,8 @@ import { normalizeActivePersonaIdentity } from './src/state/player-identity.js';
 import { replacePromptArray, stripSupersededChoicesFromChatPrompt, stripSupersededChoicesFromTextPromptMessages } from './src/features/cyoa-prompt-history.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 
 export { RENDERING_TAGS_LIBRARY };
 export { bindRenderedCardEvents };
@@ -108,7 +121,10 @@ globalThis._rpgRenderRouterUI = () => { if (typeof runtimeState.renderRouterUI =
 /** Rebuilds CAMPAIGN RECORDS; assigned in createPanel when the agent panel is wired. */
 globalThis._rpgRefreshImmersionView = () => { void runtimeState.refreshImmersionView(); };
 globalThis._rpgCheckRealtimeSceneArt = () => { void runRealtimeSceneArtCheck().catch(() => {}); };
-globalThis._rpgRefreshAgentManifest = async () => { if (typeof runtimeState.refreshAgentManifest === 'function') await runtimeState.refreshAgentManifest(); };
+globalThis._rpgRefreshAgentManifest = async () => {
+    if (!isAgentPanelVisible()) return;
+    if (typeof runtimeState.refreshAgentManifest === 'function') await runtimeState.refreshAgentManifest();
+};
 /** Refreshes the NPC card grid; assigned in createPanel so module-level code can call it. */
 
 // Combined refresh: updates both the tracker panel and the Lorebook Terminal NPC grid.
@@ -183,6 +199,204 @@ function scheduleAgentManifestRefresh(force = false) {
 /** Reload CAMPAIGN RECORDS / Scene View — safe from settings UI outside createPanel(). */
 export async function refreshAgentManifestNow() {
     await refreshLorebookAgentViewsNow();
+}
+
+function notifyMapEvolutionPassResult(result) {
+    const skipped = result?.skipped;
+    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') toastr.warning('Persistent Maps is off.', 'Map Evolution');
+    else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites' || skipped === 'no_selection') toastr.warning('No mapped site to evolve.', 'Map Evolution');
+    else if (skipped === 'disabled') toastr.warning('Map Evolution is disabled.', 'Map Evolution');
+    else if (skipped === 'busy') toastr.warning('An agent is already running.', 'Map Evolution');
+    else if (skipped === 'stopped') toastr['info']('Stopped.', 'Map Evolution');
+    else if (result?.baseline) toastr['info']('Interval baseline stamped. Evolution will fire after the interval elapses.', 'Map Evolution');
+    else if (result?.ok && result?.applied === 0) toastr['info']('Nothing durable changed.', 'Map Evolution');
+    else if (result?.ok) toastr['success']('Map Evolution applied.', 'Map Evolution');
+    else toastr.error('Could not apply a valid evolution update.', 'Map Evolution');
+}
+
+function persistMapEvolutionSelectedRootsFromUi() {
+    const roots = [];
+    $('#rpg_map_evolution_selected_list input[type="checkbox"]:checked').each(function () {
+        const root = String($(this).attr('data-site-root') || '').trim();
+        if (root) roots.push(root);
+    });
+    const settings = getSettings();
+    settings.mapEvolutionSelectedRoots = roots;
+    saveSettings();
+    return roots;
+}
+
+function persistMapEvolutionIntervalOverrideFromUi(siteRoot, rawValue) {
+    const settings = getSettings();
+    settings.mapEvolutionIntervalHoursBySite = setSiteEvolutionIntervalOverride(
+        settings.mapEvolutionIntervalHoursBySite,
+        siteRoot,
+        String(rawValue || '').trim(),
+    );
+    saveSettings();
+    if (settings.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+    updateMapEvolutionScheduleDisplay();
+}
+
+function syncMapEvolutionTickRows(settings) {
+    const scope = settings?.mapEvolutionTickScope || 'all';
+    $('#rpg_map_evolution_n_row').toggle(scope === 'count' || scope === 'selected');
+    $('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected');
+}
+
+async function refreshMapEvolutionSelectedList() {
+    const $list = $('#rpg_map_evolution_selected_list');
+    if (!$list.length) return;
+    $list.empty();
+    let sites = [];
+    try {
+        sites = await listMappedEvolutionSites();
+    } catch (error) {
+        console.warn('[RPG Tracker] Failed to list mapped sites for Map Evolution:', error);
+    }
+    if (!sites.length) {
+        $list.append($('<i>').css({ opacity: '0.6', fontSize: '0.85em' }).text('No mapped sites in this chat.'));
+        $('#rpg_map_evolution_site_list_header').hide();
+        updateMapEvolutionScheduleDisplay();
+        return;
+    }
+    $('#rpg_map_evolution_site_list_header').show();
+    const selected = new Set((getSettings().mapEvolutionSelectedRoots || []).map(root => String(root || '').trim().toLowerCase()));
+    const settings = getSettings();
+    const currentRoot = sites.find(site => site.current)?.siteRoot || '';
+    const inheritedFor = evolutionIntervalHoursForSettings({
+        ...settings,
+        mapEvolutionIntervalHoursBySite: {},
+    }, currentRoot);
+    const overrides = settings.mapEvolutionIntervalHoursBySite || {};
+    for (const site of sites) {
+        const $input = $('<input type="checkbox">')
+            .attr('data-site-root', site.siteRoot)
+            .prop('checked', selected.has(String(site.siteRoot || '').trim().toLowerCase()));
+        const label = site.current ? `${site.siteRoot} (current)` : site.siteRoot;
+        const inherited = inheritedFor(site.siteRoot);
+        const overrideHours = getSiteEvolutionIntervalOverride(overrides, site.siteRoot);
+        const hasOverride = overrideHours != null;
+        const inheritText = inherited === 0
+            ? (site.current ? 'Automatic: skip (current map)' : 'Automatic: skip (other maps)')
+            : (site.current ? `Automatic: ${inherited}h (current map)` : `Automatic: ${inherited}h (other maps)`);
+        const $inherit = $('<div>').css({
+            fontSize: '0.75em',
+            opacity: hasOverride ? '0.45' : '0.65',
+            lineHeight: '1.3',
+            marginTop: '2px',
+        }).text(hasOverride ? `Override · was ${inherited === 0 ? 'skip' : `${inherited}h`}` : inheritText);
+        const $hours = $('<input type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole">')
+            .attr({
+                'data-site-root': site.siteRoot,
+                min: '0',
+                max: '168',
+                placeholder: '—',
+                title: hasOverride
+                    ? 'Custom automatic interval for this map. Clear the box to inherit Other maps / Current map again. 0 skips automatic ticks.'
+                    : 'Leave blank to inherit Other maps / Current map. Fill only to override this map\'s automatic timer. 0 skips automatic ticks. Independent of the Run now checkbox.',
+            })
+            .css({ width: '56px', minWidth: '56px', fontSize: '0.85em', textAlign: 'center', boxSizing: 'border-box' })
+            .val(hasOverride ? String(overrideHours) : '');
+        $hours.on('change', function () {
+            persistMapEvolutionIntervalOverrideFromUi(site.siteRoot, String($(this).val() || ''));
+            void refreshMapEvolutionSelectedList();
+        });
+        const $row = $('<div>').css({
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            padding: '4px 0',
+        });
+        const $name = $('<span>').css({ flex: '1', minWidth: '0' }).append(
+            $('<div>').text(label),
+            $inherit,
+        );
+        const $item = $('<label class="checkbox_label">').css({
+            fontSize: '0.9em',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '6px',
+            flex: '1',
+            minWidth: '0',
+            margin: '0',
+        }).append($input.css({ marginTop: '2px' }), $name);
+        $input.on('change', persistMapEvolutionSelectedRootsFromUi);
+        const $interval = $('<div>').css({
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            width: '72px',
+            flex: '0 0 72px',
+            justifyContent: 'flex-end',
+            paddingTop: '1px',
+        }).append($hours, $('<span>').css({ fontSize: '0.75em', opacity: '0.55' }).text('h'));
+        $row.append($item, $interval);
+        $list.append($row);
+    }
+    updateMapEvolutionScheduleDisplay(currentRoot);
+}
+
+function currentMemoMinutes() {
+    const s = getSettings();
+    const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
+    return timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
+}
+
+function updateMapEvolutionScheduleDisplay(currentRoot = '') {
+    const s = getSettings();
+    const root = currentRoot || s.mapEvolutionLastSiteRoot || '';
+    const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+        intervalHours: s.mapEvolutionIntervalHours,
+        currentMinutes: currentMemoMinutes(),
+        intervalHoursFor: evolutionIntervalHoursForSettings(s, root),
+    });
+    const lastText = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Never';
+    $('#rpg_map_evolution_last_fired').text(lastText);
+    $('#rpg_map_evolution_last_report_val').text(lastText);
+    $('#rpg_map_evolution_next_report_val').text(schedule.nextMins >= 0 ? formatInWorldTime(schedule.nextMins) : '—');
+    if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+        runtimeState.updateAgentMapEvolutionStatusRef();
+    }
+}
+
+function applyMapEvolutionTickSettingsToUi(settings) {
+    const s = settings || getSettings();
+    $('#rpg_map_evolution_tick_scope').val(s.mapEvolutionTickScope || 'all');
+    $('#rpg_map_evolution_tick_count').val(s.mapEvolutionTickCount ?? 1);
+    $('#rpg_map_evolution_tick_randomize').prop('checked', s.mapEvolutionTickRandomize !== false);
+    syncMapEvolutionTickRows(s);
+    void refreshMapEvolutionSelectedList();
+    updateMapEvolutionScheduleDisplay();
+}
+
+runtimeState.updateMapEvolutionScheduleDisplayRef = updateMapEvolutionScheduleDisplay;
+runtimeState.refreshTrackerViewRef = () => {
+    const s = getSettings();
+    updateUIMemo(s.currentMemo);
+    refreshRenderedView();
+    updateMapEvolutionScheduleDisplay();
+};
+runtimeState.applyMapEvolutionTickSettingsToUiRef = applyMapEvolutionTickSettingsToUi;
+runtimeState.runMapEvolutionPassRef = runMapEvolutionPass;
+runtimeState.loadMappedEvolutionSiteRef = loadMappedEvolutionSite;
+runtimeState.isLoreOrMapAgentBusyRef = () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning();
+
+function applyMapRuntimeConnectionSettingsToUi(settings) {
+    const s = settings || getSettings();
+    $('#rpg_map_runtime_connection_source').val(s.mapRuntimeConnectionSource || 'default');
+    $('#rpg_map_runtime_connection_profile').val(s.mapRuntimeConnectionProfileId || '');
+    $('#rpg_map_runtime_completion_preset').val(s.mapRuntimeCompletionPresetId || '');
+    $('#rpg_map_runtime_ollama_url').val(s.mapRuntimeOllamaUrl || 'http://localhost:11434');
+    $('#rpg_map_runtime_ollama_model').val(s.mapRuntimeOllamaModel || '');
+    $('#rpg_map_runtime_openai_url').val(s.mapRuntimeOpenaiUrl || '');
+    $('#rpg_map_runtime_openai_key').val(s.mapRuntimeOpenaiKey || '');
+    $('#rpg_map_runtime_openai_model').val(s.mapRuntimeOpenaiModel || '');
+    $('#rpg_map_runtime_openai_model_manual').val(s.mapRuntimeOpenaiModel || '');
+    $('#rpg_map_runtime_profile_group').toggle(s.mapRuntimeConnectionSource === 'profile');
+    $('#rpg_map_runtime_ollama_group').toggle(s.mapRuntimeConnectionSource === 'ollama');
+    $('#rpg_map_runtime_openai_group').toggle(s.mapRuntimeConnectionSource === 'openai');
 }
 
 
@@ -501,7 +715,6 @@ async function syncCampaignPrefixAndWorldsForChat(newChatId, source) {
     if (!s2.chatStates[newChatId]) s2.chatStates[newChatId] = {};
     s2.chatStates[newChatId].campaignBooks = matchingBooks;
     saveSettings();
-    if (s2.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
     try {
         await activateCampaignBooks({
             debugSource: source,
@@ -541,6 +754,27 @@ let _saveSettingsPending = false;
 let _saveSettingsPendingForce = false;
 /** Cached core ST saveSettings (not on getContext — only saveSettingsDebounced is). */
 let _coreSaveSettingsFn = null;
+/**
+ * Persistence stays closed while extension bootstrap is projecting the active
+ * chat partition into the live top-level settings object. Prompt/version
+ * migrations and UI hydration can request saves during that window; writing
+ * then can persist a half-bootstrapped or transient unseen-chat reset.
+ */
+let _settingsPersistenceGateOpen = false;
+let _startupSavePending = false;
+let _startupSavePendingForce = false;
+
+/** Open persistence after Chat Link bootstrap and flush one coalesced save. */
+async function openSettingsPersistenceGate() {
+    if (_settingsPersistenceGateOpen) return;
+    _settingsPersistenceGateOpen = true;
+    if (!_startupSavePending) return;
+
+    const force = _startupSavePendingForce;
+    _startupSavePending = false;
+    _startupSavePendingForce = false;
+    await Promise.resolve(saveSettings(force));
+}
 
 /**
  * Resolve SillyTavern's immediate (non-debounced) saveSettings().
@@ -618,6 +852,15 @@ export function saveSettings(force = false, delay = 0) {
             }
         }
     } catch (_) { /* non-fatal */ }
+
+    // Never persist SillyTavern's whole settings blob while boot is still
+    // selecting/loading the active chat. Coalesce all startup requests and
+    // flush once the live chat projection is complete.
+    if (!_settingsPersistenceGateOpen) {
+        _startupSavePending = true;
+        _startupSavePendingForce = _startupSavePendingForce || !!force;
+        return;
+    }
 
     const doSave = async (forceWrite) => {
         _saveSettingsTimer = null;
@@ -1134,6 +1377,8 @@ function syncOnboardingUI() {
                 : (s.syspromptModules?.[key] ?? true);
         }
     }
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
 
     // Time & Date sync — Character Creator + "Other ways to begin" drawer
     syncSegToggle(onboarding.querySelector('#rt-cr-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
@@ -1513,6 +1758,14 @@ function resetUnseenChatState(s) {
     s.worldProgressionLastFiredAtMinutes = -1;
     s.worldProgressionLastFiredPeriodLabel = '';
     s.worldProgressionSkeletonAtmosphereSummary = '';
+    s.worldProgressionLocationLastAdvanced = {};
+    s.mapEvolutionLastFiredBySite = {};
+    s.mapEvolutionBacklogBySite = {};
+    s.mapEvolutionThreadsBySite = {};
+    s.dungeonMapRevealAll = false;
+    s.mapEvolutionLastSiteRoot = '';
+    s.mapEvolutionPendingExitRoot = '';
+    s.mapEvolutionWorldReportApplications = {};
     s.agentImmersionMode = false;
     resetImmersionSceneArtTracking();
     applyChatTimeFormatSettings(null);
@@ -1722,7 +1975,7 @@ function onChatChanged(newChatId) {
     // resetRouterTick(true) zeroes keywordActivatedKeys in-place; if saveChatState ran
     // after that, the yellow-pill keyword state for the departing chat would be lost.
     // Guard matches the later chatLinkEnabled block so we only persist when linking is on.
-    if (s.chatLinkEnabled && oldChatId) saveChatState(oldChatId);
+    if (s.chatLinkEnabled && oldChatId) saveChatState(oldChatId, { skipDiskWrite: true });
 
     // Reset the run-every tick so the agent fires promptly on the first generation of each chat.
     // Only clear keyword-activated lore when actually switching to a different chat.
@@ -1846,6 +2099,14 @@ function onChatChanged(newChatId) {
         s.worldProgressionLastFiredAtMinutes = -1;
         s.worldProgressionLastFiredPeriodLabel = '';
         s.worldProgressionSkeletonAtmosphereSummary = '';
+        s.worldProgressionLocationLastAdvanced = {};
+        s.mapEvolutionLastFiredBySite = {};
+        s.mapEvolutionBacklogBySite = {};
+        s.mapEvolutionThreadsBySite = {};
+        s.dungeonMapRevealAll = false;
+        s.mapEvolutionLastSiteRoot = '';
+        s.mapEvolutionPendingExitRoot = '';
+        s.mapEvolutionWorldReportApplications = {};
         s.activeWorldKeys = [];
         s.quests = [];
         if (typeof globalThis._rpgLoadAdventureCompanionForChat === 'function') {
@@ -1879,6 +2140,11 @@ function onChatChanged(newChatId) {
     }
     if (s.chatSetupLinkEnabled) syncAllNarratorTogglesForUnlockState();
     if (migratedPortraitScope) void saveSettings(true);
+
+    // Persist only after the arriving partition has been projected. Saving the
+    // departing partition above used to call ST directly while top-level state
+    // still belonged to the old chat, creating a destructive startup/switch race.
+    saveSettings();
 
     scheduleAgentManifestRefresh();
     updateChatLinkUI();
@@ -2267,7 +2533,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     suffix;
             }
 
-            const result = await sendStateRequest(settings, systemPrompt, userPrompt);
+            const result = await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' });
 
             if (result && typeof result === 'string') {
                 if (settings.debugMode) console.log(`[RPG Tracker] Raw Result (Chunk ${i + 1}):`, result);
@@ -2513,7 +2779,7 @@ export async function sendDirectPrompt(message, options = {}) {
             `## USER INSTRUCTION\n${message}\n\n` +
             `## OUTPUT ONLY CHANGED OR NEW SECTIONS:`;
 
-        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt);
+        const result = await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' });
 
         if (result && typeof result === 'string') {
             let cleanedOutput = result;
@@ -2609,20 +2875,11 @@ function loadProfile(name) {
     s.routerDirectPrompt = p.routerDirectPrompt || '';
     s.worldProgressionLookback = p.worldProgressionLookback ?? 20;
     s.worldProgressionHistoryLookback = p.worldProgressionHistoryLookback ?? 0;
-    s.worldProgressionRandomizeNPCs = p.worldProgressionRandomizeNPCs ?? false;
-    s.worldProgressionRandomSkeletonNPCCount = p.worldProgressionRandomSkeletonNPCCount ?? 2;
-    s.worldProgressionRandomNarrativeNPCCount = p.worldProgressionRandomNarrativeNPCCount ?? 3;
-    s.worldProgressionRandomizeLocations = p.worldProgressionRandomizeLocations ?? false;
-    s.worldProgressionRandomSkeletonLocationCount = p.worldProgressionRandomSkeletonLocationCount ?? 2;
-    s.worldProgressionRandomNarrativeLocationCount = p.worldProgressionRandomNarrativeLocationCount ?? 2;
-    s.worldProgressionRandomizeFactions = p.worldProgressionRandomizeFactions ?? false;
-    s.worldProgressionRandomSkeletonFactionCount = p.worldProgressionRandomSkeletonFactionCount ?? 2;
-    s.worldProgressionRandomNarrativeFactionCount = p.worldProgressionRandomNarrativeFactionCount ?? 2;
-    s.worldProgressionRandomizeConflicts = p.worldProgressionRandomizeConflicts ?? false;
-    s.worldProgressionRandomConflictCount = p.worldProgressionRandomConflictCount ?? 3;
+    s.worldProgressionLocationsPerReport = p.worldProgressionLocationsPerReport ?? 3;
+    s.worldProgressionLocationRandomize = p.worldProgressionLocationRandomize !== false;
+    s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(p.worldProgressionLocationLastAdvanced || {}));
     s.worldProgressionSkeletonFactions = p.worldProgressionSkeletonFactions ?? 4;
     s.worldProgressionSkeletonLocations = p.worldProgressionSkeletonLocations ?? 4;
-    s.worldProgressionSkeletonNPCs = p.worldProgressionSkeletonNPCs ?? 0;
     s.worldProgressionSkeletonConflicts = p.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionSkeletonUseLorebooks = p.worldProgressionSkeletonUseLorebooks ?? false;
     s.worldProgressionSkeletonLorebookFilter = JSON.parse(JSON.stringify(p.worldProgressionSkeletonLorebookFilter || []));
@@ -2657,6 +2914,7 @@ function loadProfile(name) {
 
     s.mapArchitectLookback = p.mapArchitectLookback ?? 12;
     s.mapArchitectMaxTokens = p.mapArchitectMaxTokens ?? 25000;
+    s.mapArchitectOpener = p.mapArchitectOpener === 'text' ? 'text' : 'tool';
     s.mapArchitectSystemPrompt = p.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
     s.mapArchitectConnectionSource = p.mapArchitectConnectionSource ?? "default";
     s.mapArchitectConnectionProfileId = p.mapArchitectConnectionProfileId || "";
@@ -2666,10 +2924,51 @@ function loadProfile(name) {
     s.mapArchitectOpenaiUrl = p.mapArchitectOpenaiUrl || "";
     s.mapArchitectOpenaiKey = p.mapArchitectOpenaiKey || "";
     s.mapArchitectOpenaiModel = p.mapArchitectOpenaiModel || "";
+    s.mapRuntimeConnectionSource = p.mapRuntimeConnectionSource ?? p.mapArchitectConnectionSource ?? "default";
+    s.mapRuntimeConnectionProfileId = p.mapRuntimeConnectionProfileId || p.mapArchitectConnectionProfileId || "";
+    s.mapRuntimeCompletionPresetId = p.mapRuntimeCompletionPresetId || p.mapArchitectCompletionPresetId || "";
+    s.mapRuntimeOllamaUrl = p.mapRuntimeOllamaUrl || p.mapArchitectOllamaUrl || "http://localhost:11434";
+    s.mapRuntimeOllamaModel = p.mapRuntimeOllamaModel || p.mapArchitectOllamaModel || "";
+    s.mapRuntimeOpenaiUrl = p.mapRuntimeOpenaiUrl || p.mapArchitectOpenaiUrl || "";
+    s.mapRuntimeOpenaiKey = p.mapRuntimeOpenaiKey || p.mapArchitectOpenaiKey || "";
+    s.mapRuntimeOpenaiModel = p.mapRuntimeOpenaiModel || p.mapArchitectOpenaiModel || "";
+    s.mapRuntimeConnectionSeeded = true;
     s.mapUpdaterEnabled = p.mapUpdaterEnabled !== false;
     s.mapUpdaterRunEvery = Math.max(1, Number(p.mapUpdaterRunEvery) || 1);
-    s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 2500;
+    s.mapUpdaterMaxTokens = p.mapUpdaterMaxTokens ?? 25000;
     s.mapUpdaterSystemPrompt = p.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+    s.mapEvolutionEnabled = p.mapEvolutionEnabled !== false;
+    s.mapEvolutionIntervalHours = Math.max(1, Number(p.mapEvolutionIntervalHours) || 8);
+    s.mapEvolutionOnSiteIntervalHours = (() => {
+        const hours = Math.floor(Number(p.mapEvolutionOnSiteIntervalHours));
+        if (!Number.isFinite(hours)) return s.mapEvolutionIntervalHours;
+        if (hours === 0) return 0;
+        return Math.max(1, Math.min(168, hours));
+    })();
+    s.mapEvolutionIntervalHoursBySite = JSON.parse(JSON.stringify(p.mapEvolutionIntervalHoursBySite || {}));
+    s.mapEvolutionMaxTokens = p.mapEvolutionMaxTokens ?? 25000;
+    s.mapEvolutionCompressEnabled = p.mapEvolutionCompressEnabled !== false;
+    s.mapEvolutionCompressThreshold = (() => {
+        const n = Math.floor(Number(p.mapEvolutionCompressThreshold));
+        return Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
+    })();
+    s.mapEvolutionNarratorCommitTokens = normalizeMapEvolutionNarratorCommitTokens(p.mapEvolutionNarratorCommitTokens);
+    s.mapEvolutionCompressSystemPrompt = p.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT;
+    s.mapEvolutionTickScope = p.mapEvolutionTickScope || 'all';
+    s.mapEvolutionTickCount = (() => {
+        const n = Number(p.mapEvolutionTickCount);
+        return Number.isFinite(n) ? Math.max(0, Math.min(50, n)) : 1;
+    })();
+    s.mapEvolutionTickRandomize = p.mapEvolutionTickRandomize !== false;
+    s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(p.mapEvolutionSelectedRoots || []));
+    s.mapEvolutionSystemPrompt = p.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+    s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(p.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(p.mapEvolutionBacklogBySite || {}));
+    s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(p.mapEvolutionThreadsBySite || {}));
+    s.dungeonMapRevealAll = !!p.dungeonMapRevealAll;
+    s.mapEvolutionLastSiteRoot = p.mapEvolutionLastSiteRoot || '';
+    s.mapEvolutionWorldReportLookback = p.mapEvolutionWorldReportLookback ?? 5;
+    s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(p.mapEvolutionWorldReportApplications || {}));
 
     s.worldConnectionSource = p.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = p.worldConnectionProfileId || "";
@@ -2700,19 +2999,8 @@ function loadProfile(name) {
     s.characterCreationOpenaiModel = p.characterCreationOpenaiModel || "";
 
     // Update settings UI inputs if rendered
-    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-    $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
-    $('#rpg_world_progression_random_narrative_npc_count').val(s.worldProgressionRandomNarrativeNPCCount ?? 3);
-    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-    $('#rpg_world_progression_random_skeleton_location_count').val(s.worldProgressionRandomSkeletonLocationCount ?? 2);
-    $('#rpg_world_progression_random_narrative_location_count').val(s.worldProgressionRandomNarrativeLocationCount ?? 2);
-    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
-    $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
-    $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
-    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
     $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
     $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
     $('#rpg_world_progression_skeleton_lorebook_filter_group').toggle(!!s.worldProgressionSkeletonUseLorebooks);
@@ -2731,6 +3019,8 @@ function loadProfile(name) {
         void globalThis._rpgRefreshSkeletonLorebookList();
     }
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
@@ -2756,7 +3046,9 @@ function loadProfile(name) {
     $('#rpg_portrait_openai_model').val(s.portraitOpenaiModel || '');
     $('#rpg_portrait_openai_model_manual').val(s.portraitOpenaiModel || '');
 
-    // Sync Map Architect settings UI
+    // Sync Persistent Maps settings UI
+    applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
     $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
     $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
     $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
@@ -2769,10 +3061,22 @@ function loadProfile(name) {
     $('#rpg_map_architect_openai_key').val(s.mapArchitectOpenaiKey || '');
     $('#rpg_map_architect_openai_model').val(s.mapArchitectOpenaiModel || '');
     $('#rpg_map_architect_openai_model_manual').val(s.mapArchitectOpenaiModel || '');
+    applyMapRuntimeConnectionSettingsToUi(s);
     $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
     $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
-    $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 2500);
+    $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
     $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
+    $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
+    $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 8);
+    $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours ?? 8);
+    $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+    $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
+    $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
+    $('#rpg_map_evolution_narrator_commit_tokens').val(s.mapEvolutionNarratorCommitTokens ?? 2000);
+    $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
+    applyMapEvolutionTickSettingsToUi(s);
+    $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
+    $('#rpg_map_evolution_compress_prompt').val(s.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT);
 
     // Sync world progression connection settings UI
     $('#rpg_world_connection_source').val(s.worldConnectionSource || 'default');
@@ -2810,13 +3114,6 @@ function loadProfile(name) {
     $('#rpg_gs_wizard_openai_group').toggle(s.gameSystemWizardConnectionSource === 'openai');
 
     // Toggle container visibilities
-    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
-    else $('#rpg_world_progression_random_npc_count_container').hide();
-    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
-    else $('#rpg_world_progression_random_location_count_container').hide();
-    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
-    else $('#rpg_world_progression_random_faction_count_container').hide();
-
     s.activeProfile = name;
     runtimeState.historyViewIndex = -1;
 
@@ -2937,25 +3234,25 @@ async function showComponentsExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('🎲', 'Botín',
+                ${card('🎲', 'Tiradas de Botín',
         `Al obtener botín, se realizan tiradas de dados para determinar su calidad (común, raro, valioso). Añade variedad y recompensas significativas.`
     )}
                 ${card('🌍', 'Eventos Aleatorios',
-        `Se lanzan eventos aleatorios cuando pasa el tiempo o durante viajes. Un encuentro fortuito, un cambio de clima o una emboscada: situaciones que ocurren de forma dinámica y mantienen el mundo vivo.`
+        `Se lanzan eventos aleatorios cuando pasa el tiempo o durante viajes. Un encuentro fortuito, un cambio de clima o una emboscada: situaciones dinámicas que mantienen el mundo vivo.`
     )}
-                ${card('💤', 'Descanso',
-        `El descanso está limitado a una vez cada 9 horas de tiempo en el juego. Evita abusar del descanso para curarse tras cada combate.`
+                ${card('💤', 'Restricciones de Descanso (≥9h entre descansos)',
+        `El descanso está limitado a una vez cada 9 horas de tiempo en el juego. Evita abusar del descanso para curarse tras cada combate y refleja la realidad de no poder dormir a demanda.`
     )}
                 ${card('⛺', 'Grupo en Reserva (Benched Party)',
         `Rastrea a los miembros del grupo que están temporalmente ausentes (hospitalizados, explorando, capturados) en un listado separado [BENCHED PARTY]. El narrador mantendrá su separación hasta que la historia los reúna.`
     )}
                 ${card('🗺️', 'Mapas Persistentes (Alpha)',
-        `Al entrar en un lugar mapeado (mazmorra, ruina, fortaleza, guarida, pueblo o ciudad), el Arquitecto de Mapas genera un mapa objetivo oculto (a escala de habitaciones para interiores o distritos para asentamientos). El narrador inventa tiendas e interiores sobre dicho esqueleto. Requiere llamadas a funciones habilitadas. No se recomienda junto con Progresión del Mundo hasta que se añada compatibilidad completa.`
+        `Al entrar en un lugar mapeado (mazmorra, ruina, fortaleza, guarida, pueblo o ciudad), el Arquitecto de Mapas genera un mapa objetivo oculto (a escala de habitaciones para interiores o distritos para asentamientos). El narrador inventa tiendas e interiores sobre dicho esqueleto. Requiere llamadas a funciones habilitadas.`
     )}
-                ${card('🧭', 'Modo CYOA',
+                ${card('🧭', 'Modo CYOA (opciones de acción cada turno)',
         `Estilo Elige tu propia aventura: el narrador concluye sus respuestas con opciones numeradas de acción para que selecciones tu siguiente paso.`
     )}
-                ${card('💞', 'Sistema de Relaciones',
+                ${card('💞', 'Sistema de Relaciones (Amistad y Afecto)',
         `Rastrea la amistad, afecto o reputación general entre el jugador y los PNJs. Calcula automáticamente los cambios según las acciones y los visualiza con barras personalizadas.`
     )}
             </div>`;
@@ -3064,7 +3361,7 @@ async function showLorebookAgentDocumentation() {
                                 <li><b>Incluir PNJs Presentes en los Prompts de Escena</b> — Incluye a los PNJs mencionados en la respuesta más reciente del narrador junto con el personaje del jugador en los prompts de generación de imágenes de ubicación.</li>
                                 <li><b>Modo de Visualización en Tiempo Real</b> — Genera imágenes de ubicación en Visuales / Mapa según el contexto del chat y los personajes presentes. Elige un activador: <b>Al entrar en la ubicación</b>, <b>Al cambiar de ubicación</b> o <b>Cada N respuestas</b>.</li>
                             </ul>
-                            <p style="margin-top:8px;"><b>Visuales / Mapa</b> (panel del agente) muestra la ubicación actual: imagen panorámica cuando el arte de escena está activo, mapa de la ubicación filtrado por conocimiento cuando estás dentro de una mazmorra mapeada, y tarjetas de personajes presentes. El mapa de la ubicación se puede desacoplar en su propia ventana flotante.</p>
+                            <p style="margin-top:8px;"><b>Visuales / Mapa</b> (panel del agente) muestra la ubicación actual: imagen panorámica cuando el arte de escena está activo, mapa de la ubicación filtrado por conocimiento cuando estás dentro de una mazmorra mapeada, y tarjetas de personajes presentes (PNJs activos del libro de lore más el personaje del jugador vinculado). El mapa de la ubicación se puede desacoplar en su propia ventana. Al hacer clic en la imagen panorámica, una habitación revelada o una tarjeta de personaje, se abre su correspondiente ficha de lore. En la raíz de una ubicación mapeada, el chip cian <b>MAPA</b> abre el inspector privado del GM y la <b>X</b> adyacente elimina solo ese <code>[MAP]</code> (el bloque CORE permanece). Las ubicaciones no mapeadas muestran un botón <b>+ MAPA</b>: Automático emplea un turno del Arquitecto de Mapas para inferir entrada/tipo/escala/amenaza/premisa del lore y la historia reciente y luego genera el mapa; Manual permite rellenar los mismos campos por ti mismo. El botón <b>Añadir ubicación mapeada</b> en el encabezado crea una nueva raíz y su mapa. El arte de escena se genera según tus ajustes de Imágenes de Ubicación.</p>
                             <p style="margin-top:4px;"><i>Consejo: Con el Modo de Visualización en Tiempo Real activo, usa Visuales / Mapa en el Agente de Lorebook para ver el arte de la escena según te desplazas por la historia.</i></p>
 
                             <h4 style="margin-bottom: 5px;">🧹 Limpieza y Compresión</h4>
@@ -3159,10 +3456,10 @@ function refreshPortraitPromptPresetsList() {
     });
 }
 
-async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null) {
+async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null, options = {}) {
     const refresh = onRefresh || refreshRenderedView;
     const s = getSettings();
-    const currentSrc = lookupCustomPortraitSrc(s, entityName);
+    const currentSrc = String(options.currentSrc || lookupCustomPortraitSrc(s, entityName) || '');
     const zoomWrapperId = `rt-portrait-zoom-wrap-${Date.now()}`;
     const zoomImgId     = `rt-portrait-zoom-img-${Date.now()}`;
     const zoomBadgeId   = `rt-portrait-zoom-badge-${Date.now()}`;
@@ -3196,10 +3493,15 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
         popupOpts.customButtons.push({ text: '🗑 Clear Portrait', result: 2, classes: ['menu_button'] });
     }
 
+    const persistPortrait = typeof options.applyPortrait === 'function'
+        ? options.applyPortrait
+        : (src) => applyPortraitData(entityName, src);
     const localApply = async (src) => {
-        await applyPortraitData(entityName, src);
+        await persistPortrait(src);
         refresh();
-        void runtimeState.refreshNpcManifest().catch(() => { });
+        if (typeof options.applyPortrait !== 'function') {
+            void runtimeState.refreshNpcManifest().catch(() => { });
+        }
     };
 
     let capturedUrl = currentSrc.startsWith('http') ? currentSrc : '';
@@ -3874,7 +4176,9 @@ export function refreshRenderedView() {
 
     const el = document.getElementById('rpg-tracker-render');
     if (el) {
-        const capturedXp = captureXpGainAnimationState(el, xpAnimationContext);
+        const bottomXp = /** @type {HTMLElement|null} */ (document.getElementById('rt-bottom-xp-bar'));
+        const xpAnimationHost = s.xpBarAtBottom === true ? bottomXp : el;
+        const capturedXp = captureXpGainAnimationState(xpAnimationHost, xpAnimationContext);
         const capturedBars = captureBarChangeAnimationState(el, xpAnimationContext);
         const questsEnabled = s.syspromptModules?.quests !== false && !!(memo && memo.trim());
         let html;
@@ -3891,7 +4195,12 @@ export function refreshRenderedView() {
         }
 
         el.innerHTML = html;
-        playXpGainAnimation(el, capturedXp, xpAnimationContext);
+        if (bottomXp) {
+            const bottomXpHtml = s.xpBarAtBottom === true ? renderBottomXpBar(displayMemo) : '';
+            bottomXp.innerHTML = bottomXpHtml;
+            bottomXp.style.display = bottomXpHtml ? 'block' : 'none';
+        }
+        playXpGainAnimation(xpAnimationHost, capturedXp, xpAnimationContext);
         playBarChangeAnimations(el, capturedBars, xpAnimationContext);
         bindRenderedCardEvents(el, memo, false);
 
@@ -3996,9 +4305,14 @@ function createPanel() {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        deleteDungeonMapFromLocationEntry,
+        deleteNpcFromLibrary,
         escapeHtml,
+        escapeHtmlWithColor,
+        exportNpcToFile,
         extractCurrentTimeStr,
         fileToDataUrl,
+        fetchSrcAsDataUrl,
         formatInWorldTime,
         getLorebookManifest,
         getNarrativeBlocks,
@@ -4009,7 +4323,9 @@ function createPanel() {
         getMapUpdaterTick,
         getSettings,
         handleTrackerEnabledChange,
+        importNpcPackages,
         isMapUpdaterRunning,
+        isMapEvolutionRunning,
         isRouterRunning,
         loadChatState,
         loadDeltaHeight,
@@ -4043,12 +4359,17 @@ function createPanel() {
         resolveLocationImageWithMeta,
         resolvePortraitSrcForPlayerCharacter,
         rollbackRouterPass,
+        runMapArchitect,
+        inferMapArchitectArgs,
         runRealtimeSceneArtCheck,
         runMapUpdaterPass,
+        runMapEvolutionPass,
+        listMappedEvolutionSites,
         runRouterPass,
         runStateModelPass,
         sanitizeLorebookRecordContent,
         saveChatState,
+        saveNpcToLibrary,
         saveSettings,
         scaleImageTo512Square,
         scaleImageToLandscape,
@@ -4063,14 +4384,16 @@ function createPanel() {
         showPortraitSettingsMenu,
         stopRouterPass,
         stopMapUpdaterPass,
+        stopMapEvolutionPass,
         syncCampaignPrefixAndWorldsForChat,
         syncMemoView,
         syncRouterPrefixDisplays,
-        toggleDebugViewer,
         triggerBackgroundPortraitGeneration,
         updateAgentStatusIndicator,
         updateChatLinkUI,
         updateLorebookEntry,
+        updateWorldInfoCache,
+        rememberCampaignBook,
         updatePanelStatus,
     });
 }
@@ -4281,7 +4604,7 @@ function updateUIMemo(text) {
 function updateAgentStatusIndicator(running) {
     const stopBtn = /** @type {HTMLElement} */ (document.getElementById('rt-agent-stop-btn'));
     const playBtn = /** @type {HTMLElement} */ (document.getElementById('rt-agent-router-manual-run'));
-    const busy = !!running || isMapUpdaterRunning();
+    const busy = !!running || isMapUpdaterRunning() || isMapEvolutionRunning();
     if (stopBtn) stopBtn.style.display = busy ? 'flex' : 'none';
     if (playBtn) playBtn.style.opacity = busy ? '0.3' : '';
 }
@@ -4368,42 +4691,16 @@ export async function fetchBaseSyspromptRaw(settingsOverride = null) {
     return content || '';
 }
 
-function getMainSyspromptTextarea() {
-    return /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
-}
-
-function isMainSyspromptBackupEnabled(settings) {
-    return settings.mainSyspromptBackupEnabled !== false;
-}
-
-/** Snapshot Quick Prompt Main before the framework overwrites it (once per tracker-on period). */
-function armMainSyspromptStash(settings, force = false, { manual = false } = {}) {
-    if (!isMainSyspromptBackupEnabled(settings)) return false;
-    if (!manual && (settings.customSysprompt || !settings.enabled)) return false;
-    if (settings.syspromptStashArmed && !force) return true;
-    const ta = getMainSyspromptTextarea();
-    if (!ta) return false;
-    settings.stashedMainSysprompt = ta.value;
-    settings.syspromptStashArmed = true;
-    saveSettings();
+function persistMainSyspromptBackupIfChanged(result, settings) {
+    if (result?.changed) saveSettings(true);
     updateMainSyspromptBackupStatusUi(settings);
-    return true;
 }
 
-/** Restore stashed Quick Prompt Main when the tracker is turned off (or manually from settings). */
-function restoreMainSyspromptStash(settings, { manual = false } = {}) {
-    if (!isMainSyspromptBackupEnabled(settings) || !settings.syspromptStashArmed) return false;
-    if (!manual && settings.customSysprompt) return false;
-    const ta = getMainSyspromptTextarea();
-    if (!ta) return false;
-    ta.value = settings.stashedMainSysprompt ?? '';
-    ta.dispatchEvent(new Event('blur', { bubbles: true }));
-    if (!manual) {
-        settings.syspromptStashArmed = false;
-        saveSettings();
-    }
+function restoreTrackedMainSysprompt(settings, { manual = false } = {}) {
+    const restored = restoreMainSyspromptStash(settings, { manual });
+    if (restored) saveSettings(true);
     updateMainSyspromptBackupStatusUi(settings);
-    return true;
+    return restored;
 }
 
 function updateMainSyspromptBackupStatusUi(settings = getSettings()) {
@@ -4423,14 +4720,13 @@ function updateMainSyspromptBackupStatusUi(settings = getSettings()) {
         statusEl.textContent = 'Backup is disabled — enable above to save or restore.';
         return;
     }
-    if (!settings.syspromptStashArmed) {
-        statusEl.textContent = 'No backup saved yet. It is created automatically before the framework overwrites Main, or use Save above.';
+    hydrateMainSyspromptBackup(settings);
+    const backupLen = getEffectiveBackupText(settings).length;
+    if (!backupLen) {
+        statusEl.textContent = 'No backup saved yet. It is created automatically before the framework overwrites Main, and kept in this browser even if the tracker or extension is turned off.';
         return;
     }
-    const len = (settings.stashedMainSysprompt ?? '').length;
-    statusEl.textContent = len
-        ? `Backup saved (${len.toLocaleString()} characters).`
-        : 'Backup saved (empty Main prompt).';
+    statusEl.textContent = `Backup saved (${backupLen.toLocaleString()} characters). Kept if you disable the tracker or the extension.`;
 }
 
 function syncMainSyspromptBackupControlsUi() {
@@ -4442,16 +4738,16 @@ async function handleTrackerEnabledChange(settings, enabled) {
     saveSettings();
     updatePanelStatus();
     if (settings.enabled) {
-        armMainSyspromptStash(settings, true);
         await autoApplySysprompt(true);
     } else {
-        restoreMainSyspromptStash(settings);
+        restoreTrackedMainSysprompt(settings);
         void resetCombatProfileOverride(settings);
     }
 }
 
 let _autoApplyTimer = null;
 let _stashDeferCount = 0;
+let _restoreDeferCount = 0;
 const MAX_STASH_DEFER = 25;
 let _lastDynamicRngCombatState = null;
 
@@ -4463,27 +4759,33 @@ export async function autoApplySysprompt(force = false) {
     if (s.customSysprompt) return;
     if (!force && !s.enabled) return;
 
+    const content = await fetchBaseSyspromptRaw(s);
+    if (!content) return;
+
+    const built = buildSysprompt(content);
+
     if (s.enabled && isMainSyspromptBackupEnabled(s)) {
-        const armed = armMainSyspromptStash(s);
-        if (!armed && !s.syspromptStashArmed) {
+        const result = captureMainSyspromptBackup(s, { builtFrameworkText: built });
+        persistMainSyspromptBackupIfChanged(result, s);
+        if (result.shouldDefer) {
             if (_stashDeferCount < MAX_STASH_DEFER) {
                 _stashDeferCount++;
                 scheduleAutoApply();
                 return;
             }
+            if (!getEffectiveBackupText(s).trim()) {
+                console.warn('[RPG Tracker] Refusing to overwrite Quick Prompt Main: backup source is not ready and no durable backup exists.');
+                return;
+            }
+        }
+        if (!result.ok && !getEffectiveBackupText(s).trim()) {
+            console.warn('[RPG Tracker] Refusing to overwrite Quick Prompt Main until a user backup can be saved.');
+            return;
         }
     }
     _stashDeferCount = 0;
 
-    const content = await fetchBaseSyspromptRaw(s);
-    if (!content) return;
-
-    const built = buildSysprompt(content);
-    const mainTextarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
-    if (mainTextarea) {
-        mainTextarea.value = built;
-        mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
-    }
+    setLiveMainSyspromptText(built);
 }
 
 /**
@@ -4521,6 +4823,21 @@ function scheduleAutoApply() {
     if (!s.enabled || s.customSysprompt) return;
     if (_autoApplyTimer) clearTimeout(_autoApplyTimer);
     _autoApplyTimer = setTimeout(() => { _autoApplyTimer = null; autoApplySysprompt(); }, 400);
+}
+
+function scheduleDisabledTrackerMainRestore() {
+    const s = getSettings();
+    if (s.enabled || s.customSysprompt) return;
+    if (maybeRestoreMainIfTrackerDisabled(s)) {
+        saveSettings(true);
+        updateMainSyspromptBackupStatusUi(s);
+        _restoreDeferCount = 0;
+        return;
+    }
+    if (!isMainSyspromptSourceReady() && _restoreDeferCount < MAX_STASH_DEFER) {
+        _restoreDeferCount++;
+        setTimeout(scheduleDisabledTrackerMainRestore, 400);
+    }
 }
 
 /**
@@ -4805,6 +5122,7 @@ const CONNECTION_SETTINGS_UI = [
     { key: 'adventure_companion', control: '#rpg_adventure_companion_connection_source', slot: '#rpg_connection_slot_adventure_companion', label: 'Acompañante de Aventura' },
     { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Asistente de Sistemas de Juego', recommendation: 'Recomiendo usar un modelo más potente como Sonnet o superior para sistemas complejos.' },
     { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Arquitecto de Mapas', recommendation: 'Se recomienda un modelo con capacidad de razonamiento para topologías coherentes, secretos y colocación de entidades.' },
+    { key: 'map_runtime', control: '#rpg_map_runtime_connection_source', slot: '#rpg_connection_slot_map_runtime', label: 'Actualizador y Evolución de Mapas', recommendation: 'La ocupación y evolución fuera de pantalla pueden usar un modelo más ligero que el Arquitecto de Mapas.' },
     { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'Progresión del Mundo' },
     { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Generación de Retratos', recommendation: 'Un modelo ligero funciona perfectamente.' },
 ];
@@ -4904,6 +5222,8 @@ function organizeConnectionSettingsUI() {
     const ctx = SillyTavern.getContext();
     const { eventSource, event_types, renderExtensionTemplateAsync } = ctx;
     const pm = ctx.getPresetManager ? ctx.getPresetManager() : null;
+    let _runPromptDefaultsDialog = null;
+    let _runPromptDefaultsStartupAction = null;
 
     configureRuntimeActions({
         saveSettings,
@@ -4990,6 +5310,9 @@ function organizeConnectionSettingsUI() {
         if (applyCriticalSettingsBackup(earlySettings)) {
             void saveSettings(true);
         }
+        if (hydrateMainSyspromptBackup(earlySettings)) {
+            void saveSettings(true);
+        }
     }
     // Recover BEFORE any init saveSettings can clobber the localStorage backup.
     {
@@ -5067,6 +5390,20 @@ function organizeConnectionSettingsUI() {
             settings,
             presetManager: pm,
         });
+        await bindFeatureConnectionSettings({
+            uiPrefix: 'rpg_map_runtime',
+            keyPrefix: 'mapRuntime',
+            settings,
+            presetManager: pm,
+        });
+        applyMapArchitectOpenerToUi(settings.mapArchitectOpener);
+        syncMapArchitectOpenerNestedVisibility(settings.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
+        $('input[name="rpg_map_architect_opener"], input[name="rpg_map_architect_opener_components"]').on('change', function () {
+            settings.mapArchitectOpener = normalizeMapArchitectOpener($(this).val());
+            saveSettings();
+            scheduleAutoApply();
+            applyMapArchitectOpenerToUi(settings.mapArchitectOpener);
+        });
         $('#rpg_map_architect_lookback').val(settings.mapArchitectLookback ?? 12).on('change', function () {
             settings.mapArchitectLookback = Math.max(0, Math.min(100, parseInt(String($(this).val()), 10) || 0));
             $(this).val(settings.mapArchitectLookback);
@@ -5098,8 +5435,8 @@ function organizeConnectionSettingsUI() {
             $('#rt-agent-map-updater-run-every').val(settings.mapUpdaterRunEvery);
             saveSettings();
         });
-        $('#rpg_map_updater_max_tokens').val(settings.mapUpdaterMaxTokens ?? 2500).on('change', function () {
-            settings.mapUpdaterMaxTokens = Math.max(400, Math.min(16000, parseInt(String($(this).val()), 10) || 2500));
+        $('#rpg_map_updater_max_tokens').val(settings.mapUpdaterMaxTokens ?? 25000).on('change', function () {
+            settings.mapUpdaterMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
             $(this).val(settings.mapUpdaterMaxTokens);
             saveSettings();
         });
@@ -5112,6 +5449,214 @@ function organizeConnectionSettingsUI() {
             $('#rpg_map_updater_system_prompt').val(settings.mapUpdaterSystemPrompt);
             saveSettings();
             toastr['success']('Map Updater prompt reset.');
+        });
+        $('#rpg_map_evolution_enabled').prop('checked', settings.mapEvolutionEnabled !== false).on('change', function () {
+            settings.mapEvolutionEnabled = !!$(this).prop('checked');
+            saveSettings();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+                runtimeState.updateAgentMapEvolutionStatusRef();
+            }
+        });
+        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 8).on('change', function () {
+            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 8));
+            $(this).val(settings.mapEvolutionIntervalHours);
+            saveSettings();
+            updateMapEvolutionScheduleDisplay();
+            $('#rt-agent-map-evo-interval').val(settings.mapEvolutionIntervalHours);
+            void refreshMapEvolutionSelectedList();
+        });
+        $('#rpg_map_evolution_onsite_interval_hours').val(settings.mapEvolutionOnSiteIntervalHours ?? 8).on('change', function () {
+            const parsed = parseInt(String($(this).val()), 10);
+            settings.mapEvolutionOnSiteIntervalHours = parsed === 0
+                ? 0
+                : Math.max(1, Math.min(168, Number.isFinite(parsed) ? parsed : 12));
+            $(this).val(settings.mapEvolutionOnSiteIntervalHours);
+            saveSettings();
+            updateMapEvolutionScheduleDisplay();
+            $('#rt-agent-map-evo-onsite-interval').val(settings.mapEvolutionOnSiteIntervalHours);
+            void refreshMapEvolutionSelectedList();
+        });
+        $('#rpg_map_evolution_max_tokens').val(settings.mapEvolutionMaxTokens ?? 25000).on('change', function () {
+            settings.mapEvolutionMaxTokens = Math.max(1000, Math.min(32000, parseInt(String($(this).val()), 10) || 25000));
+            $(this).val(settings.mapEvolutionMaxTokens);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_compress_enabled').prop('checked', settings.mapEvolutionCompressEnabled !== false).on('change', function () {
+            settings.mapEvolutionCompressEnabled = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_compress_threshold').val(settings.mapEvolutionCompressThreshold ?? 10000).on('change', function () {
+            const n = Math.floor(parseInt(String($(this).val()), 10));
+            settings.mapEvolutionCompressThreshold = Number.isFinite(n) ? Math.max(500, Math.min(100000, n)) : 10000;
+            $(this).val(settings.mapEvolutionCompressThreshold);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_narrator_commit_tokens').val(settings.mapEvolutionNarratorCommitTokens ?? 2000).on('change', function () {
+            settings.mapEvolutionNarratorCommitTokens = normalizeMapEvolutionNarratorCommitTokens($(this).val());
+            $(this).val(settings.mapEvolutionNarratorCommitTokens);
+            saveSettings();
+        });
+        $('#rpg_map_evolution_world_report_lookback').val(settings.mapEvolutionWorldReportLookback ?? 5).on('change', function () {
+            settings.mapEvolutionWorldReportLookback = Math.max(1, Math.min(20, parseInt(String($(this).val()), 10) || 5));
+            $(this).val(settings.mapEvolutionWorldReportLookback);
+            saveSettings();
+        });
+        applyMapEvolutionTickSettingsToUi(settings);
+        $('#rpg_map_evolution_tick_scope').on('change', function () {
+            settings.mapEvolutionTickScope = String($(this).val() || 'all');
+            syncMapEvolutionTickRows(settings);
+            void refreshMapEvolutionSelectedList();
+            saveSettings();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+                runtimeState.updateAgentMapEvolutionStatusRef();
+            }
+        });
+        $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 1).on('change', function () {
+            const parsed = parseInt(String($(this).val()), 10);
+            settings.mapEvolutionTickCount = Math.max(0, Math.min(50, Number.isFinite(parsed) ? parsed : 1));
+            $(this).val(settings.mapEvolutionTickCount);
+            saveSettings();
+            $('#rt-agent-map-evo-tick-count').val(settings.mapEvolutionTickCount);
+        });
+        $('#rpg_map_evolution_tick_randomize').prop('checked', settings.mapEvolutionTickRandomize !== false).on('change', function () {
+            settings.mapEvolutionTickRandomize = !!$(this).prop('checked');
+            saveSettings();
+            $('#rt-agent-map-evo-tick-randomize').prop('checked', settings.mapEvolutionTickRandomize);
+        });
+        $('#rpg_map_evolution_selected_refresh').on('click', function () {
+            void refreshMapEvolutionSelectedList();
+        });
+        $('#rpg_map_evolution_selected_all').on('click', function () {
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').prop('checked', true);
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_selected_none').on('click', function () {
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').prop('checked', false);
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_selected_current').on('click', async function () {
+            const sites = await listMappedEvolutionSites();
+            const current = sites.find(site => site.current);
+            if (!current) {
+                toastr.info('The party is not inside a mapped site.', 'Map Evolution');
+                return;
+            }
+            $('#rpg_map_evolution_selected_list input[type="checkbox"]').each(function () {
+                $(this).prop('checked', String($(this).attr('data-site-root') || '') === current.siteRoot);
+            });
+            persistMapEvolutionSelectedRootsFromUi();
+        });
+        $('#rpg_map_evolution_evolve_now').on('click', async function () {
+            const roots = persistMapEvolutionSelectedRootsFromUi();
+            if (!roots.length) {
+                toastr.warning('Check at least one mapped site.', 'Map Evolution');
+                return;
+            }
+            if (isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning()) {
+                toastr.warning('An agent is already running.', 'Map Evolution');
+                return;
+            }
+            toastr['info']('Starting Map Evolution pass...');
+            const result = await runMapEvolutionPass({ trigger: 'manual', isManual: true, siteRoots: roots });
+            notifyMapEvolutionPassResult(result);
+            updateMapEvolutionScheduleDisplay();
+        });
+        $('#rpg_map_evolution_btn_override_next').on('click', async function () {
+            const s = getSettings();
+            let listed = [];
+            try {
+                listed = await listMappedEvolutionSites();
+            } catch (error) {
+                console.warn('[RPG Tracker] Failed to list mapped sites for Evolution override:', error);
+            }
+            const currentRoot = listed.find(site => site.current)?.siteRoot || s.mapEvolutionLastSiteRoot || '';
+            const hoursFor = evolutionIntervalHoursForSettings(s, currentRoot);
+            const schedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+                intervalHours: s.mapEvolutionIntervalHours,
+                currentMinutes: currentMemoMinutes(),
+                intervalHoursFor: hoursFor,
+            });
+            const fallbackHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 8);
+            const currentNextMins = schedule.nextMins >= 0
+                ? schedule.nextMins
+                : currentMemoMinutes() >= 0 ? currentMemoMinutes() + fallbackHours * 60 : fallbackHours * 60;
+
+            function fmtHint(totalMins) {
+                if (totalMins < 0) return s.useDdMmYyFormat ? '01/01/2026, 08:00 AM' : (s.use24hTime ? 'Day 1, 00:00' : 'Day 1, 12:00 AM');
+                return formatInWorldTime(totalMins);
+            }
+
+            const acceptedFormats = s.useDdMmYyFormat
+                ? 'Accepted formats: "06/01/2026, 08:00 AM", "06/01/2026, 08:00", "06/01/2026"'
+                : 'Accepted formats: "Day 6, 08:00 AM", "Day 6, 08:00", "Day 6"';
+
+            const userInput = window.prompt(
+                'Enter the in-world time for the NEXT Map Evolution interval tick.\n' + acceptedFormats,
+                fmtHint(currentNextMins)
+            );
+            if (userInput === null) return;
+
+            const parsedNextMins = parseInWorldTime(userInput.trim());
+            if (parsedNextMins == null || parsedNextMins <= 0) {
+                const errorFormat = s.useDdMmYyFormat
+                    ? 'Could not parse the entered time. Please use a format like "06/01/26, 08:00 AM".'
+                    : 'Could not parse the entered time. Please use a format like "Day 6, 08:00 AM".';
+                toastr['warning'](errorFormat, 'Map Evolution');
+                return;
+            }
+
+            let roots = [...Object.keys(s.mapEvolutionLastFiredBySite || {}), ...listed.map(site => site.siteRoot)];
+            if (!roots.length) {
+                toastr.warning('No mapped sites to schedule.', 'Map Evolution');
+                return;
+            }
+            let stamps = {};
+            for (const root of roots) {
+                const hours = hoursFor(root);
+                if (!hours || hours <= 0) continue;
+                stamps = stampEvolutionLastFired(stamps, [root], formatInWorldTime(parsedNextMins - hours * 60));
+            }
+            if (!Object.keys(stamps).length) {
+                toastr.warning('Every mapped site is set to never auto-tick.', 'Map Evolution');
+                return;
+            }
+            s.mapEvolutionLastFiredBySite = stamps;
+            saveSettings();
+            if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+            updateMapEvolutionScheduleDisplay();
+            toastr['success'](`Next interval tick set to ${fmtHint(parsedNextMins)}.`, 'Map Evolution');
+        });
+        $('#rpg_map_evolution_reset_timeline').on('click', function () {
+            const s = getSettings();
+            s.mapEvolutionLastFiredBySite = {};
+            saveSettings();
+            if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
+            updateMapEvolutionScheduleDisplay();
+            toastr['info']('Map Evolution timeline reset. Next interval starts from the current time.', 'Map Evolution');
+        });
+        $('#rpg_map_evolution_testing_ground').on('click', async function () {
+            const { openMapEvolutionTestingGround } = await import('./src/ui/panel/panel-map-evolution-debug.js');
+            await openMapEvolutionTestingGround();
+        });
+        $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).on('input', function () {
+            settings.mapEvolutionSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_reset_prompt').on('click', function () {
+            settings.mapEvolutionSystemPrompt = DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+            $('#rpg_map_evolution_system_prompt').val(settings.mapEvolutionSystemPrompt);
+            saveSettings();
+            toastr['success']('Map Evolution prompt reset.');
+        });
+        $('#rpg_map_evolution_compress_prompt').val(settings.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).on('input', function () {
+            settings.mapEvolutionCompressSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $('#rpg_map_evolution_reset_compress_prompt').on('click', function () {
+            settings.mapEvolutionCompressSystemPrompt = DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT;
+            $('#rpg_map_evolution_compress_prompt').val(settings.mapEvolutionCompressSystemPrompt);
+            saveSettings();
+            toastr['success']('Map Evolution history compression prompt reset.');
         });
 
 
@@ -5267,8 +5812,6 @@ function organizeConnectionSettingsUI() {
                                     </details>`;
         }
 
-        let _runPromptDefaultsDialog = null;
-
         // --- Version Upgrade Prompt Reset Dialog ---
         {
             let currentVersion = '4.8.10'; // Fallback
@@ -5311,22 +5854,22 @@ function organizeConnectionSettingsUI() {
 
             if (!settings.lastResetVersion) {
                 // Fresh install — record version and defaults fingerprint silently.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (!storedFingerprint) {
                 // Existing install before fingerprint tracking — adopt current defaults without prompting.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (storedFingerprint === currentFingerprint
                 && settings.lastSeenPromptDefaultsFingerprint !== currentFingerprint) {
                 // Pre-format-neutral snapshots can contain user-selected calendar/clock
                 // examples. They represent the same shipped defaults, so upgrade the
                 // acknowledgement silently instead of showing a false update prompt.
-                void acknowledgePromptDefaults(settings);
+                _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
             } else if (storedFingerprint !== currentFingerprint) {
                 syncPromptDefaultsUpgradeButton();
 
                 if (settings.autoResetPromptsOnUpdate) {
                     // Silently reset everything automatically
-                    (async () => {
+                    _runPromptDefaultsStartupAction = async () => {
                         const { extensionSettings } = SillyTavern.getContext();
                         const fresh = getSettings();
 
@@ -5410,7 +5953,7 @@ function organizeConnectionSettingsUI() {
                         await acknowledgePromptDefaults(fresh);
                         toastr['info'](`Prompts auto-updated to latest defaults (v${currentVersion}).`, 'RPG Tracker');
                         console.log(`[RPG Tracker] Automatically reset all prompts/sections to defaults for version ${currentVersion}.`);
-                    })();
+                    };
                 } else {
                     const { Popup } = SillyTavern.getContext();
                     if (Popup && Popup.show && Popup.show.confirm) {
@@ -5419,8 +5962,7 @@ function organizeConnectionSettingsUI() {
                             // Wait a short moment for the UI to be fully drawn
                             await sleepMs(500);
 
-                            const mainTa = getMainSyspromptTextarea();
-                            const mainSyspromptText = mainTa ? mainTa.value : '';
+                            const mainSyspromptText = getLiveMainSyspromptText();
                             const changedCats = getChangedPromptDefaultCategories(storedSnapshot, currentSnapshot);
                             const hasSnapshot = !!storedSnapshot;
                             const changedLabels = [...changedCats]
@@ -5681,6 +6223,8 @@ function organizeConnectionSettingsUI() {
                                     if (extensionSettings[MODULE_NAME]) {
                                         delete extensionSettings[MODULE_NAME].mapArchitectSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].mapUpdaterSystemPrompt;
+                                        delete extensionSettings[MODULE_NAME].mapEvolutionSystemPrompt;
+                                        delete extensionSettings[MODULE_NAME].mapEvolutionCompressSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
                                         delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
                                     }
@@ -5692,6 +6236,14 @@ function organizeConnectionSettingsUI() {
                                     const $mapUpdaterPromptEl = $('#rpg_map_updater_system_prompt');
                                     if ($mapUpdaterPromptEl.length) {
                                         $mapUpdaterPromptEl.val(sTemp.mapUpdaterSystemPrompt).trigger('input');
+                                    }
+                                    const $mapEvolutionPromptEl = $('#rpg_map_evolution_system_prompt');
+                                    if ($mapEvolutionPromptEl.length) {
+                                        $mapEvolutionPromptEl.val(sTemp.mapEvolutionSystemPrompt).trigger('input');
+                                    }
+                                    const $mapEvolutionCompressPromptEl = $('#rpg_map_evolution_compress_prompt');
+                                    if ($mapEvolutionCompressPromptEl.length) {
+                                        $mapEvolutionCompressPromptEl.val(sTemp.mapEvolutionCompressSystemPrompt).trigger('input');
                                     }
                                     const $wpPromptEl = $('#rpg_world_progression_system_prompt');
                                     if ($wpPromptEl.length) {
@@ -5720,9 +6272,9 @@ function organizeConnectionSettingsUI() {
                             }
                             syncPromptDefaultsUpgradeButton();
                         };
-                        void _runPromptDefaultsDialog();
+                        _runPromptDefaultsStartupAction = _runPromptDefaultsDialog;
                     } else {
-                        void acknowledgePromptDefaults(getSettings());
+                        _runPromptDefaultsStartupAction = () => acknowledgePromptDefaults(getSettings());
                     }
                 }
             } else if (settings.lastResetVersion !== currentVersion) {
@@ -5804,10 +6356,14 @@ function organizeConnectionSettingsUI() {
             if (!isMainSyspromptBackupEnabled(fresh)) {
                 return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
             }
-            if (armMainSyspromptStash(fresh, true, { manual: true })) {
+            const result = captureMainSyspromptBackup(fresh, { manual: true });
+            persistMainSyspromptBackupIfChanged(result, fresh);
+            if (result.changed || result.reason === 'kept' || result.reason === 'captured') {
                 toastr['success']('Current Quick Prompt Main saved to backup.', 'RPG Tracker');
-            } else if (!getMainSyspromptTextarea()) {
-                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
+            } else if (result.reason === 'empty') {
+                toastr['warning']('Current Main is empty — refusing to overwrite a saved backup with nothing.', 'RPG Tracker');
+            } else if (result.reason === 'already-framework') {
+                toastr['warning']('Current Main looks like the framework prompt, so the existing backup was left unchanged.', 'RPG Tracker');
             } else {
                 toastr['error']('Could not save backup.', 'RPG Tracker');
             }
@@ -5818,16 +6374,14 @@ function organizeConnectionSettingsUI() {
             if (!isMainSyspromptBackupEnabled(fresh)) {
                 return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
             }
-            if (!fresh.syspromptStashArmed) {
+            if (!getEffectiveBackupText(fresh).trim()) {
                 return toastr['info']('No backup saved yet. Use Save current Main to backup first.', 'RPG Tracker');
             }
-            if (restoreMainSyspromptStash(fresh, { manual: true })) {
+            if (restoreTrackedMainSysprompt(fresh, { manual: true })) {
                 const note = fresh.enabled && !fresh.customSysprompt
                     ? ' Click ⏻ on the tracker panel to keep it — the framework may overwrite Main again while the tracker is on.'
                     : '';
                 toastr['success'](`Backed-up Main prompt restored.${note}`, 'RPG Tracker');
-            } else if (!getMainSyspromptTextarea()) {
-                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
             } else {
                 toastr['error']('Could not restore backup.', 'RPG Tracker');
             }
@@ -5841,6 +6395,12 @@ function organizeConnectionSettingsUI() {
             const ta = document.getElementById('rpg-tracker-memo');
             refreshDayNightCycleFromMemo(ta ? ta.value : settings.currentMemo || '');
             applyPanelBackgroundToDom();
+            refreshRenderedView();
+        });
+
+        $('#rpg_tracker_xp_bar_bottom').prop('checked', !!settings.xpBarAtBottom).on('change', function () {
+            settings.xpBarAtBottom = !!$(this).prop('checked');
+            saveSettings();
             refreshRenderedView();
         });
 
@@ -6306,6 +6866,12 @@ function organizeConnectionSettingsUI() {
         eventSource.on(event_types.GENERATION_STARTED, onGenerationStarted);
         eventSource.on(event_types.GENERATION_ENDED, onGenerationEnded);
         eventSource.on(event_types.GENERATION_STOPPED, onGenerationEnded);
+        if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, onMapArchitectAssistantMessage);
+        const catchUpMapArchitectFence = () => {
+            setTimeout(() => { void onMapArchitectAssistantMessage(undefined, 'normal'); }, 0);
+        };
+        if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, catchUpMapArchitectFence);
+        if (event_types.CHAT_LOADED) eventSource.on(event_types.CHAT_LOADED, catchUpMapArchitectFence);
         if (event_types.MESSAGE_EDITED) eventSource.on(event_types.MESSAGE_EDITED, handleRelationshipSwipeChange);
         if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, handleRelationshipSwipeChange);
 
@@ -6347,8 +6913,16 @@ function organizeConnectionSettingsUI() {
             });
         }
         if (bootChatId && settings.chatLinkEnabled) {
-            const restoredBootChat = loadChatState(bootChatId);
-            if (!restoredBootChat && !settings.chatStates?.[bootChatId]) resetUnseenChatState(settings);
+            // ST and other extensions queue whole-settings saves before settingsReady.
+            // Never expose an empty transient projection during that window. If the
+            // active partition is missing, empty, or older/poorer than the already
+            // visible live state, seed it from live memory instead of clearing it.
+            const preserveLiveBootState = shouldPreserveLiveChatStateOnBoot(settings, bootChatId);
+            const restoredBootChat = preserveLiveBootState ? false : loadChatState(bootChatId);
+            if (preserveLiveBootState || (!restoredBootChat && !settings.chatStates?.[bootChatId])) {
+                saveChatState(bootChatId, { skipDiskWrite: true });
+                console.warn('[RPG Tracker] Preserved live tracker state for an unsafe boot partition:', bootChatId);
+            }
             if (settings.chatSetupLinkEnabled) {
                 syncSettingsUi();
                 syncAllNarratorTogglesForUnlockState();
@@ -6382,57 +6956,66 @@ function organizeConnectionSettingsUI() {
         // cannot overwrite freshly migrated paths before the synchronous disk flush.
         await runPortraitMigrationIfNeeded();
 
-        // ─── Flush-on-unload / tab-hide safety net ───
-        // saveSettings() debounces disk writes by ~2s, and ST's saveSettings() is async
-        // (fetch). Reloading for a code update before the write lands resurrects the last
-        // flushed snapshot — looks like settings "reset to a particular point."
-        // Chat Link makes memo/modules worse: boot runs loadChatState() from chatStates.
-        // Global UI prefs (auto-image-gen, immersion, connections, panel backgrounds) are
-        // intentionally NOT stored in chatStates anymore — only campaign/memo state is.
-        //
-        // Order matters: snapshot chatStates FIRST, then write.
-        // Also flush on visibility hidden so the async save usually finishes before reload.
-        let _flushInFlight = false;
-        const flushPendingSettingsToDisk = (reason = 'flush') => {
-            if (_flushInFlight) return;
-            _flushInFlight = true;
+        // Do not release extension persistence until core SillyTavern declares
+        // settings ready. Before that, core saveSettings() turns every early call
+        // into a delayed global retry that can outlive extension bootstrap.
+        let startupPersistenceReleaseScheduled = false;
+        const scheduleStartupPersistenceRelease = () => {
+            if (startupPersistenceReleaseScheduled) return;
+            startupPersistenceReleaseScheduled = true;
+            setTimeout(() => {
+                void openSettingsPersistenceGate().then(() => {
+                    if (typeof _runPromptDefaultsStartupAction === 'function') {
+                        const action = _runPromptDefaultsStartupAction;
+                        _runPromptDefaultsStartupAction = null;
+                        void action();
+                    }
+                });
+            }, 0);
+        };
+        eventSource.once(event_types.SETTINGS_LOADED, scheduleStartupPersistenceRelease);
+        // APP_READY auto-fires for extensions activated after normal startup.
+        if (event_types.APP_READY) eventSource.once(event_types.APP_READY, scheduleStartupPersistenceRelease);
+
+        // ─── Navigation snapshot safety net ───
+        // Never write SillyTavern's whole settings blob from lifecycle events. A hidden or
+        // older tab may hold a stale snapshot, and visibilitychange/pagehide/beforeunload
+        // would then silently replace personas, connection settings, and every extension's
+        // state (last writer wins). Async unload fetches are unreliable for this ~16 MB file
+        // anyway. Keep only synchronous/local recovery snapshots here; ordinary user actions
+        // already schedule the normal SillyTavern save while the page is alive.
+        let _navigationSnapshotInFlight = false;
+        const snapshotPendingStateForNavigation = (reason = 'navigation') => {
+            if (_navigationSnapshotInFlight) return;
+            _navigationSnapshotInFlight = true;
             try {
                 if (typeof globalThis._rpgFlushRawMemoChanges === 'function') {
                     globalThis._rpgFlushRawMemoChanges();
                 }
-                if (_saveSettingsTimer) {
-                    clearTimeout(_saveSettingsTimer);
-                    _saveSettingsTimer = null;
-                }
                 const s = getSettings();
-                snapshotPortraitMapsForChat(s, runtimeState.currentChatId);
-                // Do this FIRST and unconditionally — localStorage.setItem is synchronous
-                // and cannot be cancelled by the unload that's about to happen, unlike the
-                // disk write below. This is the actual safety net; everything after is best-effort.
-                snapshotMemoToLocalStorage(runtimeState.currentChatId);
+                const chatId = runtimeState.currentChatId || SillyTavern.getContext()?.chatId || null;
+                snapshotPortraitMapsForChat(s, chatId);
+                snapshotMemoToLocalStorage(chatId, { force: true });
                 stampCriticalSettingsSynced(s, writeCriticalSettingsBackup(s));
-                // Snapshot chat-linked fields first so loadChatState() on next boot
-                // cannot overwrite live settings with a stale per-chat copy.
-                if (s.chatLinkEnabled && runtimeState.currentChatId) {
-                    saveChatState(runtimeState.currentChatId);
+                if (s.chatLinkEnabled && chatId && !isPortraitMigrationLocked()) {
+                    // Update the in-memory partition and synchronous module-schema WAL only.
+                    // skipDiskWrite is essential: lifecycle events must not replace settings.json.
+                    saveChatState(chatId, { skipDiskWrite: true });
+                } else {
+                    writeModuleSchemaBackup(chatId);
                 }
-                // Always force a disk write. saveChatState already calls saveSettings when
-                // it runs, but it can no-op (portrait migration lock) — so flush anyway.
-                const flushCtx = SillyTavern.getContext();
-                if (typeof flushCtx.saveSettings === 'function') void flushCtx.saveSettings();
-                else flushCtx.saveSettingsDebounced?.();
-                if (s.debugMode) console.log(`[RPG Tracker] Settings flushed (${reason}).`);
+                if (s.debugMode) console.log(`[RPG Tracker] Local navigation snapshot captured (${reason}); settings.json write skipped.`);
             } catch (err) {
-                console.warn('[RPG Tracker] Settings flush failed:', err);
+                console.warn('[RPG Tracker] Navigation snapshot failed:', err);
             } finally {
-                // Allow another flush after this tick (e.g. hide then unload).
-                setTimeout(() => { _flushInFlight = false; }, 0);
+                // Allow a later lifecycle signal (hide, pagehide, unload) to refresh the WAL.
+                setTimeout(() => { _navigationSnapshotInFlight = false; }, 0);
             }
         };
-        window.addEventListener('beforeunload', () => flushPendingSettingsToDisk('beforeunload'));
-        window.addEventListener('pagehide', () => flushPendingSettingsToDisk('pagehide'));
+        window.addEventListener('beforeunload', () => snapshotPendingStateForNavigation('beforeunload'));
+        window.addEventListener('pagehide', () => snapshotPendingStateForNavigation('pagehide'));
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') flushPendingSettingsToDisk('visibilityhidden');
+            if (document.visibilityState === 'hidden') snapshotPendingStateForNavigation('visibilityhidden');
         });
         // Always run activation when routerEnabled — regardless of chatLinkEnabled —
         // so the correct lorebook stack is live from the very first message.
@@ -9142,6 +9725,9 @@ RULES:
                     $('#rpg_quests_options').toggle(checked);
                     refreshOrderList();
                 }
+                if (key === LOCATION_MAPPING_SECTION_TAG) {
+                    syncMapArchitectOpenerNestedVisibility(checked);
+                }
                 if (key === 'party_bench') {
                     if (!fresh.modules) fresh.modules = {};
                     fresh.modules['benched party'] = checked;
@@ -9163,6 +9749,9 @@ RULES:
 
             if (key === 'quests') {
                 $('#rpg_quests_options').toggle(val);
+            }
+            if (key === LOCATION_MAPPING_SECTION_TAG) {
+                syncMapArchitectOpenerNestedVisibility(val);
             }
         });
 
@@ -9207,14 +9796,14 @@ RULES:
                 <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Relationship Update Method</div>
                 <div style="font-size:12px;opacity:.75;margin-bottom:14px;">Select one method. The inactive method receives no instructions and does not run.</div>
                 <label style="display:block;padding:10px;margin-bottom:8px;border:1px solid rgba(255,255,255,.16);border-radius:7px;cursor:pointer;">
-                    <input type="radio" name="rpg_relationship_update_mode" value="regex" ${mode === RELATIONSHIP_UPDATE_MODES.REGEX ? 'checked' : ''}>
-                    <strong> Narrator Regex</strong>
-                    <div style="font-size:11px;opacity:.7;margin:5px 0 0 23px;">Parses <code>(Friendship: Name +X)</code> annotations from the narrator output.</div>
-                </label>
-                <label style="display:block;padding:10px;border:1px solid rgba(255,255,255,.16);border-radius:7px;cursor:pointer;">
                     <input type="radio" name="rpg_relationship_update_mode" value="state_tracker" ${mode === RELATIONSHIP_UPDATE_MODES.STATE_TRACKER ? 'checked' : ''}>
                     <strong> State Tracker Tags</strong>
                     <div style="font-size:11px;opacity:.7;margin:5px 0 0 23px;">State Tracker emits a temporary <code>[RELATIONS]</code> block and code applies its lines.</div>
+                </label>
+                <label style="display:block;padding:10px;border:1px solid rgba(255,255,255,.16);border-radius:7px;cursor:pointer;">
+                    <input type="radio" name="rpg_relationship_update_mode" value="regex" ${mode === RELATIONSHIP_UPDATE_MODES.REGEX ? 'checked' : ''}>
+                    <strong> Narrator Regex</strong>
+                    <div style="font-size:11px;opacity:.7;margin:5px 0 0 23px;">Parses <code>(Friendship: Name +X)</code> annotations from the narrator output.</div>
                 </label>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;">
                     <label style="font-size:12px;font-weight:700;">State Tracker relationship instruction</label>
@@ -9519,7 +10108,7 @@ RULES:
                     }
 
                     const overrideChatLog = chunks[i].join('\n\n');
-                    const chunkResult = await runRouterPass(null, null, null, true, [], overrideChatLog);
+                    const chunkResult = await runRouterPass(null, LOREBOOK_FULL_AUDIT_INSTRUCTION, null, true, [], overrideChatLog);
                     console.log(`[RPG Tracker] Agent Full Audit: Chunk ${i + 1}/${chunks.length} finished. Result: ${chunkResult}`);
 
                     // Yield to the event loop so the UI can repaint with the agent panel updates
@@ -10068,19 +10657,6 @@ RULES:
         const $wpInterval = $('#rpg_world_progression_interval');
         const $wpKeepActive = $('#rpg_world_progression_keep_active');
         const $wpHistoryLookback = $('#rpg_world_progression_history_lookback');
-        const $wpRandomizeNPCs = $('#rpg_world_progression_randomize_npcs');
-        const $wpRandomSkeletonNPCCount = $('#rpg_world_progression_random_skeleton_npc_count');
-        const $wpRandomNarrativeNPCCount = $('#rpg_world_progression_random_narrative_npc_count');
-        const $wpRandomNPCCountContainer = $('#rpg_world_progression_random_npc_count_container');
-        const $wpRandomizeLocations = $('#rpg_world_progression_randomize_locations');
-        const $wpRandomSkeletonLocationCount = $('#rpg_world_progression_random_skeleton_location_count');
-        const $wpRandomNarrativeLocationCount = $('#rpg_world_progression_random_narrative_location_count');
-        const $wpRandomLocationCountContainer = $('#rpg_world_progression_random_location_count_container');
-        const $wpRandomizeFactions = $('#rpg_world_progression_randomize_factions');
-        const $wpRandomSkeletonFactionCount = $('#rpg_world_progression_random_skeleton_faction_count');
-        const $wpRandomNarrativeFactionCount = $('#rpg_world_progression_random_narrative_faction_count');
-        const $wpRandomFactionCountContainer = $('#rpg_world_progression_random_faction_count_container');
-
         const $wpLookback = $('#rpg_world_progression_lookback');
         const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
         const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
@@ -10088,6 +10664,8 @@ RULES:
         const $wpLastReportVal = $('#rpg_world_progression_last_report_val');
         const $wpNextReportVal = $('#rpg_world_progression_next_report_val');
         const $wpGenerateNow = $('#rpg_world_progression_generate_now');
+        const $wpLocationsPerReport = $('#rpg_world_progression_locations_per_report');
+        const $wpLocationRandomize = $('#rpg_world_progression_location_randomize');
 
         /** Refreshes the "Last generated:" read-only display. */
         function updateWorldProgressionLastFiredDisplay() {
@@ -10144,6 +10722,16 @@ RULES:
             getSettings().worldProgressionHistoryLookback = parseInt(String($(this).val() || '')) || 0;
             saveSettings();
         });
+        $wpLocationsPerReport.val(settings.worldProgressionLocationsPerReport ?? 3).on('change', function () {
+            getSettings().worldProgressionLocationsPerReport = Math.max(1, Math.min(12, parseInt(String($(this).val()), 10) || 3));
+            $(this).val(getSettings().worldProgressionLocationsPerReport);
+            saveSettings();
+            $('#rt-agent-world-locations').val(getSettings().worldProgressionLocationsPerReport);
+        });
+        $wpLocationRandomize.prop('checked', settings.worldProgressionLocationRandomize !== false).on('change', function () {
+            getSettings().worldProgressionLocationRandomize = !!$(this).prop('checked');
+            saveSettings();
+        });
 
         const $wpConsolidateEnabled = $('#rpg_world_progression_consolidate_enabled');
         const $wpConsolidateInterval = $('#rpg_world_progression_consolidate_interval');
@@ -10167,77 +10755,6 @@ RULES:
             saveSettings();
         });
         updateConsolidateVisibility();
-
-        function updateRandomizersVisibility() {
-            if ($wpRandomizeNPCs.prop('checked')) {
-                $wpRandomNPCCountContainer.show();
-            } else {
-                $wpRandomNPCCountContainer.hide();
-            }
-            if ($wpRandomizeLocations.prop('checked')) {
-                $wpRandomLocationCountContainer.show();
-            } else {
-                $wpRandomLocationCountContainer.hide();
-            }
-            if ($wpRandomizeFactions.prop('checked')) {
-                $wpRandomFactionCountContainer.show();
-            } else {
-                $wpRandomFactionCountContainer.hide();
-            }
-
-        }
-
-        $wpRandomizeNPCs.prop('checked', !!settings.worldProgressionRandomizeNPCs).on('change', function () {
-            getSettings().worldProgressionRandomizeNPCs = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonNPCCount.val(settings.worldProgressionRandomSkeletonNPCCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonNPCCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeNPCCount.val(settings.worldProgressionRandomNarrativeNPCCount ?? 3).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeNPCCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomizeLocations.prop('checked', !!settings.worldProgressionRandomizeLocations).on('change', function () {
-            getSettings().worldProgressionRandomizeLocations = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonLocationCount.val(settings.worldProgressionRandomSkeletonLocationCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonLocationCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeLocationCount.val(settings.worldProgressionRandomNarrativeLocationCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeLocationCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomizeFactions.prop('checked', !!settings.worldProgressionRandomizeFactions).on('change', function () {
-            getSettings().worldProgressionRandomizeFactions = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
-
-        $wpRandomSkeletonFactionCount.val(settings.worldProgressionRandomSkeletonFactionCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomSkeletonFactionCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-        $wpRandomNarrativeFactionCount.val(settings.worldProgressionRandomNarrativeFactionCount ?? 2).on('input', function () {
-            getSettings().worldProgressionRandomNarrativeFactionCount = parseInt(String($(this).val() || '')) || 0;
-            saveSettings();
-        });
-
-
-
-        updateRandomizersVisibility();
 
         $wpLookback.val(settings.worldProgressionLookback ?? 0).on('input', function () {
             getSettings().worldProgressionLookback = parseInt(String($(this).val() || '')) || 0;
@@ -10468,7 +10985,6 @@ RULES:
         const $wpSkeletonUseExisting = $('#rpg_world_progression_skeleton_use_existing');
         const $wpSkeletonFactions = $('#rpg_world_progression_skeleton_factions');
         const $wpSkeletonLocations = $('#rpg_world_progression_skeleton_locations');
-        const $wpSkeletonNPCs = $('#rpg_world_progression_skeleton_npcs');
         const $wpSkeletonConflicts = $('#rpg_world_progression_skeleton_conflicts');
         const $wpSkeletonPrompt = $('#rpg_world_progression_skeleton_system_prompt');
         const $wpResetSkeletonPrompt = $('#rpg_world_progression_btn_reset_skeleton_prompt');
@@ -10549,26 +11065,18 @@ RULES:
             try {
                 const book = await ctx.loadWorldInfo(skeletonBookName);
                 const entries = book?.entries ? Object.values(book.entries) : [];
-                const count = entries.length;
-
-                // Per-category counts for pool display
-                const npcCount = entries.filter(e => e.extensions?.rpgCategory === 'NPC').length;
+                // Legacy NPC seeds remain on disk but are intentionally inert
+                // and absent from the macro-skeleton status.
                 const locCount = entries.filter(e => e.extensions?.rpgCategory === 'LOC').length;
                 const facCount = entries.filter(e => e.extensions?.rpgCategory === 'FAC').length;
+                const conflictCount = entries.filter(e => e.extensions?.rpgCategory === 'EVENT').length;
+                const count = locCount + facCount + conflictCount;
 
                 $wpSkeletonStatus.text(count > 0
-                    ? `${count} skeleton entries in "${skeletonBookName}" (NPC: ${npcCount}, LOC: ${locCount}, FAC: ${facCount})`
+                    ? `${count} macro skeleton entries in "${skeletonBookName}" (LOC: ${locCount}, FAC: ${facCount}, CONFLICT: ${conflictCount})`
                     : 'No skeleton generated.');
-
-                // Update pool-count spans in the Focus Randomization section
-                $('#rpg_world_progression_skeleton_npc_pool_count').text(npcCount);
-                $('#rpg_world_progression_skeleton_location_pool_count').text(locCount);
-                $('#rpg_world_progression_skeleton_faction_pool_count').text(facCount);
             } catch (_) {
                 $wpSkeletonStatus.text('No skeleton generated.');
-                $('#rpg_world_progression_skeleton_npc_pool_count').text('0');
-                $('#rpg_world_progression_skeleton_location_pool_count').text('0');
-                $('#rpg_world_progression_skeleton_faction_pool_count').text('0');
             }
         }
 
@@ -10634,11 +11142,6 @@ RULES:
 
         $wpSkeletonLocations.val(settings.worldProgressionSkeletonLocations ?? 4).on('input', function () {
             getSettings().worldProgressionSkeletonLocations = parseInt(String($(this).val() || '')) || 4;
-            saveSettings();
-        });
-
-        $wpSkeletonNPCs.val(settings.worldProgressionSkeletonNPCs ?? 0).on('input', function () {
-            getSettings().worldProgressionSkeletonNPCs = parseInt(String($(this).val() || '')) || 0;
             saveSettings();
         });
 
@@ -10954,6 +11457,7 @@ RULES:
             $('#rpg_tracker_chat_setup_link_enabled').prop('checked', !!s.chatSetupLinkEnabled);
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
+            $('#rpg_tracker_xp_bar_bottom').prop('checked', !!s.xpBarAtBottom);
             if (typeof globalThis._rpgSyncPanelBgSettingsUi === 'function') {
                 globalThis._rpgSyncPanelBgSettingsUi();
             } else {
@@ -10995,7 +11499,9 @@ RULES:
             $('#rpg_portrait_location_include_present_npcs').prop('checked', !!s.portraitLocationIncludePresentNpcs);
             $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
 
-            // Map Architect
+            // Persistent Maps
+            applyMapArchitectOpenerToUi(s.mapArchitectOpener);
+            syncMapArchitectOpenerNestedVisibility(s.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
             $('#rpg_map_architect_lookback').val(s.mapArchitectLookback ?? 12);
             $('#rpg_map_architect_max_tokens').val(s.mapArchitectMaxTokens ?? 25000);
             $('#rpg_map_architect_system_prompt').val(s.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT);
@@ -11011,10 +11517,21 @@ RULES:
             $('#rpg_map_architect_profile_group').toggle(s.mapArchitectConnectionSource === 'profile');
             $('#rpg_map_architect_ollama_group').toggle(s.mapArchitectConnectionSource === 'ollama');
             $('#rpg_map_architect_openai_group').toggle(s.mapArchitectConnectionSource === 'openai');
+            applyMapRuntimeConnectionSettingsToUi(s);
             $('#rpg_map_updater_enabled').prop('checked', s.mapUpdaterEnabled !== false);
             $('#rpg_map_updater_run_every').val(s.mapUpdaterRunEvery ?? 1);
-            $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 2500);
+            $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
             $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
+            $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
+            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 8);
+            $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours ?? 8);
+            $('#rpg_map_evolution_max_tokens').val(s.mapEvolutionMaxTokens ?? 25000);
+            $('#rpg_map_evolution_compress_enabled').prop('checked', s.mapEvolutionCompressEnabled !== false);
+            $('#rpg_map_evolution_compress_threshold').val(s.mapEvolutionCompressThreshold ?? 10000);
+            $('#rpg_map_evolution_narrator_commit_tokens').val(s.mapEvolutionNarratorCommitTokens ?? 2000);
+            applyMapEvolutionTickSettingsToUi(s);
+            $('#rpg_map_evolution_system_prompt').val(s.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT);
+            $('#rpg_map_evolution_compress_prompt').val(s.mapEvolutionCompressSystemPrompt || DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT);
 
             // Inventory/Core Prompt
             $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');
@@ -11067,9 +11584,9 @@ RULES:
 
             // World Progression
             $('#rpg_world_progression_enabled').prop('checked', !!s.worldProgressionEnabled);
-            $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-            $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-            $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
+            $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+            $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
+            $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
             $('#rpg_world_progression_skeleton_use_existing').prop('checked', !!s.worldProgressionSkeletonUseExisting);
             $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
             $('#rpg_world_progression_skeleton_lorebook_filter_group').toggle(!!s.worldProgressionSkeletonUseLorebooks);
@@ -11077,6 +11594,8 @@ RULES:
             syncSkeletonLorebookOnlyAvailability();
             if (s.worldProgressionSkeletonUseLorebooks) void refreshSkeletonLorebookList();
             $('#rpg_world_progression_consolidate_enabled').prop('checked', !!s.worldProgressionConsolidateEnabled);
+            if (typeof runtimeState.updateAgentWorldStatusRef === 'function') runtimeState.updateAgentWorldStatusRef();
+            if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') runtimeState.updateAgentMapEvolutionStatusRef();
 
             // Textareas (Agent prompt templates)
             if (typeof syncRouterPromptUi === 'function') syncRouterPromptUi();
@@ -11103,7 +11622,9 @@ RULES:
     // Fresh installs default to tracker on — schedule first apply so Main is stashed then overwritten.
     {
         const s = getSettings();
+        hydrateMainSyspromptBackup(s);
         if (s.enabled && !s.customSysprompt) scheduleAutoApply();
+        else scheduleDisabledTrackerMainRestore();
     }
 
     // Add wand button to toggle panel visibility
@@ -11151,6 +11672,21 @@ RULES:
         });
 
         wandContainer.appendChild(btn);
+
+        if (!document.getElementById('rpg_tracker_debug_wand_button')) {
+            const debugBtn = document.createElement('div');
+            debugBtn.id = 'rpg_tracker_debug_wand_button';
+            debugBtn.classList.add('list-group-item', 'flex-container', 'flexGap5');
+            debugBtn.innerHTML = `
+            <div class="fa-solid fa-screwdriver-wrench extensionsMenuExtensionButton"></div>
+            <span>Multihog Context Debugger</span>
+        `;
+            debugBtn.addEventListener('click', () => {
+                initializeDebugViewer();
+                toggleDebugViewer();
+            });
+            wandContainer.appendChild(debugBtn);
+        }
     }
 
     // ── Debug harness (safe to leave in — only runs when called manually) ──
@@ -11187,4 +11723,3 @@ RULES:
 /**
  * Renders the debug info into the Agent panel's debug drawer.
  */
-

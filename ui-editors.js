@@ -3,7 +3,7 @@ import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { toggleDebugViewer } from './debug-viewer.js';
-import { makeDraggable } from './ui-geometry.js';
+import { makeDraggable, makeResizableBR } from './ui-geometry.js';
 import { t } from './src/i18n/index.js';
 import { 
     saveSettings, 
@@ -22,6 +22,9 @@ import {
     autoApplySysprompt
 } from './src/app/runtime-bridge.js';
 import { renderMemoAsCards, MARKER_TYPE_MAP, getMarkerLibraryKeys } from './renderer.js';
+import { moveDisplayGroupInOrder, normalizeDisplayGroups } from './src/features/display-groups.js';
+import { applyMapArchitectOpenerToUi, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
+import { LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
 
 export function handleCategorySettings(tag, targetEl) {
     const existing = document.getElementById('rt-cat-settings-popup');
@@ -516,9 +519,10 @@ export function openCustomFieldEditor(index) {
                 </div>
             </div>
             <!-- Floating preview -->
-            <div id="rt_cfe_preview" class="rpg-tracker-panel" style="margin:0;display:none;flex-direction:column;cursor:default;height:auto;min-height:44px;width:300px;position:fixed;">
+            <div id="rt_cfe_preview" class="rpg-tracker-panel" style="margin:0;display:none;flex-direction:column;cursor:default;height:auto;min-width:220px;min-height:44px;width:300px;position:fixed;overflow:hidden;">
                 <div id="rt_cfe_preview_header" class="rpg-tracker-header" style="cursor:move;user-select:none;font-size:0.75em;opacity:0.7;padding:5px 10px;"><i class="fa-solid fa-grip-lines" style="margin-right:6px;"></i>UI Live Preview</div>
-                <div id="rt_cfe_preview_view" class="rpg-tracker-render-view"></div>
+                <div id="rt_cfe_preview_view" class="rpg-tracker-render-view" style="flex:1;min-height:0;overflow:auto;"></div>
+                <div id="rt_cfe_preview_resizer" class="rt-resizer-br" title="Resize preview from bottom-right"></div>
             </div>
         `;
     document.body.appendChild(overlay);
@@ -551,8 +555,10 @@ export function openCustomFieldEditor(index) {
         previewEl.style.top = modalRect.top + 'px';
         const previewHeader = document.getElementById('rt_cfe_preview_header');
         if (previewHeader) {
-            destroyPreviewDraggable = makeDraggable(previewEl, previewHeader);
+            destroyPreviewDraggable = makeDraggable(previewEl, previewHeader, 'rpg_tracker_geometry_custom_module_preview');
         }
+        const previewResizer = document.getElementById('rt_cfe_preview_resizer');
+        if (previewResizer) makeResizableBR(previewEl, previewResizer, 'rpg_tracker_geometry_custom_module_preview');
     }
 
     const renderPreviewInto = (targetEl) => {
@@ -716,7 +722,6 @@ export function openCustomFieldEditor(index) {
 
     document.getElementById('rt_cfe_cancel').onclick = close;
     document.getElementById('rt_cfe_close').onclick = close;
-    document.getElementById('rpg-tracker-debug-btn').onclick = () => toggleDebugViewer();
     document.getElementById('rt_cfe_export').onclick = () => {
         const { liveField } = resolveLiveField();
         exportModules([liveField || {
@@ -755,7 +760,83 @@ export function openCustomFieldEditor(index) {
     };
 }
 
+const STOCK_MODULE_PREVIEW_SAMPLES = Object.freeze({
+    COMBAT: `COMBAT ROUND 2
+ENEMIES:
+Goblin Scout: 8/12 HP
+Att/def: Shortsword (1 attack, +4 / 1d6+2 Piercing) | Leather Armor (AC: 13)
+Saves: Fort +2, Ref +4, Will +0
+Abilities: Nimble Escape
+Other: Minion Tier
+Status: Wounded`,
+    CHARACTER: `Adventurer (Ranger): 28/36 HP
+Combat: BAB: +4 | Ranged (1 attack): +7 | Melee (1 attack): +5 | Base AC: 13 | Total AC: 15
+Gear: Longbow (1d8 Piercing) | Leather Armor (+2 AC)
+Attr: STR 12 (+1), DEX 16 (+3), CON 14 (+2), INT 10 (+0), WIS 15 (+2), CHA 10 (+0)
+Status: Healthy`,
+    PARTY: `Elara (Cleric): 24/30 HP
+Combat: BAB: +3 | Ranged (1 attack): +3 | Melee (1 attack): +5 | Base AC: 10 | Total AC: 16
+Gear: Mace (1d6+2 Bludgeoning) | Chain Shirt (+4 AC) | Shield (+2 AC)
+Abilities: Channel Divinity (1/1)
+Spells: Level 1 (3/4): Bless, Cure Wounds
+Status: Healthy`,
+    INVENTORY: `Gear:
+- 🗡️ [Rare] [E] Flame Dagger +1 (1d6+2 Fire, +1 to hit) (~350 GP)
+- 🛡️ [Common] Iron Buckler (AC +2) (~15 GP)
+Other Items:
+- 🧪 [Uncommon] Healing Potion (Restores 2d4+2 HP) (~50 GP)
+- 💰 1,200 GP`,
+    ABILITIES: `Second Wind (Regain 1d10+4 HP, 1/1 per rest)
+Action Surge (Take one additional action, 1/1 per rest)
+Fighting Style: Archery (+2 to ranged attack rolls)`,
+    SPELLS: `Cantrips: Light, Mage Hand
+Level 1 (3/4): Hunter's Mark, Longstrider, Detect Magic
+Level 2 (2/3): Pass Without Trace, Lesser Restoration`,
+    XP: 'Level: 4 | XP: 3,250/6,500',
+    TIME: `Last Rest: 10:00 PM, Day 2
+Current Time: 08:35 AM, Day 3`,
+    QUESTS: `QUEST: The Missing Sheep
+  ID: quest_1746703200000
+  STATUS: active
+  GIVER: Farmer Hemwick @ Crestwood Mill
+  ACCEPTED: 08:00 AM, Day 1
+  REWARD: 100 GP
+  OBJ_ACTIVE: Find the missing sheep`,
+    'BENCHED PARTY': `Gareth (Fighter): 30/38 HP
+Status: Benched (08:08 AM, Day 1, investigating the docks)`,
+});
+
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Return the first complete block body for `tag`, or an empty string. */
+export function extractStockModulePreviewContent(source, tag) {
+    const normalizedTag = String(tag || '').trim().toUpperCase();
+    if (!normalizedTag) return '';
+    const pattern = new RegExp(`\\[${escapeRegExp(normalizedTag)}\\]([\\s\\S]*?)\\[\\/${escapeRegExp(normalizedTag)}\\]`, 'i');
+    return String(source || '').match(pattern)?.[1]?.trim() || '';
+}
+
+/** Build the isolated memo rendered by the stock-module editor's preview. */
+export function buildStockModulePreviewMemo(content, tag) {
+    const normalizedTag = String(tag || '').trim().toUpperCase();
+    if (!normalizedTag) return '';
+    const unwrapped = extractStockModulePreviewContent(content, normalizedTag);
+    const body = unwrapped || String(content || '').trim() || 'Nothing in testing sandbox';
+    return `[${normalizedTag}]\n${body}\n[/${normalizedTag}]`;
+}
+
+function getInitialStockModulePreviewContent(settings, blockTag, promptText) {
+    const normalizedTag = String(blockTag || '').trim().toUpperCase();
+    return extractStockModulePreviewContent(settings?.currentMemo, normalizedTag)
+        || STOCK_MODULE_PREVIEW_SAMPLES[normalizedTag]
+        || extractStockModulePreviewContent(promptText, normalizedTag)
+        || 'Example preview content';
+}
+
 export function openPromptEditor(blockTag, title, currentText, defaultText, onSave, promptModKey) {
+    const isSmallScreen = window.innerWidth <= 700;
     let overlay = document.getElementById('rt_pe_overlay');
 
     if (!overlay) {
@@ -771,13 +852,14 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
         overlay.style.display = 'flex';
         overlay.style.alignItems = 'center';
         overlay.style.justifyContent = 'center';
+        overlay.style.overflowY = 'auto';
         overlay.innerHTML = `
-                <div class="popup shadowBase" style="min-width: 400px; max-width: 600px;">
+                <div id="rt_pe_modal" class="popup shadowBase" style="width:min(600px,94vw);max-height:${isSmallScreen ? '90vh' : '850px'};margin:auto;display:flex;flex-direction:column;overflow:hidden;">
                     <div class="popup-header">
                         <h3 class="margin0" id="rt_pe_title">${t('editors.editPrompt', 'Editar Prompt')}</h3>
                         <div id="rt_pe_close" class="popup-close interactable" title="Close"><i class="fa-solid fa-times"></i></div>
                     </div>
-                    <div class="popup-body flex-container flexFlowColumn gap-1" style="padding: 10px;">
+                    <div class="popup-body flex-container flexFlowColumn gap-1" style="padding:10px;overflow-y:auto;flex:1;">
                         <!-- Layout Options -->
                         <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; padding:0 4px;">
                             <div style="display:flex; align-items:center; gap:6px;">
@@ -787,6 +869,12 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
                             </div>
                         </div>
                         <textarea id="rt_pe_text" class="text_pole" rows="10" style="width: 100%; resize: vertical;"></textarea>
+                        <div style="margin-top:8px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                <b style="font-size:13px;">Testing Sandbox (desktop only) <i class="fa-solid fa-circle-question" style="opacity:0.5;cursor:help;font-size:11px;" title="This box is only for testing how this stock module renders. Its contents are not sent to the AI or saved with the prompt."></i></b>
+                            </div>
+                            <textarea id="rt_pe_template" class="text_pole" rows="7" style="resize:vertical;width:100%;font-family:monospace;font-size:12px;" placeholder="Enter example module content to render in the live preview."></textarea>
+                        </div>
                         <div class="flex-container gap-1" style="display: flex; justify-content: flex-end;">
                             <button id="rt_pe_edit_ai" class="menu_button interactable" style="background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);"><i class="fa-solid fa-wand-magic-sparkles"></i> ${t('editors.editWithAi', 'Editar con IA')}</button>
                             <button id="rt_pe_reset" class="menu_button interactable" style="margin-right: auto;"><i class="fa-solid fa-arrow-rotate-left"></i> ${t('common.reset', 'Restablecer')}</button>
@@ -795,12 +883,18 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
                         </div>
                     </div>
                 </div>
+                <div id="rt_pe_preview" class="rpg-tracker-panel" style="margin:0;display:none;flex-direction:column;cursor:default;height:auto;min-width:220px;min-height:44px;max-height:calc(100vh - 24px);width:300px;position:fixed;overflow:hidden;">
+                    <div id="rt_pe_preview_header" class="rpg-tracker-header" style="cursor:move;user-select:none;font-size:0.75em;opacity:0.7;padding:5px 10px;"><i class="fa-solid fa-grip-lines" style="margin-right:6px;"></i>UI Live Preview</div>
+                    <div id="rt_pe_preview_view" class="rpg-tracker-render-view" style="flex:1;min-height:0;overflow:auto;"></div>
+                    <div id="rt_pe_preview_resizer" class="rt-resizer-br" title="Resize preview from bottom-right"></div>
+                </div>
             `;
         document.body.appendChild(overlay);
     }
 
     const titleEl = document.getElementById('rt_pe_title');
     const textEl = /** @type {HTMLTextAreaElement} */ (document.getElementById('rt_pe_text'));
+    const templateEl = /** @type {HTMLTextAreaElement} */ (document.getElementById('rt_pe_template'));
     const pageSizeEl = /** @type {HTMLInputElement} */ (document.getElementById('rt_pe_pagesize'));
     const saveBtn = document.getElementById('rt_pe_save');
     const resetBtn = document.getElementById('rt_pe_reset');
@@ -809,6 +903,10 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
 
     const modKey = promptModKey || blockTag.toLowerCase();
     const s = getSettings();
+    templateEl.value = getInitialStockModulePreviewContent(s, blockTag, currentText);
+    titleEl.textContent = title;
+    textEl.value = currentText;
+    overlay.style.display = 'flex';
     pageSizeEl.value = String(s.modulePageSizes?.[blockTag.toUpperCase()] ?? (blockTag.toUpperCase() === 'SPELLS' ? 5 : PAGE_SIZE));
     pageSizeEl.oninput = () => {
         if (!s.modulePageSizes) s.modulePageSizes = {};
@@ -817,14 +915,53 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
             s.modulePageSizes[blockTag.toUpperCase()] = val;
             saveSettings();
             refreshRenderedView();
+            schedulePreview();
         }
     };
 
-    const close = () => { overlay.style.display = 'none'; };
+    let destroyPreviewDraggable = null;
+    const previewEl = document.getElementById('rt_pe_preview');
+    if (previewEl && !isSmallScreen) {
+        previewEl.style.display = 'flex';
+        const modalRect = document.getElementById('rt_pe_modal').getBoundingClientRect();
+        const previewWidth = 300;
+        const gap = 20;
+        const rightSide = modalRect.right + gap;
+        const leftSide = modalRect.left - gap - previewWidth;
+        previewEl.style.left = (rightSide + previewWidth <= window.innerWidth - 8
+            ? rightSide
+            : Math.max(8, leftSide)) + 'px';
+        previewEl.style.top = Math.max(8, modalRect.top) + 'px';
+        const previewHeader = document.getElementById('rt_pe_preview_header');
+        if (previewHeader) destroyPreviewDraggable = makeDraggable(previewEl, previewHeader, 'rpg_tracker_geometry_stock_module_preview');
+        const previewResizer = document.getElementById('rt_pe_preview_resizer');
+        if (previewResizer) makeResizableBR(previewEl, previewResizer, 'rpg_tracker_geometry_stock_module_preview');
+    }
 
-    titleEl.textContent = title;
-    textEl.value = currentText;
-    overlay.style.display = 'flex';
+    const renderPreview = () => {
+        const renderView = document.getElementById('rt_pe_preview_view');
+        if (!renderView) return;
+        const previewMemo = buildStockModulePreviewMemo(templateEl.value, blockTag);
+        renderView.innerHTML = renderMemoAsCards(previewMemo, blockTag.toUpperCase(), _sectionPages);
+        bindRenderedCardEvents(renderView, previewMemo, true, renderPreview);
+    };
+
+    let previewTimer;
+    const schedulePreview = () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(renderPreview, 180);
+    };
+
+    templateEl.oninput = schedulePreview;
+
+    const close = () => {
+        clearTimeout(previewTimer);
+        if (destroyPreviewDraggable) destroyPreviewDraggable();
+        destroyPreviewDraggable = null;
+        overlay.remove();
+    };
+
+    renderPreview();
 
     const saveHandler = () => {
         if (!s.modulePageSizes) s.modulePageSizes = {};
@@ -840,6 +977,8 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
     const resetHandler = () => {
         if (confirm("Reset this prompt to the factory default?")) {
             textEl.value = defaultText;
+            templateEl.value = getInitialStockModulePreviewContent(s, blockTag, defaultText);
+            schedulePreview();
         }
     };
 
@@ -1104,6 +1243,8 @@ export function syncSettingsAndUI(updateFn) {
                 : (fresh.syspromptModules?.[key] ?? true);
         }
     }
+    applyMapArchitectOpenerToUi(fresh.mapArchitectOpener);
+    syncMapArchitectOpenerNestedVisibility(fresh.syspromptModules?.[LOCATION_MAPPING_SECTION_TAG] ?? true);
 
     const relBarsCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_npc_rel_bars'));
     if (relBarsCb) relBarsCb.checked = !!fresh.npcRelationshipBars;
@@ -1195,6 +1336,13 @@ export function refreshOrderList() {
         { label: 'Active modules', tags: order.filter(isTagEnabled), active: true },
         { label: 'Inactive module pool', tags: order.filter(tag => !isTagEnabled(tag)), active: false },
     ];
+    // Render a Display Group at its first member so its position is visible
+    // and editable without hiding the members' existing module controls.
+    const displayGroupsByFirstMember = new Map();
+    normalizeDisplayGroups(s.displayGroups).forEach(displayGroup => {
+        const firstMember = order.find(tag => displayGroup.members.includes(tag));
+        if (firstMember) displayGroupsByFirstMember.set(firstMember, displayGroup);
+    });
 
     groups.forEach(group => {
         if (!group.tags.length) return;
@@ -1205,6 +1353,9 @@ export function refreshOrderList() {
         list.appendChild(heading);
 
         group.tags.forEach((tag, groupIndex) => {
+        const displayGroup = displayGroupsByFirstMember.get(tag);
+        if (displayGroup) list.appendChild(buildDisplayGroupOrderRow(s, order, displayGroup));
+
         const index = order.indexOf(tag);
         const isStock = BLOCK_ORDER.includes(tag);
         const customIndex = s.customFields.findIndex(f => f.tag.toUpperCase() === tag);
@@ -1445,6 +1596,56 @@ export function refreshOrderList() {
         }
         });
     });
+}
+
+/** Builds the compact, reorderable row for a display-only module group. */
+function buildDisplayGroupOrderRow(settings, order, group) {
+    const memberSet = new Set(group.members);
+    const firstIndex = order.findIndex(tag => memberSet.has(tag));
+    const lastIndex = Math.max(...order.map((tag, index) => memberSet.has(tag) ? index : -1));
+    const isActive = settings.displayGroupsEnabled && group.enabled;
+
+    const item = document.createElement('div');
+    item.className = 'flex-container gap-1 alignitemscenter rt-order-item rt-display-group-order-item';
+    item.style.cssText = `padding:5px;border-radius:4px;border:1px dashed rgba(255,196,92,.55);background:${isActive ? 'rgba(255,196,92,.10)' : 'transparent'};opacity:${isActive ? '1' : '.6'};`;
+    item.title = 'Display-only group. Its arrows move all listed member modules together.';
+
+    const marker = document.createElement('span');
+    marker.textContent = '🗂️';
+    marker.style.margin = '0 5px';
+    const label = document.createElement('span');
+    label.style.cssText = 'flex:1;font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    label.textContent = `${group.icon} ${group.name} (${group.members.length})`;
+    const badge = document.createElement('span');
+    badge.textContent = 'DISPLAY GROUP';
+    badge.style.cssText = 'font-size:8px;color:#ffc45c;border:1px solid rgba(255,196,92,.45);border-radius:3px;padding:1px 4px;white-space:nowrap;';
+
+    const controls = document.createElement('div');
+    controls.className = 'flex-container gap-1';
+    const move = (direction) => {
+        settings.blockOrder = moveDisplayGroupInOrder(order, group.members, direction);
+        saveSettings();
+        refreshOrderList();
+        refreshRenderedView();
+    };
+    const upBtn = document.createElement('button');
+    upBtn.className = 'menu_button interactable rt-order-btn';
+    upBtn.style.padding = '2px 6px';
+    upBtn.title = 'Move Display Group up';
+    upBtn.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+    upBtn.disabled = firstIndex <= 0;
+    upBtn.onclick = () => move('up');
+    const downBtn = document.createElement('button');
+    downBtn.className = 'menu_button interactable rt-order-btn';
+    downBtn.style.padding = '2px 6px';
+    downBtn.title = 'Move Display Group down';
+    downBtn.innerHTML = '<i class="fa-solid fa-arrow-down"></i>';
+    downBtn.disabled = lastIndex >= order.length - 1;
+    downBtn.onclick = () => move('down');
+
+    controls.append(upBtn, downBtn);
+    item.append(marker, label, badge, controls);
+    return item;
 }
 
 /** Builds the nested "⛺ Benched Party" sub-row shown directly under PARTY in the module list. */

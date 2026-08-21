@@ -20,4 +20,9 @@ export const runtimeState = {
     refreshNpcManifest: async () => {},
     updateAgentWorldStatusRef: null,
     updateWorldProgressionLastFiredDisplayRef: null,
+    updateMapEvolutionScheduleDisplayRef: null,
+    refreshTrackerViewRef: null,
+    runMapEvolutionPassRef: null,
+    loadMappedEvolutionSiteRef: null,
+    isLoreOrMapAgentBusyRef: null,
 };

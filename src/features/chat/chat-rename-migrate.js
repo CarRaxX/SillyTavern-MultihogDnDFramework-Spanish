@@ -72,21 +72,20 @@ const KNOWN_PARTITION_KEYS = new Set([
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
     'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
+    'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionThreadsBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
+    'dungeonMapRevealAll',
+    'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
+    'mapEvolutionIntervalHoursBySite',
     'pcCharacterBlockSeeded', 'routerDirectPrompt',
     'routerDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
     'routerDefaultOrder', 'routerDefaultRole', 'loreInjectionPosition',
     'loreInjectionDepth', 'loreInjectionRole', 'worldProgressionLookback',
     'worldProgressionHistoryLookback', 'worldProgressionInjectionPosition',
     'worldProgressionInjectionDepth', 'worldProgressionInjectionRole',
-    'worldProgressionRandomizeNPCs', 'worldProgressionRandomSkeletonNPCCount',
-    'worldProgressionRandomNarrativeNPCCount', 'worldProgressionRandomizeLocations',
-    'worldProgressionRandomSkeletonLocationCount',
-    'worldProgressionRandomNarrativeLocationCount',
-    'worldProgressionRandomizeFactions', 'worldProgressionRandomSkeletonFactionCount',
-    'worldProgressionRandomNarrativeFactionCount',
-    'worldProgressionRandomizeConflicts', 'worldProgressionRandomConflictCount',
+    'worldProgressionLocationsPerReport', 'worldProgressionLocationRandomize',
+    'worldProgressionLocationLastAdvanced',
     'worldProgressionSkeletonFactions', 'worldProgressionSkeletonLocations',
-    'worldProgressionSkeletonNPCs', 'worldProgressionSkeletonConflicts',
+    'worldProgressionSkeletonConflicts',
     'worldProgressionLastFiredAtMinutes', 'worldProgressionLastFiredPeriodLabel',
     'worldProgressionSkeletonAtmosphereSummary',
     'worldProgressionSkeletonAtmosphereLookback',
@@ -94,6 +93,7 @@ const KNOWN_PARTITION_KEYS = new Set([
     'worldProgressionSkeletonLorebookFilter', 'worldProgressionSkeletonLorebookOnly',
     'worldProgressionConsolidateEnabled', 'worldProgressionConsolidateInterval',
     'worldProgressionExclusionList', 'use24hTime', 'useDdMmYyFormat',
+    'mapEvolutionWorldReportLookback', 'mapEvolutionWorldReportApplications',
     'initialDate', 'initialTime', 'npcRelationshipMax', 'npcRelationshipValues',
     'npcRelationshipLog', 'setup', 'campaignBooks',
     'lastImmersionSceneArtPath', 'lastImmersionSceneArtChatLen',
@@ -116,7 +116,8 @@ export function partitionHasCampaignSubstance(p) {
 
     if (Object.keys(p).some((key) => !KNOWN_PARTITION_KEYS.has(key))) return true;
     if (['currentMemo', 'lastDelta', 'worldProgressionLastFiredPeriodLabel',
-        'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath']
+        'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath',
+        'mapEvolutionLastSiteRoot']
         .some((key) => hasText(p[key]))) return true;
     if (['combatDefeatedUi', 'memoHistory', 'dungeonMapHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
@@ -124,7 +125,14 @@ export function partitionHasCampaignSubstance(p) {
     if (hasMapEntries(p.customPortraits) || hasMapEntries(p.customLocationImages)
         || hasMapEntries(p.dungeonReality?.sites)
         || hasMapEntries(p.npcRelationshipValues)
-        || hasMapEntries(p.npcRelationshipLog)) return true;
+        || hasMapEntries(p.npcRelationshipLog)
+        || hasMapEntries(p.mapEvolutionLastFiredBySite)
+        || hasMapEntries(p.mapEvolutionBacklogBySite)
+        || hasMapEntries(p.mapEvolutionThreadsBySite)
+        || hasMapEntries(p.mapEvolutionWorldReportApplications)
+        || hasMapEntries(p.mapEvolutionIntervalHoursBySite)
+        || hasMapEntries(p.worldProgressionLocationLastAdvanced)
+        || hasItems(p.mapEvolutionSelectedRoots)) return true;
     if (Object.prototype.hasOwnProperty.call(p, 'playerCharacter') && p.playerCharacter != null) return true;
     if ((Number.isFinite(Number(p.historyIndex)) && Number(p.historyIndex) >= 0)
         || (Number(p.routerLastRunChatLength) || 0) > 0

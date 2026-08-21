@@ -65,7 +65,7 @@ ${COMBAT_SCOPE_RULE}
 
 export const DEFAULT_ROUTER_AUTO_PASS_RESTRICTION = `- RESTRICCIÓN DE PASE AUTOMÁTICO: Combat Profile es el único campo [CORE] que puedes actualizar en este pase vía UPDATE_CORE / commit.core. No modifiques Especie, Personalidad, Trasfondo, Hábitos, Fortalezas o Defectos a menos que el usuario dé una instrucción explícita este turno (Prompt Directo). Los cambios de equipo o cuerpo usan UPDATE_APPEARANCE / UPDATE_EQUIPMENT en su lugar.`;
 
-export const DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION = `- PASE DE PROMPT DIRECTO: puedes actualizar cualquier campo de identidad [CORE] elegible ({{eligibleCoreFields}}) cuando la instrucción del usuario lo justifique. Los cambios de equipo o cuerpo siguen usando UPDATE_APPEARANCE / UPDATE_EQUIPMENT.`;
+export const DEFAULT_ROUTER_MANUAL_PASS_RESTRICTION = `- PASE DE PROMPT DIRECTO: puedes actualizar cualquier campo de identidad [CORE] elegible ({{eligibleCoreFields}}) cuando la instrucción del usuario lo justifique. Los cambios de equipo o cuerpo siguen usando UPDATE_APPEARANCE / UPDATE_EQUIPMENT. Conserva etiquetas <font color=#RRGGBB>texto</font> y códigos de color hexadecimales; escribe atributos hexadecimales sin comillas (nunca color="#RRGGBB") para que las llamadas a herramientas JSON sigan siendo válidas.`;
 
 export const DEFAULT_ROUTER_EXISTING_NPC_NUDGE = `- Para momentos notables de un PNJ existente que no alteren ningún campo [CORE], añade una línea de crónica/EVENTO con marca de tiempo para que el evento no se pierda.`;
 

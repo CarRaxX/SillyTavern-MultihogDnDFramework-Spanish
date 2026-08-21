@@ -3,6 +3,7 @@ import {
     getSettings,
     persistMapUpdaterLastRunTimestamp,
     persistMapUpdaterLastRunWatermark,
+    persistMapEvolutionState,
 } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import {
@@ -19,12 +20,22 @@ import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import {
+    extractPartyMemberNames,
+    formatPartyRosterForMapUpdater,
+    isPartyMemberAssetName,
+} from './map-updater-lib.js';
+import {
+    appendEvolutionThreads,
+    threadsFromMapTransaction,
+} from './map-evolution-lib.js';
+import {
     applyActiveDungeonMapCommit,
     isRouterRunning,
     loadActiveDungeonMapContext,
     restoreCampaignLocationsBook,
     snapshotCampaignLocationsBook,
 } from './router.js';
+import { isMapEvolutionRunning } from './map-evolution.js';
 
 const MAX_CORRECTION_ATTEMPTS = 2;
 const swipeSnapshots = new Map();
@@ -76,15 +87,15 @@ export function isMapUpdaterNoop(value) {
 
 function requestSettings(settings) {
     return {
-        connectionSource: settings.mapArchitectConnectionSource || 'default',
-        connectionProfileId: settings.mapArchitectConnectionProfileId || '',
-        completionPresetId: settings.mapArchitectCompletionPresetId || '',
-        ollamaUrl: settings.mapArchitectOllamaUrl || 'http://localhost:11434',
-        ollamaModel: settings.mapArchitectOllamaModel || '',
-        openaiUrl: settings.mapArchitectOpenaiUrl || '',
-        openaiKey: settings.mapArchitectOpenaiKey || '',
-        openaiModel: settings.mapArchitectOpenaiModel || '',
-        maxTokens: Math.max(400, Number(settings.mapUpdaterMaxTokens) || 2500),
+        connectionSource: settings.mapRuntimeConnectionSource || 'default',
+        connectionProfileId: settings.mapRuntimeConnectionProfileId || '',
+        completionPresetId: settings.mapRuntimeCompletionPresetId || '',
+        ollamaUrl: settings.mapRuntimeOllamaUrl || 'http://localhost:11434',
+        ollamaModel: settings.mapRuntimeOllamaModel || '',
+        openaiUrl: settings.mapRuntimeOpenaiUrl || '',
+        openaiKey: settings.mapRuntimeOpenaiKey || '',
+        openaiModel: settings.mapRuntimeOpenaiModel || '',
+        maxTokens: Math.max(1000, Number(settings.mapUpdaterMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };
 }
@@ -165,11 +176,37 @@ function formatFailure(errors) {
 
 function kindRule(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT interiors the party actually enters are OBJECT assets in the current district, not new areas. Named people are CREATURE or GROUP. If CURRENT LOCATION names a more specific interior after the district and that name is not already an OBJECT asset, ADD_ASSET it. The footer is sufficient even when RECENT STORY is empty.'
+        ? 'SETTLEMENT interiors the party actually enters are OBJECT assets in the current district, not new areas. Named people are CREATURE. Unnamed bands, watches, and crowds are one GROUP with count. If CURRENT LOCATION names a more specific interior after the district and that name is not already an OBJECT asset, ADD_ASSET it. The footer is sufficient even when RECENT STORY is empty.'
         : 'If the party enters a newly invented room the map lacks, ADD_AREA from the narrative.';
 }
 
-function initialUserPrompt(loaded, recentStory) {
+function partyRosterSection(memo) {
+    const roster = formatPartyRosterForMapUpdater(memo);
+    if (!roster) return '';
+    return `
+## PARTY (do not add as assets)
+These names are the active party. Never ADD_ASSET them.
+${roster}
+`;
+}
+
+function rejectPartyMemberAssets(transaction, memo) {
+    const partyNames = extractPartyMemberNames(memo);
+    if (!partyNames.length || !transaction || typeof transaction !== 'object') return [];
+    const ops = Array.isArray(transaction.operations) ? transaction.operations : [];
+    return ops.flatMap((operation, index) => {
+        if (String(operation?.op || '').toUpperCase() !== 'ADD_ASSET') return [];
+        const name = String(operation?.name || '').trim();
+        if (!isPartyMemberAssetName(name, partyNames)) return [];
+        return [{
+            code: 'PARTY_MEMBER_NOT_AN_ASSET',
+            path: `operations[${index}].name`,
+            hint: `"${name}" is a [PARTY] member. Do not ADD_ASSET the player or party. Omit this operation.`,
+        }];
+    });
+}
+
+function initialUserPrompt(loaded, recentStory, memo, currentTime) {
     const kind = normalizeMapSiteKind(loaded.context.document?.kind);
     return `UPDATE THE ATTACHED MAP
 Exact site root: ${loaded.context.siteRoot}
@@ -179,6 +216,10 @@ ${kindRule(kind)}
 ## CURRENT LOCATION
 ${loaded.currentLocation || 'Unknown'}
 Parsed from the narrator status footer. A more specific interior on this line is a durable map fact. If RECENT STORY is empty, still apply CURRENT LOCATION.
+${partyRosterSection(memo)}
+## CURRENT IN-WORLD TIME (AUTHORITATIVE)
+${currentTime || 'Unknown'}
+Compare absolute asset duration timestamps against this value. A met or passed boundary is a durable map fact even when RECENT STORY does not narrate it.
 
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
@@ -189,7 +230,7 @@ ${recentStory || '(No additional recent context.)'}
 Output only the required JSON object. Use {"noop":true} when no durable map fact changed.`;
 }
 
-function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt) {
+function correctionPrompt(loaded, recentStory, priorOutput, errors, attempt, memo, currentTime) {
     return `CORRECTION PASS ${attempt}
 Your previous map update was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -203,6 +244,9 @@ ${priorOutput}
 
 ## CURRENT LOCATION
 ${loaded.currentLocation || 'Unknown'}
+${partyRosterSection(memo)}
+## CURRENT IN-WORLD TIME (AUTHORITATIVE)
+${currentTime || 'Unknown'}
 
 ## CURRENT MAP
 ${formatDungeonMapForUpdater(loaded.context.document, loaded.currentLocation)}
@@ -240,21 +284,21 @@ export async function maybeRollbackMapUpdaterForSwipe(msg) {
 
 /**
  * One occupancy-maintenance pass for the currently mapped site.
- * Skips when Location Mapping is off, no map is active, Lorebook Agent is busy, or auto-updates are disabled.
+ * Skips when Persistent Maps is off, no map is active, Lorebook Agent is busy, or auto-updates are disabled.
  * @param {{ isManual?: boolean, lookback?: number|null }} [options]
  */
 export async function runMapUpdaterPass({ isManual = false, lookback = null } = {}) {
     const settings = getSettings();
     if (settings.mapUpdaterEnabled === false && !isManual) return { skipped: 'disabled' };
     if (!isLocationMappingEnabled(settings)) return { skipped: 'location_mapping_off' };
-    if (_mapUpdaterRunning || _mapUpdaterStarting || isRouterRunning()) return { skipped: 'busy' };
+    if (_mapUpdaterRunning || _mapUpdaterStarting || isRouterRunning() || isMapEvolutionRunning()) return { skipped: 'busy' };
 
     const ctx = SillyTavern.getContext();
     _mapUpdaterStarting = true;
     try {
         const loaded = await loadActiveDungeonMapContext();
         if (!loaded?.context) return { skipped: 'no_active_map' };
-        if (_mapUpdaterRunning || isRouterRunning()) return { skipped: 'busy' };
+        if (_mapUpdaterRunning || isRouterRunning() || isMapEvolutionRunning()) return { skipped: 'busy' };
 
         _mapUpdaterRunning = true;
         if (_mapUpdaterController) _mapUpdaterController.abort();
@@ -268,8 +312,10 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
 
         const snapshot = await snapshotCampaignLocationsBook();
         const recentStory = recentStoryContext(ctx, settings, { isManual, lookback });
+        const memo = settings.currentMemo || '';
+        const currentTime = currentTimeFrom(settings, recentStory);
         const systemPrompt = String(settings.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).trim();
-        let prompt = initialUserPrompt(loaded, recentStory);
+        let prompt = initialUserPrompt(loaded, recentStory, memo, currentTime);
         let lastIssues = [];
 
         for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -289,7 +335,16 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             if (!parsed.value) {
                 lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
+                    continue;
+                }
+                break;
+            }
+            const partyIssues = rejectPartyMemberAssets(parsed.value, memo);
+            if (partyIssues.length) {
+                lastIssues = partyIssues;
+                if (attempt < MAX_CORRECTION_ATTEMPTS) {
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
@@ -300,22 +355,21 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
                 broadcastStep('finish', 'Noop — no durable map fact changed.');
                 return { ok: true, noop: true };
             }
-            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value);
+            const validation = applyDungeonMapTransaction(loaded.context.document, parsed.value, { currentTime });
             if (!validation.ok) {
                 lastIssues = validation.errors || [];
                 if (attempt < MAX_CORRECTION_ATTEMPTS) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
             }
             broadcastStep('result', summarizeMapUpdaterOperations(parsed.value) || 'Transaction accepted.');
-            const currentTime = currentTimeFrom(settings, recentStory);
             const mapResult = await applyActiveDungeonMapCommit(parsed.value, loaded.context, loaded.books, currentTime);
             if (!mapResult.ok) {
                 lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
                 if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
-                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1);
+                    prompt = correctionPrompt(loaded, recentStory, output, lastIssues, attempt + 1, memo, currentTime);
                     continue;
                 }
                 break;
@@ -329,6 +383,15 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null } = 
             } else {
                 const n = Array.isArray(parsed.value.operations) ? parsed.value.operations.length : 0;
                 broadcastStep('finish', `Applied ${n} operation${n === 1 ? '' : 's'}.`);
+                settings.mapEvolutionThreadsBySite = appendEvolutionThreads(
+                    settings.mapEvolutionThreadsBySite,
+                    loaded.context.siteRoot,
+                    threadsFromMapTransaction(parsed.value, {
+                        at: currentTime,
+                        createdAssets: mapResult.createdAssets || [],
+                    }),
+                );
+                persistMapEvolutionState();
             }
             return { ok: true, result: mapResult };
         }

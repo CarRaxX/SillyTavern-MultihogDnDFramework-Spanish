@@ -1,11 +1,17 @@
 > 🇪🇸 **Versión en Español:** Para consultar la guía completa en español, lee [README.es.md](README.es.md).
 
-### New: Persistent maps. The framework now generates persistent maps that are automatically updated. Explore a dungeon or a town, leave, come back later, and it's still there as it was. Dungeons are no longer hallucinated but skill checks actually matter.
+### 📢 New: Persistent maps and autonomous map evolution/activity. The framework now generates persistent maps that are automatically updated and even evolved offscreen. Dungeons are also no longer hallucinated but skill checks actually matter. Explore a dungeon or a town, leave, come back later, and continue. What you come back to is likely not the exact same thanks to Map Evolution. The dungeon might've repopulated, enemies might've set up ambushes, started their proto-cultural projects, and so on. Settlements evolve too.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/9f5e6fec-9ea6-45fb-b514-9a89ee882d4c" width="100%" alt="Combat in progress" />
+  <img src="https://github.com/user-attachments/assets/7c7f3f2a-6b9c-4d97-8787-57f70992c1c0" width="75%" alt="Combat in progress" />
   <br>
   <em>Dungeon Area Map</em>
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/a9873a1e-9bdb-450f-98b4-fdf779b593a6" width="75%" alt="Combat in progress" />
+  <br>
+  <em>Map Assets</em>
 </p>
 
 ---
@@ -37,7 +43,8 @@ I know it says "D&D Framework," but in addition to fantasy, the system works jus
    - RNG Queue: Pre-seeded deterministic dice injected into every turn. Cheaper than using tool calls and very smooth when a lot of rolls are used in sequence such as in combat.
    - Tool Call RNG: Enables a commitment logic where the AI must declare a DC before seeing the result, completely preventing sycophancy.
 3. 🤖 **Lorebook Agent** - Automatically creates, activates/deactivates, updates, consolidates, etc, lorebook entries, ensuring long-term memory despite summarization.
-4. 🌍 **World Progression** - A system that creates daily (or more frequent) reports about NPC/world affairs using existing lore entries as well as an optional world "skeleton" created beforehand. The world moves regardless of you.
+4. 🌍 **World Progression** - A location-centric macro simulator that creates daily (or more frequent) prose reports from readable location lore and an optional world skeleton. Reports steer the narrator immediately and are realized lazily by Map Evolution; granular entities and hidden maps remain outside WP authority.
+5. 🗺️ **Map Evolution** - Dungeons and settlements evolve autonomously. Enemies may repopulate or set up ambushes, third-party scavengers may enter, etc.
 
 Together they solve the four core problems of LLM tabletop RP: the AI forgetting your inventory/spells, the AI forgetting long-term context, you always winning (aka. plot armor), and the world being static outside of the immediate player's bubble. I have high confidence in the system's reliability—you can just play and not worry about tinkering with much of anything.
 
@@ -88,11 +95,11 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 1. **Initial Setup:** Use the archetype buttons on the empty tracker to roll a new character, or paste an existing sheet into the "Raw View" (if your sheet doesn't align with what the UI expects, ask the model via 💬 to fix the formatting). Create a character card for your "narrator," such as Simulation Engine that I use. You can also name it something like Game Master.
 2. **Auto-Tracking:** As you roleplay, the extension intelligently parses assistant responses. It detects losses of HP, new loot, or combat triggers, stitching together multi-part tool-call responses and running background passes to update the state.
 3. **Prompt Injection & Execution:** The State Memo and RNG Queue are injected seamlessly into your outgoing prompt to act as the "source of truth." For narrative actions, the framework dynamically catches and resolves the AI's `RollTheDice` tool calls.
-4. **World Progression Skeleton & Settings:** Optionally, create a "world skeleton" for the World Progression component to inject broader macroscopic content into the context/world in the world reports. Optionally set up the randomizers from the WP settings to determine how much skeleton and organic (Lorebook Agent) content is used in world updates.
+4. **World Progression Skeleton & Settings:** Optionally create a macro-only world skeleton of locations, factions, and conflicts. Locations become simulation subjects while factions and conflicts provide wider context; named NPCs are established through play and ordinary lore instead.
 
 ### Initial Setup Video Guide
 
-https://youtu.be/dKKFQqrH7qQ
+https://www.youtube.com/watch?v=82Lt9pRYFS0
 
 ---
 
@@ -140,18 +147,26 @@ These are recommendations, not rules — experiment. Different models shine for 
 
 <div align="center">
   <figure>
-    <img width="1918" height="982" alt="Screenshot 2026-06-18 195917" src="https://github.com/user-attachments/assets/7eb15c2b-bfd8-4193-8553-4053bac14c34" />
+    <img width="1918" height="982" alt="Screenshot 2026-06-18 195917" src="https://github.com/user-attachments/assets/9cd3fc04-a8b3-40f7-86fd-64b21adffc0f" />
   </figure>
 </div>
 
 ---
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/1de1d4cf-229f-447a-adc0-ab4aaaced139" width="60%" alt="Combat in progress" />
+  <img src="https://github.com/user-attachments/assets/1539fb88-2db5-4b32-86cb-2f34400cdf35" width="60%" alt="Combat in progress" />
   <br>
   <em>Visualization Mode</em>
 </p>
 
 ---
+
+## License
+
+Copyright (c) 2026 MultihogAurelius
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+See [LICENSE](LICENSE) for the full text.
 
 ## Got a Question or Ideas?
 You can find me in the SillyTavern Discord extensions forum. Join the Discord and then head to the sub-forum there: https://discord.gg/sillytavern

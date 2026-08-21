@@ -11,6 +11,7 @@ import { buildDisplayGroupRenderPlan } from './src/features/display-groups.js';
 
 const DEFAULT_HP_COLOR = '#00ffaa';
 const DEFAULT_XP_COLOR = 'linear-gradient(90deg, #0088ff, #00d4ff)';
+const BUY_ME_A_COFFEE_ICON = new URL('./src/ui/buy_me_a_coffee-63ed78263f6e.svg', import.meta.url).href;
 
 /** CSS tint for any browser-supported solid color token (named or hexadecimal). */
 function makeColorTintStyle(color, backgroundPct = 12, borderPct = 40) {
@@ -207,7 +208,13 @@ export function renderDayNightBadge(str) {
         const displayLabelText = SUB_LABEL_TRANSLATIONS[rawLabelText.toLowerCase()] || rawLabelText;
         const value = translateSubFieldValue(rawValue);
 
-        const colorLabel = rule.color && !['badge', 'badge_colored', 'pills', 'pill_colored'].includes(rule.renderType);
+        // Badge color overrides belong to the badge value itself. Applying the
+        // same color to a preceding label (for example `Status:` in
+        // `Status: ((BADGEPINK)) Respected`) visually merges the label into the
+        // badge styling even though it is not part of the badge.
+        // A BAR color is a fill color, not a text color. Keeping it off the
+        // label means `Hunger: ((BARBLUE)) 75/100` colors only the bar.
+        const colorLabel = rule.color && !['badge', 'badge_colored', 'pills', 'pill_colored', 'hp_bar', 'xp_bar', 'progress'].includes(rule.renderType);
         const labelStyle = colorLabel ? ` style="color:${rule.color}"` : '';
         const labelHtml  = displayLabelText
             ? `<span class="rt-entity-sub-label"${labelStyle}>${escapeHtmlWithColor(displayLabelText)}</span>`
@@ -296,7 +303,7 @@ export function renderDayNightBadge(str) {
                         : 'linear-gradient(90deg,#e74c3c,#c0392b)';
                     if (barId) barBg = getBarBackground(barId, barBg, pct);
 
-                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${rule.color ? 'true' : 'false'}" title="Click to recolor"` : '';
 
                     const showAsPct = getBarShowAsPercentage(barId);
                     const dispCur = showAsPct ? Math.round(pct) : cur;
@@ -1668,13 +1675,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         if (inlineEntityName) {
                             results.push(`<div class="rt-entity-row" style="display:block; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
                                 <div class="rt-entity-name" style="font-size:1.1em; margin-bottom:6px;">${escapeHtmlWithColor(currentEntity)}</div>
-                                <div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''} style="position:relative; height:14px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,0.1); margin-bottom:4px; width:100%;">
+                                <div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''} style="position:relative; height:14px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,0.1); margin-bottom:4px; width:100%;">
                                     <div class="rt-hp-bar" style="width:${pct.toFixed(1)}%; height:100%; border-radius:4px; background:${barBg}; transition:width 0.3s;"></div>
                                 </div>
                                 <span class="rt-hp-label" style="display:block; font-size:0.82em; opacity:0.85; text-align:left; line-height:1.2;">${label}</span>
                             </div>`);
                         } else {
-                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
+                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
                         }
 
                         if (status) {
@@ -2116,6 +2123,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             const startTimeInputVal = obSettings.initialTime || '08:00 AM';
 
             return `<div class="rt-empty" style="text-align: left; align-items: flex-start; padding: 12px; gap: 10px; overflow-y: auto;">
+                <a class="rt-bmc-btn" href="https://buymeacoffee.com/multihog" target="_blank" rel="noopener noreferrer" title="Buy Me a Coffee">
+                    <img src="${escapeHtml(BUY_ME_A_COFFEE_ICON)}" alt="" width="14" height="20">
+                    <span>Buy Me a Coffee</span>
+                </a>
                 <div style="text-align: center; width: 100%; margin-bottom: 2px; flex-shrink: 0;">
                     <div class="rt-empty-icon rt-onboarding-crest" aria-label="Fencers guarding a shield">
                         <span class="rt-onboarding-crest-fencer" aria-hidden="true">🤺</span>
@@ -2486,29 +2497,40 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <b>NOTA:</b> Multihog D&amp;D Framework aplica automáticamente su propio prompt del sistema. Si deseas restaurar tu prompt anterior, ve a los ajustes de la extensión: General y Visual -> Núcleo -> Restaurar copia de seguridad al Principal.
                 </div>
 
-                <div class="rt-onboarding-chat-tip" role="note">
-                    <div class="rt-onboarding-chat-tip-title">¿Necesitas ayuda? Abre <b>CHAT</b> en el encabezado del Rastreador de Estado</div>
-                    <div class="rt-onboarding-chat-tip-body">Habla con el <b>Acompañante de Aventura</b> para recibir ayuda con el Multihog o discutir tu historia. Activa el Modo Tutorial en CHAT cuando quieras incluir la guía completa del framework adjunta a cada solicitud. O entra a nuestro Discord en la sección de extensiones: <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">https://discord.gg/sillytavern</a>.</div>
-                    <div class="rt-onboarding-chat-tip-body" style="margin-top: 6px;">Aquí tienes un video tutorial para empezar: <a href="https://www.youtube.com/watch?v=dKKFQqrH7qQ" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=dKKFQqrH7qQ</a></div>
-                </div>
-
-                <div style="font-size: 13px; opacity: 0.9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; line-height: 1.4;">
+                <div class="rt-onboarding-how-it-works">
                     <div><b style="color: var(--rt-accent);">Seguimiento Automático:</b> Conforme juegas, la extensión analiza inteligentemente las respuestas del asistente utilizando lenguaje natural. Detecta pérdidas de PV, nuevo botín o activaciones de combate, ejecutando pases en segundo plano para actualizar el estado.</div>
 
                     <div><b style="color: var(--rt-accent);">Inyección en el Prompt:</b> El State Memo y la Cola RNG se inyectan sin problemas en tu prompt saliente. Actúa como la "fuente de la verdad", asegurando que el modelo narrador/DM vea con precisión PV, inventario y resultados mecánicos. ¡FUNCIONA PERFECTAMENTE!</div>
 
                     <div><b style="color: var(--rt-accent);">Agente de Lorebook 🤖:</b> Ábrelo desde la pestaña <b>Agente de Lorebook</b> en la parte superior del panel del Rastreador de Estado y preferiblemente desacóplalo. Gestiona de forma autónoma tu libro de lore (creando, actualizando, activando, desactivando y eliminando entradas). Haz clic en <b>?</b> dentro del panel del agente para ver la documentación completa.</div>
 
-                    <div><b style="color: var(--rt-accent);">Progresión del Mundo 🌍:</b> Simula la actividad del mundo fuera de escena generando informes de eventos a intervalos regulares dentro del juego (por ejemplo, diarios). Puedes inicializar la simulación con un Esqueleto del Mundo opcional para introducir facciones, ubicaciones, PNJs y conflictos no descubiertos. Configura estas opciones en la sección Progresión del Mundo dentro del menú de Ajustes de la Extensión.</div>
+                    <div><b style="color: var(--rt-accent);">Progresión del Mundo 🌍:</b> Simula las condiciones a escala de ubicación y corrientes generales a intervalos regulares del mundo. Lee dosieres completos de lore de ubicaciones sin mapas ocultos, rota por los lugares menos cubiertos recientemente y redacta prosa direccional para el narrador y posteriores pasadas de Evolución de Mapas. Un Esqueleto del Mundo puede sembrar ubicaciones no descubiertas y contexto regional. La consolidación de atrasos comprime informes antiguos. Configura estas opciones dentro de Progresión del Mundo en los Ajustes de la Extensión.</div>
+
+                    <div><b style="color: var(--rt-accent);">Evolución de Mapas 🗺️:</b> Hace que los mapas y ubicaciones sean dinámicos. Las mazmorras y pueblos evolucionan y generan hilos argumentales de forma autónoma en segundo plano (o incluso mientras estás en el lugar). ¿Limpiaste media mazmorra, saliste y volviste? Los enemigos pueden haber recibido refuerzos o preparado emboscadas. Se puede configurar para ejecutarse con mayor o menor frecuencia en la sección de Mapas Persistentes de los ajustes.</div>
+                </div>
+
+                <div class="rt-onboarding-divider"><span>¿Necesitas Ayuda?</span></div>
+
+                <div class="rt-onboarding-chat-tip" role="note">
+                    <div class="rt-onboarding-chat-tip-title">¿Necesitas ayuda? Prueba esto:</div>
+                    <ol class="rt-onboarding-help-list">
+                        <li>Mira este <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">video tutorial básico</a> para empezar.</li>
+                        <li>Habla con el bot <button type="button" class="rt-onboarding-open-chat" id="rt-onboarding-open-chat">Acompañante de Aventura</button>. Tiene acceso a una guía completa del framework cuando el Modo Tutorial está habilitado.</li>
+                        <li>Únete al <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">Discord de SillyTavern</a> y entra a la sección de extensiones para consultar dudas directamente.</li>
+                    </ol>
                 </div>
 
                 <div class="rt-onboarding-divider"><span>Guía de Configuración</span></div>
 
-                <div style="font-size: 13px; opacity: 0.9; flex-shrink: 0; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
-                    <b style="color: var(--rt-accent); font-size: 14px;">Configuración Inicial:</b><br><br>
-                    1. Crea una ficha de personaje para tu "narrador" (ej. Director de Juego). <b>Deja los campos vacíos</b>, ya que el framework gestiona toda la lógica mediante el prompt del sistema.<br><br>
-                    2. Usa una de las opciones de creación de personajes anteriores para definir tu personaje. Puedes usar la opción Creador de Personajes para especificar los detalles, usar "Otras Formas de Iniciar" para un resumen rápido o usar "Acción Instantánea" para que la extensión genere automáticamente todo lo que dejes sin especificar.<br><br>
-                    3. Si utilizas el modo RNG híbrido que combina llamadas a herramientas con la Cola RNG pre-generada de la extensión, asegúrate de activar <b>Habilitar llamadas a funciones</b> en la configuración de IA. De lo contrario, la herramienta <b>RollTheDice</b> no funcionará.<br><br>
+                <div class="rt-onboarding-setup-guide">
+                    <b class="rt-onboarding-setup-title">Configuración Inicial:</b>
+                    <ol class="rt-onboarding-setup-list">
+                        <li>Asegúrate de que las <b>Llamadas a Funciones (Function Calling)</b> estén habilitadas en tu ajuste de Chat Completion si deseas tiradas de dados híbridas y el abridor por defecto de Mapas Persistentes (<b>CreateAreaMap</b>). Puedes omitir las llamadas a funciones: configura el abridor del Arquitecto de Mapas en <b>Comando de texto</b> bajo Configuración del Narrador (cuando Mapas Persistentes esté activado) y usa la Cola RNG. Puedes desactivar Mapas Persistentes en Sistemas de Juego / Componentes.</li>
+                        <li>Configura tus conexiones en los ajustes de conexión de la extensión. Recomiendo un modelo ligero, rápido y económico para todo excepto para el narrador/GM principal. Más detalles abajo.</li>
+                        <li>Crea una ficha de personaje para tu "narrador" (ej. Director de Juego). <b>Deja los campos vacíos</b>, ya que el framework gestiona toda la lógica mediante el prompt del sistema.</li>
+                        <li>Usa una de las opciones de creación de personajes anteriores para definir tu personaje. Puedes usar la opción Creador de Personajes para especificar los detalles, usar "Otras Formas de Iniciar" para un resumen rápido o usar "Acción Instantánea" para empezar más rápido.</li>
+                    </ol>
+                </div>
                     <div style="margin-top: 8px;">
                         🪙 <b>Optimización de Tokens:</b> Para reducir el costo de tokens, especialmente en modo de herramientas, considera usar una extensión de resumen como <b>Summaryception</b>. La resumización combinada con el <b>Agente de Lorebook</b> garantizará que la IA se mantenga enfocada.
                     </div>
@@ -2595,32 +2617,45 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_loot" />
-                            <span>🎲 Botín (Tiradas para Calidad de Botín)</span>
+                            <span>🎲 Tiradas de Botín</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_random_events" />
-                            <span>🌍 Eventos Aleatorios (Tiradas en saltos de tiempo y viajes)</span>
+                            <span>🌍 Eventos Aleatorios</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_resting" />
-                            <span>💤 Descanso Limitado en Tiempo e interrupciones según peligro</span>
+                            <span>💤 Restricciones de Descanso (≥9h entre descansos)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
                             <span>⛺ Grupo en Reserva (Rastrea compañeros ausentes)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. Function calling MUST be enabled. Not recommended together with World Progression until compatibility is added.">
+                        <div>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra, ruina, pueblo o ciudad. Nuevos mapas requieren CreateAreaMap (llamadas a funciones) o el abridor por comando de texto abajo.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
-                            <span>🗺️ Persistent Maps (Alpha)</span>
+                            <span>🗺️ Mapas Persistentes (Alpha)</span>
                         </label>
+                        <div id="rt_onboarding_map_architect_opener_wrap" style="padding-left: 20px; display: none; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold; margin-top: 2px;">Abridor del Arquitecto de Mapas</span>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
+                                <input type="radio" name="rt_onboarding_map_architect_opener" value="tool" id="rt_onboarding_map_architect_opener_tool" />
+                                <span>Llamada a función (CreateAreaMap) — requiere function calling</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Para modelos o presets sin llamadas a funciones. El narrador emite un bloque [CREATE_AREA_MAP] y se detiene; el Arquitecto de Mapas se ejecuta y luego continúa la narración.">
+                                <input type="radio" name="rt_onboarding_map_architect_opener" value="text" id="rt_onboarding_map_architect_opener_text" />
+                                <span>Comando de texto — sin llamadas a funciones</span>
+                            </label>
+                        </div>
+                        </div>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />
-                            <span>🧭 Modo CYOA (Opciones numeradas al final de respuestas)</span>
+                            <span>🧭 Modo CYOA (opciones de acción cada turno)</span>
                             <button id="rt_onboarding_cyoa_settings_btn" style="background:none;border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:inherit;font-size:0.75em;padding:1px 6px;cursor:pointer;flex-shrink:0;opacity:0.8;" title="Ajustes CYOA"><i class="fa-solid fa-gear"></i></button>
                         </div>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_npc_rel_bars" />
-                            <span>💞 Sistema de Relaciones (rastrea amistad y afecto de PNJs)</span>
+                            <span>💞 Sistema de Relaciones (Amistad y Afecto)</span>
                         </label>
                     </div>
 
@@ -2647,10 +2682,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
         const s = getSettings();
         const order = stripBenchedPartyTag(s.blockOrder || BLOCK_ORDER);
-        const sorted = [
+        let sorted = [
             ...order.filter(k => blocks[k] !== undefined),
             ...stripBenchedPartyTag(Object.keys(blocks).filter(k => !order.includes(k))).sort()
         ];
+        if (s.xpBarAtBottom === true && !filterTag) {
+            sorted = sorted.filter(tag => tag !== 'XP');
+        }
 
         const collapsed = loadCollapsed();
         const detached = loadDetached();
@@ -2751,8 +2789,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
         ` : '';
 
         const personaFromCharBtn = tag === 'CHARACTER' ? `
-            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create Lorebook Agent Player Card from this CHARACTER (uses sheet + last 3 story messages)">
-                👤
+            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create a Lorebook Agent Player Card from this CHARACTER sheet (uses the sheet plus the last 3 story messages)">
+                Create PC Card
             </button>
         ` : '';
 
@@ -3004,10 +3042,13 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
 
     const s = getSettings();
     const order = stripBenchedPartyTag(s.blockOrder || BLOCK_ORDER);
-    const sorted = [
+    let sorted = [
         ...order.filter(k => blocks[k] !== undefined),
         ...stripBenchedPartyTag(Object.keys(blocks).filter(k => !order.includes(k))).sort()
     ];
+    if (s.xpBarAtBottom === true) {
+        sorted = sorted.filter(tag => tag !== 'XP');
+    }
 
     const collapsed = loadCollapsed();
     const detached = loadDetached();
@@ -3092,6 +3133,21 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
         ${tabStripHtml}
         <div class="rt-tabmode-content" data-active-tag="${activeTag}">${contentHtml}</div>
     </div>`;
+}
+
+/**
+ * Render only the memo-backed XP row for the persistent bottom-of-panel bar.
+ * Keeping this sourced from blockToItems means it shares parsing, recoloring,
+ * percentage labels, and animation data attributes with the normal XP module.
+ * @param {string} memo
+ * @returns {string}
+ */
+export function renderBottomXpBar(memo) {
+    if (!memo || !memo.trim()) return '';
+    const blocks = parseMemoBlocks(memo);
+    if (blocks.XP === undefined) return '';
+    const xpRow = blockToItems('XP', blocks.XP).find(item => item.includes('class="rt-xp-row"'));
+    return xpRow ? `<div class="rt-bottom-xp-content">${xpRow}</div>` : '';
 }
 
 // ── Quest Log Renderer ─────────────────────────────────────────────────────

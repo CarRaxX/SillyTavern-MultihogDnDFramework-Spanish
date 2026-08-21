@@ -38,8 +38,12 @@ describe('XP gain animation', () => {
         expect(renderer).toContain('data-xp-current="${cur}"');
         expect(renderer.match(/data-xp-current="\$\{cur\}"/g)).toHaveLength(3);
         expect(renderer).toContain('class="rt-xp-current"');
-        expect(index).toContain('captureXpGainAnimationState(el, xpAnimationContext)');
-        expect(index).toContain('playXpGainAnimation(el, capturedXp, xpAnimationContext)');
+        expect(index).toContain('captureXpGainAnimationState(xpAnimationHost, xpAnimationContext)');
+        expect(index).toContain('playXpGainAnimation(xpAnimationHost, capturedXp, xpAnimationContext)');
+        expect(index).toContain('renderBottomXpBar(displayMemo)');
+        expect(styles).toContain('.rt-bottom-xp-content .rt-xp-gain-floater');
+        expect(styles).toContain('@keyframes rt-xp-bottom-gain-fade');
+        expect(styles).toContain('#rt-bottom-xp-bar .rt-xp-bar-wrap[data-recolor-id]');
         expect(styles).toContain('color: #29b6ff;');
         expect(styles).toContain('0 0 7px rgba(0, 180, 255, 0.65)');
         expect(styles).toContain('var(--rt-xp-trickle-duration, 2640ms)');

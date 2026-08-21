@@ -1,7 +1,7 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, expandLorebookPromptTemplate, resolveRecordCategoryTag } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, persistMapEvolutionState, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, mergePreservedColorMarkup, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
+import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent, parseJsonWithColorRepair } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
@@ -20,18 +20,24 @@ import {
     isLoreRedoEntryForChat,
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
-import { buildKeyringText, grepLoreInBooks, isSkeletonBookName } from './src/state/lorebook-keyring.js';
+import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
+import { findMostRecentNarratorMessage } from './src/state/present-now.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
+    detachDungeonMapFromLocationEntry,
     buildDungeonSitesFromLocationEntries,
     collectDungeonMapCandidates,
     dungeonLabelsMatch,
     dungeonSiteRootsMatch,
+    normalizeDungeonLabel,
     extractDungeonMapSection,
     extractFooterLocation,
     findLatestDungeonLocation,
+    locationContainsSiteRoot,
+    mapSiteFooterMismatchHint,
     getDungeonMapAttachment,
+    listMappedSiteDocuments,
     migrateDungeonMapAttachmentToContent,
     parseDungeonMapDocument,
     reconcileDungeonMapAreaKnowledge,
@@ -44,6 +50,14 @@ import {
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
 import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
+import { clearEvolutionHistoryForSite, setSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
+import {
+    buildWorldProgressionLocationDossiers,
+    normalizeWorldReportMetadata,
+    selectWorldProgressionLocations,
+    stampLocationAdvancement,
+    WORLD_REPORT_METADATA_KEY,
+} from './world-progression-lib.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -186,10 +200,14 @@ function stripSkeletonFromRouterPools() {
  * @param {object} ctx
  */
 async function fetchRouterArchiveBooks(prefix, ctx) {
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-    const allBookNames = await getWorldInfoNamesSafe();
+    const settings = getSettings();
+    const chatId = getRouterChatId(ctx);
+    const ownedNames = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
+    // The per-chat ownership list is the hot path. Union the already-loaded ST
+    // registry for newly linked/legacy books, but never enumerate every lorebook
+    // on disk during an automatic Lorebook Agent pass.
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: false });
+    const allBookNames = [...new Set([...ownedNames, ...registryNames])];
     const inScope = (n) => !prefix || bookBelongsToPrefix(n, prefix);
     const scoped = new Set(prefix ? allBookNames.filter(inScope) : allBookNames);
 
@@ -248,7 +266,9 @@ function parseTextAction(text) {
             args = { [argNames[name] || 'value']: cleaned };
         } else {
             cleaned = cleaned.replace(/,\s*\}/g, '}').replace(/,\s*\]/g, ']');
-            args = JSON.parse(cleaned);
+            const parsed = parseJsonWithColorRepair(cleaned);
+            if (!parsed.ok) throw new Error(parsed.error || 'Invalid JSON');
+            args = parsed.value;
         }
     } catch (_) {
         return null;
@@ -268,8 +288,13 @@ function broadcastStep(type, content, metadata = {}) {
 
 /**
  * Compatibility helper for older SillyTavern versions.
- * Probes both the frontend cache AND the backend API for ground truth,
- * so that cloned/renamed lorebooks are always discovered.
+ * Uses the frontend registry for the normal path and the dedicated backend
+ * lorebook-list endpoint for a disk-authoritative refresh.
+ *
+ * Do not use /api/settings/get here. That endpoint returns the user's complete
+ * settings payload, which can be hundreds of megabytes on long-running
+ * Multihog installs. Parsing it during every manifest refresh was the main
+ * Persistent Maps slowdown.
  */
 async function getWorldInfoNamesSafe(options = {}) {
     const fullProbe = options.fullProbe !== false;
@@ -291,27 +316,11 @@ async function getWorldInfoNamesSafe(options = {}) {
         return [...frontendNames];
     }
 
-    // 2. Probe the backend API. Once either backend endpoint answers, its result
+    // 2. Probe the dedicated backend list endpoint. Once it answers, its result
     // is authoritative: unioning it with the frontend registry would resurrect
     // deleted lorebooks that still exist only in SillyTavern's in-memory cache.
     const backendNames = new Set();
     let backendResponded = false;
-    try {
-        const r = await fetch('/api/settings/get', { 
-            method: 'POST', 
-            headers: getRequestHeaders(),
-            body: JSON.stringify({})
-        });
-        if (r.ok) {
-            const j = await r.json();
-            if (Array.isArray(j?.world_names)) {
-                backendResponded = true;
-                j.world_names.forEach(n => backendNames.add(n));
-            }
-        }
-    } catch (_) {}
-
-    // 3. Fallback: enumerate all lorebooks from the backend list endpoint
     try {
         const r = await fetch('/api/worldinfo/list', { method: 'POST', headers: getRequestHeaders() });
         if (r.ok) {
@@ -326,6 +335,36 @@ async function getWorldInfoNamesSafe(options = {}) {
     return backendResponded ? [...backendNames] : [...frontendNames];
 }
 
+/**
+ * Cheap existence guard for passive reads. SillyTavern's /worldinfo/get returns
+ * an empty dummy for a missing file and logs an error, so probing a generated
+ * `<prefix>_Locations` name on every map/UI refresh creates an error storm.
+ * The already-loaded frontend registry is authoritative when available.
+ */
+export async function isWorldInfoBookKnown(bookName, ctx = SillyTavern.getContext()) {
+    const wanted = String(bookName || '').trim().toLowerCase();
+    if (!wanted) return false;
+
+    try {
+        const getter = typeof ctx?.getWorldInfoNames === 'function'
+            ? ctx.getWorldInfoNames.bind(ctx)
+            : (typeof ctx?.getLorebookList === 'function' ? ctx.getLorebookList.bind(ctx) : null);
+        if (getter) {
+            const names = await getter();
+            if (Array.isArray(names)) {
+                return names.some(name => String(name || '').toLowerCase() === wanted);
+            }
+        }
+    } catch (_) {
+        // Fall through to the per-chat ownership list on older ST versions.
+    }
+
+    const settings = getSettings();
+    const chatId = getRouterChatId(ctx);
+    const knownBooks = chatId ? settings.chatStates?.[chatId]?.campaignBooks : [];
+    return (knownBooks || []).some(name => String(name || '').toLowerCase() === wanted);
+}
+
 function cloneRouterValue(value, fallback) {
     return JSON.parse(JSON.stringify(value ?? fallback));
 }
@@ -334,6 +373,28 @@ function getRouterChatId(ctx = SillyTavern.getContext()) {
     return (typeof globalThis._rpgCurrentChatId === 'function' && globalThis._rpgCurrentChatId())
         || ctx?.chatId
         || null;
+}
+
+/**
+ * Record a lorebook on the active chat's campaignBooks list so boot / chat-switch
+ * `/world state=on` and the keyword scanner's fast path can find it. Newly created
+ * NPCs books were previously omitted here, so ST native WI and the scanner both
+ * skipped them until a manual Activate Campaign Lorebooks.
+ * @param {string} bookName
+ * @param {object} [settings]
+ * @returns {boolean} true when the list changed
+ */
+export function rememberCampaignBook(bookName, settings = getSettings()) {
+    if (!bookName) return false;
+    const chatId = getRouterChatId();
+    if (!chatId) return false;
+    settings.chatStates = settings.chatStates || {};
+    settings.chatStates[chatId] = settings.chatStates[chatId] || {};
+    const existing = new Set(settings.chatStates[chatId].campaignBooks || []);
+    const before = existing.size;
+    existing.add(bookName);
+    settings.chatStates[chatId].campaignBooks = [...existing];
+    return existing.size !== before;
 }
 
 function buildRouterLoreState(settings, { prefix, chatId, bookSnapshots }) {
@@ -388,7 +449,7 @@ async function evictWorldInfoCache(bookName) {
     }
 }
 
-async function updateWorldInfoCache(bookName, bookData) {
+export async function updateWorldInfoCache(bookName, bookData) {
     try {
         const { worldInfoCache } = await import('../../../world-info.js');
         if (typeof worldInfoCache?.set !== 'function') return false;
@@ -438,13 +499,13 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
 
     const bookName = `${prefix}_Locations`;
     const collected = capture ? collectDungeonMapCandidates(chat) : { maps: [], errors: [] };
-    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
+    let bookData = bookKnown ? await loadWorldInfoFresh(bookName, ctx) : null;
     if (!bookData) {
         if (!collected.maps.length) {
             return { bookName, sites: {}, changed: false, capturedMaps: 0, errors: collected.errors };
         }
-        const knownNames = await getWorldInfoNamesSafe();
-        if (knownNames.includes(bookName)) {
+        if (bookKnown) {
             throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
         }
         bookData = {
@@ -521,7 +582,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     if (changed) {
         await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map persistence');
         recordLiveDungeonMapSnapshot(getSettings(), collectDungeonMapHistorySnapshot(bookData.entries, bookName));
-        if (typeof ctx.updateWorldInfoList === 'function') {
+        if (!bookKnown && typeof ctx.updateWorldInfoList === 'function') {
             try { await ctx.updateWorldInfoList(); } catch (_) {}
         }
         if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
@@ -531,6 +592,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     return {
         bookName,
         sites: buildDungeonSitesFromLocationEntries(bookData.entries, bookName),
+        bookData,
         changed,
         capturedMaps,
         errors: collected.errors,
@@ -541,7 +603,7 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
  * Atomically attach a validated Map Architect document to its root Location.
  * Existing maps always win: concurrent/repeated tool calls never overwrite canon.
  */
-export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
+export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowOffsite = false, requireNew = false, locationKeys = null, locationCore = '' } = {}) {
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
     const prefix = getLivePrefix();
@@ -550,10 +612,10 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
     if (!site) throw new Error('Map Architect requires an exact site root.');
 
     const bookName = `${prefix}_Locations`;
-    let bookData = await loadWorldInfoFresh(bookName, ctx);
+    const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
+    let bookData = bookKnown ? await loadWorldInfoFresh(bookName, ctx) : null;
     if (!bookData) {
-        const knownNames = await getWorldInfoNamesSafe();
-        if (knownNames.includes(bookName)) {
+        if (bookKnown) {
             throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
         }
         bookData = {
@@ -572,6 +634,9 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
     });
     const existing = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
     if (existing) {
+        if (requireNew) {
+            throw new Error(`A mapped location named "${site}" already exists.`);
+        }
         return {
             bookName,
             entryId: `${bookName}::${rootEntry.uid}`,
@@ -581,15 +646,28 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
         };
     }
 
+    if (requireNew && rootEntry) {
+        throw new Error(`A location named "${site}" already exists. Use + MAP on that root instead.`);
+    }
+
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site) && !allowOffsite) {
+        throw new Error(mapSiteFooterMismatchHint(site, currentLocation));
+    }
+
     if (!rootEntry) {
         const uids = Object.keys(bookData.entries || {}).map(Number).filter(Number.isFinite);
         const nextUid = uids.length ? Math.max(...uids) + 1 : 0;
+        const coreBody = String(locationCore || '').trim();
+        const coreContent = /\[CORE\]/i.test(coreBody)
+            ? coreBody
+            : `[CORE]\n${coreBody || `${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.`}\n[/CORE]`;
         rootEntry = {
             uid: nextUid,
-            key: [site],
+            key: locationKeysForNewRoot(site, locationKeys),
             keysecondary: [],
             comment: site,
-            content: `[CORE]\n${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.\n[/CORE]`,
+            content: coreContent,
             constant: false,
             selective: false,
             selectiveLogic: 0,
@@ -627,7 +705,7 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
         settings.chatStates[chatId].campaignBooks = [...campaignBooks];
         void saveSettings();
     }
-    if (typeof ctx.updateWorldInfoList === 'function') {
+    if (!bookKnown && typeof ctx.updateWorldInfoList === 'function') {
         try { await ctx.updateWorldInfoList(); } catch (_) {}
     }
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
@@ -640,6 +718,150 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument) {
         existing: false,
         document: mapDocument,
     };
+}
+
+/**
+ * Replace the root Location's [MAP] from manual JSON editing in the map inspector.
+ * Does not create new roots or overwrite a site that lost its map attachment.
+ */
+export async function persistManualDungeonMapDocument(siteRoot, mapDocument) {
+    const ctx = SillyTavern.getContext();
+    const settings = getSettings();
+    const prefix = getLivePrefix();
+    const site = String(siteRoot || '').trim();
+    if (!prefix) throw new Error('No campaign prefix is available for the Locations lorebook.');
+    if (!site) throw new Error('Site root is required.');
+    if (!mapDocument || typeof mapDocument !== 'object') throw new Error('Map document is required.');
+
+    const bookName = `${prefix}_Locations`;
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
+    if (!bookData?.entries) {
+        throw new Error(`Locations lorebook "${bookName}" could not be loaded.`);
+    }
+
+    const rootEntry = Object.values(bookData.entries).find(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
+    });
+    if (!rootEntry) throw new Error(`No Location root found for "${site}".`);
+    if (!getDungeonMapAttachment(rootEntry)) throw new Error(`"${site}" has no private map to edit.`);
+
+    if (migrateDungeonMapAttachmentToContent(rootEntry)) {
+        // legacy extension blob upgraded to [MAP] in content
+    }
+    rootEntry.content = replaceDungeonMapSection(
+        rootEntry.content,
+        serializeDungeonMapDocument(mapDocument),
+    );
+    reconcileDungeonMapAreaKnowledge(rootEntry, bookData.entries);
+    rootEntry.disable = true;
+
+    await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Manual map JSON edit');
+    recordLiveDungeonMapSnapshot(settings, collectDungeonMapHistorySnapshot(bookData.entries, bookName));
+
+    const chatId = ctx.chatId || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : '');
+    if (chatId) {
+        settings.chatStates = settings.chatStates || {};
+        settings.chatStates[chatId] = settings.chatStates[chatId] || {};
+        const campaignBooks = new Set(settings.chatStates[chatId].campaignBooks || []);
+        campaignBooks.add(bookName);
+        settings.chatStates[chatId].campaignBooks = [...campaignBooks];
+        void saveSettings();
+    }
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+
+    return {
+        bookName,
+        entryId: `${bookName}::${rootEntry.uid}`,
+        document: mapDocument,
+    };
+}
+
+/** True when a Location root with this site name already exists. */
+export async function locationRootExists(siteRoot) {
+    const site = String(siteRoot || '').trim();
+    const prefix = getLivePrefix();
+    if (!site || !prefix) return false;
+    const ctx = SillyTavern.getContext();
+    const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return false;
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
+    if (!bookData?.entries) return false;
+    return Object.values(bookData.entries).some(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
+    });
+}
+
+/**
+ * Remove the private [MAP] from a Locations entry without deleting the lore record.
+ * CORE/chronicles stay. Evolution trajectory for that site is dropped so a later
+ * map is not biased by the deleted occupancy clock.
+ */
+export async function deleteDungeonMapFromLocationEntry(id) {
+    const raw = String(id || '');
+    const splitAt = raw.indexOf('::');
+    const bookName = splitAt >= 0 ? raw.slice(0, splitAt) : '';
+    const uid = splitAt >= 0 ? raw.slice(splitAt + 2) : '';
+    if (!bookName || !uid) return { ok: false, error: 'Invalid lorebook entry id.' };
+
+    const ctx = SillyTavern.getContext();
+    const bookData = await loadWorldInfoFresh(bookName, ctx);
+    const rootEntry = bookData?.entries?.[uid];
+    if (!rootEntry) return { ok: false, error: 'Location entry was not found.' };
+    if (!getDungeonMapAttachment(rootEntry)) return { ok: false, error: 'That Location has no private map.' };
+
+    const siteRoot = String(rootEntry.comment || '').trim();
+    if (!detachDungeonMapFromLocationEntry(rootEntry)) {
+        return { ok: false, error: 'Could not remove the private map.' };
+    }
+    rootEntry.disable = false;
+
+    await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Dungeon map removal');
+    recordLiveDungeonMapSnapshot(
+        getSettings(),
+        collectDungeonMapHistorySnapshot(bookData.entries, bookName) || { bookName, maps: [] },
+    );
+
+    const settings = getSettings();
+    const siteKey = normalizeDungeonLabel(siteRoot);
+    const cleared = clearEvolutionHistoryForSite({
+        backlogBySite: settings.mapEvolutionBacklogBySite,
+        threadsBySite: settings.mapEvolutionThreadsBySite,
+        reportApplicationsBySite: settings.mapEvolutionWorldReportApplications,
+    }, siteRoot);
+    if (cleared.cleared) {
+        settings.mapEvolutionBacklogBySite = cleared.backlogBySite;
+        settings.mapEvolutionThreadsBySite = cleared.threadsBySite;
+        settings.mapEvolutionWorldReportApplications = cleared.reportApplicationsBySite;
+    }
+    if (siteKey) {
+        settings.mapEvolutionIntervalHoursBySite = setSiteEvolutionIntervalOverride(
+            settings.mapEvolutionIntervalHoursBySite,
+            siteRoot,
+            null,
+        );
+        if (settings.mapEvolutionLastFiredBySite && typeof settings.mapEvolutionLastFiredBySite === 'object') {
+            delete settings.mapEvolutionLastFiredBySite[siteKey];
+        }
+        if (normalizeDungeonLabel(settings.mapEvolutionLastSiteRoot) === siteKey) {
+            settings.mapEvolutionLastSiteRoot = '';
+        }
+        if (normalizeDungeonLabel(settings.mapEvolutionPendingExitRoot) === siteKey) {
+            settings.mapEvolutionPendingExitRoot = '';
+        }
+        if (Array.isArray(settings.mapEvolutionSelectedRoots)) {
+            settings.mapEvolutionSelectedRoots = settings.mapEvolutionSelectedRoots.filter(
+                root => normalizeDungeonLabel(root) !== siteKey,
+            );
+        }
+    }
+    persistMapEvolutionState();
+
+    if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(bookName);
+    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+    return { ok: true, bookName, entryId: raw, siteRoot };
 }
 
 /** Captures the complete current campaign state for lossless redo. */
@@ -667,6 +889,7 @@ export async function captureActiveDungeonMapHistory(ctx = SillyTavern.getContex
     const prefix = getLivePrefix();
     if (!prefix) return null;
     const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return null;
     const book = await loadWorldInfoFresh(bookName, ctx);
     if (!book?.entries) return null;
     return collectDungeonMapHistorySnapshot(book.entries, bookName);
@@ -693,7 +916,7 @@ export async function loadActiveDungeonMapContext() {
     const currentLocation = findLatestDungeonLocation(ctx.chat || []);
     const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
     if (!synced.bookName) return { prefix, books: {}, context: null, currentLocation };
-    const book = await loadWorldInfoFresh(synced.bookName, ctx);
+    const book = synced.bookData;
     if (!book?.entries) return { prefix, books: {}, context: null, currentLocation };
     const books = { [synced.bookName]: book };
     return {
@@ -704,11 +927,32 @@ export async function loadActiveDungeonMapContext() {
     };
 }
 
+/** Load every attached [MAP] in the campaign Locations book. */
+export async function loadAllMappedSiteContexts() {
+    const ctx = SillyTavern.getContext();
+    const prefix = getLivePrefix();
+    if (!prefix) return null;
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    const synced = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
+    if (!synced.bookName) return { prefix, books: {}, sites: [], currentLocation };
+    const book = synced.bookData;
+    if (!book?.entries) return { prefix, books: {}, sites: [], currentLocation };
+    const books = { [synced.bookName]: book };
+    const sites = listMappedSiteDocuments(book.entries, synced.bookName).map(site => ({
+        ...site,
+        prefix,
+        bookName: synced.bookName,
+        currentLocation,
+    }));
+    return { prefix, books, sites, currentLocation };
+}
+
 /** Deep-clone the campaign Locations book for Map Updater swipe restore. */
 export async function snapshotCampaignLocationsBook(ctx = SillyTavern.getContext()) {
     const prefix = getLivePrefix();
     if (!prefix) return null;
     const bookName = `${prefix}_Locations`;
+    if (!await isWorldInfoBookKnown(bookName, ctx)) return null;
     const book = await loadWorldInfoFresh(bookName, ctx);
     if (!book) return null;
     return { bookName, book: JSON.parse(JSON.stringify(book)) };
@@ -735,7 +979,10 @@ async function finalizeRouterHistorySnapshot(runId) {
         snapshot.deletedBookNames = [];
         return;
     }
-    const currentNames = (await getWorldInfoNamesSafe())
+    const chatId = snapshot.chatId || getRouterChatId();
+    const ownedNames = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: false });
+    const currentNames = [...new Set([...ownedNames, ...registryNames])]
         .filter(name => bookBelongsToPrefix(name, prefix) && !isSkeletonBookName(name));
     const before = new Set(getLorebookSnapshotNames(snapshot));
     const after = new Set(currentNames);
@@ -847,19 +1094,46 @@ function mapTransactionSignature(value) {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function resolveDungeonContextByUid(book, expectedContext) {
+    const rootEntry = book?.entries?.[expectedContext?.uid];
+    const mapBody = extractDungeonMapSection(rootEntry?.content);
+    if (!rootEntry || !mapBody) return null;
+    return {
+        prefix: expectedContext.prefix,
+        bookName: expectedContext.bookName,
+        uid: expectedContext.uid,
+        entryId: expectedContext.entryId,
+        siteRoot: expectedContext.siteRoot,
+        currentLocation: expectedContext.currentLocation,
+        document: parseDungeonMapDocument(mapBody, expectedContext.siteRoot).document,
+    };
+}
+
 /** Save current [MAP] plus observable child chronicles in one Locations-book write. */
-export async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
+export async function applyDungeonMapCommit(transaction, expectedContext, allBooks, currentTime, options = {}) {
+    const requireActive = options.requireActive !== false;
+    const frozenAreaIds = Array.isArray(options.frozenAreaIds) ? options.frozenAreaIds : [];
     if (!expectedContext) {
         return { ok: false, retryable: false, errors: [{ code: 'MAP_NOT_ACTIVE', path: 'map', received: transaction, hint: 'Map commands are unavailable because no mapped site is currently active.' }] };
     }
     const ctx = SillyTavern.getContext();
-    const latestLocation = findLatestDungeonLocation(ctx.chat || []) || expectedContext.currentLocation;
     const freshBook = await loadWorldInfoFresh(expectedContext.bookName, ctx);
-    const liveContext = freshBook
-        ? resolveActiveDungeonContext({ [expectedContext.bookName]: freshBook }, expectedContext.prefix, latestLocation)
-        : null;
-    if (!liveContext || liveContext.entryId !== expectedContext.entryId) {
-        return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: latestLocation, hint: 'The active mapped site changed during this pass. Do not retry this map mutation.' }] };
+    if (!freshBook?.entries) {
+        return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: expectedContext.siteRoot, hint: 'The mapped site could not be reloaded. Do not retry this map mutation.' }] };
+    }
+
+    let liveContext;
+    if (requireActive) {
+        const latestLocation = findLatestDungeonLocation(ctx.chat || []) || expectedContext.currentLocation;
+        liveContext = resolveActiveDungeonContext({ [expectedContext.bookName]: freshBook }, expectedContext.prefix, latestLocation);
+        if (!liveContext || liveContext.entryId !== expectedContext.entryId) {
+            return { ok: false, retryable: false, errors: [{ code: 'MAP_CONTEXT_CHANGED', path: 'map', received: latestLocation, hint: 'The active mapped site changed during this pass. Do not retry this map mutation.' }] };
+        }
+    } else {
+        liveContext = resolveDungeonContextByUid(freshBook, expectedContext);
+        if (!liveContext) {
+            return { ok: false, retryable: false, errors: [{ code: 'MAP_ENTRY_MISSING', path: 'map', received: expectedContext.siteRoot, hint: 'The mapped root was removed during this pass. Do not retry this map mutation.' }] };
+        }
     }
 
     const rootEntry = freshBook.entries[liveContext.uid];
@@ -878,7 +1152,7 @@ export async function applyActiveDungeonMapCommit(transaction, expectedContext, 
 
     const mapBody = extractDungeonMapSection(rootEntry.content);
     const parsed = parseDungeonMapDocument(mapBody, liveContext.siteRoot);
-    const applied = applyDungeonMapTransaction(parsed.document, transaction);
+    const applied = applyDungeonMapTransaction(parsed.document, transaction, { frozenAreaIds, currentTime });
     if (!applied.ok) return applied;
 
     const timestampRegex = /(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
@@ -912,6 +1186,11 @@ export async function applyActiveDungeonMapCommit(transaction, expectedContext, 
     if (typeof ctx.reloadWorldInfoEditor === 'function') ctx.reloadWorldInfoEditor(expectedContext.bookName);
     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
     return { ...applied, document: undefined };
+}
+
+/** Occupancy commits require the party to still be inside the mapped site. */
+export async function applyActiveDungeonMapCommit(transaction, expectedContext, allBooks, currentTime) {
+    return applyDungeonMapCommit(transaction, expectedContext, allBooks, currentTime, { requireActive: true });
 }
 
 /**
@@ -1118,11 +1397,19 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         const maxActive = settings.routerMaxActivations || 12;
         const overflow = activeCount - maxActive;
         const budgetLine = `Active entries: ${activeCount} / ${maxActive}`;
+        const curationInstruction =
+            `\nCONTEXT OWNERSHIP: You decide the active set. Keyword / NEWLY ACTIVATED hits are provisional, not locks. ` +
+            `Scene and narrative relevance is paramount regardless of what is currently active. ` +
+            `If ARCHIVE INDEX has a more important entry for this scene, deactivate a weaker active entry ` +
+            `(including a recent keyword hit) and activate the better one in this same pass — even when already at the cap. ` +
+            `Do not lazy-prune to the cap and stop.`;
         const overflowInstruction = overflow > 0
             ? `\nBUDGET VIOLATION: ${activeCount} entr${activeCount !== 1 ? 'ies' : 'y'} active, limit is ${maxActive}. ` +
               `You MUST deactivate at least ${overflow} entr${overflow > 1 ? 'ies' : 'y'} ` +
-              `before this pass ends. Eliminate the narratively least relevant entries first. ` +
-              `Justify each deactivation.`
+              `before this pass ends so the count is legal. That is the floor, not the whole job: ` +
+              `if ARCHIVE INDEX has higher-priority scene-relevant entries still inactive, deactivate extra low-value actives ` +
+              `(keyword hits are not protected) and activate those missing entries in this same pass. ` +
+              `Narrative relevance beats whatever is currently active. Justify each deactivation.`
             : '';
 
         const activeCombatBlock = extractActiveCombatBlock(settings.currentMemo);
@@ -1155,6 +1442,19 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
                 void saveSettings();
             }
         }
+
+        // One authoritative runtime list drives schemas, text-mode instructions,
+        // routing, and diagnostics. Disabled stock modules must not leak into a
+        // custom-only setup merely because their category names are built in.
+        const categoryEnum = getEnabledRouterCategoryTags(settings);
+        const categoryChoiceText = categoryEnum.map(tag => `"${tag}"`).join(' | ');
+        const categoryExampleValue = JSON.stringify(categoryEnum[0] || '');
+        const categoryRouteText = categoryEnum
+            .map(tag => `"${tag}" -> "${prefix ? `${prefix}_` : ''}${getRouterCategoryBookSuffix(tag)}"`)
+            .join(', ');
+        const recordCategoryGuidance = categoryEnum.length
+            ? `## AVAILABLE RECORD CATEGORIES (AUTHORITATIVE FOR THIS PASS)\nThe only valid \`record[].category\` values are: ${categoryChoiceText}.\nRoutes: ${categoryRouteText}.\nUse one of these exact values for every new record. Categories not listed here are disabled and must not be used.`
+            : `## AVAILABLE RECORD CATEGORIES (AUTHORITATIVE FOR THIS PASS)\nNo record categories are enabled. Do not create new records this pass.`;
 
         const sysTemplate = adjustPromptTimestamps(settings.routerSystemPromptTemplate || 'You are the Lorebook Agent. Maintain narrative consistency and manage lorebooks.', settings);
         const basePrompt = sysTemplate
@@ -1631,7 +1931,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
-            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
+            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
             const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal);
@@ -1641,12 +1941,13 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             broadcastStep('thought', 'Parsing tags...');
             const basicAction = parseBasicTags(basicResp, archiveBooks);
 
-            const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
+            const hasOrdinaryActions = basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.deactivate.length > 0 || basicAction.delete_ids?.length > 0 || basicAction.rel?.length > 0 || basicAction.appearance?.length > 0 || basicAction.equipment?.length > 0 || basicAction.core?.length > 0;
             if (hasOrdinaryActions) {
                 const summaries = [];
                 if (basicAction.record.length) summaries.push(`New: ${basicAction.record.length}`);
                 if (basicAction.update.length) summaries.push(`Updates: ${basicAction.update.length}`);
                 if (basicAction.activate.length) summaries.push(`Activations: ${basicAction.activate.length}`);
+                if (basicAction.deactivate.length) summaries.push(`Deactivations: ${basicAction.deactivate.length}`);
                 if (basicAction.core?.length || basicAction.appearance?.length || basicAction.equipment?.length) summaries.push(`Core: ${(basicAction.core?.length || 0) + (basicAction.appearance?.length || 0) + (basicAction.equipment?.length || 0)}`);
                 basicAction.reason = (thoughtMatchB ? thoughtMatchB[1].trim() : 'Tag-based update.') + ` (${summaries.join(', ')})`;
                 await applyAction(basicAction, archiveBooks, currentTime, breadcrumb, isManual);
@@ -1658,16 +1959,9 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
         } else {
             // -- Agent Mode (native tool calling, multi-turn messages) ----------
 
-            // Build the commit tool's category enum from enabled modules + custom tags
-            const validCategories = [
-                ...Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => m.tag.toUpperCase()),
-                ...(settings.routerCustomTags || []).map(t => t.tag.toUpperCase()),
-            ];
-            const categoryEnum = validCategories.length ? validCategories : ['NPC', 'LOC', 'QUEST', 'FAC', 'EVENT'];
-
             // Dynamically build the commit tool parameters based on settings
             const commitProperties = {
-                record: {
+                ...(categoryEnum.length ? { record: {
                     type: 'array',
                     description: 'Creates a BRAND-NEW entry only. Never use this for a name that already appears in ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, or the ARCHIVE INDEX — that would duplicate their [CORE] block. For an existing entity, use "core" (identity/Combat Profile fields) or "update" (chronicle text) instead.',
                     items: {
@@ -1675,12 +1969,12 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                         properties: {
                             label: { type: 'string', description: 'Entity name only. NO tag prefix (e.g. "Iron Syndicate", NOT "FAC: Iron Syndicate"). Do NOT record the player character under any name (including "Player" or their roleplay character name/alias like "Dave Davidson").' },
                             keys:  { type: 'array', items: { type: 'string' }, description: 'Search keywords. Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names.' },
-                            content:  { type: 'string', description: `Full entry body. NPC: structured [CORE] with ${sectionNamesList}. LOC: plain [CORE] with 1–2 sentences (no field headers). FAC: plain [CORE] wrapping permanent history, ideology, schemes. QUEST/EVENT: no [CORE]; use chronicle format.` },
-                            category: { type: 'string', enum: categoryEnum, description: 'REQUIRED. Chooses the lorebook book: NPC→…_NPCs, LOC→…_Locations, FAC→…_Factions, QUEST→…_Quests, EVENT→…_Events. Labels and "::" paths do NOT choose the book — omit this and the record is skipped.' }
+                            content:  { type: 'string', description: `Full entry body. Follow the FIELD INSTRUCTIONS for the selected enabled category. Stock-category formatting, when enabled: NPC uses structured [CORE] with ${sectionNamesList}; LOC/FAC use plain [CORE]; QUEST/EVENT use chronicle format.` },
+                            category: { type: 'string', enum: categoryEnum, description: `REQUIRED. Use exactly one category enabled for this pass: ${categoryChoiceText || '(none)'}. ${categoryRouteText ? `Routes: ${categoryRouteText}. ` : ''}Labels and "::" paths do not choose the book.` }
                         },
                         required: ['label', 'keys', 'content', 'category']
                     }
-                },
+                } } : {}),
                 update: {
                     type: 'array',
                     description: 'Append new information to existing entries.',
@@ -1789,9 +2083,9 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 items: {
                     type: 'object',
                     properties: {
-                        id:      { type: 'string', description: 'Book::UID or plain NPC name (from ACTIVE MEMORY). Not used for the Player Character — PC Body/Equipment use commit.appearance/commit.equipment.' },
+                        id:      { type: 'string', description: 'Book::UID or plain NPC name from ACTIVE MEMORY, NEWLY ACTIVATED, or ARCHIVE INDEX. Not used for the Player Character — PC Body/Equipment use commit.appearance/commit.equipment.' },
                         field:   { type: 'string', enum: eligibleCoreFields, description: 'The exact eligible [CORE] field to update this pass.' },
-                        content: { type: 'string', description: 'New field content text.' }
+                        content: { type: 'string', description: 'New field content. To color text, write <font color=#RRGGBB>text</font> with an UNQUOTED hex (never color="#RRGGBB" — quotes break JSON). Preserve existing font/hex color markup.' }
                     },
                     required: ['id', 'field', 'content']
                 }
@@ -1893,7 +2187,8 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             );
 
             const commitFieldNames = [
-                '"record": [...]', '"update": [...]', '"rename": [...]', '"activate": [...]',
+                ...(categoryEnum.length ? ['"record": [...]'] : []),
+                '"update": [...]', '"rename": [...]', '"activate": [...]',
                 '"deactivate": [...]', '"delete_ids": [...]',
                 ...(settings.npcRelationshipBars ? ['"rel": [...]'] : []),
                 '"appearance": [...]', '"equipment": [...]', '"core": [...]',
@@ -1913,7 +2208,8 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 You are a lorebook research agent. Maintain the campaign lorebook using the provided tools.
 ${LORE_EXISTENCE_RULE}
 When research is complete, call commit once to write all changes. Stop immediately after.
-${adjustedSharedContext}`
+${adjustedSharedContext}
+${recordCategoryGuidance}`
                 // Text-format prompt for profile/default ? model outputs Action:/Observation: text
                 : `${basePrompt}
 
@@ -1932,7 +2228,9 @@ Available actions:
 - read_entry({"uid": "Book::0"}) — read full body of an archived entry already on ARCHIVE INDEX
 - commit({${commitFieldNames}}) ? write all changes and finish
 
-commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"} — category is REQUIRED on every record (NPC people → "NPC", places with optional " :: " paths → "LOC"). Omitting category skips the record.
+${categoryEnum.length
+    ? `commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": ${categoryExampleValue}} — category is REQUIRED and must use one of these enabled values: ${categoryChoiceText}.`
+    : `commit record items: unavailable because no record categories are enabled.`}
 commit update items: {"id": "Book::UID", "content": "new text to append"}
 commit rename items: {"id": "Book::UID", "label": "New Name (optional)", "keys": ["kw1","kw2"] (optional, max 6)}${commitRelDescription}
 commit appearance items: {"id": "Book::UID or NPC Name or {{user}}", "content": "new body text"} — surgically updates Body (NPC [CORE] or linked PC card)
@@ -1940,13 +2238,15 @@ commit equipment items: {"id": "Book::UID or NPC Name or {{user}}", "content": "
 commit core items: {"id": "Book::UID or NPC Name", "field": "${eligibleCoreFields.join('|')}", "content": "new field content"} — surgically updates an eligible [CORE] field on NPC entries only (Body/Equipment use commit.appearance/commit.equipment; automatic passes = Combat Profile only)
 
 ## EXAMPLE
-Thought: Lissa and The Handler's Rest are not in ACTIVE MEMORY or ARCHIVE INDEX, so they do not exist yet. I will record both with explicit categories.
-Action: commit({"record": [{"label": "Lissa", "keys": ["Lissa", "rope-keeper"], "content": "[CORE]\\nSpecies: Human\\n[/CORE]", "category": "NPC"}, {"label": "Kalvermoor :: The Handler's Rest", "keys": ["The Handler's Rest", "Kalvermoor", "tavern"], "content": "[CORE]\\nA weathered tavern.\\n[/CORE]", "category": "LOC"}]})
-${adjustedSharedContext}`;
+${categoryEnum.length
+    ? `Thought: New Entity is not in ACTIVE MEMORY or ARCHIVE INDEX, so it does not exist yet. I will record it with an enabled category.\nAction: commit({"record": [{"label": "New Entity", "keys": ["New Entity"], "content": "Persistent details about the entity.", "category": "${categoryEnum[0]}"}]})`
+    : `Thought: No record categories are enabled, so I will not create a record.\nAction: commit({})`}
+${adjustedSharedContext}
+${recordCategoryGuidance}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockA = questMatchA ? `[QUESTS]${questMatchA[1].trim()}[/QUESTS]` : 'None';
-            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
+            const contextMessage = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${pcCharacterSeedSection}${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
 
             /** @type {Array<{role:string, content:string|null, tool_calls?:any[], tool_call_id?:string}>} */
             const messages = [
@@ -2045,7 +2345,7 @@ ${adjustedSharedContext}`;
                         code: 'MALFORMED_JSON',
                         path: `${toolName}.arguments`,
                         received: effectiveArgumentError,
-                        hint: 'Retry the same action with strict JSON: double-quoted keys/strings, no comments, and no trailing commas. Nothing was written.',
+                        hint: 'Retry the same action with strict JSON: double-quoted keys/strings, no comments, and no trailing commas. For color markup write <font color=#RRGGBB>text</font> with UNQUOTED hex — never color="#RRGGBB". Nothing was written.',
                     }, null, 2);
                     retryRejectedJson = jsonCorrectionRetries <= MAX_JSON_CORRECTION_RETRIES;
                 } else if (toolName === 'commit') {
@@ -2430,22 +2730,22 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const recordedIds = [];
 
     // -- Phase A: Route each record to its target book --
-    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events', 'WORLD': 'World' };
-    // Extend with user-defined custom tags so they get their own books (e.g. WEATHER ? prefix_Weather)
-    for (const ct of (settings.routerCustomTags || [])) {
-        const t = ct.tag.toUpperCase();
-        if (!catMap[t]) catMap[t] = t.charAt(0) + t.slice(1).toLowerCase();
-    }
+    const writableCategoryMap = buildRouterCategoryMap(settings);
+    // WORLD is an internal World Progression target, not an implicit Agent category.
+    const catMap = { ...writableCategoryMap, WORLD: 'World' };
     /** @type {Map<string, Array>} */
     const bookQueue = new Map();
 
     const knownBookNames = Object.keys(allBooks);
     const knownCatTags = Object.keys(catMap);
+    const writableCatTags = Object.keys(writableCategoryMap);
+    const unambiguousFallbackTag = writableCatTags.length === 1 ? writableCatTags[0] : null;
     for (const rec of records) {
-        const resolved = resolveRecordCategoryTag(rec, knownCatTags);
+        const resolved = resolveRecordCategoryTag(rec, knownCatTags, unambiguousFallbackTag);
         if (!resolved.tag) {
             const who = rec.label || '(untitled)';
-            errors.push(`Skipped record "${who}": missing required category (NPC|LOC|FAC|QUEST|EVENT). Re-commit with "category" set.`);
+            const expected = writableCatTags.length ? writableCatTags.join('|') : '(no record categories enabled)';
+            errors.push(`Skipped record "${who}": missing or unrecognized category. Expected ${expected}. Re-commit with "category" set.`);
             continue;
         }
         if (resolved.inferred) {
@@ -2574,10 +2874,21 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                     // delta ALSO contains a full [CORE] block, replace the old one in place
                     // (last write wins) rather than duplicating it, and only append whatever
                     // chronicle text (if any) remains outside that block.
-                    const newCoreMatch = delta.match(/\[CORE\][\s\S]*?\[\/CORE\]/i);
+                    const newCoreMatch = delta.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
                     const existingHasCore = /\[CORE\][\s\S]*?\[\/CORE\]/i.test(existing);
                     if (newCoreMatch && existingHasCore) {
-                        existing = existing.replace(/\[CORE\][\s\S]*?\[\/CORE\]/i, newCoreMatch[0]);
+                        const oldCoreMatch = existing.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
+                        const newCoreInner = newCoreMatch[1];
+                        const oldCoreInner = oldCoreMatch ? oldCoreMatch[1] : '';
+                        let extraHeaders = [];
+                        try {
+                            const coreSecs = (settings.npcCoreSections && Array.isArray(settings.npcCoreSections) && settings.npcCoreSections.length > 0)
+                                ? settings.npcCoreSections
+                                : DEFAULT_NPC_SECTIONS;
+                            extraHeaders = coreSecs.map(sec => sec.name).filter(Boolean);
+                        } catch (_) {}
+                        const mergedInner = mergePreservedColorMarkup(oldCoreInner, newCoreInner, { extraHeaders });
+                        existing = existing.replace(/\[CORE\][\s\S]*?\[\/CORE\]/i, `[CORE]${mergedInner}[/CORE]`);
                         delta = delta.replace(newCoreMatch[0], '').trim();
                         if (settings.debugMode) console.warn(`[RPG Tracker] Record targeted existing entry "${rec.label}" with a full [CORE] block — replaced in place instead of duplicating (agent should have used UPDATE_CORE/commit core).`);
                     }
@@ -2660,14 +2971,16 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     }
 
     // Bulk-activate all written books after all disk writes are done.
-    // Doing this once at the end avoids race conditions where ST's world info
-    // list hasn't re-indexed yet when the first /world command fires.
+    // Re-index only if this pass actually created a new book. Re-indexing an
+    // already-known book downloads the complete settings payload for no benefit.
     if (booksWritten.size > 0 && typeof ctx.executeSlashCommandsWithOptions === 'function') {
-        await new Promise(r => setTimeout(r, 400));
-        if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
+        const knownBefore = new Set(allBookNames.map(name => String(name || '').toLowerCase()));
+        const createdNewBook = [...booksWritten].some(name => !knownBefore.has(String(name || '').toLowerCase()));
+        if (createdNewBook && typeof ctx.updateWorldInfoList === 'function') {
+            await ctx.updateWorldInfoList();
+        }
         for (const bookName of booksWritten) {
             await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
-            await new Promise(r => setTimeout(r, 100));
         }
         if (settings.debugMode) console.log(`[RPG Tracker] Activated books: ${[...booksWritten].join(', ')}`);
     }
@@ -3443,7 +3756,7 @@ Output a JSON object:
 
 /**
  * Fetches a manifest of all campaign-scoped lorebook entries for the UI.
- * @param {boolean} skipUpdate When true, skips updateWorldInfoList and backend name probes (fast path).
+ * @param {boolean} skipUpdate When true, skips backend name probes (fast path).
  */
 export async function getLorebookManifest(skipUpdate = false) {
     const settings = getSettings();
@@ -3451,12 +3764,6 @@ export async function getLorebookManifest(skipUpdate = false) {
     const prefix = getLivePrefix();
     sanitizeRouterState(settings);
     
-    // Always flush ST's registry from disk first so books written via HTTP API are visible,
-    // unless skipUpdate is explicitly requested for speed.
-    if (!skipUpdate && typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-
     const names = await getWorldInfoNamesSafe({ fullProbe: !skipUpdate });
     // With no prefix, show nothing ? the user hasn't set a campaign yet.
     if (!prefix) return [];
@@ -3509,7 +3816,11 @@ export async function getLorebookManifest(skipUpdate = false) {
     const loadedBooks = await Promise.all(booksToLoad.map(async (n) => {
         try {
             const b = skipUpdate ? await ctx.loadWorldInfo(n) : await loadWorldInfoFresh(n, ctx);
-            return b?.entries ? { bookName: n, entries: b.entries } : null;
+            if (!b?.entries) return null;
+            // Full refreshes read disk; write that back so the interceptor's
+            // ctx.loadWorldInfo() sees the same entries the Agent UI just showed.
+            if (!skipUpdate) await updateWorldInfoCache(n, b);
+            return { bookName: n, entries: b.entries };
         } catch (_) {
             return null;
         }
@@ -3656,38 +3967,17 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     const prefix = getLivePrefix();
     if (!prefix) return [];
 
-    // Fast Path: use the campaignBooks ownership list if available.
-    // This avoids calling updateWorldInfoList() — the same 90-second registry scan
-    // that was causing the chat-switch latency — on EVERY generation.
+    // Fast path: campaignBooks avoids a disk re-index on every send. Union it
+    // with the in-memory registry so a newly created NPCs book that is not yet
+    // on the ownership list is still scanned (the exclusive fast path used to
+    // skip those books until Activate / Refresh Manifest).
     const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
     const knownBooks = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
-
-    let booksToScan;
-    if (knownBooks.length > 0) {
-        // We know exactly which books belong to this campaign — no registry scan needed.
-        booksToScan = [...knownBooks];
-    } else {
-        // Fallback for first-time chats: discover books via in-memory registry.
-        // updateWorldInfoList() is intentionally NOT called here — it triggers a
-        // full disk re-index on every message send, causing multi-second latency
-        // for users whose chatStates.campaignBooks is empty (new campaigns, no
-        // lorebook entries yet). The routerLog fallback below already catches any
-        // books not yet visible in the in-memory registry at zero I/O cost.
-        // runRouterPass calls updateWorldInfoList() after actual book writes (line ~1298),
-        // so the registry is already current by the time the next scan fires.
-        const allNames = await getWorldInfoNamesSafe();
-        const scoped = allNames.filter(n => bookBelongsToPrefix(n, prefix));
-
-        // Also sweep books referenced in routerLog (catches books not yet re-indexed)
-        const logBookNames = (settings.routerLog || [])
-            .flatMap(e => [...(e.record || []), ...(e.activate || [])].map(id => id.split('::')[0]))
-            .filter(Boolean);
-        const scopedSet = new Set(scoped);
-        for (const n of logBookNames) {
-            if (bookBelongsToPrefix(n, prefix) && !isSkeletonBookName(n)) scopedSet.add(n);
-        }
-        booksToScan = [...scopedSet];
-    }
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: knownBooks.length === 0 });
+    const logBookNames = (settings.routerLog || [])
+        .flatMap(e => [...(e.record || []), ...(e.activate || [])].map(id => id.split('::')[0]))
+        .filter(Boolean);
+    const booksToScan = resolveBooksToScan(knownBooks, registryNames, prefix, logBookNames);
 
     // ── Forward pass: activate entries whose keywords appear in the new narrative ──
     // ── or in the recent history window (Retroactive Lookback).            ──
@@ -3892,33 +4182,29 @@ function getRecentlyRecordedNpcIds(settings) {
 }
 
 /**
- * Most recent single assistant/narrator message only (not the whole multi-message turn block).
+ * Most recent single assistant/narrator message only (not the whole multi-message
+ * turn block, and never a user input — Present Now must not empty between replies).
  * @param {boolean} [includeHidden]
  * @returns {string}
  */
 function getMostRecentNarrativeText(includeHidden = false) {
     const { chat } = SillyTavern.getContext();
-    if (!chat?.length) return '';
-    for (let i = chat.length - 1; i >= 0; i--) {
-        const msg = chat[i];
-        if (msg.is_user) break;
-        if (msg.is_system) continue;
-        if (!includeHidden && /** @type {any} */ (msg).is_hidden) continue;
-        if (msg.extra?.['summary'] || msg.extra?.['is_summary'] || msg.extra?.['summary_data']) continue;
-        const mes = cleanMessageContent(msg);
-        if (!mes) continue;
-        if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) continue;
-        return mes;
-    }
-    return '';
+    const msg = findMostRecentNarratorMessage(chat, { includeHidden });
+    if (!msg) return '';
+    const mes = cleanMessageContent(msg);
+    if (!mes) return '';
+    if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) return '';
+    return mes;
 }
 
 /**
  * Present-Now name scanner — separate from the Lorebook Agent keyword scanner.
  * Scans ONLY the latest single narrator message for NPC names (entry comment/label).
- * First/last name tokens are enough for established NPCs; NPCs the agent just
- * recorded this pass require a full-name match so loose tokens/keys do not
- * instantly populate Present Now. Lorebook key[] arrays are never scanned.
+ * User messages are never scanned: a player turn without explicit NPC names must
+ * not clear Present Now. First/last name tokens are enough for established NPCs;
+ * NPCs the agent just recorded this pass require a full-name match so loose
+ * tokens/keys do not instantly populate Present Now. Lorebook key[] arrays are
+ * never scanned.
  *
  * Call immediately before location scene image generation (and when building Present Now UI).
  *
@@ -3938,16 +4224,9 @@ export async function scanRecentOutputForPresentNpcs(narrativeText) {
 
     const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
     const knownBooks = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
-
-    let booksToScan;
-    if (knownBooks.length > 0) {
-        booksToScan = knownBooks.filter(n => isNpcBookName(n) && !isSkeletonBookName(n));
-    } else {
-        const allNames = await getWorldInfoNamesSafe({ fullProbe: false });
-        booksToScan = allNames.filter(n =>
-            bookBelongsToPrefix(n, prefix) && isNpcBookName(n) && !isSkeletonBookName(n),
-        );
-    }
+    const registryNames = await getWorldInfoNamesSafe({ fullProbe: knownBooks.length === 0 });
+    const booksToScan = resolveBooksToScan(knownBooks, registryNames, prefix)
+        .filter(n => isNpcBookName(n));
     if (!booksToScan.length) return [];
 
     const recentlyRecordedNpcIds = getRecentlyRecordedNpcIds(settings);
@@ -4086,6 +4365,12 @@ function cleanKeys(keys) {
     if (!Array.isArray(keys)) return [];
     const unique = [...new Set(keys.map(k => k?.trim()).filter(Boolean))];
     return unique.slice(0, 6); // Hard cap: max 6 keywords per entry to prevent keyword bloat
+}
+
+/** Site name first, then user keywords, still capped at 6. */
+function locationKeysForNewRoot(site, keys) {
+    const extra = Array.isArray(keys) ? keys : String(keys || '').split(/[,;\n]/);
+    return cleanKeys([site, ...extra]);
 }
 
 /**
@@ -4267,6 +4552,8 @@ export async function purgeWorldHistoryForChat(opts = {}) {
     settings.worldProgressionLastFiredAtMinutes = -1;
     settings.worldProgressionLastFiredPeriodLabel = '';
     settings.worldProgressionSkeletonAtmosphereSummary = '';
+    settings.worldProgressionLocationLastAdvanced = {};
+    settings.mapEvolutionWorldReportApplications = {};
 
     if (settings.chatStates && chatId && settings.chatStates[chatId]) {
         const cs = settings.chatStates[chatId];
@@ -4274,6 +4561,8 @@ export async function purgeWorldHistoryForChat(opts = {}) {
         cs.worldProgressionLastFiredAtMinutes = -1;
         cs.worldProgressionLastFiredPeriodLabel = '';
         cs.worldProgressionSkeletonAtmosphereSummary = '';
+        cs.worldProgressionLocationLastAdvanced = {};
+        cs.mapEvolutionWorldReportApplications = {};
     }
 
     persistWorldProgressionTimer();
@@ -4356,9 +4645,6 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
     //    Used for: duplicate check, full lore context, and applyAction verification.
     //    No double-fetch - archiveBooks is reused throughout the function.
     const ctx = SillyTavern.getContext();
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
     const allBookNames = await getWorldInfoNamesSafe();
     const archiveBooks = {};
     for (const n of allBookNames) {
@@ -4373,13 +4659,26 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
     const worldBook = archiveBooks[worldBookName] ?? null;
     const cleanPeriod = periodLabel.toLowerCase().trim();
     if (worldBook?.entries) {
-        for (const entry of Object.values(worldBook.entries)) {
+        for (const [uid, entry] of Object.entries(worldBook.entries)) {
             const existingLabel = (entry.comment || '').toLowerCase().trim();
             if (existingLabel === cleanPeriod) {
                 broadcastStep('thought', `\uD83C\uDF0D World Progression: "${periodLabel}" already exists - advancing timer.`);
                 settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+                const metadata = normalizeWorldReportMetadata(entry, worldBookName, uid);
+                settings.worldProgressionLocationLastAdvanced = stampLocationAdvancement(
+                    settings.worldProgressionLocationLastAdvanced,
+                    metadata.selectedLocations,
+                    periodLabel,
+                );
                 persistWorldProgressionTimer();
-                return;
+                return {
+                    ok: true,
+                    skipped: 'duplicate',
+                    periodLabel,
+                    reportContent: String(entry.content || '').trim(),
+                    reportId: metadata.reportId,
+                    selectedLocations: metadata.selectedLocations,
+                };
             }
         }
     }
@@ -4435,7 +4734,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
 ## RULES
 1. Merge all reports into a single coherent, present-tense narrative.
 2. Always retain temporal context. The summary MUST begin with the overall period label (e.g. "[${consolidatedLabel}]"). Never remove all temporal markers.
-3. Preserve every unique fact — faction developments, NPC actions, location changes, economic shifts, and plot developments. Never replace detailed facts with generic summaries (e.g. writing "Various events occurred" is a critical failure).
+3. Preserve every unique location-scale or wider-current fact — institutional developments, location changes, economic shifts, environmental conditions, public sentiment, and causal reversals. Named entities may remain only where needed to identify historical causes; do not turn them into new simulation subjects. Never replace detailed facts with generic summaries.
 4. Eliminate only true redundancies — if the same fact repeats across multiple reports, write it once.
 5. Target 40–60% of the combined original token count.
 6. Format: dense prose or tight bullet points, no filler, no markdown headers beyond the period label. 1–2 sentences per development.
@@ -4450,7 +4749,7 @@ ${rawDump}`;
 
                 let consolidatedContent = null;
                 try {
-                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt);
+                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression' });
                 } catch (e) {
                     broadcastStep('error', `World Progression consolidation failed: ${e.message} — continuing without consolidation.`);
                 }
@@ -4506,206 +4805,24 @@ ${rawDump}`;
         }
     }
 
-    // 3. Build full lore context from ALL campaign lorebooks, split into three sections.
-    //    _Skeleton books -> Day 0 Baseline (foundational undiscovered entities, never injected
-    //                       into narrative context — only visible to the World Progression engine)
-    //    Regular books   -> Active World Lore (all discovered entities, active or not)
-    //    _World books    -> Historical Reports (all prior periods, incl. deactivated)
-    //
-    //    Segregating the Skeleton into its own timestamped section prevents the LLM from
-    //    treating Day-0 stub data as current events, while still making those entities available
-    //    for off-screen simulation.
-    const skeletonLines = [];
-    const loreGrouped = {}; // categoryHeader -> Array of entry lines
+    // 3. Historical macro context only. Location lore and pertinent read-only
+    //    constraints are assembled below by buildWorldProgressionLocationDossiers().
     const historicalReportLines = [];
-    // Typed entity name pools — skeleton vs. narrative
-    const skeletonNpcNames = [];
-    const narrativeNpcNames = [];
-    const skeletonLocationNames = [];
-    const narrativeLocationNames = [];
-    const skeletonFactionNames = [];
-    const narrativeFactionNames = [];
-    const conflictNames = [];
-    // First-sentence descriptions for the fallback generator context
-    const skeletonFactionDescs = []; // { name, desc }
-    const skeletonLocationDescs = []; // { name, desc }
-
-    // Compute exclusion list (manual, general-purpose — soft: only affects the
-    // randomized designation pool, not raw context visibility, by long-standing design).
-    const excludedTerms = [];
-    if (settings.worldProgressionExclusionList) {
-        settings.worldProgressionExclusionList
-            .split(',')
-            .map(term => term.trim().toLowerCase())
-            .filter(Boolean)
-            .forEach(term => excludedTerms.push(term));
-    }
-
-    // Party presence, unconditional (no toggle) — [PARTY] members are HARD-excluded below
-    // (stripped from context entirely, not just the randomization pool), because they are
-    // physically with {{user}} right now and any off-screen activity for them risks
-    // contradicting the live scene. [BENCHED PARTY] members are the opposite: eligible for
-    // simulation, with their benching note captured as flavor for their designation entry.
-    // See <leaving_vs_benching> in sysprompt.txt / DEFAULT_STOCK_PROMPTS['benched party'] for the
-    // inference contract that keeps these two blocks in sync with the narrative.
-    function extractPartyRoster(memo, tagName) {
-        const roster = [];
-        const re = new RegExp(`\\[${tagName}\\]([\\s\\S]*?)\\[\\/${tagName}\\]`, 'i');
-        const match = memo.match(re);
-        if (!match) return roster;
-        const blockContent = match[1];
-        // Each member starts a new "Name (Class): cur/max HP" line — split on those anchors
-        // rather than every line, so we can carry a member's Status line along with their name.
-        const memberChunks = blockContent.split(/\n(?=[^\n]*\([^)]*\):\s*\d)/);
-        for (const chunk of memberChunks) {
-            const lines = chunk.split('\n').map(l => l.trim()).filter(Boolean);
-            if (!lines.length) continue;
-            const headerLine = lines[0];
-            const colonIdx = headerLine.indexOf(':');
-            const entityPart = colonIdx !== -1 ? headerLine.substring(0, colonIdx).trim() : headerLine;
-            const namePart = entityPart.replace(/\s*\([^)]*\)/g, '').trim();
-            if (!namePart || namePart === '(unnamed)') continue;
-            const statusLine = lines.find(l => l.toLowerCase().startsWith('status:'));
-            const note = statusLine ? statusLine.substring(statusLine.indexOf(':') + 1).trim() : '';
-            roster.push({ name: namePart, note });
-        }
-        return roster;
-    }
-
-    const memoForParty = settings.currentMemo || '';
-    const presentPartyRoster = extractPartyRoster(memoForParty, 'PARTY');
-    const benchedPartyRoster = extractPartyRoster(memoForParty, 'BENCHED PARTY');
-    const presentPartyNames = new Set(presentPartyRoster.map(m => m.name.toLowerCase()));
-
-    function getBookCategoryHeader(bookName, prefix) {
-        let cleanName = bookName;
-        if (prefix && bookName.startsWith(prefix + '_')) {
-            cleanName = bookName.slice(prefix.length + 1);
-        }
-        return cleanName.toUpperCase();
-    }
-
     for (const [bookName, book] of Object.entries(archiveBooks)) {
-        const nameLower = bookName.toLowerCase();
-        const isSkeletonBook = nameLower.endsWith('_skeleton');
+        const nameLower = String(bookName || '').toLowerCase();
         const isWorldBook = nameLower.endsWith('_world') || nameLower === 'world';
-        // Sort by uid (numeric insertion order ≈ chronological)
+        if (!isWorldBook || !book?.entries) continue;
         let sortedEntries = Object.entries(book.entries)
-            .sort(([a], [b]) => Number(a) - Number(b));
-
-        if (isWorldBook) {
-            const historyLookback = settings.worldProgressionHistoryLookback ?? 0;
-            if (historyLookback > 0) {
-                sortedEntries = sortedEntries.slice(-historyLookback);
-            }
-        }
-
+            .sort(([left], [right]) => Number(left) - Number(right));
+        const historyLookback = settings.worldProgressionHistoryLookback ?? 0;
+        if (historyLookback > 0) sortedEntries = sortedEntries.slice(-historyLookback);
         for (const [, entry] of sortedEntries) {
-            if (!entry?.content?.trim()) continue;
-            const label = (entry.comment || entry.key?.[0] || '(unnamed)').trim();
-            if (label === '(unnamed)' || !label) continue;
-
-            const categoryHeader = getBookCategoryHeader(bookName, prefix);
-            const isNpc = (isSkeletonBook && entry.extensions?.rpgCategory === 'NPC') ||
-                          (!isSkeletonBook && (categoryHeader === 'NPC' || categoryHeader === 'NPCS' || nameLower.includes('npc')));
-            const isLoc = (isSkeletonBook && entry.extensions?.rpgCategory === 'LOC') ||
-                          (!isSkeletonBook && (categoryHeader === 'LOC' || categoryHeader === 'LOCATIONS' || nameLower.includes('location') || nameLower.includes('place')));
-            const isFac = (isSkeletonBook && entry.extensions?.rpgCategory === 'FAC') ||
-                          (!isSkeletonBook && (categoryHeader === 'FAC' || categoryHeader === 'FACTIONS' || nameLower.includes('faction') || nameLower.includes('guild')));
-            const isConflict = (isSkeletonBook && entry.extensions?.rpgCategory === 'EVENT') ||
-                               (!isSkeletonBook && (categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' || categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' || nameLower.includes('event') || nameLower.includes('conflict') || nameLower.includes('quest')));
-
-            // HARD exclusion for present party members: skip this entry entirely (never enters
-            // skeletonLines/loreGrouped/any name pool) if it's an NPC-type entry representing
-            // someone currently in [PARTY]. Historical [_World] reports are exempt — they're
-            // archived record of the past, not something being freshly selected now.
-            if (isNpc && !isWorldBook && presentPartyNames.size > 0) {
-                const labelLower = label.toLowerCase();
-                const primaryKeysForParty = Array.isArray(entry.key) ? entry.key.map(k => String(k).trim().toLowerCase()) : [];
-                const matchesPresentParty = [...presentPartyNames].some(name =>
-                    labelLower.includes(name) || primaryKeysForParty.some(k => k.includes(name))
-                );
-                if (matchesPresentParty) continue;
-            }
-
-            // Check exclusion list
-            let isExcluded = false;
-            if (excludedTerms.length > 0) {
-                const labelLower = label.toLowerCase();
-                const primaryKeys = Array.isArray(entry.key) ? entry.key.map(k => String(k).trim().toLowerCase()) : [];
-                const secondaryKeys = Array.isArray(entry.keysecondary) ? entry.keysecondary.map(k => String(k).trim().toLowerCase()) : [];
-
-                isExcluded = excludedTerms.some(term => {
-                    if (labelLower.includes(term)) return true;
-                    if (primaryKeys.some(k => k.includes(term))) return true;
-                    if (secondaryKeys.some(k => k.includes(term))) return true;
-                    return false;
-                });
-            }
-
-            if (isSkeletonBook) {
-                skeletonLines.push(`### ${label}\n${entry.content.trim()}`);
-                if (!isExcluded) {
-                    if (isNpc) skeletonNpcNames.push(label);
-                    else if (isLoc) {
-                        skeletonLocationNames.push(label);
-                        skeletonLocationDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                    } else if (isFac) {
-                        skeletonFactionNames.push(label);
-                        skeletonFactionDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                    } else if (isConflict) conflictNames.push(label);
-                }
-            } else if (isWorldBook) {
-                historicalReportLines.push(`### ${label}\n${entry.content.trim()}`);
-            } else {
-                const isQuestOrEvent = categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' ||
-                                       categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' ||
-                                       nameLower.includes('event') || nameLower.includes('quest');
-                if (isQuestOrEvent) continue;
-
-                if (!loreGrouped[categoryHeader]) {
-                    loreGrouped[categoryHeader] = [];
-                }
-                loreGrouped[categoryHeader].push(`### ${label}\n${entry.content.trim()}`);
-                if (!isExcluded) {
-                    if (isNpc) narrativeNpcNames.push(label);
-                    else if (isLoc) narrativeLocationNames.push(label);
-                    else if (isFac) narrativeFactionNames.push(label);
-                }
-            }
+            const content = String(entry?.content || '').trim();
+            if (!content) continue;
+            const label = String(entry?.comment || entry?.key?.[0] || 'Prior report').trim();
+            historicalReportLines.push(`### ${label}\n${content}`);
         }
     }
-
-    // Benched party members are eligible for simulation regardless of whether they also have
-    // a standalone NPC lorebook entry — synthesize a category so WP has real content to work
-    // with (their benching note as flavor), and make them selectable via the same NPC
-    // designation pool as any other narrative NPC.
-    if (benchedPartyRoster.length > 0) {
-        const benchedLabel = 'PARTY MEMBERS (BENCHED)';
-        loreGrouped[benchedLabel] = benchedPartyRoster.map(m =>
-            `### ${m.name}\n${m.note || 'Currently separated from {{user}}.'}`
-        );
-        for (const m of benchedPartyRoster) {
-            narrativeNpcNames.push(m.name);
-        }
-    }
-
-    const skeletonDump = skeletonLines.length
-        ? skeletonLines.join('\n\n')
-        : '(No skeleton generated — engine will rely solely on discovered lore.)';
-
-    let loreDump = '';
-    const categories = Object.keys(loreGrouped).sort();
-    if (categories.length > 0) {
-        const categoryBlocks = [];
-        for (const cat of categories) {
-            categoryBlocks.push(`## ${cat}\n${loreGrouped[cat].join('\n\n')}`);
-        }
-        loreDump = categoryBlocks.join('\n\n');
-    } else {
-        loreDump = 'No lore entries found.';
-    }
-
     const historicalDump = historicalReportLines.length
         ? historicalReportLines.join('\n\n')
         : 'No prior World Progression reports.';
@@ -4730,6 +4847,23 @@ ${rawDump}`;
         recentNarrative = narrativeBlocks.join('\n\n');
     }
 
+    const locationContext = buildWorldProgressionLocationDossiers(archiveBooks, {
+        prefix,
+        exclusionList: settings.worldProgressionExclusionList || '',
+    });
+    const selectedDossiers = selectWorldProgressionLocations(locationContext.dossiers, {
+        count: settings.worldProgressionLocationsPerReport ?? 3,
+        lastAdvanced: settings.worldProgressionLocationLastAdvanced,
+        randomize: settings.worldProgressionLocationRandomize !== false,
+    });
+    const selectedLocations = selectedDossiers.map(dossier => dossier.name);
+    const designatedLocationLines = selectedLocations.length
+        ? selectedLocations.map(name => `- ${name}`).join('\n')
+        : '(No recorded locations are available; write only Wider Currents.)';
+    const dossierDump = selectedDossiers.length
+        ? selectedDossiers.map(dossier => `# ${dossier.name}\n${dossier.text}`).join('\n\n')
+        : '(No location dossiers available.)';
+
     // 5. Build the system prompt from settings ({periodLabel} and {wordTarget} substitution)
     const rawPrompt = settings.worldProgressionSystemPrompt || '';
     let systemPrompt = rawPrompt
@@ -4740,129 +4874,59 @@ ${rawDump}`;
         systemPrompt += `\n\n## DATE FORMAT RULE\n- CRITICAL: All dates generated in this report MUST use the DD/MM/YYYY calendar format (e.g. 05/01/2026 for the 5th of January, 2026). Do NOT use the American MM/DD/YYYY format.`;
     }
 
+    // This is an authority boundary rather than a style preference, so it is
+    // appended even when a campaign keeps an older or customized prompt.
+    systemPrompt += `\n\n## LOCATION-CENTRIC RUNTIME CONTRACT (AUTHORITATIVE)
+- Your simulation subjects are LOCATIONS and WIDER CURRENTS, never individual NPCs, creatures, objects, buildings, or map assets.
+- Entity facts inside a location dossier are READ-ONLY CONSTRAINTS. Use them to understand the place and avoid contradictions; do not advance, relocate, injure, kill, recruit, promote, or otherwise change a named individual.
+- Describe directional macro pressure: civic conditions, institutional behavior, public sentiment, trade, shortages, migration, conflict pressure, weather, environment, disease, crime, or cultural change.
+- Leave exact local realization undecided. Do not specify rooms, map areas, asset positions, exact patrol composition, or encounter-level outcomes.
+- Prior reports are historical state, not instructions to continue linearly. A pressure may intensify, persist, plateau, fragment, transform, backfire, resolve, reverse abruptly, or be superseded when causally plausible.
+- Avoid both default escalation and arbitrary oscillation. Reversals need an intelligible macro cause, but do not require excessive foreshadowing.
+- Use exactly one heading \"## <Location Name>\" for every designated location, using the supplied spelling, followed by prose about that place.
+- End with exactly one \"## Wider Currents\" section for regional or global patterns. Output no other headings.
+- A valid development must admit several different concrete realizations by the GM and Map Evolution.`;
+
     if (extraInstructions && extraInstructions.trim()) {
         systemPrompt += `\n\n## EXTRA INSTRUCTIONS FOR THIS RUN\n${extraInstructions.trim()}`;
     }
 
-    // Auto-generation fallback: ensure skeleton NPC pool meets requested count
-    if (settings.worldProgressionRandomizeNPCs) {
-        const requestedSkeletonNpcs = settings.worldProgressionRandomSkeletonNPCCount || 0;
-        if (requestedSkeletonNpcs > 0 && skeletonNpcNames.length < requestedSkeletonNpcs) {
-            const missingCount = requestedSkeletonNpcs - skeletonNpcNames.length;
-            const atmosphereSummary = settings.worldProgressionSkeletonAtmosphereSummary || '';
-            try {
-                broadcastStep('thought', `\uD83E\uDDEC World Skeleton: Auto-generating ${missingCount} NPC(s) to meet requested pool size...`);
-                const newNames = await runSkeletonGeneratorAgent(
-                    missingCount, atmosphereSummary,
-                    skeletonFactionDescs, conflictNames, skeletonLocationDescs, archiveBooks
-                );
-                skeletonNpcNames.push(...newNames);
-                if (typeof globalThis._rpgUpdateSkeletonStatus === 'function') {
-                    globalThis._rpgUpdateSkeletonStatus().catch(() => {});
-                }
-            } catch (e) {
-                broadcastStep('error', `World Skeleton auto-generation failed: ${e.message} \u2014 proceeding with existing pool.`);
-            }
-        }
-    }
-
-    // Determine designated entities using typed skeleton/narrative pools
-    const designations = [];
-    const shuffleAndSelect = (arr, count) => {
-        const unique = Array.from(new Set(arr)).filter(Boolean);
-        const clamped = Math.min(Math.max(count, 0), unique.length);
-        if (clamped === 0) return [];
-        const shuffled = [...unique];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled.slice(0, clamped);
-    };
-
-    const handleTypedRandomization = (enabled, skeletonNames, narrativeNames, skeletonCount, narrativeCount, category) => {
-        if (!enabled) return;
-        const skelSelected = shuffleAndSelect(skeletonNames, skeletonCount);
-        const narSelected = shuffleAndSelect(narrativeNames, narrativeCount);
-        if (skelSelected.length > 0 || narSelected.length > 0) {
-            let block = `### ${category}`;
-            if (skelSelected.length > 0) {
-                block += `\n#### SKELETON ENTITIES [drawn from skeleton lorebook only]\n` + skelSelected.map(n => `- ${n}`).join('\n');
-            }
-            if (narSelected.length > 0) {
-                block += `\n#### NARRATIVE ENTITIES [drawn from active world lore only]\n` + narSelected.map(n => `- ${n}`).join('\n');
-            }
-            designations.push(block);
-        }
-    };
-
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeNPCs,
-        skeletonNpcNames, narrativeNpcNames,
-        settings.worldProgressionRandomSkeletonNPCCount || 0,
-        settings.worldProgressionRandomNarrativeNPCCount || 0,
-        'NPCs'
-    );
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeLocations,
-        skeletonLocationNames, narrativeLocationNames,
-        settings.worldProgressionRandomSkeletonLocationCount || 0,
-        settings.worldProgressionRandomNarrativeLocationCount || 0,
-        'Locations'
-    );
-    handleTypedRandomization(
-        settings.worldProgressionRandomizeFactions,
-        skeletonFactionNames, narrativeFactionNames,
-        settings.worldProgressionRandomSkeletonFactionCount || 0,
-        settings.worldProgressionRandomNarrativeFactionCount || 0,
-        'Factions'
-    );
-
-
-
-    let selectedNPCsText = '';
-    if (designations.length > 0) {
-        selectedNPCsText = `\n\n## DESIGNATED ENTITIES FOR THIS PERIOD\n` +
-            `The following entities have been pre-selected by the system simulator. Entities listed under SKELETON ENTITIES originate from the hidden background skeleton (off-screen, undiscovered by the player). Entities listed under NARRATIVE ENTITIES originate from the active discovered world lore. You MUST focus on and advance the timeline only for these designated entities:\n\n` +
-            designations.join('\n\n') +
-            `\n\nYou are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for entities not listed above. You MAY mention them passively as background context where their prior established actions are a direct catalyst for a designated entity.`;
-    }
-
+    // No raw map or entity pool can enter the World Progression LLM call.
     let userPrompt =
-`## WORLD SKELETON (Day 0 Baseline — Foundational Undiscovered State)
-These entities existed at the start of the campaign. They have been acting off-screen since Day 1.
-They are NOT yet known to the player. Use them freely to generate off-screen activity.
-${skeletonDump}
+`## DESIGNATED LOCATIONS
+Advance only these location-scale subjects during this period:
+${designatedLocationLines}
 
-## ACTIVE WORLD LORE (Discovered Entities — Current Known State)
-${loreDump}
+## LOCATION DOSSIERS
+These dossiers contain the known character, history, sublocations, institutions, and relevant facts for each designated place. Named entities and map-scale facts are context only, not simulation subjects.
+${dossierDump}
 
-## HISTORICAL WORLD REPORTS (Previously Generated Off-Screen Activity)
+## WIDER-WORLD CONTEXT
+Use this only to derive regional or global pressures. Do not advance any named individual found here.
+${locationContext.globalContext || '(No wider-world context recorded.)'}
+
+## HISTORICAL WORLD REPORTS
+These are prior macro conditions. Continue their causal consequences where appropriate, but consider persistence, transformation, resolution, backlash, and reversal rather than assuming linear escalation.
 ${historicalDump}`;
 
     if (recentNarrative) {
         userPrompt += `\n\n## RECENT NARRATIVE (Current Scene Context)\n${recentNarrative}`;
     }
 
-    if (selectedNPCsText) {
-        userPrompt += selectedNPCsText;
-    }
-
-    userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**.`;
+    userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**, with exactly one section for every designated location and a final Wider Currents section.`;
 
     // 6. Send the LLM request using the Lorebook Agent connection settings
-    const loreCount = Object.values(loreGrouped).reduce((sum, arr) => sum + arr.length, 0);
-    broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${skeletonLines.length} skeleton, ${loreCount} lore, ${historicalReportLines.length} prior reports)...`);
+    broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${selectedLocations.length} locations, ${historicalReportLines.length} prior reports)...`);
     let reportContent;
     try {
-        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'World Progression' });
     } catch (e) {
         broadcastStep('error', `World Progression generation failed: ${e.message}`);
-        return;
+        return { ok: false, error: e.message };
     }
     if (!reportContent || !reportContent.trim()) {
         broadcastStep('error', 'World Progression: LLM returned empty response.');
-        return;
+        return { ok: false, error: 'empty' };
     }
 
     // 7. Store the entry via applyAction (routes to the _World lorebook).
@@ -4876,74 +4940,10 @@ ${historicalDump}`;
         reason: `World Progression: auto-generated report for ${periodLabel}`,
     }, archiveBooks, timeStr, '');
 
-    // 7b. Breadcrumb write-back: for each benched party member mentioned in this report,
-    // concatenate the matching bullet(s) into their [BENCHED PARTY] Status field as a
-    // period-timestamped "last update" trailer. This keeps a benched companion's thread
-    // alive in the always-injected memo even after the _World book's rolling window
-    // (worldProgressionKeepActive) moves past the report that mentioned them. Bullets in a
-    // single report are synchronous (one shared period timestamp) — there is no ordering to
-    // exploit across multiple matches, so all matches are kept, not just "the last one".
-    if (benchedPartyRoster.length > 0) {
-        const bullets = reportContent
-            .split(/\n\s*\n/)
-            .map(b => b.replace(/^[-*]\s*/, '').trim())
-            .filter(Boolean);
-
-        let memoForBreadcrumbs = settings.currentMemo || '';
-        let anyBreadcrumbWritten = false;
-
-        for (const member of benchedPartyRoster) {
-            const escapedName = member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const nameRx = new RegExp(`\\b${escapedName}\\b`, 'i');
-            const matchingBullets = bullets.filter(b => nameRx.test(b));
-            if (matchingBullets.length === 0) continue;
-
-            const breadcrumb = matchingBullets.join('; ');
-
-            // Locate this member's chunk within [BENCHED PARTY] the same way extractPartyRoster
-            // split it, so we only touch this member's Status line, not the whole block.
-            const blockRe = /\[BENCHED PARTY\]([\s\S]*?)\[\/BENCHED PARTY\]/i;
-            const blockMatch = memoForBreadcrumbs.match(blockRe);
-            if (!blockMatch) break; // block vanished mid-loop (shouldn't happen) — bail safely
-
-            const blockContent = blockMatch[1];
-            const chunks = blockContent.split(/\n(?=[^\n]*\([^)]*\):\s*\d)/);
-            const chunkIdx = chunks.findIndex(c => {
-                const headerLine = c.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
-                const colonIdx = headerLine.indexOf(':');
-                const entityPart = colonIdx !== -1 ? headerLine.substring(0, colonIdx).trim() : headerLine;
-                const namePart = entityPart.replace(/\s*\([^)]*\)/g, '').trim();
-                return namePart.toLowerCase() === member.name.toLowerCase();
-            });
-            if (chunkIdx === -1) continue;
-
-            let chunk = chunks[chunkIdx];
-            const statusLineRe = /^(\s*Status:\s*)(.*)$/im;
-            if (statusLineRe.test(chunk)) {
-                chunk = chunk.replace(statusLineRe, (full, prefix, value) => {
-                    // Strip any prior "— Last update: ..." trailer before appending the fresh one.
-                    const baseValue = value.replace(/\s*—\s*Last update:.*$/i, '').trim();
-                    return `${prefix}${baseValue} — Last update: ${periodLabel}: ${breadcrumb}`;
-                });
-            } else {
-                chunk = chunk.trim() + `\nStatus: Benched — Last update: ${periodLabel}: ${breadcrumb}`;
-            }
-            chunks[chunkIdx] = chunk;
-
-            const newBlockContent = chunks.join('\n');
-            memoForBreadcrumbs = memoForBreadcrumbs.replace(blockRe, `[BENCHED PARTY]${newBlockContent}[/BENCHED PARTY]`);
-            anyBreadcrumbWritten = true;
-        }
-
-        if (anyBreadcrumbWritten) {
-            settings.currentMemo = memoForBreadcrumbs;
-            void saveSettings();
-        }
-    }
-
     // 8. Rolling window: keep only the N most recent WORLD entries active.
     await new Promise(r => setTimeout(r, 300));
     let freshWorldBook = null;
+    let reportId = '';
     try { freshWorldBook = await ctx.loadWorldInfo(worldBookName); } catch (_) {}
     if (!freshWorldBook?.entries) {
         try {
@@ -4959,6 +4959,32 @@ ${historicalDump}`;
     if (freshWorldBook?.entries) {
         const sorted = Object.entries(freshWorldBook.entries)
             .sort(([a], [b]) => Number(a) - Number(b));
+        const reportPair = [...sorted].reverse().find(([, entry]) =>
+            String(entry?.comment || '').trim().toLowerCase() === cleanPeriod
+        );
+        if (reportPair) {
+            const [uid, entry] = reportPair;
+            reportId = `${worldBookName}::${uid}`;
+            entry.extensions = {
+                ...(entry.extensions || {}),
+                [WORLD_REPORT_METADATA_KEY]: {
+                    reportId,
+                    periodLabel,
+                    selectedLocations: [...selectedLocations],
+                },
+            };
+            try {
+                const response = await fetch('/api/worldinfo/edit', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ name: worldBookName, data: freshWorldBook }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.warn('[RPG Tracker] Could not persist World Report routing metadata through the API.', error);
+            }
+            try { await ctx.saveWorldInfo(worldBookName, freshWorldBook); } catch (_) {}
+        }
         const allWorldIds = sorted.map(([uid]) => `${worldBookName}::${uid}`);
         const toActivate = allWorldIds.slice(-keepActive);
         const toDeactivate = allWorldIds.slice(0, Math.max(0, allWorldIds.length - keepActive));
@@ -4980,18 +5006,30 @@ ${historicalDump}`;
 
     // 9. Advance the timer — only the period label is stored; numeric field is legacy.
     settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+    settings.worldProgressionLocationLastAdvanced = stampLocationAdvancement(
+        settings.worldProgressionLocationLastAdvanced,
+        selectedLocations,
+        periodLabel,
+    );
     persistWorldProgressionTimer();
 
     broadcastStep('finish', `\uD83C\uDF0D World Progression: "${periodLabel}" report saved.`);
     if (typeof globalThis._rpgRenderRouterUI === 'function') {
         globalThis._rpgRenderRouterUI();
     }
+    return {
+        ok: true,
+        reportContent: reportContent.trim(),
+        periodLabel,
+        reportId,
+        selectedLocations,
+    };
 }
 // -- World Skeleton ------------------------------------------------------------------
 
 /**
- * Parses the raw LLM output from the skeleton generation pass into individual
- * lore records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
+ * Parses the raw LLM output from the skeleton generation pass into macro
+ * premise records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
  * Returns an array of { label, content, category } objects.
  * @param {string} rawText
  * @returns {Array<{label: string, content: string, category: string}>}
@@ -5033,7 +5071,7 @@ function parseSkeletonOutput(rawText) {
     const records = [];
     const lines = cleanedText.split('\n');
     
-    let currentCategory = 'NPC';
+    let currentCategory = null;
     let currentItem = null;
 
     const sectionRegex = /^##\s+([A-Z\/]+)/i;
@@ -5055,9 +5093,13 @@ function parseSkeletonOutput(rawText) {
                 currentItem = null;
             }
             const key = secMatch[1].toUpperCase();
-            currentCategory = categoryMap[key] || 'NPC';
+            currentCategory = categoryMap[key] || null;
             continue;
         }
+
+        // Unknown sections — notably the retired NPC/NPCS category emitted by
+        // an old custom prompt — are intentionally ignored.
+        if (!currentCategory) continue;
 
         // 2. Check for ### Sub-header
         const subMatch = line.match(subHeaderRegex);
@@ -5119,130 +5161,12 @@ function parseSkeletonOutput(rawText) {
         }
     }
 
-    return records.filter(r => r.label && r.content);
-}
-
-/**
- * Auto-generates skeleton NPCs when the pool is below the requested count.
- * Operates in informational isolation — receives only the skeleton theme, atmosphere
- * summary, and existing skeleton faction/location/conflict names.
- * Never sees narrative content, active NPC stats, quest details, or player logs.
- *
- * @param {number} missingCount  Number of NPCs to generate
- * @param {string} atmosphere    Skeleton Source material used as the generation foundation
- * @param {Array}  factionDescs  Array of {name, desc} from skeleton factions
- * @param {Array}  conflictNames Skeleton conflict/event names (names only)
- * @param {Array}  locationDescs Array of {name, desc} from skeleton locations
- * @param {Object} archiveBooks  Loaded lorebook map for writing back to skeleton
- * @returns {Promise<string[]>}  Names of newly created skeleton NPCs
- */
-async function runSkeletonGeneratorAgent(missingCount, atmosphere, factionDescs, conflictNames, locationDescs, archiveBooks) {
-    const settings = getSettings();
-    const prefix = getLivePrefix();
-    const skeletonBookName = prefix ? `${prefix}_Skeleton` : 'World_Skeleton';
-
-    const factionContext = factionDescs.length > 0
-        ? factionDescs.map(f => `- ${f.name}: ${f.desc}`).join('\n')
-        : '(none defined yet)';
-    const locationContext = locationDescs.length > 0
-        ? locationDescs.map(l => `- ${l.name}: ${l.desc}`).join('\n')
-        : '(none defined yet)';
-    const conflictContext = conflictNames.length > 0
-        ? conflictNames.map(n => `- ${n}`).join('\n')
-        : '(none defined yet)';
-
-    const systemPrompt =
-`You are a World Architect. Generate background skeleton NPCs for an RPG campaign simulation.
-These NPCs are undiscovered background characters — they have never appeared in the narrative.
-Do NOT reference any player characters, recent events, or narrative content.
-Output ONLY structured content:
-
-## NPCS
-### [Name]
-[Role in the world. Current situation or agenda in 1-2 sentences.]`;
-
-    let userPrompt = `## SKELETON SOURCE\n${atmosphere || '(No written Skeleton Source provided)'}\n\n`;
-    userPrompt +=
-`## EXISTING SKELETON CONTEXT (for thematic consistency — do not replicate)
-### Factions
-${factionContext}
-
-### Locations
-${locationContext}
-
-### Active Conflicts
-${conflictContext}
-
-Generate exactly ${missingCount} new skeleton NPC(s). Each must be unique, thematically consistent, and not affiliated with or named after any player character.`;
-
-    const routerSettings = {
-        connectionSource: settings.worldConnectionSource || 'default',
-        connectionProfileId: settings.worldConnectionProfileId,
-        completionPresetId: settings.worldCompletionPresetId,
-        ollamaUrl: settings.worldOllamaUrl,
-        ollamaModel: settings.worldOllamaModel,
-        openaiUrl: settings.worldOpenaiUrl,
-        openaiKey: settings.worldOpenaiKey,
-        openaiModel: settings.worldOpenaiModel,
-    };
-
-    const rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
-    if (!rawOutput?.trim()) throw new Error('Skeleton generator agent returned empty response');
-
-    const records = parseSkeletonOutput(rawOutput).filter(r => r.category === 'NPC');
-    if (records.length === 0) throw new Error('Skeleton generator: no NPC records parsed from output');
-
-    // Load or reuse the skeleton book
-    let skeletonBook = (archiveBooks && archiveBooks[skeletonBookName]) || null;
-    if (!skeletonBook || !skeletonBook.entries) {
-        const ctx = SillyTavern.getContext();
-        try { skeletonBook = await ctx.loadWorldInfo(skeletonBookName); } catch (_) {}
-        if (!skeletonBook || !skeletonBook.entries) {
-            skeletonBook = { entries: {}, name: skeletonBookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
-        }
-    }
-
-    const existingUids = Object.keys(skeletonBook.entries).map(Number).filter(n => !isNaN(n));
-    let nextUid = existingUids.length > 0 ? Math.max(...existingUids) + 1 : 0;
-
-    const newNames = [];
-    for (const rec of records) {
-        skeletonBook.entries[nextUid] = {
-            uid: nextUid,
-            key: [],
-            keysecondary: [],
-            comment: `NPC: ${rec.label}`,
-            content: `[Day 0 Baseline — Auto-generated]\n${rec.content}`,
-            constant: false, selective: false, selectiveLogic: 0, addMemo: true,
-            order: 100, position: 0,
-            disable: true,
-            probability: 100, useProbability: false,
-            depth: 4, group: '', groupOverride: false, groupWeight: 100,
-            extensions: { rpgCategory: 'NPC', rpgSkeleton: true },
-        };
-        newNames.push(rec.label);
-        nextUid++;
-    }
-
-    const saveRes = await fetch('/api/worldinfo/edit', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name: skeletonBookName, data: skeletonBook })
-    });
-    if (!saveRes.ok) throw new Error(`Skeleton generator save failed: HTTP ${saveRes.status}`);
-
-    const ctx = SillyTavern.getContext();
-    try { await ctx.saveWorldInfo(skeletonBookName, skeletonBook); } catch (_) {}
-
-    if (archiveBooks) archiveBooks[skeletonBookName] = skeletonBook;
-
-    broadcastStep('thought', `\uD83E\uDDEC Skeleton Generator: ${newNames.length} NPC(s) created (${newNames.join(', ')}).`);
-    return newNames;
+    return records.filter(r => r.label && r.content && ['FAC', 'LOC', 'EVENT'].includes(r.category));
 }
 
 /**
  * Generates the World Skeleton: a hidden lorebook of foundational undiscovered
- * entities (factions, locations, NPCs, conflicts) seeded from the user's Skeleton Source.
+ * macro premises (factions, locations, conflicts) seeded from the user's Skeleton Source.
  * Saves all entries to [CampaignPrefix]_Skeleton. Overwrites any existing skeleton.
  *
  * @param {string} atmosphereSummary - User-provided Skeleton Source material (legacy setting name retained)
@@ -5268,15 +5192,19 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
 
     const factionCount = settings.worldProgressionSkeletonFactions ?? 4;
     const locationCount = settings.worldProgressionSkeletonLocations ?? 4;
-    const npcCount = settings.worldProgressionSkeletonNPCs ?? 0;
     const conflictCount = settings.worldProgressionSkeletonConflicts ?? 3;
     const atmosphere = (atmosphereSummary || settings.worldProgressionSkeletonAtmosphereSummary || '').trim();
 
     let systemPrompt = (settings.worldProgressionSkeletonSystemPrompt || '')
         .replace(/\{factionCount\}/g, String(factionCount))
         .replace(/\{locationCount\}/g, String(locationCount))
-        .replace(/\{npcCount\}/g, String(npcCount))
         .replace(/\{conflictCount\}/g, String(conflictCount));
+
+    systemPrompt += `\n\n## MACRO-ONLY SKELETON CONTRACT (AUTHORITATIVE)
+- The World Skeleton contains only FACTIONS, LOCATIONS, and CONFLICTS/EVENTS.
+- Never create an NPC/NPCS section or a named-individual skeleton entry.
+- Named individuals in source material are canon constraints only. Do not extract, duplicate, or transform them into skeleton entries.
+- World Progression advances locations and wider currents; ordinary NPC lore is created by the GM and Lorebook Agent when an individual becomes real in play.`;
 
     let sourceLorebooksStr = '';
     if (settings.worldProgressionSkeletonUseLorebooks) {
@@ -5296,7 +5224,7 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
                 throw new Error('Lorebook-only mode is enabled, but the selected source lorebooks contain no usable entries.');
             }
             systemPrompt += `\n\n## LOREBOOK-ONLY MODE — OVERRIDES EXACT COUNTS
-Only output entities explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate entities. Ignore the requested faction, location, NPC, and conflict counts; output the eligible entities established by the source material, and omit an empty category section.`;
+Only output factions, locations, and conflicts explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate premises. Ignore the requested category counts; output the eligible macro premises established by the source material, and omit an empty category section. Never output named individuals.`;
         }
     }
 
@@ -5304,13 +5232,13 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
     let existingEntitiesStr = '';
     if (append && useExisting && skeletonBook.entries) {
         const entries = Object.values(skeletonBook.entries)
-            .filter(e => e.comment && e.content);
+            .filter(e => e.comment && e.content && ['FAC', 'LOC', 'EVENT'].includes(e.extensions?.rpgCategory));
         if (entries.length > 0) {
             const formattedEntries = entries.map(e => {
                 const cleanContent = e.content.replace(/^\[Day 0 Baseline\]\n?/i, '').trim();
                 return `### ${e.comment}\n${cleanContent}`;
             }).join('\n\n');
-            existingEntitiesStr = `Avoid duplicating these or generating similar entities. Build on top of or expand this context with new, unique entities:\n\n${formattedEntries}`;
+            existingEntitiesStr = `Avoid duplicating these or generating similar premises. Build on top of or expand this context with new, unique macro premises:\n\n${formattedEntries}`;
         }
     }
 
@@ -5319,9 +5247,9 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
         userPrompt += `${sourceLorebooksStr}\n\n`;
     }
     if (existingEntitiesStr) {
-        userPrompt += `## EXISTING SKELETON ENTITIES\n${existingEntitiesStr}\n\n`;
+        userPrompt += `## EXISTING SKELETON PREMISES\n${existingEntitiesStr}\n\n`;
     }
-    userPrompt += `Generate ${append ? 'additional' : 'the'} world skeleton ${append ? 'entities' : ''} now.`;
+    userPrompt += `Generate ${append ? 'additional' : 'the'} world skeleton ${append ? 'premises' : ''} now.`;
 
     const routerSettings = {
         connectionSource: settings.worldConnectionSource || 'default',
@@ -5362,7 +5290,7 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
     }
 
     for (const rec of records) {
-        const prefixMap = { 'FAC': 'FACTION', 'LOC': 'LOCATION', 'NPC': 'NPC', 'EVENT': 'CONFLICT' };
+        const prefixMap = { 'FAC': 'FACTION', 'LOC': 'LOCATION', 'EVENT': 'CONFLICT' };
         const typePrefix = prefixMap[rec.category] || 'ENTITY';
         const typePrefixedLabel = `${typePrefix}: ${rec.label}`;
 
@@ -5438,101 +5366,6 @@ Only output entities explicitly mentioned in the supplied lorebook source materi
 }
 
 /**
- * Promotes a skeleton entity to the active lorebook when the player discovers it.
- * Scans Historical World Reports for references to the entity and performs a merge
- * LLM pass to synthesize a cohesive, up-to-date lore entry incorporating both
- * the Day 0 stub and any off-screen history accumulated since then.
- *
- * @param {string} skeletonId     - "BookName::uid" of the skeleton entry to promote
- * @param {string} newLabel       - Label of the newly discovered entry (from Lorebook Agent)
- * @param {string} newContent     - Content of the newly discovered entry
- * @param {Object} archiveBooks   - Loaded lorebook map (from runWorldProgressionPass or applyAction)
- * @returns {Promise<{label: string, content: string, category: string}|null>}
- */
-export async function promoteSkeletonEntity(skeletonId, newLabel, newContent, archiveBooks) {
-    const [skeletonBookName, uid] = skeletonId.split('::');
-    const skeletonBook = archiveBooks[skeletonBookName];
-    if (!skeletonBook?.entries?.[uid]) return null;
-
-    const skeletonEntry = skeletonBook.entries[uid];
-    const skeletonContent = (skeletonEntry.content || '').trim();
-    const category = skeletonEntry.extensions?.rpgCategory || 'NPC';
-
-    // Gather historical world report references to this entity
-    const nameLower = newLabel.toLowerCase();
-    const historySnippets = [];
-    for (const [bookName, book] of Object.entries(archiveBooks)) {
-        if (!bookName.toLowerCase().endsWith('_world') && bookName.toLowerCase() !== 'world') continue;
-        const sorted = Object.entries(book.entries).sort(([a], [b]) => Number(a) - Number(b));
-        for (const [, entry] of sorted) {
-            if ((entry.content || '').toLowerCase().includes(nameLower)) {
-                const reportLabel = entry.comment || '(unknown period)';
-                historySnippets.push(`[${reportLabel}] ${(entry.content || '').trim()}`);
-            }
-        }
-    }
-
-    if (historySnippets.length === 0) {
-        // No off-screen history — simple merge of stub + scene entry
-        const merged = skeletonContent && newContent
-            ? `${newContent}\n\n[Prior State]\n${skeletonContent}`
-            : (newContent || skeletonContent);
-        // Delete skeleton entry
-        await deleteLorebookEntry(skeletonId);
-        return { label: newLabel, content: merged, category };
-    }
-
-    // Run merge LLM pass to synthesize a complete up-to-date entry
-    const settings = getSettings();
-    const systemPrompt = `You are a Lore Synthesizer. You will be given three pieces of information about an entity:
-1. Their original Day 0 background stub (how they were at campaign start)
-2. Their off-screen activity history extracted from World Progression reports
-3. A new scene-based description written after the player has encountered them
-
-Synthesize these into a single, cohesive, up-to-date lore entry. Write in third person.
-Preserve all specific names, facts, and events. Do not invent new information.
-Output ONLY the final lore entry text. No preamble, no labels, no meta-commentary.`;
-
-    const userPrompt = `## ENTITY: ${newLabel}
-
-## DAY 0 SKELETON STUB
-${skeletonContent}
-
-## OFF-SCREEN HISTORY (from World Progression reports)
-${historySnippets.join('\n\n---\n\n')}
-
-## NEW SCENE-BASED DESCRIPTION (player has now encountered this entity)
-${newContent}
-
-Synthesize the above into one complete, up-to-date lore entry.`;
-
-    const routerSettings = {
-        connectionSource: settings.worldConnectionSource || 'default',
-        connectionProfileId: settings.worldConnectionProfileId,
-        completionPresetId: settings.worldCompletionPresetId,
-        ollamaUrl: settings.worldOllamaUrl,
-        ollamaModel: settings.worldOllamaModel,
-        openaiUrl: settings.worldOpenaiUrl,
-        openaiKey: settings.worldOpenaiKey,
-        openaiModel: settings.worldOpenaiModel,
-    };
-
-    let mergedContent;
-    try {
-        mergedContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
-    } catch (_) {
-        // Merge failed — fall back to simple concatenation
-        mergedContent = `${newContent}\n\n[Off-screen history]\n${historySnippets.join('\n\n')}`;
-    }
-
-    // Delete skeleton entry
-    await deleteLorebookEntry(skeletonId);
-
-    broadcastStep('thought', `\uD83D\uDDE6 Skeleton Promotion: "${newLabel}" promoted with ${historySnippets.length} history reference(s).`);
-    return { label: newLabel, content: (mergedContent || '').trim(), category };
-}
-
-/**
  * Manually consolidates a specific number of raw World Progression reports.
  * @param {number} targetCount - Number of raw reports to consolidate.
  * @returns {Promise<string>} - The consolidated label (e.g., "Days 1-7").
@@ -5554,10 +5387,6 @@ export async function runWorldProgressionConsolidationPass(targetCount) {
     };
 
     const ctx = SillyTavern.getContext();
-    if (typeof ctx.updateWorldInfoList === 'function') {
-        try { await ctx.updateWorldInfoList(); } catch (_) {}
-    }
-
     const allBookNames = await getWorldInfoNamesSafe();
     const archiveBooks = {};
     for (const n of allBookNames) {
@@ -5628,7 +5457,7 @@ ${rawDump}`;
 
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Manually consolidating ${toConsolidate.length} reports into "${consolidatedLabel}"...`);
 
-    const consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt);
+    const consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression' });
     if (!consolidatedContent || !consolidatedContent.trim()) {
         throw new Error("LLM returned an empty response during consolidation.");
     }

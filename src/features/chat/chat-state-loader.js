@@ -1,6 +1,7 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { applyChatSetup, resetChatSetupToStock } from '../../state/chat-setup.js';
 import { ensureDungeonMapHistory } from '../../state/dungeon-map-history.js';
+import { summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
 
 /** Restores one chat-linked tracker snapshot and synchronizes dependent UI. */
 export function createChatStateLoader({
@@ -74,6 +75,19 @@ export function createChatStateLoader({
     s.routerLastRunAt = saved.routerLastRunAt ?? 0;
     s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
     s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
+    s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(saved.mapEvolutionLastFiredBySite || {}));
+    s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(saved.mapEvolutionBacklogBySite || {}));
+    s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(saved.mapEvolutionThreadsBySite || {}));
+    s.dungeonMapRevealAll = !!saved.dungeonMapRevealAll;
+    s.mapEvolutionLastSiteRoot = saved.mapEvolutionLastSiteRoot || '';
+    s.mapEvolutionPendingExitRoot = saved.mapEvolutionPendingExitRoot || '';
+    s.mapEvolutionTickScope = saved.mapEvolutionTickScope || 'all';
+    s.mapEvolutionTickCount = saved.mapEvolutionTickCount ?? 1;
+    s.mapEvolutionTickRandomize = saved.mapEvolutionTickRandomize !== false;
+    s.mapEvolutionSelectedRoots = JSON.parse(JSON.stringify(saved.mapEvolutionSelectedRoots || []));
+    s.mapEvolutionIntervalHoursBySite = JSON.parse(JSON.stringify(saved.mapEvolutionIntervalHoursBySite || {}));
+    s.mapEvolutionWorldReportLookback = saved.mapEvolutionWorldReportLookback ?? 5;
+    s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(saved.mapEvolutionWorldReportApplications || {}));
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;
@@ -81,20 +95,11 @@ export function createChatStateLoader({
     s.worldProgressionInjectionPosition = saved.worldProgressionInjectionPosition ?? 4;
     s.worldProgressionInjectionDepth = saved.worldProgressionInjectionDepth ?? 4;
     s.worldProgressionInjectionRole = saved.worldProgressionInjectionRole ?? 0;
-    s.worldProgressionRandomizeNPCs = saved.worldProgressionRandomizeNPCs ?? false;
-    s.worldProgressionRandomSkeletonNPCCount = saved.worldProgressionRandomSkeletonNPCCount ?? 2;
-    s.worldProgressionRandomNarrativeNPCCount = saved.worldProgressionRandomNarrativeNPCCount ?? 3;
-    s.worldProgressionRandomizeLocations = saved.worldProgressionRandomizeLocations ?? false;
-    s.worldProgressionRandomSkeletonLocationCount = saved.worldProgressionRandomSkeletonLocationCount ?? 2;
-    s.worldProgressionRandomNarrativeLocationCount = saved.worldProgressionRandomNarrativeLocationCount ?? 2;
-    s.worldProgressionRandomizeFactions = saved.worldProgressionRandomizeFactions ?? false;
-    s.worldProgressionRandomSkeletonFactionCount = saved.worldProgressionRandomSkeletonFactionCount ?? 2;
-    s.worldProgressionRandomNarrativeFactionCount = saved.worldProgressionRandomNarrativeFactionCount ?? 2;
-    s.worldProgressionRandomizeConflicts = saved.worldProgressionRandomizeConflicts ?? false;
-    s.worldProgressionRandomConflictCount = saved.worldProgressionRandomConflictCount ?? 3;
+    s.worldProgressionLocationsPerReport = saved.worldProgressionLocationsPerReport ?? 3;
+    s.worldProgressionLocationRandomize = saved.worldProgressionLocationRandomize !== false;
+    s.worldProgressionLocationLastAdvanced = JSON.parse(JSON.stringify(saved.worldProgressionLocationLastAdvanced || {}));
     s.worldProgressionSkeletonFactions = saved.worldProgressionSkeletonFactions ?? 4;
     s.worldProgressionSkeletonLocations = saved.worldProgressionSkeletonLocations ?? 4;
-    s.worldProgressionSkeletonNPCs = saved.worldProgressionSkeletonNPCs ?? 0;
     s.worldProgressionSkeletonConflicts = saved.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionSkeletonAtmosphereSummary = saved.worldProgressionSkeletonAtmosphereSummary ?? '';
     s.worldProgressionSkeletonAtmosphereLookback = saved.worldProgressionSkeletonAtmosphereLookback ?? 30;
@@ -124,19 +129,8 @@ export function createChatStateLoader({
     }
 
     // Update settings UI inputs if rendered
-    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
-    $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
-    $('#rpg_world_progression_random_narrative_npc_count').val(s.worldProgressionRandomNarrativeNPCCount ?? 3);
-    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
-    $('#rpg_world_progression_random_skeleton_location_count').val(s.worldProgressionRandomSkeletonLocationCount ?? 2);
-    $('#rpg_world_progression_random_narrative_location_count').val(s.worldProgressionRandomNarrativeLocationCount ?? 2);
-    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
-    $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
-    $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
-    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
     $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
     $('#rpg_world_progression_skeleton_atmosphere').val(s.worldProgressionSkeletonAtmosphereSummary);
     $('#rpg_world_progression_skeleton_atmosphere_lookback').val(s.worldProgressionSkeletonAtmosphereLookback);
@@ -158,6 +152,13 @@ export function createChatStateLoader({
         void globalThis._rpgRefreshSkeletonLorebookList();
     }
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
+    $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
+    $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
+    if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
+        runtimeState.updateAgentMapEvolutionStatusRef();
+    }
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
@@ -232,14 +233,6 @@ export function createChatStateLoader({
     }
 
     // Toggle container visibilities
-    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
-    else $('#rpg_world_progression_random_npc_count_container').hide();
-    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
-    else $('#rpg_world_progression_random_location_count_container').hide();
-    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
-    else $('#rpg_world_progression_random_faction_count_container').hide();
-
-
     // Sync World Progression timing readouts for this chat
     {
         function _fmtWpMins(totalMins) {
@@ -261,6 +254,19 @@ export function createChatStateLoader({
             if (tMins >= 0) nextMins = tMins + intervalMinutes;
         }
         $('#rpg_world_progression_next_report_val').text(nextMins >= 0 ? _fmtWpMins(nextMins) : '—');
+
+        const evoSchedule = summarizeMapEvolutionSchedule(s.mapEvolutionLastFiredBySite, {
+            intervalHours: s.mapEvolutionIntervalHours,
+            currentMinutes: (() => {
+                const tMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+                const tStr = tMatch ? extractCurrentTimeStr(tMatch[1]) : '';
+                return tStr ? (parseInWorldTime(tStr) ?? -1) : -1;
+            })(),
+        });
+        const evoLast = evoSchedule.lastMins >= 0 ? formatInWorldTime(evoSchedule.lastMins) : 'Never';
+        $('#rpg_map_evolution_last_fired').text(evoLast);
+        $('#rpg_map_evolution_last_report_val').text(evoLast);
+        $('#rpg_map_evolution_next_report_val').text(evoSchedule.nextMins >= 0 ? formatInWorldTime(evoSchedule.nextMins) : '—');
 
         // Sync consolidation fields
         $('#rpg_world_progression_consolidate_enabled').prop('checked', !!s.worldProgressionConsolidateEnabled);

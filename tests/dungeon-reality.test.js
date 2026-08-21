@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     applyDungeonMapTransaction,
     buildDungeonRealityInjection,
+    buildMappedSitesInjection,
+    listMappedSiteSummaries,
     buildDungeonMapCommitSchema,
     attachDungeonMapToLocationEntry,
     buildDungeonSitesFromLocationEntries,
@@ -15,18 +17,32 @@ import {
     formatDungeonMapForNarrator,
     formatDungeonMapForPlayer,
     formatDungeonMapForUpdater,
+    formatDungeonMapForEvolution,
     getSiteRootFromLocation,
+    locationContainsSiteRoot,
     looksLikeDungeonSite,
+    mapSiteMatchesLiveFooter,
+    mapSiteFooterMismatchHint,
     migrateDungeonMapAttachmentToContent,
     migrateDungeonMapSectionToStructured,
+    normalizeDungeonMapDocument,
+    normalizeMapSiteThreat,
+    MAP_SITE_THREATS,
     parseDungeonMapDocument,
+    parseEditableDungeonMapJson,
+    serializeDungeonMapDocument,
+    coerceAssetState,
+    isPlayCanonLockedState,
     parseDungeonDeltaBlock,
     reconcileDungeonMapAreaKnowledge,
     resolveActiveDungeonSite,
+    resolveMentionedDungeonSites,
     stripCapturedDungeonMapBlocks,
     stripDungeonRealityBlocksFromPrompt,
     stripDungeonMapSection,
+    detachDungeonMapFromLocationEntry,
     syncDungeonRealityState,
+    canonicalizeReciprocalConnectionDetails,
     validateDungeonMapArchitecture,
 } from '../dungeon-reality.js';
 
@@ -69,6 +85,129 @@ describe('Map Architect validation', () => {
         });
         expect(result.valid).toBe(true);
         expect(result.document.areas).toHaveLength(2);
+        expect(result.document.threat).toBe('HIGH');
+    });
+
+    it('stamps requested threat onto a valid map and rejects a mismatched threat', () => {
+        const stamped = validateDungeonMapArchitecture(connectedArchitectMap, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'LOW',
+        });
+        expect(stamped.valid).toBe(true);
+        expect(stamped.document.threat).toBe('LOW');
+
+        const mismatched = structuredClone(connectedArchitectMap);
+        mismatched.threat = 'DEADLY';
+        const rejected = validateDungeonMapArchitecture(mismatched, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'LOW',
+        });
+        expect(rejected.valid).toBe(false);
+        expect(rejected.errors.some(error => error.code === 'THREAT_MISMATCH')).toBe(true);
+    });
+
+    it('keeps NONE distinct from LOW threat', () => {
+        expect(MAP_SITE_THREATS).toEqual(['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY']);
+        expect(normalizeMapSiteThreat('NONE')).toBe('NONE');
+        expect(normalizeMapSiteThreat('safe')).toBe('NONE');
+        expect(normalizeMapSiteThreat('peaceful')).toBe('NONE');
+        expect(normalizeMapSiteThreat('LOW')).toBe('LOW');
+        expect(normalizeMapSiteThreat('mild')).toBe('LOW');
+
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        const result = validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        });
+        expect(result.valid).toBe(true);
+        expect(result.document.threat).toBe('NONE');
+    });
+
+    it('rejects active trap, hazard, and alarm assets at NONE threat', () => {
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        none.assets.push({
+            id: 'armed-snare',
+            kind: 'TRAP',
+            name: 'Armed Snare',
+            location: 'cellar-landing',
+            state: 'ARMED',
+            knowledge: 'UNREVEALED',
+            detail: 'A live snare.',
+            origin: 'INITIAL_MAP',
+        });
+        const rejected = validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        });
+        expect(rejected.valid).toBe(false);
+        expect(rejected.errors.some(error => error.code === 'NONE_THREAT_ACTIVE_DANGER')).toBe(true);
+
+        none.assets.at(-1).state = 'DEACTIVATED';
+        expect(validateDungeonMapArchitecture(none, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+            threat: 'NONE',
+        }).valid).toBe(true);
+    });
+
+    it('copies the first-seen route detail onto a reciprocal pair so directional paraphrases do not fail the map', () => {
+        const directional = structuredClone(connectedArchitectMap);
+        directional.areas[0].connections[0].detail = 'A low, braced crawlway passes eastward through fractured masonry into the ossuary.';
+        directional.areas[1].connections[0].detail = 'A low, braced crawlway passes westward through fractured masonry into the chamber.';
+        expect(validateDungeonMapArchitecture(directional, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).valid).toBe(false);
+
+        canonicalizeReciprocalConnectionDetails(directional.areas);
+        const result = validateDungeonMapArchitecture(directional, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(result.valid).toBe(true);
+        expect(directional.areas[0].connections[0].detail).toBe(directional.areas[1].connections[0].detail);
+        expect(directional.areas[0].connections[0].detail).toContain('eastward');
+    });
+
+    it('mirrors a valid missing reverse passage before strict validation', () => {
+        const oneWay = structuredClone(connectedArchitectMap);
+        oneWay.areas[1].connections = [];
+        expect(validateDungeonMapArchitecture(oneWay, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).errors.some(error => error.code === 'MISSING_RECIPROCAL_CONNECTION')).toBe(true);
+
+        canonicalizeReciprocalConnectionDetails(oneWay.areas);
+
+        expect(oneWay.areas[1].connections).toEqual([{
+            to: 'cellar-landing',
+            state: 'LOCKED',
+            detail: 'Iron-banded door between the landing and passage.',
+        }]);
+        expect(validateDungeonMapArchitecture(oneWay, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).valid).toBe(true);
+    });
+
+    it('does not auto-resolve conflicting reciprocal states', () => {
+        const conflicting = structuredClone(connectedArchitectMap);
+        conflicting.areas[1].connections[0].state = 'OPEN';
+
+        canonicalizeReciprocalConnectionDetails(conflicting.areas);
+
+        expect(conflicting.areas[0].connections[0].state).toBe('LOCKED');
+        expect(conflicting.areas[1].connections[0].state).toBe('OPEN');
+        expect(validateDungeonMapArchitecture(conflicting, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        }).errors.some(error => error.code === 'CONNECTION_STATE_MISMATCH')).toBe(true);
     });
 
     it('rejects omitted reverse passages and orphaned areas with correction hints', () => {
@@ -91,6 +230,40 @@ describe('Map Architect validation', () => {
         const result = validateDungeonMapArchitecture(broken, { site: 'Abbey Undercroft', entrance: 'Cellar Landing' });
         expect(result.valid).toBe(false);
         expect(result.errors.some(error => error.code === 'UNKNOWN_ASSET_LOCATION')).toBe(true);
+    });
+
+    it('treats a translated English site title as a miss against a live Russian footer', () => {
+        const footer = 'Андермаунтина, шестой уровень, Кладовая запчастей';
+        expect(locationContainsSiteRoot(footer, 'Undermountain Level 6 — The Grinding Halls')).toBe(false);
+        expect(mapSiteMatchesLiveFooter('Undermountain Level 6 — The Grinding Halls', footer)).toBe(false);
+        expect(locationContainsSiteRoot(footer, 'шестой уровень')).toBe(true);
+        expect(locationContainsSiteRoot(footer, 'Кладовая запчастей')).toBe(true);
+        expect(mapSiteMatchesLiveFooter('шестой уровень', footer)).toBe(true);
+        expect(mapSiteMatchesLiveFooter('Ashgate Maintenance Tunnels', 'Kuzne, Ashgate Maintenance Tunnels, Junction Chamber Theta')).toBe(true);
+        expect(mapSiteMatchesLiveFooter('Invented Title', '')).toBe(true);
+        expect(mapSiteFooterMismatchHint('Undermountain Level 6 — The Grinding Halls', footer)).toContain('Never translate');
+    });
+
+    it('accepts pack count on initial assets and rejects count 0', () => {
+        const withCount = structuredClone(connectedArchitectMap);
+        withCount.assets[0].kind = 'GROUP';
+        withCount.assets[0].name = 'Listening Ghoul Pack';
+        withCount.assets[0].count = 4;
+        const accepted = validateDungeonMapArchitecture(withCount, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(accepted.valid).toBe(true);
+        expect(accepted.document.assets[0].count).toBe(4);
+
+        const zero = structuredClone(withCount);
+        zero.assets[0].count = 0;
+        const rejected = validateDungeonMapArchitecture(zero, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(rejected.valid).toBe(false);
+        expect(rejected.errors.some(error => error.code === 'INVALID_COUNT')).toBe(true);
     });
 
     it('uses district-scale area counts for SETTLEMENT maps and stamps kind', () => {
@@ -135,6 +308,7 @@ describe('Map Architect validation', () => {
         });
         expect(result.valid).toBe(true);
         expect(result.document.kind).toBe('SETTLEMENT');
+        expect(result.document.threat).toBe('MODERATE');
         expect(result.document.areas).toHaveLength(6);
 
         const tooSmall = structuredClone(settlement);
@@ -171,6 +345,36 @@ describe('Map Architect validation', () => {
         expect(injection).toContain('name it in the Location footer');
         expect(injection).toContain('Map kind: SETTLEMENT (district-scale)');
         expect(injection).not.toContain('room-scale interior canon');
+    });
+
+    it('tells the narrator that site threat governs occupancy, not party level', () => {
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Abbey Undercroft',
+            mapChunks: [JSON.stringify({
+                version: 3,
+                site: 'Abbey Undercroft',
+                kind: 'DUNGEON',
+                threat: 'LOW',
+                areas: [
+                    { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['A stone landing.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'A stair' }] },
+                    { id: 'crypt', name: 'Crypt', knowledge: 'DISCOVERED', geometry: ['A dusty crypt.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'A stair' }] },
+                ],
+                assets: [],
+            })],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Abbey Undercroft, Cellar Landing');
+        expect(injection).toContain('Site threat is LOW');
+        expect(injection).toContain('not party level');
+        expect(injection).toContain('Site threat: LOW');
+    });
+
+    it('tells the narrator not to invent danger for a NONE-threat map', () => {
+        const none = structuredClone(connectedArchitectMap);
+        none.threat = 'NONE';
+        const rendered = formatDungeonMapForNarrator(none);
+        expect(rendered).toContain('Site threat: NONE');
+        expect(rendered).toContain('Do not invent active hostile occupancy, armed traps, dangerous hazards, or violent conflict');
     });
 });
 
@@ -233,6 +437,10 @@ A desecrated altar.
         expect(stored.areas[0].geometry).toContain('A desecrated altar.');
         expect(stripDungeonMapSection(root.content)).toBe('[CORE]A crypt.[/CORE]');
         expect(root.extensions?.multihogDungeonMap).toBeUndefined();
+        expect(detachDungeonMapFromLocationEntry(root)).toBe(true);
+        expect(extractDungeonMapSection(root.content)).toBe('');
+        expect(root.content).toBe('[CORE]A crypt.[/CORE]');
+        expect(detachDungeonMapFromLocationEntry(root)).toBe(false);
     });
 
     it('migrates the earlier private-extension attachment into normal lore content', () => {
@@ -287,7 +495,10 @@ Area: Ossuary Behind Rotten Tapestry
                 { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['Low oak beams cross the ceiling.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'Iron-banded door' }] },
                 { id: 'crypt', name: 'Crypt Passage', knowledge: 'DISCOVERED', geometry: ['A collapsed arch provides cover.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'Iron-banded door' }] },
             ],
-            assets: [{ id: 'ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains beneath the arch.', origin: 'INITIAL_MAP' }],
+            assets: [
+                { id: 'ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains beneath the arch.', origin: 'INITIAL_MAP' },
+                { id: 'crawling-dead-pack', kind: 'GROUP', name: 'Crawling Dead Pack', location: 'crypt', state: 'ACTIVE', knowledge: 'KNOWN', detail: 'A knot of lesser corpses.', origin: 'INITIAL_MAP', count: 6 },
+            ],
         };
         const raw = JSON.stringify(map, null, 2);
         const readable = formatDungeonMapForNarrator(map);
@@ -295,6 +506,8 @@ Area: Ossuary Behind Rotten Tapestry
         expect(readable).toContain('Cellar Landing <-> Crypt Passage [OPEN] — Iron-banded door');
         expect(readable.match(/Cellar Landing <-> Crypt Passage/g)).toHaveLength(1);
         expect(readable).toContain('Crypt Ghoul [CREATURE / DESTROYED / KNOWN] — Smoldering remains beneath the arch.');
+        expect(readable).toContain('Crawling Dead Pack ×6 [GROUP / ACTIVE / KNOWN]');
+        expect(readable).toContain('Count: 6');
         expect(readable).not.toContain('"version"');
         expect(readable.length).toBeLessThan(raw.length * 0.7);
     });
@@ -304,6 +517,7 @@ Area: Ossuary Behind Rotten Tapestry
             version: 3,
             site: 'Abbey Undercroft',
             kind: 'DUNGEON',
+            threat: 'DEADLY',
             areas: [
                 { id: 'landing', name: 'Cellar Landing', knowledge: 'VISITED', geometry: ['Low oak beams cross the ceiling.'], connections: [{ to: 'crypt', state: 'OPEN', detail: 'Iron-banded door' }, { to: 'vault', state: 'LOCKED', detail: 'Sealed glyph door' }] },
                 { id: 'crypt', name: 'Crypt Passage', knowledge: 'DISCOVERED', geometry: ['A collapsed arch provides cover.'], connections: [{ to: 'landing', state: 'OPEN', detail: 'Iron-banded door' }] },
@@ -329,6 +543,8 @@ Area: Ossuary Behind Rotten Tapestry
         expect(readable).not.toContain('Explodes on touch');
         expect(readable).not.toContain('Smoldering remains');
         expect(readable).not.toContain('A collapsed arch provides cover');
+        expect(readable).not.toContain('Site threat');
+        expect(readable).not.toContain('DEADLY');
     });
 
     it('uses explicit child chronicles once when establishing current state from a legacy map', () => {
@@ -370,7 +586,7 @@ Area: Ossuary Behind Rotten Tapestry
         };
         const moved = applyDungeonMapTransaction(map, {
             operation_id: 'day1-0832-ghoul-moves',
-            operations: [{ op: 'MOVE_ASSET', evidence: 'AUTONOMOUS', asset_id: 'crypt-ghoul', from: 'crypt-passage', to: 'cellar', state: 'ALERT' }],
+            operations: [{ op: 'MOVE_ASSET', evidence: 'AUTONOMOUS', asset_id: 'crypt-ghoul', from: 'crypt-passage', to: 'cellar', state: 'ALERT', cause: 'Moved toward the cellar on alarm.' }],
             chronicles: [],
         });
         expect(moved.ok).toBe(true);
@@ -379,11 +595,15 @@ Area: Ossuary Behind Rotten Tapestry
 
         const destroyed = applyDungeonMapTransaction(moved.document, {
             operation_id: 'day1-0833-ghoul-destroyed',
-            operations: [{ op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'crypt-ghoul', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains on the landing.' }],
+            operations: [{ op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'crypt-ghoul', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains on the landing.', cause: 'Killed by the party on the landing.', actor: 'party' }],
             chronicles: [{ area_id: 'cellar', text: 'The crypt ghoul was destroyed.' }],
         });
         expect(destroyed.ok).toBe(true);
         expect(destroyed.document.assets[0].state).toBe('DESTROYED');
+        expect(destroyed.document.assets[0]).toMatchObject({
+            actor: 'party',
+            cause: 'Killed by the party on the landing.',
+        });
         expect(destroyed.document.areas.find(area => area.id === 'cellar').knowledge).toBe('VISITED');
         expect(destroyed.chronicles).toEqual([{ areaId: 'cellar', areaName: 'Cellar Landing', text: 'The crypt ghoul was destroyed.' }]);
     });
@@ -397,7 +617,7 @@ Area: Ossuary Behind Rotten Tapestry
         };
         const applied = applyDungeonMapTransaction(map, {
             operation_id: 'day1-0813-enter-cellar',
-            operations: [{ op: 'SET_AREA', evidence: 'CONFIRMED', area_id: 'cellar', geometry_append: ['Loose stones were braced.'] }],
+            operations: [{ op: 'SET_AREA', evidence: 'CONFIRMED', area_id: 'cellar', geometry_append: ['Loose stones were braced.'], cause: 'The party braced the loose stones.' }],
             chronicles: [{ area_id: 'cellar', text: 'The party entered the cellar and braced its loose stones.' }],
         });
         expect(applied.ok).toBe(true);
@@ -425,8 +645,8 @@ Area: Ossuary Behind Rotten Tapestry
         const openedThenMoved = applyDungeonMapTransaction(map, {
             operation_id: 'day1-0900-open-gate-move',
             operations: [
-                { op: 'SET_CONNECTION', evidence: 'CONFIRMED', from: 'sanctum', to: 'vault', state: 'OPEN' },
-                { op: 'MOVE_ASSET', evidence: 'CONFIRMED', asset_id: 'wight', to: 'vault' },
+                { op: 'SET_CONNECTION', evidence: 'CONFIRMED', from: 'sanctum', to: 'vault', state: 'OPEN', cause: 'The iron gate was forced open.' },
+                { op: 'MOVE_ASSET', evidence: 'CONFIRMED', asset_id: 'wight', to: 'vault', cause: 'The wight crossed the opened gate.' },
             ],
         });
         expect(openedThenMoved.ok).toBe(true);
@@ -486,6 +706,7 @@ Area: Ossuary Behind Rotten Tapestry
                 op: 'ADD_ASSET', evidence: 'CONFIRMED', name: 'Summoned Spirit', kind: 'CREATURE',
                 location: 'crypt', state: 'ACTIVE', knowledge: 'KNOWN', origin: 'PLAYER_RESOLVED',
                 owner: 'Silvan Starweaver', duration: '10 minutes',
+                cause: 'Summoned by Silvan Starweaver.',
             }],
         });
         expect(added.ok).toBe(true);
@@ -493,6 +714,30 @@ Area: Ossuary Behind Rotten Tapestry
         expect(added.document.assets[0]).toMatchObject({
             id: 'summoned-spirit', owner: 'Silvan Starweaver', duration: '10 minutes', origin: 'PLAYER_RESOLVED',
         });
+    });
+
+    it('clears a processed absolute asset boundary without retaining an empty duration', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'crypt', name: 'Crypt', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'delayed-alarm', kind: 'ALARM', name: 'Delayed Alarm', location: 'crypt',
+                state: 'ARMED', knowledge: 'KNOWN', detail: 'Rings when its delay elapses.',
+                duration: 'Until Day 2, 4:40 AM', origin: 'INITIAL_MAP',
+            }],
+        };
+        const applied = applyDungeonMapTransaction(map, {
+            operation_id: 'day2-0440-delayed-alarm',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'delayed-alarm',
+                state: 'TRIGGERED', duration: '', detail: 'The alarm is ringing.',
+                cause: 'Its stored Day 2, 4:40 AM boundary was reached.',
+            }],
+        }, { currentTime: 'Day 2, 4:40 AM' });
+        expect(applied.ok).toBe(true);
+        expect(applied.document.assets[0]).toMatchObject({ state: 'TRIGGERED', detail: 'The alarm is ringing.' });
+        expect(applied.document.assets[0]).not.toHaveProperty('duration');
     });
 
     it('defaults omitted map evidence to CONFIRMED and coerces NPC kind to CREATURE', () => {
@@ -510,12 +755,14 @@ Area: Ossuary Behind Rotten Tapestry
                     op: 'ADD_ASSET', name: 'Chapel of the Drowned Stone', kind: 'OBJECT',
                     location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
                     detail: 'Dry stone chapel with reed mats.',
+                    cause: 'The party entered this chapel.',
                 },
                 {
                     op: 'ADD_ASSET', name: 'Odran', kind: 'NPC',
                     location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
                     detail: 'Elderly gray-hooded priest in the chapel.',
                     distinct_from: [],
+                    cause: 'Encountered tending the chapel.',
                 },
             ],
             chronicles: [{ area_id: 'shrine-quarter', text: 'Entered the Chapel of the Drowned Stone.' }],
@@ -552,6 +799,7 @@ Area: Ossuary Behind Rotten Tapestry
                         state: 'ACTIVE',
                         knowledge: 'KNOWN',
                         detail: 'Narrow stone sanctuary tucked behind iron votive screens.',
+                        cause: 'The party entered this chapel.',
                     },
                 },
                 {
@@ -563,6 +811,7 @@ Area: Ossuary Behind Rotten Tapestry
                         state: 'ACTIVE',
                         knowledge: 'KNOWN',
                         detail: 'Elderly gray-hooded priest tending the chapel.',
+                        cause: 'Encountered tending the chapel.',
                     },
                 },
             ],
@@ -589,6 +838,7 @@ Area: Ossuary Behind Rotten Tapestry
             operations: [{
                 op: 'ADD_ASSET', kind: 'OBJECT', name: 'Chapel of the Drowned Stone',
                 location: 'shrine-quarter', state: 'ACTIVE', knowledge: 'KNOWN',
+                cause: 'The party entered this chapel.',
             }],
             chronicles: [{ area: 'shrine-quarter', text: 'Entered the Chapel of the Drowned Stone and received shelter from Odran.' }],
         });
@@ -608,6 +858,9 @@ Area: Ossuary Behind Rotten Tapestry
         expect(schema.properties.operations.items.oneOf.every(item => item.additionalProperties === false)).toBe(true);
         expect(schema.description).toContain('Do not include transient combat poses');
         const setAsset = schema.properties.operations.items.oneOf.find(item => item.properties.op.enum.includes('SET_ASSET'));
+        expect(setAsset.required).toContain('cause');
+        expect(setAsset.properties.actor).toBeDefined();
+        expect(setAsset.properties.count).toMatchObject({ type: 'integer', minimum: 1, maximum: 99 });
         expect(setAsset.properties.detail.description).toContain('Never HP, targeting, mid-round poses');
         expect(schema.properties.chronicles.description).toContain('Not turn-by-turn combat choreography');
     });
@@ -629,14 +882,59 @@ Area: Ossuary Behind Rotten Tapestry
                 kind: 'CREATURE',
                 name: 'Crypt Ghoul',
                 location: 'cellar-landing',
+                state: 'DESTROYED',
+                knowledge: 'KNOWN',
+                actor: 'party',
+                cause: 'Killed by the party on the landing.',
+                changed_at: 'Day 1, 16:02',
+            }, {
+                id: 'crawling-dead-pack',
+                kind: 'GROUP',
+                name: 'Crawling Dead Pack',
+                location: 'cellar-landing',
                 state: 'ACTIVE',
-                knowledge: 'UNREVEALED',
+                knowledge: 'KNOWN',
+                count: 6,
             }],
         }, 'Abbey Undercroft, Cellar Landing');
         expect(snapshot).toContain('KIND: DUNGEON');
         expect(snapshot).toContain('cellar-landing | Cellar Landing | VISITED');
         expect(snapshot).toContain('crypt-ghoul | CREATURE | Crypt Ghoul');
+        expect(snapshot).toContain('actor=party');
+        expect(snapshot).toContain('cause=Killed by the party on the landing.');
+        expect(snapshot).toContain('since=Day 1, 16:02');
+        expect(snapshot).toContain('count=6');
         expect(snapshot).toContain('A damp stair landing.');
+    });
+
+    it('lists living occupants for Map Evolution and flags same-room crowding', () => {
+        const snapshot = formatDungeonMapForEvolution({
+            version: 3,
+            site: 'Abbey Undercroft',
+            kind: 'DUNGEON',
+            areas: [
+                { id: 'ossuary', name: 'Ossuary', knowledge: 'UNREVEALED', geometry: [], connections: [] },
+                { id: 'gallery', name: 'Gallery', knowledge: 'UNREVEALED', geometry: [], connections: [] },
+            ],
+            assets: [
+                { id: 'outer-bandit-crew', kind: 'GROUP', name: 'Marsh Road Bandit Crew', location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED', count: 5, origin: 'MAP_EVOLUTION' },
+                { id: 'flood-passage-vermin', kind: 'GROUP', name: 'Giant Marsh Rats', location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED', count: 4, origin: 'INITIAL_MAP' },
+                { id: 'upper-crypt-skeletal-guardians', kind: 'GROUP', name: 'Skeletal Crypt Guardians', location: 'gallery', state: 'ACTIVE', knowledge: 'UNREVEALED', count: 8, origin: 'INITIAL_MAP' },
+                { id: 'crypt-ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'ossuary', state: 'DESTROYED', knowledge: 'KNOWN', origin: 'INITIAL_MAP' },
+                { id: 'bandit-hideout-supplies', kind: 'OBJECT', name: 'Bandit Hideout Supplies', location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED', origin: 'MAP_EVOLUTION' },
+            ],
+        });
+        expect(snapshot).toContain('## LIVING OCCUPANTS');
+        expect(snapshot).toContain('several may act in this one transaction');
+        expect(snapshot).toContain('same-room means they share a space');
+        expect(snapshot).toContain('Do not assume they are enemies');
+        expect(snapshot).not.toContain('competing groups that should interact');
+        expect(snapshot).toContain('outer-bandit-crew | GROUP | Marsh Road Bandit Crew | loc=ossuary | ACTIVE | count=5 | same-room=flood-passage-vermin');
+        expect(snapshot).toContain('flood-passage-vermin | GROUP | Giant Marsh Rats | loc=ossuary | ACTIVE | count=4 | same-room=outer-bandit-crew');
+        expect(snapshot).toContain('upper-crypt-skeletal-guardians | GROUP | Skeletal Crypt Guardians | loc=gallery | ACTIVE | count=8');
+        expect(snapshot).not.toMatch(/## LIVING OCCUPANTS[\s\S]*crypt-ghoul/);
+        expect(snapshot).not.toMatch(/## LIVING OCCUPANTS[\s\S]*bandit-hideout-supplies/);
+        expect(snapshot).not.toContain('same-room=upper-crypt-skeletal-guardians');
     });
 
     it('assembles an attached root map with descendant Lorebook Agent location state', () => {
@@ -820,6 +1118,39 @@ The last guard falls and a loose stone reveals a niche.
         expect(resolveActiveDungeonSite(state, 'Forest Near the Forgotten Tomb')).toBeNull();
     });
 
+    it('resolves maps from exact canonical location-name mentions only', () => {
+        const state = {
+            version: 3,
+            sites: {
+                ember: { siteRoot: 'Ember Mine', entryId: 'Campaign_Locations::7', mapChunks: ['map'] },
+                crypt: { siteRoot: "Saint Oren's Crypt", entryId: 'Campaign_Locations::8', mapChunks: ['map'] },
+            },
+        };
+
+        expect(resolveMentionedDungeonSites(state, 'We should travel to Ember Mine next.').map(site => site.siteRoot))
+            .toEqual(['Ember Mine']);
+        expect(resolveMentionedDungeonSites(state, 'Ask about ember mine, then decide.').map(site => site.siteRoot))
+            .toEqual(['Ember Mine']);
+        expect(resolveMentionedDungeonSites(state, 'We are near the Ember Mines.')).toEqual([]);
+        expect(resolveMentionedDungeonSites(state, 'The ember-mining guild can help.')).toEqual([]);
+        expect(resolveMentionedDungeonSites(state, "Go to Saint Oren's Crypt!").map(site => site.siteRoot))
+            .toEqual(["Saint Oren's Crypt"]);
+        expect(resolveMentionedDungeonSites(state, "Go to Oren's Crypt.")).toEqual([]);
+    });
+
+    it('marks an off-site exact-name map injection without claiming the party is there', () => {
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Ember Mine',
+            mapChunks: ['Dungeon Site: Ember Mine\nArea: Lift\nFrayed cable.'],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Oakbridge, Market', { referencedByName: true });
+
+        expect(injection).toContain('Site: Ember Mine');
+        expect(injection).toContain('Current footer location: Oakbridge, Market');
+        expect(injection).toContain('exact mapped-location name in the current player input');
+    });
+
     it('strips only captured map blocks and builds an internal canon injection', () => {
         const captured = 'Dungeon Site: Ember Mine\nArea: Lift\nThe cable is frayed.';
         const uncaptured = 'Unrelated hidden UI payload';
@@ -843,6 +1174,9 @@ The last guard falls and a loose stone reveals a niche.
         expect(injection).toContain('resolved story events override stale positions/states');
         expect(injection).toContain('room-scale interior canon');
         expect(injection).toContain('you may add a room or incidental feature');
+        expect(injection).toContain('Cause / Actor / Since');
+        expect(injection).toContain('Recent site activity');
+        expect(injection).not.toContain('### Recent site activity');
         expect(injection).not.toContain('do not invent missing rooms');
         expect(injection).not.toContain('current operational snapshot');
     });
@@ -863,7 +1197,49 @@ The last guard falls and a loose stone reveals a niche.
         expect(injection).toContain('Poison Needle [TRAP / ARMED / SUSPECTED]');
         expect(injection).not.toContain('"version"');
         expect(injection).not.toContain('"assets"');
-        expect(injection.length).toBeLessThan(raw.length + 900);
+        expect(injection.length).toBeLessThan(raw.length + 1200);
+    });
+
+    it('includes per-asset coupling and a compact activity briefing without the ledger', () => {
+        const map = {
+            version: 3,
+            site: 'Ossuary',
+            areas: [{ id: 'nave', name: 'Nave', knowledge: 'VISITED', geometry: ['Ash on the flagstones.'], connections: [] }],
+            assets: [{
+                id: 'chapel-latch',
+                kind: 'OBJECT',
+                name: 'Chapel Latch',
+                location: 'nave',
+                state: 'ACTIVE',
+                knowledge: 'KNOWN',
+                detail: 'Barred from the inside.',
+                origin: 'INITIAL_MAP',
+                actor: 'bandits',
+                cause: 'Bandits barred the chapel latch.',
+                changed_at: 'Day 1, 08:00',
+            }],
+        };
+        const readable = formatDungeonMapForNarrator(map);
+        expect(readable).toContain('Actor: bandits');
+        expect(readable).toContain('Cause: Bandits barred the chapel latch.');
+        expect(readable).toContain('Since: Day 1, 08:00');
+
+        const activity = [
+            'Use this to understand why occupancy looks this way.',
+            'Open causal threads (latest per subject):',
+            '- Day 1, 08:00 — OPEN chapel-latch by bandits: Bandits barred the chapel latch.',
+        ].join('\n');
+        const injection = buildDungeonRealityInjection({
+            siteRoot: 'Ossuary',
+            mapChunks: [JSON.stringify(map)],
+            locationEntries: [],
+            statusLog: [],
+        }, 'Ossuary, Nave', { activityText: activity });
+        expect(injection).toContain('### Recent site activity');
+        expect(injection).toContain('OPEN chapel-latch by bandits');
+        expect(injection).toContain('Actor: bandits');
+        expect(injection).not.toContain('"changed_at"');
+        expect(injection).not.toContain('"subjectId"');
     });
 
     it('strips a valid captured delta cue but keeps malformed or uncaptured cues', () => {
@@ -911,6 +1287,49 @@ The last guard falls and a loose stone reveals a niche.
         expect(extractDungeonMapSection(storedEntry.content)).toContain('"site":"Ember Mine"');
     });
 
+    it('lists existing maps for the narrator without requiring a matching footer', () => {
+        expect(buildMappedSitesInjection({})).toContain('[MAPPED_SITES — INTERNAL]');
+        expect(buildMappedSitesInjection({})).toContain('- None.');
+        expect(buildMappedSitesInjection({})).toContain('CreateAreaMap is allowed');
+
+        const sites = {
+            thornbrook: {
+                siteRoot: 'Thornbrook',
+                mapChunks: [JSON.stringify({ version: 3, site: 'Thornbrook', kind: 'SETTLEMENT', areas: [], assets: [] })],
+            },
+            ember: {
+                siteRoot: 'Ember Mine',
+                mapChunks: [JSON.stringify({ version: 3, site: 'Ember Mine', kind: 'DUNGEON', areas: [], assets: [] })],
+            },
+            incomplete: { siteRoot: 'Ghost Site', mapChunks: [] },
+        };
+        expect(listMappedSiteSummaries(sites)).toEqual([
+            { siteRoot: 'Ember Mine', kind: 'DUNGEON' },
+            { siteRoot: 'Thornbrook', kind: 'SETTLEMENT' },
+        ]);
+        const index = buildMappedSitesInjection(sites);
+        expect(index).toContain('- Ember Mine (DUNGEON)');
+        expect(index).toContain('- Thornbrook (SETTLEMENT)');
+        expect(index).toContain('when approaching, entering, or returning');
+        expect(index).not.toContain('Ghost Site');
+        expect(index).not.toContain('"version"');
+    });
+
+    it('strips a mapped-sites index from the prompt copy when Persistent Maps is off', () => {
+        const prompt = [
+            {
+                name: 'Dungeon Reality',
+                mes: '[MAPPED_SITES — INTERNAL]\n- Thornbrook (SETTLEMENT)\n[/MAPPED_SITES]\n',
+            },
+            {
+                role: 'system',
+                content: 'Keep this. [MAPPED_SITES — INTERNAL]\n- Ember Mine (DUNGEON)\n[/MAPPED_SITES]',
+            },
+        ];
+        stripDungeonRealityBlocksFromPrompt(prompt);
+        expect(prompt.some(message => /MAPPED_SITES/i.test(JSON.stringify(message)))).toBe(false);
+    });
+
     it('uses the latest narrator footer and diagnoses obvious high-risk roots', () => {
         const chat = [
             assistant('*(Location: Oakbridge, Market)*'),
@@ -920,5 +1339,258 @@ The last guard falls and a loose stone reveals a niche.
         expect(findLatestDungeonLocation(chat)).toBe('Ashen Catacombs, Entry Stair');
         expect(looksLikeDungeonSite(findLatestDungeonLocation(chat))).toBe(true);
         expect(looksLikeDungeonSite('Oakbridge, Market')).toBe(false);
+    });
+
+    it('defaults EVOLVED ADD_ASSET origin to MAP_EVOLUTION and rejects revival, bubble mutation, and SET_AREA knowledge', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [
+                { id: 'crypt-passage', name: 'Crypt Passage', knowledge: 'VISITED', geometry: ['Damp stone.'], connections: [{ to: 'ossuary', state: 'OPEN', detail: '' }] },
+                { id: 'ossuary', name: 'Ossuary', knowledge: 'UNREVEALED', geometry: [], connections: [{ to: 'crypt-passage', state: 'OPEN', detail: '' }] },
+            ],
+            assets: [
+                { id: 'crypt-ghoul', kind: 'CREATURE', name: 'Crypt Ghoul', location: 'crypt-passage', state: 'DESTROYED', knowledge: 'KNOWN', detail: 'Smoldering remains.', origin: 'INITIAL_MAP' },
+            ],
+        };
+
+        const added = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-ashen-patrol',
+            operations: [{
+                op: 'ADD_ASSET', evidence: 'EVOLVED', name: 'Ashen Skeleton Patrol', kind: 'GROUP',
+                location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED',
+                distinct_from: ['crypt-ghoul'],
+                cause: 'Moved into the emptied ossuary after the ghoul fell.',
+            }],
+        });
+        expect(added.ok).toBe(true);
+        expect(added.document.assets.find(asset => asset.id === 'ashen-skeleton-patrol')).toMatchObject({
+            origin: 'MAP_EVOLUTION', knowledge: 'UNREVEALED', location: 'ossuary',
+        });
+
+        const revived = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-revive-ghoul',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'crypt-ghoul', state: 'ACTIVE' }],
+        });
+        expect(revived.ok).toBe(false);
+        expect(revived.errors[0]).toMatchObject({ code: 'PLAY_CANON_LOCKED' });
+
+        const autonomousAdd = applyDungeonMapTransaction(map, {
+            operation_id: 'day2-0800-autonomous-add',
+            operations: [{
+                op: 'ADD_ASSET', evidence: 'AUTONOMOUS', name: 'Wandering Shade', kind: 'CREATURE',
+                location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED',
+            }],
+        });
+        expect(autonomousAdd.ok).toBe(false);
+        expect(autonomousAdd.errors[0]).toMatchObject({ code: 'AUTONOMY_NOT_ALLOWED' });
+
+        const frozen = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-bubble',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'crypt-ghoul', detail: 'Should not change in the player bubble.' }],
+        }, { frozenAreaIds: ['crypt-passage'] });
+        expect(frozen.ok).toBe(false);
+        expect(frozen.errors[0]).toMatchObject({ code: 'PLAYER_BUBBLE_FROZEN' });
+
+        const knowledgeChange = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-reveal-ossuary',
+            operations: [{ op: 'SET_AREA', evidence: 'EVOLVED', area_id: 'ossuary', knowledge: 'DISCOVERED' }],
+        });
+        expect(knowledgeChange.ok).toBe(false);
+        expect(knowledgeChange.errors[0]).toMatchObject({ code: 'EVOLUTION_SET_AREA_LIMITED' });
+
+        const geometry = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-day2-0800-barricade',
+            operations: [{ op: 'SET_AREA', evidence: 'EVOLVED', area_id: 'ossuary', geometry_append: ['A collapsed shelf of bone now blocks the alcove.'], cause: 'A bone shelf collapsed after scavengers rummaged the alcove.' }],
+        });
+        expect(geometry.ok).toBe(true);
+        expect(geometry.document.areas.find(area => area.id === 'ossuary').geometry).toContain('A collapsed shelf of bone now blocks the alcove.');
+    });
+
+    it('requires cause on material changes and actor on DESTROYED, and stamps changed_at', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [
+                { id: 'crypt', name: 'Crypt', knowledge: 'VISITED', geometry: [], connections: [{ to: 'ossuary', state: 'OPEN', detail: '' }] },
+                { id: 'ossuary', name: 'Ossuary', knowledge: 'UNREVEALED', geometry: [], connections: [{ to: 'crypt', state: 'OPEN', detail: '' }] },
+            ],
+            assets: [
+                { id: 'ash-wight', kind: 'CREATURE', name: 'Ash Wight', location: 'ossuary', state: 'ACTIVE', knowledge: 'UNREVEALED', detail: '', origin: 'INITIAL_MAP' },
+                { id: 'salt-road-delvers', kind: 'GROUP', name: 'Salt-Road Delvers', location: 'crypt', state: 'ACTIVE', knowledge: 'UNREVEALED', detail: '', origin: 'MAP_EVOLUTION' },
+            ],
+        };
+        const missingCause = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-missing-cause',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'ash-wight', state: 'ALERT' }],
+        });
+        expect(missingCause.ok).toBe(false);
+        expect(missingCause.errors[0].code).toBe('MISSING_CAUSE');
+
+        const missingActor = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-missing-killer',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'ash-wight', state: 'DESTROYED', cause: 'Killed during a fight over spoils.' }],
+        });
+        expect(missingActor.ok).toBe(false);
+        expect(missingActor.errors[0].code).toBe('MISSING_ACTOR');
+
+        const killed = applyDungeonMapTransaction(map, {
+            operation_id: 'evo-third-party-kill',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'ash-wight', state: 'DESTROYED',
+                detail: 'Broken remains after a brief fight over spoils.',
+                cause: 'Killed by Salt-Road Delvers over ossuary spoils.',
+                actor: 'salt-road-delvers',
+            }],
+        }, { currentTime: 'Day 3, 08:00' });
+        expect(killed.ok).toBe(true);
+        expect(killed.document.assets.find(asset => asset.id === 'ash-wight')).toMatchObject({
+            state: 'DESTROYED',
+            actor: 'salt-road-delvers',
+            cause: 'Killed by Salt-Road Delvers over ossuary spoils.',
+            changed_at: 'Day 3, 08:00',
+        });
+    });
+
+    it('stores pack count on ADD_ASSET and SET_ASSET, and rejects count 0', () => {
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'crypt', name: 'Crypt', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [],
+        };
+        const added = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-1540-pack',
+            operations: [{
+                op: 'ADD_ASSET', evidence: 'CONFIRMED', name: 'Crawling Dead Pack', kind: 'GROUP',
+                location: 'crypt', state: 'ACTIVE', knowledge: 'KNOWN', count: 6,
+                cause: 'The party encountered this pack in the crypt.',
+            }],
+        });
+        expect(added.ok).toBe(true);
+        expect(added.document.assets[0]).toMatchObject({ kind: 'GROUP', count: 6 });
+
+        const thinned = applyDungeonMapTransaction(added.document, {
+            operation_id: 'day1-1610-pack-thinned',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'crawling-dead-pack', count: 2,
+                cause: 'The party destroyed four of the pack.', actor: 'party',
+            }],
+        });
+        expect(thinned.ok).toBe(true);
+        expect(thinned.document.assets[0].count).toBe(2);
+
+        const zero = applyDungeonMapTransaction(added.document, {
+            operation_id: 'day1-1611-pack-zero',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'crawling-dead-pack', count: 0,
+                cause: 'None remain.',
+            }],
+        });
+        expect(zero.ok).toBe(false);
+        expect(zero.errors[0].code).toBe('INVALID_COUNT');
+    });
+
+    it('stores DEACTIVATED as the canonical neutralized-mechanism state', () => {
+        expect(coerceAssetState('DISARMED')).toBe('DEACTIVATED');
+        expect(coerceAssetState('inactive')).toBe('DEACTIVATED');
+        expect(coerceAssetState('PACIFIED')).toBe('DEACTIVATED');
+        expect(isPlayCanonLockedState('DISARMED')).toBe(true);
+        expect(isPlayCanonLockedState('DEACTIVATED')).toBe(true);
+
+        const document = normalizeDungeonMapDocument({
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'entry', name: 'Entry', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'needle', kind: 'TRAP', name: 'Poison Needle', location: 'entry',
+                state: 'DISARMED', knowledge: 'KNOWN', detail: 'Pins folded back.', origin: 'INITIAL_MAP',
+            }],
+        });
+        expect(document.assets[0].state).toBe('DEACTIVATED');
+
+        const withDisarmed = {
+            ...connectedArchitectMap,
+            assets: [{
+                ...connectedArchitectMap.assets[0],
+                id: 'glyph',
+                kind: 'TRAP',
+                name: 'Scorching Glyph',
+                state: 'DISARMED',
+            }],
+        };
+        const accepted = validateDungeonMapArchitecture(withDisarmed, {
+            site: 'Abbey Undercroft',
+            entrance: 'Cellar Landing',
+        });
+        expect(accepted.valid).toBe(true);
+        expect(accepted.document.assets.find(asset => asset.id === 'glyph').state).toBe('DEACTIVATED');
+
+        const map = {
+            version: 3,
+            site: 'Abbey Undercroft',
+            areas: [{ id: 'entry', name: 'Entry', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [{
+                id: 'needle', kind: 'TRAP', name: 'Poison Needle', location: 'entry',
+                state: 'ARMED', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP',
+            }],
+        };
+        const disarmed = applyDungeonMapTransaction(map, {
+            operation_id: 'day1-1600-needle-off',
+            operations: [{
+                op: 'SET_ASSET', evidence: 'CONFIRMED', asset_id: 'needle', state: 'DISARMED',
+                knowledge: 'KNOWN', cause: 'The party folded the needle back.', actor: 'party',
+            }],
+        });
+        expect(disarmed.ok).toBe(true);
+        expect(disarmed.document.assets[0].state).toBe('DEACTIVATED');
+
+        const revived = applyDungeonMapTransaction(disarmed.document, {
+            operation_id: 'evo-day2-0800-rearm',
+            operations: [{ op: 'SET_ASSET', evidence: 'EVOLVED', asset_id: 'needle', state: 'ARMED', cause: 'Should not rearm.' }],
+        });
+        expect(revived.ok).toBe(false);
+        expect(revived.errors[0]).toMatchObject({ code: 'PLAY_CANON_LOCKED' });
+    });
+
+    it('parses editable inspector JSON and rejects site mismatches', () => {
+        const json = serializeDungeonMapDocument(connectedArchitectMap);
+        const parsed = parseEditableDungeonMapJson(json, 'Abbey Undercroft');
+        expect(parsed.ok).toBe(true);
+        expect(parsed.document.site).toBe('Abbey Undercroft');
+        expect(parsed.document.areas.length).toBeGreaterThan(0);
+
+        const fenced = parseEditableDungeonMapJson('```json\n' + json + '\n```', 'Abbey Undercroft');
+        expect(fenced.ok).toBe(true);
+
+        const wrongSite = parseEditableDungeonMapJson(json, 'Other Site');
+        expect(wrongSite.ok).toBe(false);
+        expect(wrongSite.errors[0]).toContain('site must stay');
+
+        const broken = parseEditableDungeonMapJson('{bad', 'Abbey Undercroft');
+        expect(broken.ok).toBe(false);
+        expect(broken.errors.length).toBeGreaterThan(0);
+
+        const withAsset = parseEditableDungeonMapJson(
+            serializeDungeonMapDocument({
+                ...connectedArchitectMap,
+                assets: [
+                    ...connectedArchitectMap.assets,
+                    {
+                        id: 'new-rat',
+                        kind: 'CREATURE',
+                        name: 'Cellar Rat',
+                        location: 'cellar-landing',
+                        state: 'ACTIVE',
+                        knowledge: 'KNOWN',
+                        detail: 'Added via JSON.',
+                        origin: 'INITIAL_MAP',
+                    },
+                ],
+            }),
+            'Abbey Undercroft',
+        );
+        expect(withAsset.ok).toBe(true);
+        expect(withAsset.document.assets.some(asset => asset.id === 'new-rat')).toBe(true);
     });
 });

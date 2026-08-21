@@ -3,34 +3,72 @@ import { getSettings } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import {
     dungeonSiteRootsMatch,
+    findLatestDungeonLocation,
     formatDungeonMapForNarrator,
     getDungeonMessageText,
+    locationContainsSiteRoot,
+    mapSiteFooterMismatchHint,
     normalizeMapSiteKind,
+    normalizeMapSiteThreat,
+    defaultMapSiteThreat,
     parseDungeonMapDocument,
     stripCapturedDungeonMapsFromPrompt,
+    canonicalizeReciprocalConnectionDetails,
     validateDungeonMapArchitecture,
 } from './dungeon-reality.js';
-import { persistArchitectDungeonMap, syncDungeonMapsToLocationLorebook } from './router.js';
-import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
+import { locationRootExists, persistArchitectDungeonMap, syncDungeonMapsToLocationLorebook } from './router.js';
+import { DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT, DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from './map-architect-prompt.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
-import { MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
+import { MAP_ARCHITECT_BRIEF_JSON_SCHEMA, MAP_ARCHITECT_JSON_SCHEMA } from './map-architect-schema.js';
+import { extractCurrentTimeStr } from './memo-processor.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
+import { buildMapArchitectReferenceContext } from './map-architect-context.js';
 export { parseMapArchitectResponse } from './map-architect-parser.js';
+export { buildMapArchitectReferenceContext } from './map-architect-context.js';
 
 const architectRuns = new Map();
 const MAX_CORRECTION_ATTEMPTS = 2;
 
+const architectToasts = new Map();
+
+function siteToastLabel(site) {
+    return String(site || 'location').trim() || 'location';
+}
+
+function startMapArchitectToast(site) {
+    const toastrApi = globalThis.toastr;
+    if (typeof toastrApi?.info !== 'function') return;
+    const key = normalizeKey(site);
+    const prior = architectToasts.get(key);
+    if (prior && typeof toastrApi.clear === 'function') {
+        try { toastrApi.clear(prior); } catch (_) { /* best effort */ }
+    }
+    try {
+        const toast = toastrApi.info(
+            `Generating a location map for ${siteToastLabel(site)}...`,
+            'Map Architect',
+            { timeOut: 0, extendedTimeOut: 0, closeButton: true },
+        );
+        if (toast) architectToasts.set(key, toast);
+        else architectToasts.delete(key);
+    } catch (_) { /* notification display is best effort */ }
+}
+
 function finishMapArchitectToast(site, succeeded) {
     const toastrApi = globalThis.toastr;
-    if (!toastrApi) return;
-    const method = succeeded ? toastrApi.success : toastrApi.error;
+    const key = normalizeKey(site);
+    const prior = architectToasts.get(key);
+    architectToasts.delete(key);
+    if (prior && typeof toastrApi?.clear === 'function') {
+        try { toastrApi.clear(prior); } catch (_) { /* best effort */ }
+    }
+    const method = succeeded ? toastrApi?.success : toastrApi?.error;
     if (typeof method !== 'function') return;
-    const label = String(site || 'location').trim() || 'location';
     try {
         method(
             succeeded
-                ? `Location map ready for ${label}.`
-                : `Location map generation failed for ${label}. See the tool result for details.`,
+                ? `Location map ready for ${siteToastLabel(site)}.`
+                : `Location map generation failed for ${siteToastLabel(site)}. See the tool result for details.`,
             'Map Architect',
             { timeOut: succeeded ? 5000 : 10000, extendedTimeOut: succeeded ? 10000 : 20000 },
         );
@@ -62,7 +100,7 @@ function recentStoryContext(ctx, lookback, dungeonState) {
     }).filter(Boolean).join('\n\n');
 }
 
-function requestSettings(settings) {
+function requestSettings(settings, extra = {}) {
     return {
         connectionSource: settings.mapArchitectConnectionSource || 'default',
         connectionProfileId: settings.mapArchitectConnectionProfileId || '',
@@ -72,26 +110,74 @@ function requestSettings(settings) {
         openaiUrl: settings.mapArchitectOpenaiUrl || '',
         openaiKey: settings.mapArchitectOpenaiKey || '',
         openaiModel: settings.mapArchitectOpenaiModel || '',
-        maxTokens: Math.max(1000, Number(settings.mapArchitectMaxTokens) || 25000),
+        maxTokens: extra.maxTokens ?? Math.max(1000, Number(settings.mapArchitectMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };
 }
 
+function resolveLookback(settings, override) {
+    const fallback = Number(settings?.mapArchitectLookback);
+    const configured = override != null && override !== '' ? Number(override) : fallback;
+    if (Number.isFinite(configured)) return Math.max(0, Math.min(100, Math.floor(configured)));
+    return Number.isFinite(fallback) ? Math.max(0, fallback) : 12;
+}
+
+function currentTimeFrom(settings) {
+    const memoTimeMatch = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    return memoTimeMatch ? extractCurrentTimeStr(memoTimeMatch[1]) : '';
+}
+
 function kindBrief(kind) {
     return kind === 'SETTLEMENT'
-        ? 'SETTLEMENT = district-scale town/city/village; do not map every building interior.'
+        ? 'SETTLEMENT = the city/town/village as a whole, district-scale; never an alley, house, or shop.'
         : 'DUNGEON = room-scale hidden interior; populate rooms fully.';
 }
 
-function initialUserPrompt(args, context) {
-    return `CREATE ONE PRIVATE MAP\nExact site root: ${args.site}\nEntrance area: ${args.entrance}\nKind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nEstablished premise: ${args.premise}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the required JSON object. Follow the ${args.kind} instruction set.`;
+function threatBrief(threat, kind) {
+    if (normalizeMapSiteKind(kind) === 'SETTLEMENT') {
+        return {
+            LOW: 'LOW = sleepy watch and civilian life; not a war zone.',
+            MODERATE: 'MODERATE = normal garrison or street crime.',
+            HIGH: 'HIGH = occupation, curfews, armed factions in several districts.',
+            DEADLY: 'DEADLY = active siege, massacre, or open war in the streets.',
+        }[threat] || 'Threat is site danger, not party level.';
+    }
+    return {
+        LOW: 'LOW = mostly empty/abandoned; sparse hostiles and traps.',
+        MODERATE: 'MODERATE = moderate occupancy; hostiles here and there; some traps and hazards; safe pauses are not too unlikely.',
+        HIGH: 'HIGH = frequent hostiles, packs or patrols, traps on multiple routes.',
+        DEADLY: 'DEADLY = dense overlapping threats and layered traps; still traversable.',
+    }[threat] || 'Threat is site danger, not party level.';
 }
 
-function correctionPrompt(args, context, priorOutput, parseError, errors, attempt) {
+function initialUserPrompt(args, context, referenceContext = '', currentLocation = '', currentTime = '') {
+    return `CREATE ONE PRIVATE MAP
+Exact site root: ${args.site}
+Entrance area: ${args.entrance}
+Kind: ${args.kind} (${kindBrief(args.kind)})
+Scale: ${args.scale}
+Threat: ${args.threat} (${threatBrief(args.threat, args.kind)})
+Established premise: ${args.premise}
+Live location footer: ${currentLocation || '(none yet)'}
+Current in-world time (authoritative): ${currentTime || 'Unknown'}
+
+LANGUAGE
+Copy Exact site root and Entrance area character-for-character. Write every human-readable name, geometry line, route detail, and asset label in that same language and script. Do not translate them into English. JSON keys, kebab-case IDs, and enums stay English.
+Write each connection detail once as a direction-neutral description of the passage, then copy that exact string onto the reverse. Do not rewrite it from the other room.
+
+RECENT STORY CONTEXT
+${context || '(No additional recent context.)'}
+
+${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}
+
+Output only the required JSON object. Follow the ${args.kind} instruction set.`;
+}
+
+function correctionPrompt(args, context, referenceContext, priorOutput, parseError, errors, attempt, currentTime = '') {
     const issues = parseError
         ? [{ code: 'INVALID_JSON', path: '$', hint: parseError }]
         : errors.map(({ code, path, hint }) => ({ code, path, hint }));
-    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nPremise: ${args.premise}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
+    return `CORRECTION PASS ${attempt}\nYour previous map was rejected. Return a complete corrected JSON object, not a patch.\n\nRequested site: ${args.site}\nRequested entrance: ${args.entrance}\nRequested kind: ${args.kind} (${kindBrief(args.kind)})\nScale: ${args.scale}\nThreat: ${args.threat} (${threatBrief(args.threat, args.kind)})\nPremise: ${args.premise}\nCurrent in-world time (authoritative): ${currentTime || 'Unknown'}\n\nVALIDATION ERRORS\n${JSON.stringify(issues, null, 2)}\n\nPREVIOUS OUTPUT\n${priorOutput}\n\nRECENT STORY CONTEXT\n${context || '(No additional recent context.)'}\n\n${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}\n\nOutput only the corrected JSON object. Follow the ${args.kind} instruction set.`;
 }
 
 function existingResult(siteRecord) {
@@ -123,6 +209,7 @@ async function runMapArchitectOnce(rawArgs) {
         premise: String(rawArgs?.premise || '').trim(),
         kind: normalizeMapSiteKind(rawArgs?.kind),
         scale: String(rawArgs?.scale || 'MEDIUM').trim().toUpperCase(),
+        threat: normalizeMapSiteThreat(rawArgs?.threat, defaultMapSiteThreat(rawArgs?.kind)),
     };
     if (!args.site || !args.entrance || !args.premise) {
         throw mapArchitectFailure('site, entrance, and premise are required. Establish those facts before a later attempt.');
@@ -139,13 +226,27 @@ async function runMapArchitectOnce(rawArgs) {
         throw mapArchitectFailure('No campaign prefix is available, so there is no safe Locations lorebook target. Nothing was generated or saved.');
     }
     const existing = Object.values(current.sites || {}).find(record => dungeonSiteRootsMatch(record?.siteRoot, args.site));
-    if (existing?.mapChunks?.length) return existingResult(existing);
+    if (existing?.mapChunks?.length) {
+        if (rawArgs?.requireNew) {
+            throw mapArchitectFailure(`A mapped location named "${args.site}" already exists.`);
+        }
+        return existingResult(existing);
+    }
+    if (rawArgs?.requireNew && await locationRootExists(args.site)) {
+        throw mapArchitectFailure(`A location named "${args.site}" already exists. Use + MAP on that root instead.`);
+    }
 
-    const configuredLookback = Number(settings.mapArchitectLookback);
-    const lookback = Number.isFinite(configuredLookback) ? Math.max(0, configuredLookback) : 12;
+    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
+    if (currentLocation && !locationContainsSiteRoot(currentLocation, args.site) && !rawArgs?.allowOffsite) {
+        throw mapArchitectFailure(mapSiteFooterMismatchHint(args.site, currentLocation));
+    }
+
+    const lookback = resolveLookback(settings, rawArgs?.lookback);
     const context = recentStoryContext(ctx, lookback, current);
+    const referenceContext = await buildMapArchitectReferenceContext(ctx, rawArgs);
+    const currentTime = currentTimeFrom(settings);
     const systemPrompt = String(settings.mapArchitectSystemPrompt || DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT).trim();
-    let prompt = initialUserPrompt(args, context);
+    let prompt = initialUserPrompt(args, context, referenceContext, currentLocation, currentTime);
     let lastIssues = [];
 
     for (let attempt = 0; attempt <= MAX_CORRECTION_ATTEMPTS; attempt++) {
@@ -154,17 +255,23 @@ async function runMapArchitectOnce(rawArgs) {
             systemPrompt,
             prompt,
             null,
-            { jsonSchema: MAP_ARCHITECT_JSON_SCHEMA },
+            { jsonSchema: MAP_ARCHITECT_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' },
         );
         const parsed = parseMapArchitectResponse(output);
+        if (parsed.value?.areas) canonicalizeReciprocalConnectionDetails(parsed.value.areas);
         const validation = parsed.value
-            ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale, kind: args.kind })
+            ? validateDungeonMapArchitecture(parsed.value, { site: args.site, entrance: args.entrance, scale: args.scale, kind: args.kind, threat: args.threat })
             : { valid: false, errors: [] };
         if (validation.valid) {
             if (!isLocationMappingEnabled(getSettings())) {
                 throw mapArchitectFailure('Persistent Maps was disabled while the map was being generated. Nothing was saved.');
             }
-            const saved = await persistArchitectDungeonMap(args.site, validation.document);
+            const saved = await persistArchitectDungeonMap(args.site, validation.document, {
+                allowOffsite: !!rawArgs?.allowOffsite,
+                requireNew: !!rawArgs?.requireNew,
+                locationKeys: rawArgs?.locationKeys,
+                locationCore: rawArgs?.locationCore,
+            });
             const status = saved.existing ? 'A concurrent map already existed and was preserved.' : `Map saved to ${saved.entryId}.`;
             return `[MAP_ARCHITECT_RESULT — PRIVATE]\n${status}\nTreat this as objective current canon. Do not expose unseen facts.\n\n${formatDungeonMapForNarrator(saved.document)}\n\nContinue narration from ${args.entrance}; reveal only what the player can perceive.\n[/MAP_ARCHITECT_RESULT]`;
         }
@@ -172,7 +279,7 @@ async function runMapArchitectOnce(rawArgs) {
             ? [{ code: 'INVALID_JSON', path: '$', hint: parsed.error }]
             : validation.errors;
         if (attempt < MAX_CORRECTION_ATTEMPTS) {
-            prompt = correctionPrompt(args, context, output, parsed.error, validation.errors, attempt + 1);
+            prompt = correctionPrompt(args, context, referenceContext, output, parsed.error, validation.errors, attempt + 1, currentTime);
         }
     }
 
@@ -180,10 +287,93 @@ async function runMapArchitectOnce(rawArgs) {
     throw mapArchitectFailure(`The architect could not produce a valid connected map after ${MAX_CORRECTION_ATTEMPTS + 1} attempts. Nothing was saved. Problems: ${concise}`);
 }
 
+/**
+ * Lorebook Agent Auto path: one Architect turn fills CreateAreaMap handshake fields.
+ * Site is locked; the narrator is not involved.
+ */
+export async function inferMapArchitectArgs({ site, loreEntry = '', userBrief = '', lookback, lorebookNames = [], characterCards = [] } = {}) {
+    const siteRoot = String(site || '').trim();
+    if (!siteRoot) throw new Error('Map Architect auto-fill needs a location root.');
+
+    const ctx = SillyTavern.getContext();
+    const settings = getSettings();
+    if (!isLocationMappingEnabled(settings)) {
+        throw new Error('Persistent Maps is disabled in Components. No map brief was filled.');
+    }
+
+    const current = await syncDungeonMapsToLocationLorebook(ctx.chat || [], { capture: false });
+    if ((current.errors || []).some(error => /no campaign prefix/i.test(String(error)))) {
+        throw new Error('No campaign prefix is available, so there is no safe Locations lorebook target.');
+    }
+
+    const windowSize = resolveLookback(settings, lookback);
+    const context = recentStoryContext(ctx, windowSize, current);
+    const referenceContext = await buildMapArchitectReferenceContext(ctx, { lorebookNames, characterCards });
+    const lore = String(loreEntry || '').trim() || '(No location lore entry.)';
+    const brief = String(userBrief || '').trim() || '(none)';
+    const userPrompt = `FILL CREATE_AREA_MAP FIELDS
+Exact site root (locked, copy character-for-character): ${siteRoot}
+
+USER BRIEF
+${brief}
+
+LOCATION LORE
+${lore}
+
+RECENT STORY CONTEXT (${windowSize} messages${windowSize === 0 ? '; vacuum — do not invent from chat' : ''})
+${context || '(No additional recent context.)'}
+
+${referenceContext || 'USER-SELECTED REFERENCE CONTEXT\n(none selected)'}
+
+Infer entrance, kind, scale, threat, premise, and optional extra keywords as the GM would before calling CreateAreaMap.
+SETTLEMENT = the city/town/village as a whole, not an alley or shop. DUNGEON = a high-risk interior only.
+Do not include the locked site name in keywords.
+Output only the JSON object.`;
+
+    const output = await sendStateRequest(
+        requestSettings(settings, { maxTokens: Math.min(4000, Math.max(1000, Number(settings.mapArchitectMaxTokens) || 25000)) }),
+        DEFAULT_MAP_ARCHITECT_BRIEF_SYSTEM_PROMPT,
+        userPrompt,
+        null,
+        { jsonSchema: MAP_ARCHITECT_BRIEF_JSON_SCHEMA, stream: true, debugSource: 'Map Architect' },
+    );
+    const parsed = parseMapArchitectResponse(output);
+    if (!parsed.value) {
+        throw new Error(parsed.error || 'Map Architect returned no map brief JSON.');
+    }
+
+    const kind = normalizeMapSiteKind(parsed.value.kind);
+    const entrance = String(parsed.value.entrance || '').trim();
+    const premise = String(parsed.value.premise || '').trim();
+    const scale = String(parsed.value.scale || 'MEDIUM').trim().toUpperCase();
+    const threat = normalizeMapSiteThreat(parsed.value.threat, defaultMapSiteThreat(kind));
+    if (!entrance || !premise) {
+        throw new Error('Map Architect returned an incomplete map brief (entrance and premise are required).');
+    }
+
+    const extraKeys = Array.isArray(parsed.value.keywords)
+        ? parsed.value.keywords.map(key => String(key || '').trim()).filter(Boolean)
+        : [];
+
+    return {
+        site: siteRoot,
+        entrance,
+        kind,
+        scale: ['SMALL', 'MEDIUM', 'LARGE'].includes(scale) ? scale : 'MEDIUM',
+        threat,
+        premise,
+        keywords: extraKeys,
+        lookback: windowSize,
+        lorebookNames,
+        characterCards,
+    };
+}
+
 /** Dedupe parallel/repeated tool calls for the same site within one generation. */
 export function runMapArchitect(args) {
     const key = normalizeKey(args?.site);
     if (architectRuns.has(key)) return architectRuns.get(key);
+    startMapArchitectToast(args?.site);
     const run = runMapArchitectOnce(args)
         .then(result => {
             finishMapArchitectToast(args?.site, true);

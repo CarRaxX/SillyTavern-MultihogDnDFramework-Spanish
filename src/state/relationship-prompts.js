@@ -15,8 +15,8 @@ export const RELATIONSHIP_UPDATE_MODES = {
 };
 
 /**
- * Keeps existing campaigns on the original narrator-regex behavior unless they
- * explicitly select the State Tracker command mode.
+ * Resolves the active relationship update mode. Unset or unknown values fall back
+ * to the factory default (State Tracker).
  * @param {any} settings
  */
 export function getRelationshipUpdateMode(settings) {
