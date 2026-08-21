@@ -71,6 +71,25 @@ describe('universal tag colors', () => {
         expect(html).toContain('Full');
     });
 
+    it('colors only the BAR fill and marks its color as explicitly chosen', () => {
+        const html = tryRenderMarker('Hunger: ((BARBLUE)) 975/1000', 'CHARACTER');
+        const normalizedHtml = html.toLowerCase();
+
+        expect(html).toContain('<span class="rt-entity-sub-label">Hunger:</span>');
+        expect(normalizedHtml).not.toContain('<span class="rt-entity-sub-label" style="color:blue">');
+        expect(normalizedHtml).toContain('background:blue');
+        expect(html).toContain('data-recolor-explicit-color="true"');
+    });
+
+    it('keeps an inline CHARACTER bar header neutral while preserving its explicit color', () => {
+        const html = blockToItems('CHARACTER', 'Hunger: ((BARBLUE)) 975/1000').join('');
+
+        expect(html).toContain('class="rt-entity-name"');
+        expect(html).toContain('>Hunger:</div>');
+        expect(html.toLowerCase()).toContain('background:blue');
+        expect(html).toContain('data-recolor-explicit-color="true"');
+    });
+
     it('keeps separately colored PILLS markers as compact as a normal pill row', () => {
         const html = tryRenderMarker('Status: ((PILLSBLUE)) Respected, ((PILLSGREEN)) Good', 'CUSTOM');
 

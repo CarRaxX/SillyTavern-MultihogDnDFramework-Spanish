@@ -134,7 +134,9 @@ export function renderDayNightBadge(str) {
         // same color to a preceding label (for example `Status:` in
         // `Status: ((BADGEPINK)) Respected`) visually merges the label into the
         // badge styling even though it is not part of the badge.
-        const colorLabel = rule.color && !['badge', 'badge_colored', 'pills', 'pill_colored'].includes(rule.renderType);
+        // A BAR color is a fill color, not a text color. Keeping it off the
+        // label means `Hunger: ((BARBLUE)) 75/100` colors only the bar.
+        const colorLabel = rule.color && !['badge', 'badge_colored', 'pills', 'pill_colored', 'hp_bar', 'xp_bar', 'progress'].includes(rule.renderType);
         const labelStyle = colorLabel ? ` style="color:${rule.color}"` : '';
         const labelHtml  = labelText
             ? `<span class="rt-entity-sub-label"${labelStyle}>${escapeHtmlWithColor(labelText)}</span>`
@@ -223,7 +225,7 @@ export function renderDayNightBadge(str) {
                         : 'linear-gradient(90deg,#e74c3c,#c0392b)';
                     if (barId) barBg = getBarBackground(barId, barBg, pct);
 
-                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${rule.color ? 'true' : 'false'}" title="Click to recolor"` : '';
 
                     const showAsPct = getBarShowAsPercentage(barId);
                     const dispCur = showAsPct ? Math.round(pct) : cur;
@@ -1523,13 +1525,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         if (inlineEntityName) {
                             results.push(`<div class="rt-entity-row" style="display:block; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
                                 <div class="rt-entity-name" style="font-size:1.1em; margin-bottom:6px;">${escapeHtmlWithColor(currentEntity)}</div>
-                                <div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''} style="position:relative; height:14px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,0.1); margin-bottom:4px; width:100%;">
+                                <div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''} style="position:relative; height:14px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,0.1); margin-bottom:4px; width:100%;">
                                     <div class="rt-hp-bar" style="width:${pct.toFixed(1)}%; height:100%; border-radius:4px; background:${barBg}; transition:width 0.3s;"></div>
                                 </div>
                                 <span class="rt-hp-label" style="display:block; font-size:0.82em; opacity:0.85; text-align:left; line-height:1.2;">${label}</span>
                             </div>`);
                         } else {
-                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
+                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
                         }
 
                         if (status) {

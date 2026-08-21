@@ -20,6 +20,7 @@ import {
     autoApplySysprompt
 } from './src/app/runtime-bridge.js';
 import { renderMemoAsCards, MARKER_TYPE_MAP, getMarkerLibraryKeys } from './renderer.js';
+import { moveDisplayGroupInOrder, normalizeDisplayGroups } from './src/features/display-groups.js';
 import { applyMapArchitectOpenerToUi, syncMapArchitectOpenerNestedVisibility } from './map-architect-opener.js';
 import { LOCATION_MAPPING_SECTION_TAG } from './src/state/section-enabled.js';
 
@@ -1333,6 +1334,13 @@ export function refreshOrderList() {
         { label: 'Active modules', tags: order.filter(isTagEnabled), active: true },
         { label: 'Inactive module pool', tags: order.filter(tag => !isTagEnabled(tag)), active: false },
     ];
+    // Render a Display Group at its first member so its position is visible
+    // and editable without hiding the members' existing module controls.
+    const displayGroupsByFirstMember = new Map();
+    normalizeDisplayGroups(s.displayGroups).forEach(displayGroup => {
+        const firstMember = order.find(tag => displayGroup.members.includes(tag));
+        if (firstMember) displayGroupsByFirstMember.set(firstMember, displayGroup);
+    });
 
     groups.forEach(group => {
         if (!group.tags.length) return;
@@ -1343,6 +1351,9 @@ export function refreshOrderList() {
         list.appendChild(heading);
 
         group.tags.forEach((tag, groupIndex) => {
+        const displayGroup = displayGroupsByFirstMember.get(tag);
+        if (displayGroup) list.appendChild(buildDisplayGroupOrderRow(s, order, displayGroup));
+
         const index = order.indexOf(tag);
         const isStock = BLOCK_ORDER.includes(tag);
         const customIndex = s.customFields.findIndex(f => f.tag.toUpperCase() === tag);
@@ -1583,6 +1594,56 @@ export function refreshOrderList() {
         }
         });
     });
+}
+
+/** Builds the compact, reorderable row for a display-only module group. */
+function buildDisplayGroupOrderRow(settings, order, group) {
+    const memberSet = new Set(group.members);
+    const firstIndex = order.findIndex(tag => memberSet.has(tag));
+    const lastIndex = Math.max(...order.map((tag, index) => memberSet.has(tag) ? index : -1));
+    const isActive = settings.displayGroupsEnabled && group.enabled;
+
+    const item = document.createElement('div');
+    item.className = 'flex-container gap-1 alignitemscenter rt-order-item rt-display-group-order-item';
+    item.style.cssText = `padding:5px;border-radius:4px;border:1px dashed rgba(255,196,92,.55);background:${isActive ? 'rgba(255,196,92,.10)' : 'transparent'};opacity:${isActive ? '1' : '.6'};`;
+    item.title = 'Display-only group. Its arrows move all listed member modules together.';
+
+    const marker = document.createElement('span');
+    marker.textContent = '🗂️';
+    marker.style.margin = '0 5px';
+    const label = document.createElement('span');
+    label.style.cssText = 'flex:1;font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    label.textContent = `${group.icon} ${group.name} (${group.members.length})`;
+    const badge = document.createElement('span');
+    badge.textContent = 'DISPLAY GROUP';
+    badge.style.cssText = 'font-size:8px;color:#ffc45c;border:1px solid rgba(255,196,92,.45);border-radius:3px;padding:1px 4px;white-space:nowrap;';
+
+    const controls = document.createElement('div');
+    controls.className = 'flex-container gap-1';
+    const move = (direction) => {
+        settings.blockOrder = moveDisplayGroupInOrder(order, group.members, direction);
+        saveSettings();
+        refreshOrderList();
+        refreshRenderedView();
+    };
+    const upBtn = document.createElement('button');
+    upBtn.className = 'menu_button interactable rt-order-btn';
+    upBtn.style.padding = '2px 6px';
+    upBtn.title = 'Move Display Group up';
+    upBtn.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+    upBtn.disabled = firstIndex <= 0;
+    upBtn.onclick = () => move('up');
+    const downBtn = document.createElement('button');
+    downBtn.className = 'menu_button interactable rt-order-btn';
+    downBtn.style.padding = '2px 6px';
+    downBtn.title = 'Move Display Group down';
+    downBtn.innerHTML = '<i class="fa-solid fa-arrow-down"></i>';
+    downBtn.disabled = lastIndex >= order.length - 1;
+    downBtn.onclick = () => move('down');
+
+    controls.append(upBtn, downBtn);
+    item.append(marker, label, badge, controls);
+    return item;
 }
 
 /** Builds the nested "⛺ Benched Party" sub-row shown directly under PARTY in the module list. */

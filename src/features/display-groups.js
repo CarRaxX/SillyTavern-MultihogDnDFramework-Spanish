@@ -4,7 +4,6 @@
  */
 
 export const DISPLAY_GROUP_EXCLUDED_TAGS = new Set([
-    'CHARACTER',
     'COMBAT',
     'PARTY',
     'BENCHED PARTY',
@@ -86,7 +85,10 @@ export function buildDisplayGroupRenderPlan(tags, groups, enabled) {
         }
         if (emittedGroups.has(group.id)) continue;
 
-        const presentMembers = safeTags.filter(candidate => group.members.includes(candidate));
+        // Membership order is deliberately user-configurable in the Display
+        // Group editor. Respect it here instead of falling back to the raw
+        // module order, while still omitting members absent from this memo.
+        const presentMembers = group.members.filter(candidate => safeTags.includes(candidate));
         if (!presentMembers.length) {
             plan.push({ kind: 'module', tag });
             continue;
@@ -106,3 +108,20 @@ export function buildDisplayGroupRenderPlan(tags, groups, enabled) {
     return plan;
 }
 
+/** Moves all present group members together by one module-order position. */
+export function moveDisplayGroupInOrder(order, members, direction) {
+    const safeOrder = Array.isArray(order) ? [...order] : [];
+    const memberSet = new Set((members || []).map(normalizeDisplayGroupTag).filter(Boolean));
+    const groupMembers = safeOrder.filter(tag => memberSet.has(normalizeDisplayGroupTag(tag)));
+    if (!groupMembers.length) return safeOrder;
+
+    const firstIndex = safeOrder.findIndex(tag => memberSet.has(normalizeDisplayGroupTag(tag)));
+    const beforeCount = safeOrder.slice(0, firstIndex)
+        .filter(tag => !memberSet.has(normalizeDisplayGroupTag(tag))).length;
+    const remaining = safeOrder.filter(tag => !memberSet.has(normalizeDisplayGroupTag(tag)));
+    const insertAt = direction === 'up'
+        ? Math.max(0, beforeCount - 1)
+        : Math.min(remaining.length, beforeCount + 1);
+    remaining.splice(insertAt, 0, ...groupMembers);
+    return remaining;
+}

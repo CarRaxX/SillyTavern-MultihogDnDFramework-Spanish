@@ -229,11 +229,10 @@ export function handleRecolor(barId, currentBg, targetEl) {
     let cfg = s.barColors?.[barId];
     if (!cfg) {
         const isHP = barId.endsWith(':HP') || barId.includes(':HPBAR') || barId.endsWith(':HP');
-        let color = "#ff0000";
-        const hexMatch = currentBg.match(/#[0-9a-fA-F]{3,8}/);
-        if (hexMatch) color = hexMatch[0];
+        const color = resolvePickerColor(currentBg, targetEl);
+        const hasExplicitMarkerColor = targetEl?.dataset?.recolorExplicitColor === 'true';
 
-        if (isHP) {
+        if (isHP && !hasExplicitMarkerColor) {
             cfg = { mode: 'dynamic', color: '#00ffaa', color2: '#ff5555' };
         } else {
             cfg = { mode: 'solid', color: color };
@@ -440,6 +439,27 @@ export function handleRecolor(barId, currentBg, targetEl) {
     };
 
     setTimeout(() => document.addEventListener('mousedown', onOutside), 50);
+}
+
+/** Converts a CSS marker color into the hexadecimal value native color inputs require. */
+function resolvePickerColor(background, targetEl) {
+    const source = String(background || '').trim();
+    const colorToken = source.match(/#[0-9a-fA-F]{3,8}/)?.[0]
+        || source.match(/rgba?\([^)]*\)/i)?.[0]
+        || source.match(/\b[a-zA-Z]+\b/g)?.find(token => !['linear', 'gradient', 'radial', 'conic', 'deg', 'to'].includes(token.toLowerCase()))
+        || '#ff0000';
+
+    const doc = targetEl?.ownerDocument || document;
+    const probe = doc.createElement('span');
+    probe.style.color = colorToken;
+    if (!probe.style.color) return '#ff0000';
+    const mount = doc.body || doc.documentElement;
+    mount.appendChild(probe);
+    const resolved = doc.defaultView?.getComputedStyle(probe).color || probe.style.color;
+    probe.remove();
+    const rgb = resolved.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (!rgb) return '#ff0000';
+    return `#${rgb.slice(1, 4).map(value => Number(value).toString(16).padStart(2, '0')).join('')}`;
 }
 
 export function undoThemeChange(settings) {

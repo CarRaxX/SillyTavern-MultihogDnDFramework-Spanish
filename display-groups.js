@@ -135,6 +135,10 @@ export async function openDisplayGroupsManager() {
             const modules = knownDisplayGroupModules(settings);
             const knownTags = new Set(modules.map(item => item.tag));
             const unavailable = (existing?.members || []).filter(tag => !knownTags.has(tag));
+            // Kept independently from the checklist's DOM order: this is the
+            // order in which the group renders its member modules.
+            let memberOrder = [...(existing?.members || [])];
+            const moduleByTag = new Map(modules.map(item => [item.tag, item]));
             const memberRows = [
                 ...modules.map(item => {
                     const claimedBy = otherClaims.get(item.tag);
@@ -158,16 +162,56 @@ export async function openDisplayGroupsManager() {
                     <input id="rt-dg-editor-icon" class="text_pole" value="${escapeHtml(existing?.icon || '🗂️')}" style="width:52px;flex:0 0 52px;text-align:center;box-sizing:border-box;" maxlength="16" title="Group icon">
                     <input id="rt-dg-editor-name" class="text_pole" value="${escapeHtml(existing?.name || '')}" style="flex:1;min-width:0;box-sizing:border-box;" maxlength="80" placeholder="Display Group name">
                 </div>
-                <div style="font-size:10px;opacity:.62;margin-bottom:5px;overflow-wrap:anywhere;">Select modules to render under this shared header. Special pinned/dedicated modules are intentionally unavailable during BETA.</div>
+                <div style="font-size:10px;opacity:.62;margin-bottom:5px;overflow-wrap:anywhere;">Select modules to render under this shared header. Use the arrows below to choose their order inside the group. Dedicated modules remain unavailable during BETA.</div>
+                <div style="font-size:10px;font-weight:bold;opacity:.72;margin:8px 0 4px;">MODULE ORDER IN THIS GROUP</div>
+                <div id="rt-dg-member-order" style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;min-width:0;"></div>
                 <div style="max-height:300px;overflow-y:auto;overflow-x:hidden;border:1px solid rgba(255,255,255,.1);border-radius:5px;padding:3px;box-sizing:border-box;min-width:0;max-width:100%;">${memberRows || '<div style="padding:10px;opacity:.55;">No eligible modules found.</div>'}</div>
                 <div style="display:flex;gap:6px;margin-top:9px;min-width:0;max-width:100%;flex-wrap:wrap;">
                     <button id="rt-dg-editor-save" class="menu_button interactable" style="flex:1;background:rgba(0,200,140,.18);border-color:rgba(0,200,140,.45);">Save Display Group</button>
                 </div>`;
 
+            const orderContainer = editor.querySelector('#rt-dg-member-order');
+            const renderMemberOrder = () => {
+                if (!orderContainer) return;
+                if (!memberOrder.length) {
+                    orderContainer.innerHTML = '<div style="padding:6px 7px;border:1px dashed rgba(255,255,255,.14);border-radius:4px;font-size:10px;opacity:.55;">Select modules below, then arrange them here.</div>';
+                    return;
+                }
+                orderContainer.innerHTML = memberOrder.map((tag, memberIndex) => {
+                    const item = moduleByTag.get(tag);
+                    const label = item?.label || tag;
+                    const icon = item?.icon || '⚠️';
+                    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid rgba(255,255,255,.12);border-radius:4px;background:rgba(255,255,255,.025);min-width:0;">
+                        <span style="font-size:12px;">${escapeHtml(icon)}</span><span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(label)} <code style="opacity:.55;">[${escapeHtml(tag)}]</code></span>
+                        <button class="rt-dg-member-up menu_button interactable" data-index="${memberIndex}" title="Move up" ${memberIndex === 0 ? 'disabled' : ''}><i class="fa-solid fa-arrow-up"></i></button>
+                        <button class="rt-dg-member-down menu_button interactable" data-index="${memberIndex}" title="Move down" ${memberIndex === memberOrder.length - 1 ? 'disabled' : ''}><i class="fa-solid fa-arrow-down"></i></button>
+                    </div>`;
+                }).join('');
+                orderContainer.querySelectorAll('.rt-dg-member-up').forEach(button => button.addEventListener('click', () => {
+                    const memberIndex = Number(button.dataset.index);
+                    [memberOrder[memberIndex - 1], memberOrder[memberIndex]] = [memberOrder[memberIndex], memberOrder[memberIndex - 1]];
+                    renderMemberOrder();
+                }));
+                orderContainer.querySelectorAll('.rt-dg-member-down').forEach(button => button.addEventListener('click', () => {
+                    const memberIndex = Number(button.dataset.index);
+                    [memberOrder[memberIndex], memberOrder[memberIndex + 1]] = [memberOrder[memberIndex + 1], memberOrder[memberIndex]];
+                    renderMemberOrder();
+                }));
+            };
+
+            editor.querySelectorAll('.rt-dg-member:not(:disabled)').forEach(input => input.addEventListener('change', () => {
+                const tag = input.value;
+                if (input.checked && !memberOrder.includes(tag)) memberOrder.push(tag);
+                if (!input.checked) memberOrder = memberOrder.filter(member => member !== tag);
+                renderMemberOrder();
+            }));
+            renderMemberOrder();
+
             const saveEditor = () => {
                 const name = editor.querySelector('#rt-dg-editor-name')?.value?.trim() || '';
                 const icon = editor.querySelector('#rt-dg-editor-icon')?.value?.trim() || '🗂️';
-                const members = [...editor.querySelectorAll('.rt-dg-member:checked:not(:disabled)')].map(input => input.value);
+                const selectedTags = new Set([...editor.querySelectorAll('.rt-dg-member:checked:not(:disabled)')].map(input => input.value));
+                const members = memberOrder.filter(tag => selectedTags.has(tag));
                 if (!name) {
                     toastr['warning']('Give the Display Group a name.', 'Display Groups BETA');
                     return false;
