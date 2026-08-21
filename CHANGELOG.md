@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.22] - 2026-08-21
+
+### Changed
+- **Persistent Maps**: refreshed the GM mapping contract for settlement-first building classification, first-footer naming, and shared entrances/exits.
+- **Map Evolution**: the default interval is now 8 in-world hours for both current and other mapped sites.
+
 ## [2026.8.21] - 2026-08-21
 
 ### Fixed
