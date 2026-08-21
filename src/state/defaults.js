@@ -1378,9 +1378,9 @@ Rules:
 
         mapEvolutionEnabled: true,
 
-        mapEvolutionIntervalHours: 12,
+        mapEvolutionIntervalHours: 8,
 
-        mapEvolutionOnSiteIntervalHours: 12,
+        mapEvolutionOnSiteIntervalHours: 8,
 
         mapEvolutionIntervalHoursBySite: {},
 

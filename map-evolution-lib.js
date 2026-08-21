@@ -95,8 +95,8 @@ export const MAP_EVOLUTION_INTERVAL_MAX_HOURS = 168;
  * Clamp an Evolution interval. 0 means "never auto-tick" when allowNever is set.
  * Invalid values fall back rather than becoming 0.
  */
-export function normalizeEvolutionIntervalHours(value, { allowNever = false, fallback = 12 } = {}) {
-    const fallbackHours = Math.max(1, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(Number(fallback) || 12)));
+export function normalizeEvolutionIntervalHours(value, { allowNever = false, fallback = 8 } = {}) {
+    const fallbackHours = Math.max(1, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(Number(fallback) || 8)));
     if (value == null || value === '') return fallbackHours;
     const hours = Math.floor(Number(value));
     if (!Number.isFinite(hours)) return fallbackHours;
@@ -157,7 +157,7 @@ export function resolveSiteEvolutionIntervalHours(siteRoot, {
     const key = normalizeDungeonLabel(siteRoot);
     const overrides = normalizeEvolutionIntervalOverrides(intervalHoursBySite);
     if (key && Object.prototype.hasOwnProperty.call(overrides, key)) return overrides[key];
-    const offSite = normalizeEvolutionIntervalHours(intervalHours, { allowNever: false, fallback: 12 });
+    const offSite = normalizeEvolutionIntervalHours(intervalHours, { allowNever: false, fallback: 8 });
     const onSite = (onSiteIntervalHours == null || onSiteIntervalHours === '')
         ? offSite
         : normalizeEvolutionIntervalHours(onSiteIntervalHours, { allowNever: true, fallback: offSite });

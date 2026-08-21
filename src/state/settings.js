@@ -901,7 +901,7 @@ function getSettingsInternal(extensionSettings) {
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
     s.mapEvolutionOnSiteIntervalHours = (() => {
         const hours = Math.floor(Number(s.mapEvolutionOnSiteIntervalHours));
-        if (!Number.isFinite(hours)) return 12;
+        if (!Number.isFinite(hours)) return 8;
         if (hours === 0) return 0;
         return Math.max(1, Math.min(168, hours));
     })();

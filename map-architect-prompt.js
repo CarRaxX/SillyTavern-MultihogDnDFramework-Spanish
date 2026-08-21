@@ -19,6 +19,7 @@ OUTPUT CONTRACT
 AREAS AND PASSAGES
 - Each area is {"id":"stable-kebab-id","name":"Short natural label","knowledge":"UNREVEALED|DISCOVERED|VISITED","geometry":["durable structural fact"],"connections":[{"to":"area-id","state":"OPEN|CLOSED|LOCKED|BLOCKED|DESTROYED|UNKNOWN","detail":"concise physical route description"}]}.
 - The first area must be the requested entrance, with knowledge VISITED. Areas directly perceptible from it may be DISCOVERED; all others are UNREVEALED. No other area begins VISITED.
+- A site may have multiple entrances and exits. Include additional established or logically necessary thresholds as distinct areas and routes in the same graph; do not assume the requested entrance is the only way in or out. Only the requested entrance starts VISITED; other entrances and exits follow the normal knowledge rules.
 - Every area must belong to one connected physical graph rooted at the entrance. Never make an area inaccessible by omitting its route. A sealed, locked, hidden, collapsed, flooded, or otherwise unavailable way is still a connection with the corresponding state and detail.
 - Every connection must have a reverse connection with the same state and identical detail. Do not create one-way passages in the initial map.
 - Connection detail describes the physical passage itself, not travel from this room. Write the detail once, then copy that exact same string onto the reverse connection. Do not rewrite it from the other room: no swapping eastward/westward, into/back, or "from A"/"from B".
