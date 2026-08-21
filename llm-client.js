@@ -92,6 +92,18 @@ const LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS = [
     'proxy_password',
 ];
 
+// Chat Completion presets contain connection-routing fields as well as sampler
+// settings. ConnectionManagerRequestService applies the whole preset after it
+// has selected the profile, so these payload overrides are required to keep an
+// OpenRouter profile's live routing controls authoritative.
+const LIVE_OPENROUTER_ROUTING_FIELDS = {
+    openrouter_providers: 'provider',
+    openrouter_quantizations: 'quantizations',
+    openrouter_allow_fallbacks: 'allow_fallbacks',
+    openrouter_use_fallback: 'use_fallback',
+    openrouter_middleout: 'middleout',
+};
+
 function completionPresetExists(context, name) {
     const wanted = String(name || '').trim();
     if (!wanted) return false;
@@ -103,7 +115,7 @@ function completionPresetExists(context, name) {
     return false;
 }
 
-function applyLiveChatCompletionOverrides(context, overridePayload = {}) {
+function applyLiveChatCompletionOverrides(context, profile, overridePayload = {}) {
     const live = context.chatCompletionSettings || {};
     for (const field of LIVE_CHAT_COMPLETION_OVERRIDE_FIELDS) {
         if (overridePayload[field] == null || overridePayload[field] === '') {
@@ -111,6 +123,15 @@ function applyLiveChatCompletionOverrides(context, overridePayload = {}) {
             if (value != null && value !== '') overridePayload[field] = value;
         }
     }
+
+    if (String(profile?.api || '').toLowerCase() === 'openrouter') {
+        for (const [settingsField, payloadField] of Object.entries(LIVE_OPENROUTER_ROUTING_FIELDS)) {
+            if (overridePayload[payloadField] !== undefined || live[settingsField] === undefined) continue;
+            const value = live[settingsField];
+            overridePayload[payloadField] = Array.isArray(value) ? [...value] : value;
+        }
+    }
+
     return overridePayload;
 }
 
@@ -138,7 +159,7 @@ async function sendViaConnectionProfile(context, settings, messages, { signal = 
         ? service.getProfile(settings.connectionProfileId)
         : null;
     const effectivePreset = await resolveProfilePresetName(context, settings.completionPresetId, profile);
-    const overridePayload = applyLiveChatCompletionOverrides(context, { ...extraOverride });
+    const overridePayload = applyLiveChatCompletionOverrides(context, profile, { ...extraOverride });
     let profileOriginalPreset = null;
     try {
         if (effectivePreset && profile && profile.preset !== effectivePreset) {

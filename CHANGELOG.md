@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.21] - 2026-08-21
+
+### Fixed
+- **State Tracker profile routing**: completion presets no longer override an OpenRouter connection profile's provider, quantization, fallback, or middle-out routing settings.
+
 ## [2026.8.20] - 2026-08-21
 
 ### Fixed
