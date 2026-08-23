@@ -1370,13 +1370,13 @@ export function buildMagicGearLevelHint(level, genre, hasInventory) {
 }
 
 export const STARTING_GEAR_TIER_OPTIONS = [
-    { value: 'auto', label: 'Auto (match level)' },
-    { value: 'mundane', label: 'Mundane only' },
-    { value: 'low', label: 'Low' },
-    { value: 'standard', label: 'Standard' },
-    { value: 'well_equipped', label: 'Well-equipped' },
-    { value: 'heroic', label: 'Heroic' },
-    { value: 'none', label: 'None — skip gear guidance' },
+    { value: 'auto', label: 'Automático (según nivel)' },
+    { value: 'mundane', label: 'Solo terrenal / común' },
+    { value: 'low', label: 'Bajo' },
+    { value: 'standard', label: 'Estándar' },
+    { value: 'well_equipped', label: 'Bien equipado' },
+    { value: 'heroic', label: 'Heroico' },
+    { value: 'none', label: 'Ninguno (sin guía de equipo)' },
 ];
 
 /** @param {string} [selected='auto'] */
@@ -1552,6 +1552,24 @@ export const BLOCK_ICONS = {
   TIME: '🕒', XP: '🌟', CHARACTER: '🧙', PARTY: '👥', 'BENCHED PARTY': '⛺',
   COMBAT: '⚔️', INVENTORY: '🎒', ABILITIES: '✨', SPELLS: '📖',
   QUESTS: '📋',
+};
+
+export const TAG_DISPLAY_NAMES = {
+  CHARACTER: 'PERSONAJE',
+  PARTY: 'GRUPO',
+  'BENCHED PARTY': 'EN CAMPAMENTO',
+  COMBAT: 'COMBATE',
+  INVENTORY: 'INVENTARIO',
+  ABILITIES: 'CAPACIDADES',
+  SPELLS: 'CONJUROS',
+  XP: 'EXPERIENCIA',
+  TIME: 'TIEMPO',
+  QUESTS: 'MISIONES',
+  NPC: 'PNJS',
+  LOC: 'LUGARES',
+  FAC: 'FACCIÓN',
+  WORLD: 'PROGRESIÓN DEL MUNDO',
+  EVENT: 'EVENTOS',
 };
 
 // NOTE: 'BENCHED PARTY' has its OWN enable toggle + editable prompt (settings.modules['benched
