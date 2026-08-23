@@ -6,6 +6,7 @@
 
 import {
     normalizeDungeonMapDocument,
+    resolveAssetEffectiveArea,
     resolveCurrentMapPlacement,
 } from './dungeon-reality.js';
 import {
@@ -90,13 +91,17 @@ export function buildDungeonMapGraph(document, { playerFacing = true, currentLoc
         }
     }
     const visibleIds = new Set([...known, ...fog]);
+    const effectiveAssets = map.assets.map(asset => ({
+        ...asset,
+        location: resolveAssetEffectiveArea(map, asset)?.id || asset.location,
+    }));
     const nodes = map.areas
         .filter(area => visibleIds.has(area.id))
         .map(area => {
             const fogged = fog.has(area.id);
             const icons = fogged
                 ? []
-                : collectAreaAssetIcons(map.assets, area.id, { playerFacing });
+                : collectAreaAssetIcons(effectiveAssets, area.id, { playerFacing });
             return {
                 id: area.id,
                 name: area.name,
@@ -292,7 +297,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
             node.fog ? 'data-fog="1" aria-hidden="true"' : `data-area-id="${escapeXml(node.id)}" data-area-path="${escapeXml(path)}" role="button" tabindex="0"`,
         ];
         const here = node.current
-            ? (graph.currentInteriorName ? ` (in ${graph.currentInteriorName})` : ' (you are here)')
+            ? (graph.currentInteriorName ? ` (en ${graph.currentInteriorName})` : ' (estás aquí)')
             : '';
         if (!node.fog) attrs.push(`aria-label="${escapeXml(`${node.name}${here}`)}"`);
         const shape = node.fog
@@ -304,7 +309,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
             : renderAreaAssetIconsSvg(node.icons, { cx: node.cx, y: node.iconY, compact });
         return `<g ${attrs.join(' ')}>${shape}<text x="${node.cx}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}">${escapeXml(label)}</text>${icons}</g>`;
     }).join('');
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Mapa del lugar')}">${edges}${nodes}</svg>`;
 }
 
 /**
@@ -314,26 +319,40 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
  */
 export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = '' } = {}) {
     if (!graph?.nodes?.length) return '';
-    const site = escapeXml(graph.site || 'Lugar Mapeado');
+    const site = escapeXml(graph.site || 'Lugar mapeado');
     if (detached) {
         return `<div class="rt-immersion-map rt-immersion-map-popped">
-            <div class="rt-immersion-section-label"><span>Mapa de Ubicación</span></div>
+            <div class="rt-immersion-section-label"><span>Mapa del lugar</span></div>
             <div class="rt-immersion-map-popped-body">
                 <span>${site} está abierto en una ventana separada.</span>
                 <span class="rt-dungeon-map-label-actions">
                     <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
-                    <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reacoplar mapa de ubicación">Reacoplar</button>
+                    <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reacoplar mapa del lugar">Reacoplar</button>
                 </span>
             </div>
         </div>`;
     }
     return `<div class="rt-immersion-map">
         <div class="rt-immersion-section-label">
-            <span>Mapa de Ubicación</span>
+            <span>Mapa del lugar</span>
             <span class="rt-dungeon-map-label-actions">
+                <button type="button" class="rt-map-updater-direct-toggle rpg-tracker-icon-btn" title="Prompt directo para el Actualizador de Mapas" aria-expanded="false">💬</button>
                 <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
                 <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Abrir mapa en una ventana separada" aria-label="Abrir mapa en una ventana separada">⧉</button>
             </span>
+        </div>
+        <div class="rt-map-updater-direct-panel" hidden>
+            <div class="rt-map-updater-direct-bar">
+                <textarea class="rt-map-updater-direct-input text_pole" rows="2" placeholder="Instruir al Actualizador de Mapas solo para esta ejecución… (Enter para ejecutar, Shift+Enter para nueva línea)"></textarea>
+                <div class="rt-map-updater-direct-actions">
+                    <label class="rt-map-updater-direct-lookback-label" title="Revisión de historia reciente para esta ejecución manual del Actualizador de Mapas">
+                        Ctx
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="rt-map-updater-direct-lookback" min="0" max="100" value="10">
+                    </label>
+                    <button type="button" class="rt-map-updater-direct-run menu_button interactable"><i class="fa-solid fa-play"></i> Ejecutar</button>
+                </div>
+            </div>
+            <span class="rt-map-updater-direct-status" role="status" aria-live="polite"></span>
         </div>
         <div class="rt-dungeon-graph-scroll">${renderDungeonMapGraphSvg(graph, { compact: true, siteRoot: siteRoot || graph.site })}</div>
     </div>`;
@@ -352,7 +371,7 @@ function areaDisplayName(id, revealAll, visibleIds, areasById) {
     if (revealAll || visibleIds.has(id)) {
         return areasById.get(id)?.name || id;
     }
-    return 'Sin explorar';
+    return 'Inexplorado';
 }
 
 /**
@@ -362,15 +381,16 @@ function areaDisplayName(id, revealAll, visibleIds, areasById) {
  * @param {{ revealAll?: boolean }} [options]
  */
 export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } = {}) {
-    const areas = Array.isArray(mapDocument?.areas) ? mapDocument.areas : [];
-    const assets = Array.isArray(mapDocument?.assets) ? mapDocument.assets : [];
+    const map = normalizeDungeonMapDocument(mapDocument, mapDocument?.site);
+    const areas = map.areas;
+    const assets = map.assets;
     const visibleAreas = revealAll ? areas : areas.filter(isPlayerVisibleArea);
     const visibleIds = new Set(visibleAreas.map(area => area.id));
     const areasById = new Map(areas.map(area => [area.id, area]));
     const visibleAssets = revealAll ? assets : assets.filter(asset => {
         if (!isPlayerVisibleAsset(asset)) return false;
         if (!asset.location) return true;
-        return visibleIds.has(asset.location);
+        return visibleIds.has(resolveAssetEffectiveArea(map, asset)?.id);
     });
     const renderTag = (value, className = '') => `<span class="rt-dungeon-map-tag ${className}">${escapeHtml(value)}</span>`;
     const renderAsset = (asset) => {
@@ -390,10 +410,12 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
         if (asset.last_location) {
             metadata.push(`<b>Última ubicación:</b> ${escapeHtml(areaDisplayName(asset.last_location, revealAll, visibleIds, areasById))}`);
         }
+        const children = visibleAssets.filter(candidate => candidate.location === asset.id);
         return `<div class="rt-dungeon-map-asset">
                     <div class="rt-dungeon-map-asset-head"><i class="fa-solid fa-diamond"></i><strong>${escapeHtml(asset.name)}</strong>${renderTag(asset.kind)}${renderTag(asset.state, 'rt-dungeon-map-state')}${renderTag(asset.knowledge, 'rt-dungeon-map-knowledge')}</div>
                     ${asset.detail ? `<div class="rt-dungeon-map-asset-detail">${escapeHtml(asset.detail)}</div>` : ''}
                     ${metadata.length ? `<div class="rt-dungeon-map-asset-meta">${metadata.join('<span class="rt-dungeon-map-meta-sep">&bull;</span>')}</div>` : ''}
+                    ${children.length ? `<div class="rt-dungeon-map-assets rt-dungeon-map-contained">${children.map(renderAsset).join('')}</div>` : ''}
                 </div>`;
     };
     const renderArea = (area) => {
@@ -401,7 +423,7 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
         const showGeometry = revealAll || area.knowledge === 'VISITED';
         const geometry = showGeometry && area.geometry?.length
             ? `<ul class="rt-dungeon-map-geometry">${area.geometry.map(fact => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>`
-            : `<div class="rt-dungeon-map-empty">${showGeometry ? 'Sin notas estructurales.' : 'Aún no visitada.'}</div>`;
+            : `<div class="rt-dungeon-map-empty">${showGeometry ? 'Sin notas estructurales.' : 'Aún no se ha entrado.'}</div>`;
         const connections = (area.connections || []).length
             ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Rutas</span>${area.connections.map(connection => {
                 const name = areaDisplayName(connection.to, revealAll, visibleIds, areasById);
@@ -411,20 +433,20 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
             : '';
         return `<section class="rt-dungeon-map-area">
                     <div class="rt-dungeon-map-area-head"><i class="fa-solid fa-location-dot"></i><strong>${escapeHtml(area.name)}</strong>${renderTag(area.knowledge, 'rt-dungeon-map-knowledge')}</div>
-                    <div class="rt-dungeon-map-section-label">Geometría y descripción</div>
+                    <div class="rt-dungeon-map-section-label">Geometría y prosa</div>
                     ${geometry}
                     ${connections}
-                    ${areaAssets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Entidades (${areaAssets.length})</span>${areaAssets.map(renderAsset).join('')}</div>` : ''}
+                    ${areaAssets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Activos (${areaAssets.length})</span>${areaAssets.map(renderAsset).join('')}</div>` : ''}
                 </section>`;
     };
-    const unplaced = visibleAssets.filter(asset => !asset.location || !areasById.has(asset.location));
+    const unplaced = visibleAssets.filter(asset => (!asset.location || (!areasById.has(asset.location) && !assets.some(parent => parent.id === asset.location))));
     if (!visibleAreas.length && !unplaced.length) {
-        return '<div class="rt-dungeon-map-empty">Aún no hay habitaciones reveladas.</div>';
+        return '<div class="rt-dungeon-map-empty">Aún no hay salas reveladas.</div>';
     }
     return `<div class="rt-dungeon-map-summary">
                     <span>${renderTag(`${visibleAreas.length} áreas`)}</span>
-                    <span>${renderTag(`${visibleAssets.length} entidades`)}</span>
+                    <span>${renderTag(`${visibleAssets.length} activos`)}</span>
                 </div>
                 <div class="rt-dungeon-map-area-list">${visibleAreas.map(renderArea).join('')}</div>
-                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Entidades retiradas o sin ubicar</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
+                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Activos eliminados / sin ubicar</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
 }

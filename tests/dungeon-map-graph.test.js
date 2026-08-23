@@ -305,6 +305,10 @@ describe('dungeon map graph', () => {
         const html = renderDungeonMapEmbedHtml(graph, { detached: false });
         expect(html).toContain('rt-dungeon-map-details');
         expect(html).toContain('Map Details');
+        expect(html).toContain('rt-map-updater-direct-panel');
+        expect(html).toContain('rt-map-updater-direct-bar');
+        expect(html).toContain('rt-map-updater-direct-run');
+        expect(html).not.toContain('rt-map-updater-run');
         expect(html).not.toContain('rt-dungeon-alpha-tag');
         expect(html).toContain('rt-dungeon-graph-scroll');
     });
@@ -478,5 +482,25 @@ describe('dungeon map graph', () => {
         expect(html).toContain('KNOWN');
         expect(html).toContain('Heat-rune on the threshold.');
         expect(renderDungeonGraphAssetTipHtml({ name: 'Pack', kind: 'GROUP', count: 6 })).toContain('×6');
+    });
+
+    it('renders knowledge-filtered BUILDING contents beneath the container and on its district node', () => {
+        const map = {
+            version: 3, site: 'Ashford', kind: 'SETTLEMENT',
+            areas: [{ id: 'north', name: 'North Residential Streets', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [
+                { id: 'house', kind: 'BUILDING', name: 'Residential House', location: 'north', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP', notEntered: false },
+                { id: 'caretaker', kind: 'CREATURE', name: 'Caretaker', location: 'house', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'NARRATOR_ESTABLISHED' },
+                { id: 'rumored-cache', kind: 'LOOT', name: 'Rumored Cache', location: 'house', state: 'AVAILABLE', knowledge: 'SUSPECTED', detail: '', origin: 'NARRATOR_ESTABLISHED' },
+                { id: 'hidden-snare', kind: 'TRAP', name: 'Hidden Snare', location: 'house', state: 'ARMED', knowledge: 'UNREVEALED', detail: '', origin: 'NARRATOR_ESTABLISHED' },
+            ],
+        };
+        const html = renderDungeonMapReadableHtml(map, { revealAll: false });
+        expect(html.indexOf('Caretaker')).toBeGreaterThan(html.indexOf('Residential House'));
+        expect(html).toContain('Rumored Cache');
+        expect(html).not.toContain('Hidden Snare');
+        const graph = buildDungeonMapGraph(map, { playerFacing: true, currentLocation: 'Ashford, North Residential Streets, Residential House' });
+        expect(graph.nodes[0].icons.map(icon => icon.kind)).toEqual(['CREATURE', 'BUILDING', 'LOOT']);
+        expect(graph.currentInteriorName).toBe('Residential House');
     });
 });

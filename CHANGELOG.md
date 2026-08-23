@@ -2,6 +2,128 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.24.14] - 2026-08-23
+
+### Added
+- **Map Details Map Updater direct prompt**: Direct Prompt on the site inspector targets that map even when it is not the active site (`siteRoot` pass + inspector commit path).
+
+### Changed
+- **Map Details direct prompt UI**: labeled Direct Prompt button aligned with Map Entries / Raw JSON; prompt panel opens below that row.
+
+## [2026.8.24.12] - 2026-08-22
+
+### Changed
+- **Adventure Companion welcome**: default CHAT greeting now lists Map Updater among the four relay actions.
+
+## [2026.8.24.11] - 2026-08-22
+
+### Added
+- **Adventure Companion → Map Updater**: fourth action relays direct map occupancy instructions (same as Lorebook Agent / State Tracker). Persona, tools, fallback tags, and tutorial docs updated.
+
+## [2026.8.24.10] - 2026-08-22
+
+### Changed
+- **Visuals/Map toolbar**: removed redundant Map Updater button; run Map Updater from the header play menu (or 💬 direct prompt on the site map).
+
+## [2026.8.24.9] - 2026-08-22
+
+### Changed
+- **Map Updater REMOVE_ASSET**: `REMOVE_ASSET` now deletes the asset record (and contained children) from the map. Prompt adds `REMOVE_ASSET` alongside existing `DESTROYED`/`DEAD` guidance — kills still default to remains in-room; purge only when nothing lasting stays or correcting a mistake.
+
+## [2026.8.24.8] - 2026-08-22
+
+### Fixed
+- **Visuals/Map Map Updater direct prompt**: compact single-row layout; 💬 toggle now hides/shows the panel (`display:flex` no longer overrides `hidden`).
+
+## [2026.8.24.7] - 2026-08-22
+
+### Added
+- **Visuals/Map Map Updater direct prompt**: run Map Updater from the site-map toolbar with optional one-pass instructions and lookback (`Ctx`).
+
+## [2026.8.24.6] - 2026-08-22
+
+### Changed
+- **Map Architect familiar sites**: when player-facing story establishes thorough familiarity (home, daily workplace, recurring base), initial maps mark every area `VISITED` and ordinary assets `KNOWN`; hidden surprises stay `UNREVEALED`.
+
+## [2026.8.24.5] - 2026-08-22
+
+### Changed
+- **Map Updater BUILDING population**: skip ambient set dressing (tipped chairs, dusty booths, ordinary furniture); add only map-worthy CREATURE/GROUP/LOOT/HAZARD/TRAP/ALARM/BARRIER/interactive OBJECT contents via `ADD_ASSET`, never `SET_ASSET` on invented ids.
+
+## [2026.8.24.4] - 2026-08-22
+
+### Changed
+- **Pre-narration BUILDING population**: an explicit player action targeting a pending BUILDING now runs its hidden population pass during `MESSAGE_SENT`, before SillyTavern assembles the narrator prompt. Perception, entry, and danger checks therefore adjudicate pre-existing map reality instead of creating contents afterward.
+- **Intent safety**: pre-narration contents begin `UNREVEALED`, cannot write chronicles or assume entry/roll success, and clear the shared population gate atomically. Footer-based first entry remains a retry fallback.
+
+## [2026.8.24.3] - 2026-08-22
+
+### Changed
+- **Map Updater footer name drift**: short leaves like `General Store` still count as entry of the matching longer BUILDING (e.g. `Bullion General Store`); clear `notEntered` and populate normally.
+
+## [2026.8.24.2] - 2026-08-22
+
+### Changed
+- **Map Updater BUILDING population**: clarified narrative-driven interior contents (creative, setting-fit, not excessive), rumor/known seeding, and child-map wording.
+- **First-entry lookback**: FIRST-ENTRY BUILDING POPULATION passes now include at least the last 10 user turns of RECENT STORY (or more when the since-last-run window is wider).
+
+## [2026.8.24.1] - 2026-08-22
+
+### Changed
+- **Map Updater streetscape observation**: clearly identified existing UNREVEALED/SUSPECTED BUILDING/OBJECT landmarks become `KNOWN` from outside observation without clearing `notEntered`.
+
+## [2026.8.24] - 2026-08-22
+
+### Changed
+- **Status footer**: drop duplicated hosted-child breadcrumb guidance (owned by `<dungeon_reality_and_hidden_mapping>`); ban positional phrasing for unmapped BUILDINGs (`Main Street` or `Main Street, General Store` only when inside).
+
+## [2026.8.23.5] - 2026-08-22
+
+### Changed
+- **Status footer location rules**: clarified settlement / hosted-map tier guidance and forbade positional BUILDING phrasing (use the district alone, or `District, Building` only when actually inside).
+
+## [2026.8.23.4] - 2026-08-22
+
+### Fixed
+- **Map Updater exterior-relative footers**: phrases like `behind the general store`, `outside the inn`, or `near the chapel` stay on the district and no longer force a new `BUILDING` asset or first-entry population pass. Existing landmarks such as `Hollow Creek General Store` remain the match when the party actually enters (`inside` / named interior).
+
+## [2026.8.23.3] - 2026-08-22
+
+### Changed
+- **CYOA roll guidance**: choices need not always include a roll, though any choice *can*; high-stakes / problem-solving should use rolls more, downtime less.
+- **Display Groups**: `PARTY` is now an eligible module for display-only grouping (`COMBAT`, `BENCHED PARTY`, and `QUESTS` remain excluded).
+
+## [2026.8.23.2] - 2026-08-23
+
+### Fixed
+- **Asset-area knowledge consistency**: any `KNOWN` or `SUSPECTED` asset now automatically raises its effective containing area from `UNREVEALED` to `DISCOVERED`, including assets inside BUILDING or carried-inventory containers. Architect creation, Updater transactions, saved-map normalization, and presentation share the same invariant.
+
+## [2026.8.23.1] - 2026-08-23
+
+### Fixed
+- **Map Architect knowledge isolation**: premise and reference facts now define private site reality without making unseen districts, inhabitants, threats, or landmarks `DISCOVERED`, `SUSPECTED`, or `KNOWN`. Only explicit player-facing story context can raise initial knowledge above the entrance defaults.
+
+## [2026.8.23] - 2026-08-23
+
+### Changed
+- **Narrator mapping policy**: refreshed the canonical hidden-mapping module for one-map-at-a-time creation, unmapped transition space, standalone-child exit absorption, BUILDING promotion, and lazy BUILDING population. Shipped and embedded prompt copies now stay synchronized with the root source text.
+
+### Fixed
+- **Settlement absorption breadcrumbs**: absorbing an existing DUNGEON/INTERIOR now reparents its root and every descendant Location beneath the settlement district while stamping the canonical hosted site and exit context in the same atomic save.
+- **Chat rename recovery**: exact rename-reset markers now replace transient destination shells, including browser-local Companion and memo-recovery shells, without overwriting data that existed before the rename.
+
+## [2026.8.22.2] - 2026-08-22
+
+### Fixed
+- **Hosted map placement**: promoting a settlement asset now stores or reuses its map at `Settlement :: District :: Asset` instead of creating an unrelated top-level Location. Full-path activation keeps identically named buildings in different settlements distinct.
+- **Mapped-area footers**: narrator guidance now requires the exact current room/area after a hosted peer breadcrumb, including four-tier paths such as `Ashford, North Residential Streets, Residential House, Kitchen Passage`; active map canon flags an incomplete site-only footer for correction.
+
+## [2026.8.22.1] - 2026-08-22
+
+### Changed
+- **Persistent Maps**: added room-scale `INTERIOR` maps, settlement `BUILDING` / `SUBDUNGEON` / `SUBINTERIOR` assets, creation-time peer absorption, and atomic nested-site promotion with host/exit context. Existing `OBJECT` buildings and peaceful `DUNGEON` maps remain compatible.
+- **Map Architect**: settlement generation may now sparingly seed narratively justified `SUBDUNGEON` / `SUBINTERIOR` sites for future mapping, while ordinary structures continue to use `BUILDING`.
+
 ## [2026.8.22] - 2026-08-21
 
 ### Changed
@@ -3236,3 +3358,8 @@ Significant upgrades to editing custom fields. The formatting is now clear, and 
 - **HUD Controls**: Added "SYSPROMPT" and "RNG" toggle buttons directly to the tracker panel.
 - **Optimized Layout**: Reordered sections to prioritize Character and Combat status over meta-stats like XP and Time.
 - **Factory Reset**: Added a "Factory Reset" button to the settings panel for easy recovery of default prompts.
+# 2026.8.22.3
+
+- Added map-free BUILDING containers with deterministic first-entry population through the normal Map Updater pass, explicit rumor-seeded SUSPECTED contents, and atomic off-screen Evolution population.
+- Asset placement now supports the closed containment pairs BUILDING → occupants/objects/loot/hazards/traps and CREATURE/GROUP → carried objects/loot, including effective-area movement, filtering, inspection, and presentation.
+- Untouched Map Architect, Map Updater, and Map Evolution prompts migrate to the new container policy while customized prompts remain unchanged.

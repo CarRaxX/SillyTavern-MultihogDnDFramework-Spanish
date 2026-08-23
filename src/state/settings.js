@@ -22,6 +22,8 @@ import {
 import { migrateChatSetupCatalogs } from './chat-setup.js';
 import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
+import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
+import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -31,6 +33,16 @@ import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.
 // re-running the same migration block over and over → infinite recursion /
 // stack overflow that hangs the page on load. See CHANGELOG for details.
 let _gettingSettings = false;
+
+function promptSignature(value) {
+    const source = String(value || '');
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < source.length; index++) {
+        hash ^= source.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return `${source.length}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 export function getSettings() {
     const { extensionSettings } = SillyTavern.getContext();
@@ -800,6 +812,140 @@ function getSettingsInternal(extensionSettings) {
             s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
         }
         s.settingsVersion = '8.27.0';
+    }
+
+    // 2026.8.22.1: nested-site taxonomy. Replace only the byte-identical shipped
+    // prompts from the preceding release; customized prompts remain untouched.
+    if (isOlderThan(s.settingsVersion, '2026.8.22.1')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '14870:8b5acf86') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '9025:d21f2f49') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapEvolutionSystemPrompt) === '19340:f2971ff8') {
+            s.mapEvolutionSystemPrompt = DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.22.1';
+    }
+
+    // 2026.8.22.2: let Map Architect sparingly seed narratively justified
+    // settlement peers. Replace only the untouched preceding default.
+    if (isOlderThan(s.settingsVersion, '2026.8.22.2')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '15245:3f89155f') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.22.2';
+    }
+
+    // 2026.8.22.3: BUILDING containers and first-entry population. Replace
+    // only untouched map prompts from the preceding release.
+    if (isOlderThan(s.settingsVersion, '2026.8.22.3')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '15899:9c4786b5') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '9171:bc52dc99') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapEvolutionSystemPrompt) === '19287:beb4258a') {
+            s.mapEvolutionSystemPrompt = DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.22.3';
+    }
+
+    // 2026.8.23.1: keep private Map Architect premise facts from leaking into
+    // initial player knowledge. Replace only the untouched preceding default.
+    if (isOlderThan(s.settingsVersion, '2026.8.23.1')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '16167:7d0c5b25') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.23.1';
+    }
+
+    // 2026.8.23.2: keep known/suspected asset placement consistent with area
+    // knowledge. Replace only untouched prompts from the preceding release.
+    if (isOlderThan(s.settingsVersion, '2026.8.23.2')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '16952:206a52ae') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '10260:25eac89f') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.23.2';
+    }
+
+    // 2026.8.23.4: exterior-relative footer leaves (behind/outside/near…) must
+    // not invent BUILDING assets. Replace only untouched Map Updater prompts.
+    if (isOlderThan(s.settingsVersion, '2026.8.23.4')) {
+        if (
+            promptSignature(s.mapUpdaterSystemPrompt) === '10260:25eac89f'
+            || promptSignature(s.mapUpdaterSystemPrompt) === '10466:e3dc5fae'
+        ) {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.23.4';
+    }
+
+    // 2026.8.24.1: streetscape observation raises UNREVEALED landmark knowledge.
+    // Replace only untouched Map Updater prompts from the prior release.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.1')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '11080:8dacfee2') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.1';
+    }
+
+    // 2026.8.24.2: BUILDING population guidance + first-entry lookback widening.
+    // Replace only untouched Map Updater prompts from the prior release.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.2')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '12407:1e905713') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.2';
+    }
+
+    // 2026.8.24.3: short footer names still match longer BUILDING assets.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.3')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '13217:81c01304') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.3';
+    }
+
+    // 2026.8.24.4: populate pending BUILDING contents from explicit player
+    // intent before narrator adjudication. Preserve customized Updater prompts.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.4')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '13803:3665a0ba') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.4';
+    }
+
+    // 2026.8.24.5: BUILDING population skips ambient clutter; new children
+    // must use ADD_ASSET. Preserve customized Updater prompts.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.5')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '14305:798ad4c6') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.5';
+    }
+
+    // 2026.8.24.6: Map Architect familiar-site knowledge (all areas VISITED).
+    // Preserve customized Architect prompts.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.6')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '17180:395cfd6b') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.6';
+    }
+
+    // 2026.8.24.9: Map Updater REMOVE_ASSET hard-delete + REMOVE vs DESTROYED guidance.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.9')) {
+        const updaterSig = promptSignature(s.mapUpdaterSystemPrompt);
+        if (updaterSig === '14884:38c92245' || updaterSig === '16030:85697ccd') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.9';
     }
 
     // Stamp factory version even when a release has no field rewrites

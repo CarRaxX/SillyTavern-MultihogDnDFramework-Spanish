@@ -31,6 +31,7 @@ import {
     dungeonLabelsMatch,
     dungeonSiteRootsMatch,
     normalizeDungeonLabel,
+    normalizeMapSiteKind,
     extractDungeonMapSection,
     extractFooterLocation,
     findLatestDungeonLocation,
@@ -43,13 +44,16 @@ import {
     reconcileDungeonMapAreaKnowledge,
     replaceDungeonMapSection,
     resolveActiveDungeonSite,
+    resolveCurrentMapPlacement,
     serializeDungeonMapDocument,
+    settlementAbsorptionMatchesCurrentPeer,
     stripDungeonMapSection,
     collectDungeonMapHistorySnapshot,
     applyDungeonMapHistorySnapshotToBook,
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
 import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
+import { buildHostedPeerSitePath, ensureHostCoreMirror, reparentHostedLocationEntries, stampHostedPeerDocument } from './map-hosting.js';
 import { clearEvolutionHistoryForSite, setSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
 import {
     buildWorldProgressionLocationDossiers,
@@ -599,21 +603,109 @@ export async function syncDungeonMapsToLocationLorebook(chat, { capture = true }
     };
 }
 
+function rootEntryByExactSite(entries, site) {
+    return Object.values(entries || {}).find(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && label === site;
+    }) || null;
+}
+
+function entryUidFromCompositeId(entryId) {
+    const value = String(entryId || '');
+    const separator = value.lastIndexOf('::');
+    return separator >= 0 ? value.slice(separator + 2) : value;
+}
+
+function allocateHostedAssetId(document, name) {
+    const used = new Set((document.assets || []).map(asset => asset.id));
+    const base = `subsite-${mapTransactionSignature(String(name || '')).slice(0, 8)}`;
+    if (!used.has(base)) return base;
+    let suffix = 2;
+    while (used.has(`${base}-${suffix}`)) suffix++;
+    return `${base}-${suffix}`;
+}
+
+function promoteSettlementPeerAsset(hostDocument, site, expectedKind, areaId, premise) {
+    if (normalizeMapSiteKind(hostDocument.kind) !== 'SETTLEMENT') {
+        throw new Error(`Host "${hostDocument.site}" is not a SETTLEMENT map.`);
+    }
+    const area = (hostDocument.areas || []).find(item => item.id === areaId);
+    if (!area) throw new Error(`Could not resolve the host district for "${site}".`);
+    const matches = (hostDocument.assets || []).filter(asset => String(asset.name || '').trim() === site && asset.state !== 'REMOVED');
+    if (matches.length > 1) throw new Error(`Settlement contains more than one active asset named "${site}".`);
+    let asset = matches[0] || null;
+    if (asset) {
+        if (![expectedKind, 'BUILDING', 'OBJECT'].includes(asset.kind)) {
+            throw new Error(`Settlement asset "${site}" is ${asset.kind}; expected ${expectedKind}.`);
+        }
+        asset.kind = expectedKind;
+        asset.location = area.id;
+    } else {
+        asset = {
+            id: allocateHostedAssetId(hostDocument, site),
+            kind: expectedKind,
+            name: site,
+            location: area.id,
+            state: 'ACTIVE',
+            knowledge: 'KNOWN',
+            detail: String(premise || '').trim(),
+            origin: 'NARRATOR_ESTABLISHED',
+        };
+        hostDocument.assets.push(asset);
+    }
+    return asset;
+}
+
+function findArchitectMapEntry(entries, canonicalSite, requestedSite, hostContext) {
+    const rows = Object.values(entries || {});
+    const mapped = rows.filter(entry => getDungeonMapAttachment(entry));
+    const canonical = mapped.find(entry => {
+        const attachment = getDungeonMapAttachment(entry);
+        return dungeonSiteRootsMatch(attachment.siteRoot, canonicalSite);
+    });
+    if (canonical) return canonical;
+    if (hostContext) {
+        const compatibleLegacy = mapped.find(entry => {
+            const attachment = getDungeonMapAttachment(entry);
+            if (!dungeonSiteRootsMatch(attachment.siteRoot, requestedSite)) return false;
+            const document = parseDungeonMapDocument(attachment.content, attachment.siteRoot).document;
+            return !document.hostSite || document.hostSite === hostContext.hostSite;
+        });
+        if (compatibleLegacy) return compatibleLegacy;
+        return rows.find(entry => String(entry?.comment || '').trim() === canonicalSite) || null;
+    }
+    return rows.find(entry => {
+        const label = String(entry?.comment || '').trim();
+        return label && !label.includes('::') && dungeonSiteRootsMatch(label, canonicalSite);
+    }) || null;
+}
+
 /**
  * Atomically attach a validated Map Architect document to its root Location.
  * Existing maps always win: concurrent/repeated tool calls never overwrite canon.
  */
-export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowOffsite = false, requireNew = false, locationKeys = null, locationCore = '' } = {}) {
+export async function persistArchitectDungeonMap(siteRoot, mapDocument, {
+    allowOffsite = false,
+    requireNew = false,
+    locationKeys = null,
+    locationCore = '',
+    includeManifest = [],
+    hostContext = null,
+} = {}) {
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
     const prefix = getLivePrefix();
-    const site = String(siteRoot || '').trim();
+    const requestedSite = String(siteRoot || '').trim();
+    const site = String(hostContext?.peerSite || requestedSite).trim();
     if (!prefix) throw new Error('No campaign prefix is available for the Locations lorebook.');
-    if (!site) throw new Error('Map Architect requires an exact site root.');
+    if (!requestedSite || !site) throw new Error('Map Architect requires an exact site root.');
 
     const bookName = `${prefix}_Locations`;
     const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
     let bookData = bookKnown ? await loadWorldInfoFresh(bookName, ctx) : null;
+    // Work on a detached snapshot so validation or a failed backend save cannot
+    // leak partial host/promotion edits through an old cache-backed loader.
+    if (bookData) bookData = cloneRouterValue(bookData, null);
     if (!bookData) {
         if (bookKnown) {
             throw new Error(`Refusing to replace existing Locations lorebook "${bookName}" because it could not be loaded.`);
@@ -628,22 +720,24 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
         };
     }
 
-    let rootEntry = Object.values(bookData.entries || {}).find(entry => {
-        const label = String(entry?.comment || '').trim();
-        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
-    });
-    const existing = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
-    if (existing) {
+    let rootEntry = findArchitectMapEntry(bookData.entries, site, requestedSite, hostContext);
+    const existingAttachment = rootEntry ? getDungeonMapAttachment(rootEntry) : null;
+    if (existingAttachment) {
         if (requireNew) {
             throw new Error(`A mapped location named "${site}" already exists.`);
         }
-        return {
-            bookName,
-            entryId: `${bookName}::${rootEntry.uid}`,
-            created: false,
-            existing: true,
-            document: parseDungeonMapDocument(existing.content, site).document,
-        };
+        if (Array.isArray(includeManifest) && includeManifest.length) {
+            throw new Error('include[] cannot modify a settlement that already has a stored map.');
+        }
+        if (!hostContext) {
+            return {
+                bookName,
+                entryId: `${bookName}::${rootEntry.uid}`,
+                created: false,
+                existing: true,
+                document: parseDungeonMapDocument(existingAttachment.content, existingAttachment.siteRoot).document,
+            };
+        }
     }
 
     if (requireNew && rootEntry) {
@@ -651,7 +745,8 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
     }
 
     const currentLocation = findLatestDungeonLocation(ctx.chat || []);
-    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site) && !allowOffsite) {
+    const absorbsCurrentPeer = settlementAbsorptionMatchesCurrentPeer(mapDocument.kind, currentLocation, includeManifest);
+    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site) && !allowOffsite && !hostContext && !absorbsCurrentPeer) {
         throw new Error(mapSiteFooterMismatchHint(site, currentLocation));
     }
 
@@ -661,10 +756,13 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
         const coreBody = String(locationCore || '').trim();
         const coreContent = /\[CORE\]/i.test(coreBody)
             ? coreBody
-            : `[CORE]\n${coreBody || `${site} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.`}\n[/CORE]`;
+            : `[CORE]\n${coreBody || `${requestedSite} is a mapped site. Its private map stores current objective reality; child Location entries preserve player-observable history.`}\n[/CORE]`;
         rootEntry = {
             uid: nextUid,
-            key: locationKeysForNewRoot(site, locationKeys),
+            key: locationKeysForNewRoot(requestedSite, [
+                site,
+                ...(Array.isArray(locationKeys) ? locationKeys : String(locationKeys || '').split(/[,;\n]/)),
+            ]),
             keysecondary: [],
             comment: site,
             content: coreContent,
@@ -686,11 +784,83 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
         bookData.entries[nextUid] = rootEntry;
     }
 
-    if (!attachDungeonMapToLocationEntry(rootEntry, {
-        siteRoot: site,
-        content: serializeDungeonMapDocument(mapDocument),
-    })) {
-        throw new Error(`Could not attach the generated map to "${site}".`);
+    let persistedDocument = existingAttachment
+        ? parseDungeonMapDocument(existingAttachment.content, existingAttachment.siteRoot).document
+        : JSON.parse(JSON.stringify(mapDocument));
+
+    if (hostContext) {
+        const hostUid = entryUidFromCompositeId(hostContext.hostEntryId);
+        const hostEntry = bookData.entries?.[hostUid];
+        const hostAttachment = getDungeonMapAttachment(hostEntry);
+        if (!hostEntry || !hostAttachment || String(hostEntry.comment || '').trim() !== hostContext.hostSite) {
+            throw new Error(`Host settlement "${hostContext.hostSite}" changed before the peer could be saved.`);
+        }
+        const hostDocument = parseDungeonMapDocument(hostAttachment.content, hostContext.hostSite).document;
+        const hostAsset = promoteSettlementPeerAsset(
+            hostDocument,
+            requestedSite,
+            hostContext.expectedAssetKind,
+            hostContext.hostAreaId,
+            hostContext.premise,
+        );
+        const livePeerSite = buildHostedPeerSitePath(hostDocument, hostAsset);
+        if (livePeerSite !== site) {
+            throw new Error(`Host path for "${requestedSite}" changed before the peer could be saved.`);
+        }
+        const peerKind = normalizeMapSiteKind(persistedDocument.kind);
+        const expectedPeerKind = hostContext.expectedAssetKind === 'SUBINTERIOR' ? 'INTERIOR' : 'DUNGEON';
+        if (peerKind !== expectedPeerKind) {
+            throw new Error(`${hostContext.expectedAssetKind} requires a ${expectedPeerKind} peer map, received ${peerKind}.`);
+        }
+        persistedDocument.site = site;
+        persistedDocument = stampHostedPeerDocument(persistedDocument, hostDocument, hostAsset);
+        reparentHostedLocationEntries(bookData.entries, rootEntry, site, requestedSite);
+        hostEntry.content = replaceDungeonMapSection(hostEntry.content, serializeDungeonMapDocument(hostDocument));
+        hostEntry.disable = true;
+    }
+
+    if (existingAttachment) {
+        rootEntry.content = ensureHostCoreMirror(rootEntry.content, persistedDocument.hostSite, persistedDocument.hostBrief);
+        rootEntry.content = replaceDungeonMapSection(rootEntry.content, serializeDungeonMapDocument(persistedDocument));
+    } else {
+        if (persistedDocument.hostSite && persistedDocument.hostBrief) {
+            rootEntry.content = ensureHostCoreMirror(rootEntry.content, persistedDocument.hostSite, persistedDocument.hostBrief);
+        }
+        if (!attachDungeonMapToLocationEntry(rootEntry, {
+            siteRoot: site,
+            content: serializeDungeonMapDocument(persistedDocument),
+        })) {
+            throw new Error(`Could not attach the generated map to "${site}".`);
+        }
+    }
+
+    const includes = Array.isArray(includeManifest) ? includeManifest : [];
+    if (includes.length && normalizeMapSiteKind(persistedDocument.kind) !== 'SETTLEMENT') {
+        throw new Error('include[] is valid only for a new SETTLEMENT map.');
+    }
+    for (const included of includes) {
+        const peerEntry = rootEntryByExactSite(bookData.entries, String(included.site || '').trim());
+        const lockedUid = entryUidFromCompositeId(included.entryId);
+        if (!peerEntry || String(peerEntry.uid) !== String(lockedUid)) {
+            throw new Error(`Included peer "${included.site}" changed identity before the settlement could be saved.`);
+        }
+        const peerAttachment = getDungeonMapAttachment(peerEntry);
+        if (!peerAttachment) throw new Error(`Included peer "${included.site}" no longer exists.`);
+        const peerDocument = parseDungeonMapDocument(peerAttachment.content, included.site).document;
+        if (peerDocument.kind !== included.kind || !['DUNGEON', 'INTERIOR'].includes(peerDocument.kind)) {
+            throw new Error(`Included peer "${included.site}" changed kind before the settlement could be saved.`);
+        }
+        const matchingAssets = (persistedDocument.assets || []).filter(asset => asset.name === included.site && asset.kind === included.assetKind);
+        if (matchingAssets.length !== 1) {
+            throw new Error(`Settlement must contain exactly one ${included.assetKind} asset named "${included.site}".`);
+        }
+        const hostedSite = buildHostedPeerSitePath(persistedDocument, matchingAssets[0]);
+        const stamped = stampHostedPeerDocument(peerDocument, persistedDocument, matchingAssets[0]);
+        stamped.site = hostedSite;
+        reparentHostedLocationEntries(bookData.entries, peerEntry, hostedSite, included.site);
+        peerEntry.content = ensureHostCoreMirror(peerEntry.content, stamped.hostSite, stamped.hostBrief);
+        peerEntry.content = replaceDungeonMapSection(peerEntry.content, serializeDungeonMapDocument(stamped));
+        peerEntry.disable = true;
     }
     rootEntry.disable = true;
     await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Map Architect persistence');
@@ -714,9 +884,9 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, { allowO
     return {
         bookName,
         entryId: `${bookName}::${rootEntry.uid}`,
-        created: true,
-        existing: false,
-        document: mapDocument,
+        created: !existingAttachment,
+        existing: !!existingAttachment,
+        document: persistedDocument,
     };
 }
 
@@ -740,11 +910,20 @@ export async function persistManualDungeonMapDocument(siteRoot, mapDocument) {
     }
 
     const rootEntry = Object.values(bookData.entries).find(entry => {
-        const label = String(entry?.comment || '').trim();
-        return label && !label.includes('::') && dungeonSiteRootsMatch(label, site);
+        const attachment = getDungeonMapAttachment(entry);
+        return attachment && dungeonSiteRootsMatch(attachment.siteRoot, site);
     });
     if (!rootEntry) throw new Error(`No Location root found for "${site}".`);
-    if (!getDungeonMapAttachment(rootEntry)) throw new Error(`"${site}" has no private map to edit.`);
+    const existingAttachment = getDungeonMapAttachment(rootEntry);
+    if (!existingAttachment) throw new Error(`"${site}" has no private map to edit.`);
+    const existingDocument = parseDungeonMapDocument(existingAttachment.content, existingAttachment.siteRoot).document;
+    const oldHost = String(existingDocument.hostSite || '').trim();
+    const newHost = String(mapDocument.hostSite || '').trim();
+    const oldBrief = String(existingDocument.hostBrief || '').trim();
+    const newBrief = String(mapDocument.hostBrief || '').trim();
+    if (oldHost !== newHost || oldBrief !== newBrief) {
+        throw new Error('hostSite/hostBrief are runtime-owned and cannot be added, removed, edited, or re-hosted in the manual JSON editor.');
+    }
 
     if (migrateDungeonMapAttachmentToContent(rootEntry)) {
         // legacy extension blob upgraded to [MAP] in content
@@ -947,6 +1126,36 @@ export async function loadAllMappedSiteContexts() {
     return { prefix, books, sites, currentLocation };
 }
 
+/**
+ * Load one mapped site by root label for manual Map Updater / inspector passes.
+ * @param {string} siteRoot
+ */
+export async function loadDungeonMapContextForSite(siteRoot) {
+    const wanted = normalizeDungeonLabel(siteRoot);
+    if (!wanted) return null;
+    const loaded = await loadAllMappedSiteContexts();
+    if (!loaded) return null;
+    const site = (loaded.sites || []).find(candidate => normalizeDungeonLabel(candidate.siteRoot) === wanted);
+    if (!site) return null;
+    const footer = loaded.currentLocation || '';
+    const isActiveSite = footer && normalizeDungeonLabel(footer).includes(wanted);
+    return {
+        prefix: loaded.prefix,
+        books: loaded.books,
+        currentLocation: footer,
+        isActiveSite,
+        context: {
+            prefix: loaded.prefix,
+            bookName: site.bookName,
+            uid: site.uid,
+            entryId: site.entryId,
+            siteRoot: site.siteRoot,
+            currentLocation: footer,
+            document: site.document,
+        },
+    };
+}
+
 /** Deep-clone the campaign Locations book for Map Updater swipe restore. */
 export async function snapshotCampaignLocationsBook(ctx = SillyTavern.getContext()) {
     const prefix = getLivePrefix();
@@ -1069,7 +1278,7 @@ function findMappedChildEntry(entries, rootLabel, areaName) {
         const label = String(entry?.comment || '').trim();
         const segments = label.split(/\s*::\s*/).filter(Boolean);
         if (segments.length > 1) {
-            return segments.some(segment => dungeonSiteRootsMatch(segment, rootLabel))
+            return locationContainsSiteRoot(label, rootLabel)
                 && dungeonLabelsMatch(segments.at(-1), areaName);
         }
         const keys = Array.isArray(entry?.key) ? entry.key : [];
@@ -1386,7 +1595,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             openaiUrl: settings.routerOpenaiUrl,
             openaiKey: settings.routerOpenaiKey,
             openaiModel: settings.routerOpenaiModel,
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 8192,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
         };
 
         // Budget status — computed once and reused in both basic and agent context.
@@ -2278,9 +2487,6 @@ ${recordCategoryGuidance}`;
                 // Action: call from the current turn response (safe since it's single-turn).
                 let resolvedToolCall = result.toolCall;
                 if (!resolvedToolCall && result.content) {
-                    if (result.content.startsWith('Endpoint error:') || result.content.includes('AbortError') || result.content.includes('socket hang up')) {
-                        throw new Error(`Respuesta del modelo interrumpida o fuera de tiempo: ${result.content.slice(0, 150)}`);
-                    }
                     resolvedToolCall = parseTextAction(result.content);
                 }
 
@@ -3719,7 +3925,7 @@ Output a JSON object:
         const routerSettings = {
             ...settings,
             connectionSource: settings.routerConnectionSource || "default",
-            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '' && Number(settings.routerMaxTokens) > 0) ? Number(settings.routerMaxTokens) : 8192,
+            maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
         };
 
         const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
@@ -5035,54 +5241,29 @@ ${historicalDump}`;
  * @returns {Array<{label: string, content: string, category: string}>}
  */
 function parseSkeletonOutput(rawText) {
-    if (!rawText) return [];
-
-    // Strip reasoning / channel tags emitted by models like Gemma 4 / DeepSeek (<|channel>...<channel|>)
-    const cleanedText = rawText
-        .replace(/<\|channel\|?>[\s\S]*?<channel\|?>/gi, '')
-        .replace(/<thought[\s\S]*?<\/thought>/gi, '')
-        .trim();
-
     const categoryMap = {
         'FACTIONS': 'FAC',
         'FACTION': 'FAC',
-        'FACCIONES': 'FAC',
-        'FACCION': 'FAC',
         'LOCATIONS': 'LOC',
         'LOCATION': 'LOC',
-        'UBICACIONES': 'LOC',
-        'UBICACION': 'LOC',
-        'LUGARES': 'LOC',
-        'LUGAR': 'LOC',
-        'NPCS': 'NPC',
-        'NPC': 'NPC',
-        'PERSONAJES': 'NPC',
-        'PERSONAJE': 'NPC',
-        'NPCS/PERSONAJES': 'NPC',
         'CONFLICTS': 'EVENT',
         'CONFLICT': 'EVENT',
         'EVENTS': 'EVENT',
-        'CONFLICTOS': 'EVENT',
-        'CONFLICTO': 'EVENT',
-        'EVENTOS': 'EVENT',
-        'EVENTO': 'EVENT',
     };
 
     const records = [];
-    const lines = cleanedText.split('\n');
+    const lines = rawText.split('\n');
     
     let currentCategory = null;
     let currentItem = null;
 
-    const sectionRegex = /^##\s+([A-Z\/]+)/i;
+    const sectionRegex = /^##\s+([A-Z]+)/i;
     const subHeaderRegex = /^###\s+(.+)/;
     const listRegexBold = /^\s*(?:[\*\-\d\.\s]*)\s*\*\*(.+?)\*\*\s*[:\-]?\s*(.*)/;
     const listRegexPlain = /^\s*(?:[\*\-\d\.\s]*)\s*([^:\-\n]+)\s*[:\-]\s*(.*)/;
 
     for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        // Strip any residual inline channel/formatting prefixes before matching
-        line = line.replace(/^<.*?>\s*/, '');
+        const line = lines[i];
         const trimmedLine = line.trim();
 
         // 1. Check for ## Section Header

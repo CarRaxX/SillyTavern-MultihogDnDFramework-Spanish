@@ -16,7 +16,7 @@ import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgress
 import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
-import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, shouldForceBuildingPopulationPass, stopMapUpdaterPass } from './map-updater.js';
 import { maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
 import { formatNarratorSiteActivity } from './map-evolution-lib.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
@@ -170,7 +170,10 @@ function resolveEndOfOutputFooterSection(settings) {
 *(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
 *Level [X] | [HH:MM AM/PM], Day [X]*
 Footer shows ONLY {{user}}'s HP/XP/level/location — never party/NPC status or names.
-Location is coarse-to-fine (city, district, then the specific building/interior). If {{user}} is inside a named chapel, inn, shop, house, or similar, that interior MUST be the last segment.`;
+Location is coarse-to-fine and may be four or more tiers.
+
+- For an unmapped settlement building use Settlement, District, Building.
+- Never refer to unmapped BUILDINGs positionally in the footer (e.g. "Main Street, General Store rear loading dock".) Either "Main Street" or "Main Street, General Store" if actually inside.`;
     if (settings.use24hTime) {
         inner = inner.replace(/\[HH:MM AM\/PM\]/g, '[HH:MM] (24-hour clock, NO AM/PM)');
     }
@@ -541,16 +544,17 @@ export function registerMapArchitectTool() {
         registerFunctionTool({
             name: 'CreateAreaMap',
             displayName: 'Map Architect',
-            description: 'Creates and saves the complete private objective map for a site before its first exploration. Call exactly once when the player enters an unmapped dungeon/ruin/lair (kind DUNGEON, room-scale) or an unmapped town/city/village as a whole (kind SETTLEMENT, district-scale). Do not call for an alley, house, shop, rooftop, warehouse, street, or other sub-place of a city. Do not call for wilderness, roads, countryside, or other places between mapped sites. A house is DUNGEON only if that building itself is a high-risk dungeon/ruin/lair. SETTLEMENT site is the city/town name, not the current alley. Do not call if [MAPPED_SITES] lists that site or a parent of the place being entered, even when no DUNGEON_REALITY block is attached yet. Do not call if a DUNGEON_REALITY block already supplies the site map. The dedicated architect validates all routes and assets, writes the map to the root Location entry, and returns compact private canon for narration.',
+            description: 'Creates and saves one private objective map. DUNGEON is a high-risk room graph, INTERIOR is a significant lower-risk multi-room site, and SETTLEMENT is a district graph. Inside a mapped settlement, call DUNGEON or INTERIOR for an exact BUILDING/SUB* name only when it deliberately warrants promotion to a peer map; the call atomically promotes/links it. Ordinary shops, inns, houses, and chapels remain BUILDING assets with no peer map. Never map OBJECT props, wilderness, roads, or districts. A listed mapped peer is reused; a listed SETTLEMENT may still contain an unmapped SUB* site. include[] is creation-only for a new SETTLEMENT and absorbs exact existing DUNGEON/INTERIOR peers. When exiting an initially standalone peer into a newly established settlement, immediately create that SETTLEMENT with the active peer in include[]. The runtime validates, persists, and returns compact private canon.',
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'For SETTLEMENT, copy the town/city/village name from the Location footer, not the current street, alley, or interior. For DUNGEON, copy the dungeon/ruin name. Copy character-for-character. Never translate, transliterate, expand, or retitle. A distinct site title must already appear in the footer.' },
+                    site: { type: 'string', description: 'Copy the exact mapped-site name character-for-character. For a nested peer, use the exact BUILDING/SUB* name, not the settlement root or district. Never translate, transliterate, expand, or retitle.' },
                     entrance: { type: 'string', description: 'Copy the named entrance exactly as printed: a settlement gate/square/docks, or the dungeon door. Never translate it. This becomes the first VISITED map area.' },
-                    kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT'], description: 'DUNGEON = room-scale high-risk interior (ruins, lairs, strongholds) — not an ordinary house or shop. SETTLEMENT = the city/town/village as a whole, district-scale — not an alley or building. Required.' },
+                    kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT', 'INTERIOR'], description: 'DUNGEON = high-risk room-scale site. INTERIOR = significant lower-risk multi-room site. SETTLEMENT = city/town/village district-scale graph.' },
                     scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Geographic size, not danger. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
-                    threat: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'DEADLY'], description: 'Site danger for occupancy and trap density. Independent of party level and of scale. LOW = sparse/empty, MODERATE = some hostiles, HIGH = frequent hostiles and traps, DEADLY = layered overlapping threats. A LARGE LOW ruin can be vast and empty.' },
-                    premise: { type: 'string', description: 'Dense established facts and creative constraints: site purpose/history, visible entrance, expected inhabitants or danger, tone, and anything that must not be contradicted.' },
+                    threat: { type: 'string', enum: ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'], description: 'Site danger for occupancy and trap density. NONE forbids invented active danger. Independent of party level and scale.' },
+                    premise: { type: 'string', description: 'Objective private site facts and creative constraints: purpose/history, expected inhabitants or danger, tone, and anything that must not be contradicted. Premise facts do not by themselves grant the player knowledge.' },
+                    include: { type: 'array', items: { type: 'string' }, description: 'Optional only for first creation of a SETTLEMENT. Exact existing mapped DUNGEON/INTERIOR names to absorb as SUBDUNGEON/SUBINTERIOR peers.' },
                 },
                 required: ['site', 'entrance', 'kind', 'scale', 'threat', 'premise'],
             },
@@ -2894,10 +2898,14 @@ export async function onGenerationEnded() {
         });
         document.dispatchEvent(new CustomEvent('rt_generation_tick'));
     }
+    const forceBuildingPopulation = countsTowardRunEvery
+        && settings.mapUpdaterEnabled !== false
+        && isLocationMappingEnabled(settings)
+        && await shouldForceBuildingPopulationPass();
     const shouldTryMapUpdater = countsTowardRunEvery
         && settings.mapUpdaterEnabled !== false
         && isLocationMappingEnabled(settings)
-        && _mapUpdaterAutoTick >= mapEvery;
+        && (_mapUpdaterAutoTick >= mapEvery || forceBuildingPopulation);
     if (shouldTryMapUpdater) {
         const mapResult = await runMapUpdaterPass();
         const skipped = mapResult?.skipped;
@@ -2908,6 +2916,7 @@ export async function onGenerationEnded() {
             skipped: skipped || null,
             ok: mapResult?.ok === true,
             noop: mapResult?.noop === true,
+            forcedBuildingPopulation: forceBuildingPopulation,
         });
     }
 

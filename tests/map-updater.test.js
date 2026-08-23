@@ -1,19 +1,110 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { formatDungeonMapForUpdater } from '../dungeon-reality.js';
+import { formatDungeonMapForUpdater, resolveBuildingIntentPopulationTarget, resolveBuildingPopulationTarget } from '../dungeon-reality.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../map-updater-prompt.js';
+import { validateBuildingPopulationTransaction } from '../map-updater-lib.js';
 import {
     extractPartyMemberNames,
     formatPartyRosterForMapUpdater,
     isPartyMemberAssetName,
     partyNameFromHeader,
 } from '../map-updater-lib.js';
+import {
+    BUILDING_POPULATION_MIN_LOOKBACK_TURNS,
+    resolveMapUpdaterStoryWindow,
+} from '../map-updater-lib.js';
+
+function chatWithUserTurns(count) {
+    const chat = [];
+    for (let i = 0; i < count; i++) {
+        chat.push({ is_user: true, mes: `Player turn ${i + 1}` });
+        chat.push({ is_user: false, mes: `Narrator turn ${i + 1}` });
+    }
+    return chat;
+}
 
 describe('Map Updater', () => {
+    it('requires an explicit first-entry BUILDING flag clear but permits an intentionally empty result', () => {
+        const target = { building: { id: 'house', name: 'House' }, area: { id: 'north' }, children: [], untrackedName: '' };
+        expect(validateBuildingPopulationTransaction({ noop: true }, target)[0]?.code).toBe('BUILDING_POPULATION_NOT_RESOLVED');
+        expect(validateBuildingPopulationTransaction({
+            operation_id: 'house-empty',
+            operations: [{ op: 'SET_ASSET', asset_id: 'house', notEntered: false, cause: 'The empty house was entered.' }],
+        }, target)).toEqual([]);
+    });
+
+    it('resolves a unique pending BUILDING from player intent before the footer enters it', () => {
+        const map = {
+            version: 3,
+            site: 'Bullion',
+            kind: 'SETTLEMENT',
+            areas: [{ id: 'main-street', name: 'Main Street', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [
+                { id: 'bullion-general-store', kind: 'BUILDING', name: 'Bullion General Store', location: 'main-street', state: 'ACTIVE', knowledge: 'KNOWN', notEntered: false },
+                { id: 'chapel', kind: 'BUILDING', name: 'Chapel', location: 'main-street', state: 'ACTIVE', knowledge: 'KNOWN', notEntered: true },
+            ],
+        };
+        const target = resolveBuildingIntentPopulationTarget(
+            map,
+            'Bullion, Main Street, Bullion General Store',
+            'We should check out the chapel before daylight.',
+        );
+        expect(target).toMatchObject({ phase: 'intent', building: { id: 'chapel' }, area: { id: 'main-street' } });
+        expect(resolveBuildingIntentPopulationTarget(map, 'Bullion, Main Street', 'Wait here.')).toBeNull();
+    });
+
+    it('keeps pre-narration contents hidden and forbids outcome chronicles', () => {
+        const target = { phase: 'intent', building: { id: 'chapel' }, area: { id: 'main-street' }, children: [], untrackedName: '' };
+        const invalid = validateBuildingPopulationTransaction({
+            operations: [
+                { op: 'ADD_ASSET', kind: 'CREATURE', name: 'Sleeper', location: 'chapel', knowledge: 'KNOWN' },
+                { op: 'SET_ASSET', asset_id: 'chapel', notEntered: false },
+            ],
+            chronicles: [{ area_id: 'main-street', text: 'Entered the chapel.' }],
+        }, target);
+        expect(invalid.map(issue => issue.code)).toEqual(expect.arrayContaining([
+            'PRE_NARRATION_ASSET_REVEALED',
+            'PRE_NARRATION_CHRONICLE_NOT_ALLOWED',
+        ]));
+        expect(validateBuildingPopulationTransaction({
+            operations: [
+                { op: 'ADD_ASSET', kind: 'CREATURE', name: 'Sleeper', location: 'chapel', knowledge: 'UNREVEALED' },
+                { op: 'SET_ASSET', asset_id: 'chapel', notEntered: false },
+            ],
+        }, target)).toEqual([]);
+    });
     it('treats noop and empty operations as a skip', () => {
         const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
         expect(updater).toContain('if (value.noop === true) return true');
         expect(updater).toContain('return Array.isArray(value.operations) && value.operations.length === 0');
+    });
+
+    it('widens auto RECENT STORY to at least 10 user turns for first-entry BUILDING population', () => {
+        expect(BUILDING_POPULATION_MIN_LOOKBACK_TURNS).toBe(10);
+        const chat = chatWithUserTurns(12);
+        // Watermark only covers the latest exchange (last 2 messages).
+        const settings = { mapUpdaterLastRunChatLength: chat.length - 2, routerLookback: 4 };
+        const auto = resolveMapUpdaterStoryWindow(chat, settings, { isManual: false });
+        expect(auto).toEqual({ startIdx: chat.length - 2, sinceLastRun: true });
+
+        const population = resolveMapUpdaterStoryWindow(chat, settings, {
+            isManual: false,
+            minLookbackTurns: BUILDING_POPULATION_MIN_LOOKBACK_TURNS,
+        });
+        // 10 user turns → start at the 3rd user message (index 4) in a 12-turn chat of pairs.
+        expect(population.startIdx).toBe(4);
+        expect(population.startIdx).toBeLessThan(auto.startIdx);
+
+        const widerWatermark = resolveMapUpdaterStoryWindow(chat, {
+            mapUpdaterLastRunChatLength: 0,
+            routerLookback: 4,
+        }, {
+            isManual: false,
+            minLookbackTurns: BUILDING_POPULATION_MIN_LOOKBACK_TURNS,
+        });
+        // No watermark: fall back to the forced 10-turn lookback.
+        expect(widerWatermark.startIdx).toBe(4);
+        expect(widerWatermark.sinceLastRun).toBe(false);
     });
 
     it('formats a compact ID snapshot without dumping every room geometry', () => {
@@ -57,7 +148,7 @@ describe('Map Updater', () => {
         expect(snapshot).not.toContain('long hidden pier description');
     });
 
-    it('flags a settlement interior in CURRENT LOCATION that is not yet an OBJECT asset', () => {
+    it('flags a settlement building in CURRENT LOCATION that is not yet a BUILDING asset', () => {
         const snapshot = formatDungeonMapForUpdater({
             version: 3,
             site: 'Morrowfen',
@@ -74,7 +165,9 @@ describe('Map Updater', () => {
 
         expect(snapshot).toContain('shrine-quarter (Shrine Quarter)');
         expect(snapshot).toContain('Narrow lanes of salt-stained stone.');
-        expect(snapshot).toContain('SETTLEMENT INTERIOR NOT ON MAP');
+        expect(snapshot).toContain('SETTLEMENT BUILDING NOT ON MAP');
+        expect(snapshot).toContain('ADD_ASSET kind BUILDING');
+        expect(snapshot).toContain('CreateAreaMap owns promotion');
         expect(snapshot).toContain('Chapel of the Drowned Stone');
         expect(snapshot).toContain('Do not output {"noop":true} for this.');
         expect(snapshot).not.toContain('(Current location did not match an area id/name.)');
@@ -104,18 +197,71 @@ describe('Map Updater', () => {
 
         expect(snapshot).toContain('shrine-quarter (Shrine Quarter)');
         expect(snapshot).toContain('chapel-of-the-drowned-stone | OBJECT | Chapel of the Drowned Stone');
-        expect(snapshot).not.toContain('SETTLEMENT INTERIOR NOT ON MAP');
+        expect(snapshot).not.toContain('SETTLEMENT BUILDING NOT ON MAP');
+    });
+
+    it('does not invent a BUILDING from an exterior-relative footer leaf behind an existing store', () => {
+        const map = {
+            version: 3,
+            site: 'Hollow Creek',
+            kind: 'SETTLEMENT',
+            areas: [{
+                id: 'main-street',
+                name: 'Main Street',
+                knowledge: 'VISITED',
+                geometry: ['East Outskirts thoroughfare.'],
+                connections: [],
+            }],
+            assets: [{
+                id: 'hollow-creek-general-store',
+                kind: 'BUILDING',
+                name: 'Hollow Creek General Store',
+                location: 'main-street',
+                state: 'ACTIVE',
+                knowledge: 'KNOWN',
+                notEntered: true,
+            }],
+        };
+        const footer = 'Hollow Creek, East Outskirts → Main Street, behind the general store';
+        const snapshot = formatDungeonMapForUpdater(map, footer);
+
+        expect(snapshot).toContain('main-street (Main Street)');
+        expect(snapshot).toContain('hollow-creek-general-store | BUILDING | Hollow Creek General Store');
+        expect(snapshot).not.toContain('SETTLEMENT BUILDING NOT ON MAP');
+        expect(snapshot).not.toContain('behind the general store');
+        expect(resolveBuildingPopulationTarget(map, footer)).toBeNull();
     });
 
     it('ships a focused occupancy prompt and independent scheduler wiring', () => {
         const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
         const hooks = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
-        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('You do not write NPC biographies');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('You do not narrate play');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('KIND: SETTLEMENT');
-        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ADD_ASSET kind OBJECT');
-        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('the footer is sufficient even when RECENT STORY is empty');
-        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"op":"ADD_ASSET"');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ADD_ASSET kind BUILDING');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('OBJECT is props only');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('CreateAreaMap is the sole promotion signal');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('If CURRENT LOCATION names an untracked ordinary structure');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Positional footer tails');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('behind the general store');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('exterior-relative footer phrases');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Streetscape observation');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('newly observed landmarks');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('clearly observed UNREVEALED landmarks become KNOWN without clearing notEntered');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('BUILDING entry and Asset population');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Populate only map-worthy contents');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Do not ADD_ASSET ambient scenery');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('tipped chairs');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('New interior contents use ADD_ASSET');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('The narrator may make mistakes in the footer');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Bullion General Store');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('short footer names still match longer BUILDING assets');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('external combat tracker (not shown to you.)');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('map-worthy child');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('REMOVE vs DESTROYED (both valid');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Default for kills and destroyed things');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('REMOVE_ASSET is additional, not a substitute for DESTROYED');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"op":"REMOVE_ASSET"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"area_id":"shrine-quarter"');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never write {"type":"ADD_ASSET","asset":{...}}');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Never ADD_ASSET the player or anyone listed in the supplied [PARTY] names');
@@ -123,9 +269,26 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('TIME MECHANICS');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('set duration to ""');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('stored timestamp plus authoritative current time is sufficient evidence');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('BUILDING is a lightweight container');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('knowledge SUSPECTED');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('A KNOWN or SUSPECTED asset reveals its effective containing area');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('notEntered:false');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('PRE-NARRATION BUILDING INTENT POPULATION');
+        expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Every newly generated child is UNREVEALED');
+        expect(updater).toContain('Positional tails such as "behind the general store"');
+        expect(updater).toContain('SET_ASSET knowledge KNOWN on each match without clearing notEntered');
+        expect(updater).toContain('Footer leaves may shorten the asset name');
+        expect(updater).toContain('On FIRST-ENTRY / INTENT BUILDING POPULATION, ADD_ASSET only map-worthy');
+        expect(updater).toContain('ADD_ASSET only map-worthy CREATURE, GROUP, LOOT, HAZARD, TRAP, ALARM, BARRIER');
+        expect(updater).toContain('never ambient set dressing');
+        expect(updater).toContain('never SET_ASSET a brand-new invented asset_id');
+        expect(updater).toContain('Exterior-relative phrasing');
         expect(updater).toContain('formatPartyRosterForMapUpdater');
         expect(updater).toContain('## CURRENT IN-WORLD TIME (AUTHORITATIVE)');
-        expect(updater).toContain('initialUserPrompt(loaded, recentStory, memo, currentTime)');
+        expect(updater).toContain('initialUserPrompt(loaded, recentStory, memo, currentTime, populationTarget, instruction, promptOpts)');
+        expect(updater).toContain("'FIRST-ENTRY BUILDING POPULATION'");
+        expect(updater).toContain('(MANDATORY THIS PASS)');
+        expect(updater).toContain('shouldForceBuildingPopulationPass');
         expect(updater).toContain('PARTY_MEMBER_NOT_AN_ASSET');
         expect(updater).toContain('mapRuntimeConnectionSource');
         expect(updater).not.toContain('mapArchitectConnectionSource');
@@ -134,15 +297,25 @@ describe('Map Updater', () => {
         const defaults = readFileSync(new URL('../src/state/defaults.js', import.meta.url), 'utf8');
         expect(defaults).toContain('mapUpdaterMaxTokens: 25000');
         expect(settingsMarkup).toMatch(/id="rpg_map_updater_max_tokens"[^>]*max="32000"/);
-        expect(updater).toContain('export async function runMapUpdaterPass({ isManual = false, lookback = null } = {})');
+        expect(updater).toContain('siteRoot = null');
+        expect(updater).toContain('loadDungeonMapContextForSite');
+        expect(updater).toContain('DIRECT INSTRUCTION (THIS PASS ONLY)');
+        expect(updater).toContain('export async function onMapUpdaterUserMessage(messageId)');
+        expect(updater).toContain('resolveBuildingIntentPopulationTarget');
         expect(updater).toContain('if (settings.mapUpdaterEnabled === false && !isManual)');
-        expect(updater).toContain('export function resolveMapUpdaterStoryWindow');
-        expect(updater).toContain('if (isManual)');
-        expect(updater).toContain('recentStoryContext(ctx, settings, { isManual, lookback })');
+        expect(updater).toContain('resolveMapUpdaterStoryWindow');
+        expect(updater).toContain('BUILDING_POPULATION_MIN_LOOKBACK_TURNS');
+        expect(updater).toContain('minLookbackTurns: populationTarget ? BUILDING_POPULATION_MIN_LOOKBACK_TURNS : null');
+        expect(updater).toContain('RECENT STORY was widened for this population pass');
+        const updaterLib = readFileSync(new URL('../map-updater-lib.js', import.meta.url), 'utf8');
+        expect(updaterLib).toContain('export function resolveMapUpdaterStoryWindow');
+        expect(updaterLib).toContain('export const BUILDING_POPULATION_MIN_LOOKBACK_TURNS = 10');
         expect(hooks).toContain('runMapUpdaterPass');
         expect(hooks).toContain('mapUpdaterRunEvery');
         expect(hooks).toContain('maybeRollbackMapUpdaterForSwipe');
         expect(hooks).toContain('maybeRunMapEvolution');
+        const index = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        expect(index).toContain('event_types.MESSAGE_SENT, onMapUpdaterUserMessage');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('EVOLVED');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(settingsMarkup).toContain('id="rpg_map_updater_run_every"');
@@ -181,7 +354,7 @@ describe('Map Updater', () => {
         expect(updater.indexOf("skipped: 'no_active_map'")).toBeLessThan(startIdx);
         expect(updater.indexOf("skipped: 'disabled'")).toBeLessThan(startIdx);
         expect(updater.indexOf("skipped: 'location_mapping_off'")).toBeLessThan(startIdx);
-        const loopRecheckIdx = updater.indexOf('if (!isLocationMappingEnabled(getSettings()))');
+        const loopRecheckIdx = updater.indexOf('if (!isLocationMappingEnabled(getSettings()))', startIdx);
         const sendIdx = updater.indexOf('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
         expect(loopRecheckIdx).toBeGreaterThan(startIdx);
         expect(sendIdx).toBeGreaterThan(loopRecheckIdx);

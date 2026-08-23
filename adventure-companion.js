@@ -8,10 +8,9 @@ import { getSettings } from './state-manager.js';
 import { cleanToolCallMessage, memoForGmContext } from './memo-processor.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { isRouterRunning, runRouterPass, sendDirectPrompt } from './src/app/runtime-bridge.js';
-import { isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isLocationMappingEnabled, isEffectiveSectionEnabled } from './src/state/section-enabled.js';
 import { formatDungeonMapForPlayer, stripDungeonMapSection } from './dungeon-reality.js';
 import { clampFloatingPanelToViewport, isMobileLayout, makeDraggable, makeResizableBL, makeResizableBR, resolveViewportClampedGeometry } from './ui-geometry.js';
-import { t } from './src/i18n/index.js';
 
 const FOLDER_NAME = (function () {
     try {
@@ -38,7 +37,7 @@ const DETACHED_CHAT_KEY = 'rpg_tracker_adventure_companion_detached';
 const DETACHED_CHAT_GEO_KEY = 'rpg_tracker_geometry_adventure_companion';
 const CHAT_OPEN_KEY = 'rpg_tracker_adventure_companion_open';
 const CHAT_COLLAPSED_KEY = 'rpg_tracker_adventure_companion_collapsed';
-const COMPANION_HEADER_TITLE = t('companion.headerTitle', 'Acompañante de Aventura: Asistente y Guía');
+const COMPANION_HEADER_TITLE = 'Adventure Companion';
 
 export const COMPANION_PERSONA = `You are the Adventure Companion — a witty, imaginative friend sitting beside the player of a Multihog D&D Framework campaign in SillyTavern.
 
@@ -50,12 +49,13 @@ Rules:
 - For framework and settings questions, be brief and practical. If the supplied documentation does not cover something, say you are unsure rather than inventing settings, IDs, or behavior.
 - Keep replies engaging but not endless. Match the player's energy.
 
-Actions — these three ONLY (hard limit):
+Actions — these four ONLY (hard limit):
 1. Send a direct command to the **State Tracker** to correct or update mechanical campaign state (memo / tracked modules).
-2. Send a direct command to the **Lorebook Agent** to create or update campaign lore.
-3. **Act for the player** — submit their next turn (send a chat message for them, or choose a CYOA button when CYOA choices are supplied).
+2. Send a direct command to the **Lorebook Agent** to create or update campaign lore (NPCs, factions, quests, readable location history — not private map occupancy).
+3. Send a direct command to the **Map Updater** to correct or update the active site's private map occupancy ([MAP]: areas, assets, routes, building contents). Use for removing mistaken assets, clearing remains from a room, marking kills as DESTROYED when remains stay, MOVE_ASSET, and similar durable occupancy facts — not for lorebook NPC bios or memo modules.
+4. **Act for the player** — submit their next turn (send a chat message for them, or choose a CYOA button when CYOA choices are supplied).
 
-You have no other action surface. You cannot click Multihog UI, open settings drawers, edit relationship bars / NPC cards / inventory panels / module toggles in the interface, or walk the player through invented menu paths. If a change belongs in campaign state or lore, do it via State Tracker or Lorebook Agent commands — never invent a UI workflow. If you do not know how a Multihog screen looks or whether a control exists, say so or use one of the three actions above; do not guess at buttons, tabs, or editors.
+You have no other action surface. You cannot click Multihog UI, open settings drawers, edit relationship bars / NPC cards / inventory panels / module toggles in the interface, or walk the player through invented menu paths. Campaign state goes to State Tracker; lore goes to Lorebook Agent; map occupancy goes to Map Updater — never invent a UI workflow. If you do not know how a Multihog screen looks or whether a control exists, say so or use one of the four actions above; do not guess at buttons, tabs, or editors.
 
 Action rules:
 - Act whenever the player's intent to make a change is clear from ordinary conversation. They do not need exact wording, command syntax, magic phrases, or the names "State Tracker" and "Lorebook Agent."
@@ -68,13 +68,14 @@ Action rules:
 - When ACT FOR USER MODE says CYOA is inactive, compose a concise in-character player action and submit it as action_text.
 - Every act_for_user call must include commentary: a brief, lively, context-aware reaction to the move you chose. Make it feel like a clever friend at the table—amused, intrigued, impressed, ominous, or playful as appropriate. Do not mechanically report that an action was submitted, repeat the full action, use a status/checkmark format, or invent the outcome.
 - A successful act-for-user submission ends your current turn. Do not call another action afterward.
-- A request may require multiple actions. Execute them one at a time. If it combines bookkeeping/lore changes with a player turn, perform State Tracker and Lorebook Agent work first and act_for_user last.
-- For State Tracker and Lorebook Agent work, accurately tell the player whether it completed, made no change, was unavailable, or failed. For a successful player turn, use the supplied organic commentary instead of a mechanical completion receipt; the submitted action is already visible in the main chat.
+- A request may require multiple actions. Execute them one at a time. If it combines bookkeeping/lore/map changes with a player turn, perform State Tracker, Lorebook Agent, and Map Updater work first and act_for_user last.
+- For State Tracker, Lorebook Agent, and Map Updater work, accurately tell the player whether it completed, made no change, was unavailable, or failed. For a successful player turn, use the supplied organic commentary instead of a mechanical completion receipt; the submitted action is already visible in the main chat.
 - You cannot change extension settings or narrate/declare new story outcomes yourself. act_for_user only submits the player's turn; the main narrator remains the authority that advances the story.
 
 When native tools are unavailable, emit actions using exactly one or more of these fallback blocks:
 <companion_action type="state_tracker">the direct instruction</companion_action>
 <companion_action type="lorebook_agent">the direct instruction</companion_action>
+<companion_action type="map_updater">the direct instruction</companion_action>
 <companion_action type="act_for_user">{"choice_index":2,"commentary":"A quiet route into danger. I respect the optimism."}</companion_action>
 <companion_action type="act_for_user">{"action_text":"the player action to submit","commentary":"Subtlety has left the building. Let's see who notices first."}</companion_action>
 Do not show fallback blocks unless you are actually performing a change the player clearly intends. After action results are supplied, do not repeat completed actions; summarize the results for the player.
@@ -111,6 +112,24 @@ export const COMPANION_ACTION_TOOLS = [
                     instruction: {
                         type: 'string',
                         description: 'A self-contained Lorebook Agent instruction preserving the player’s intent. Minor harmless details may be inferred for an underspecified demo request.',
+                    },
+                },
+                required: ['instruction'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'command_map_updater',
+            description: 'Send a direct instruction to the Map Updater when ordinary conversational language shows clear intent to correct active-site map occupancy: remove an asset from [MAP], mark a kill DESTROYED when remains stay, clear remains with REMOVE_ASSET, move assets, fix mistaken clutter, or similar durable occupancy facts. Not for Lorebook lore or State Tracker memo modules.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    instruction: {
+                        type: 'string',
+                        description: 'A self-contained Map Updater instruction preserving the player’s intent. Name exact asset ids when known from ACTIVE SITE MAP; otherwise describe the durable occupancy change clearly.',
                     },
                 },
                 required: ['instruction'],
@@ -921,9 +940,14 @@ export function parseCompanionFallbackActions(text) {
     const visibleText = source.replace(actionPattern, (_match, doubleQuotedType, singleQuotedType, body) => {
         const type = String(doubleQuotedType || singleQuotedType || '').trim().toLowerCase();
         const instruction = String(body || '').trim();
-        if (instruction && (type === 'state_tracker' || type === 'lorebook_agent')) {
+        if (instruction && (type === 'state_tracker' || type === 'lorebook_agent' || type === 'map_updater')) {
+            const nameByType = {
+                state_tracker: 'command_state_tracker',
+                lorebook_agent: 'command_lorebook_agent',
+                map_updater: 'command_map_updater',
+            };
             actions.push({
-                name: type === 'state_tracker' ? 'command_state_tracker' : 'command_lorebook_agent',
+                name: nameByType[type],
                 instruction,
             });
         } else if (instruction && type === 'act_for_user') {
@@ -969,7 +993,7 @@ function normalizeCompanionAction(name, args) {
         }
         return null;
     }
-    if (name !== 'command_state_tracker' && name !== 'command_lorebook_agent') return null;
+    if (name !== 'command_state_tracker' && name !== 'command_lorebook_agent' && name !== 'command_map_updater') return null;
     const instruction = String(args?.instruction || '').trim();
     if (!instruction) return null;
     return { name, instruction };
@@ -985,6 +1009,36 @@ function companionActionArgs(action) {
         return args;
     }
     return { instruction: action.instruction };
+}
+
+/** @param {any} result */
+function summarizeMapUpdaterCompanionResult(result) {
+    const skipped = result?.skipped;
+    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
+        return { success: false, status: 'unavailable', message: 'Mapas Persistentes está desactivado.' };
+    }
+    if (skipped === 'no_active_map') {
+        return { success: false, status: 'unavailable', message: 'No hay un mapa de mazmorra o asentamiento activo.' };
+    }
+    if (skipped === 'no_such_map') {
+        return { success: false, status: 'unavailable', message: 'No se pudo cargar ese lugar mapeado.' };
+    }
+    if (skipped === 'disabled') {
+        return { success: false, status: 'disabled', message: 'El Actualizador de Mapas está desactivado.' };
+    }
+    if (skipped === 'busy') {
+        return { success: false, status: 'busy', message: 'Otro agente ya se está ejecutando.' };
+    }
+    if (skipped === 'stopped') {
+        return { success: true, status: 'stopped', message: 'Detenido.' };
+    }
+    if (result?.ok && result?.noop) {
+        return { success: true, status: 'noop', message: 'No hubo cambios duraderos en el mapa.' };
+    }
+    if (result?.ok) {
+        return { success: true, status: 'completed', message: 'Actualización de ocupación del mapa aplicada.' };
+    }
+    return { success: false, status: 'failed', message: 'No se pudo aplicar una actualización válida de ocupación del mapa.' };
 }
 
 /**
@@ -1003,68 +1057,68 @@ async function executeCompanionAction(action) {
                 const choices = getCurrentCyoaChoices();
                 if (!choices.length) {
                     return {
-                        action: 'Player Turn',
+                        action: 'Turno del Jugador',
                         success: false,
                         status: 'unavailable',
-                        message: 'CYOA is active, but no current choice buttons are available.',
+                        message: 'CYOA está activo, pero no hay botones de opción disponibles actualmente.',
                     };
                 }
                 const choiceIndex = Number(action.choice_index);
                 if (!Number.isInteger(choiceIndex) || choiceIndex < 1 || choiceIndex > choices.length) {
                     return {
-                        action: 'Player Turn',
+                        action: 'Turno del Jugador',
                         success: false,
                         status: 'invalid_choice',
-                        message: `Choose a CYOA choice_index from 1 to ${choices.length}.`,
+                        message: `Elige un choice_index de CYOA entre 1 y ${choices.length}.`,
                     };
                 }
                 const selected = choices[choiceIndex - 1];
                 selected.button.click();
                 return {
-                    action: 'Player Turn',
+                    action: 'Turno del Jugador',
                     success: true,
                     status: 'submitted',
-                    message: `Submitted CYOA choice: ${selected.text}`,
+                    message: `Opción de CYOA enviada: ${selected.text}`,
                     terminal: true,
                 };
             }
 
             if (!actionText) {
                 return {
-                    action: 'Player Turn',
+                    action: 'Turno del Jugador',
                     success: false,
                     status: 'missing_action',
                     message: cyoaActive
-                        ? 'Provide action_text or a valid CYOA choice_index for the player turn.'
-                        : 'Provide action_text for the player turn.',
+                        ? 'Proporciona action_text o un choice_index de CYOA válido para el turno del jugador.'
+                        : 'Proporciona action_text para el turno del jugador.',
                 };
             }
             const textarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('send_textarea'));
             const sendBtn = /** @type {HTMLElement|null} */ (document.getElementById('send_but'));
             if (!textarea || !sendBtn || typeof sendBtn.click !== 'function') {
                 return {
-                    action: 'Player Turn',
+                    action: 'Turno del Jugador',
                     success: false,
                     status: 'unavailable',
-                    message: 'The SillyTavern chat input is not available.',
+                    message: 'El campo de entrada de chat de SillyTavern no está disponible.',
                 };
             }
             if ('disabled' in sendBtn && sendBtn.disabled) {
                 return {
-                    action: 'Player Turn',
+                    action: 'Turno del Jugador',
                     success: false,
                     status: 'busy',
-                    message: 'The SillyTavern chat input is currently busy.',
+                    message: 'El campo de entrada de chat de SillyTavern está ocupado actualmente.',
                 };
             }
             textarea.value = actionText;
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
             sendBtn.click();
             return {
-                action: 'Player Turn',
+                action: 'Turno del Jugador',
                 success: true,
                 status: 'submitted',
-                message: `Submitted player action: ${actionText}`,
+                message: `Acción del jugador enviada: ${actionText}`,
                 terminal: true,
             };
         }
@@ -1073,62 +1127,115 @@ async function executeCompanionAction(action) {
             const result = await sendDirectPrompt(action.instruction);
             if (result && typeof result === 'object') {
                 return {
-                    action: 'State Tracker',
+                    action: 'Rastreador de Estado',
                     success: !!result.success,
                     status: String(result.status || (result.success ? 'completed' : 'failed')),
-                    message: String(result.message || (result.success ? 'State Tracker command completed.' : 'State Tracker command failed.')),
+                    message: String(result.message || (result.success ? 'Comando del Rastreador de Estado completado.' : 'Comando del Rastreador de Estado falló.')),
                 };
             }
             return {
-                action: 'State Tracker',
+                action: 'Rastreador de Estado',
                 success: false,
                 status: 'failed',
-                message: 'State Tracker did not report a result.',
+                message: 'El Rastreador de Estado no reportó un resultado.',
+            };
+        }
+
+        if (action.name === 'command_map_updater') {
+            const settings = getSettings();
+            if (!isLocationMappingEnabled(settings)) {
+                return {
+                    action: 'Actualizador de Mapas',
+                    success: false,
+                    status: 'unavailable',
+                    message: 'Mapas Persistentes está desactivado.',
+                };
+            }
+            if (settings.mapUpdaterEnabled === false) {
+                return {
+                    action: 'Actualizador de Mapas',
+                    success: false,
+                    status: 'disabled',
+                    message: 'El Actualizador de Mapas está desactivado.',
+                };
+            }
+            if (typeof runtimeState.isLoreOrMapAgentBusyRef === 'function' && runtimeState.isLoreOrMapAgentBusyRef()) {
+                return {
+                    action: 'Actualizador de Mapas',
+                    success: false,
+                    status: 'busy',
+                    message: 'Otro agente ya se está ejecutando.',
+                };
+            }
+            const run = runtimeState.runMapUpdaterPassRef;
+            if (typeof run !== 'function') {
+                return {
+                    action: 'Actualizador de Mapas',
+                    success: false,
+                    status: 'unavailable',
+                    message: 'El Actualizador de Mapas no está disponible aún.',
+                };
+            }
+            const lookback = settings.mapUpdaterDirectLookback ?? settings.routerLookback ?? 10;
+            const result = await run({
+                isManual: true,
+                lookback,
+                directInstruction: action.instruction,
+            });
+            const summary = summarizeMapUpdaterCompanionResult(result);
+            if (summary.success && result?.ok && !result?.noop && typeof runtimeState.refreshImmersionView === 'function') {
+                await runtimeState.refreshImmersionView();
+            }
+            return {
+                action: 'Actualizador de Mapas',
+                ...summary,
             };
         }
 
         const settings = getSettings();
         if (!settings.routerEnabled) {
             return {
-                action: 'Lorebook Agent',
+                action: 'Agente de Lorebook',
                 success: false,
                 status: 'disabled',
-                message: 'Lorebook Agent is disabled.',
+                message: 'El Agente de Lorebook está desactivado.',
             };
         }
         if (isRouterRunning()) {
             return {
-                action: 'Lorebook Agent',
+                action: 'Agente de Lorebook',
                 success: false,
                 status: 'busy',
-                message: 'Lorebook Agent is already running.',
+                message: 'El Agente de Lorebook ya se está ejecutando.',
             };
         }
         const completed = await runRouterPass(null, action.instruction, null, true);
         return completed === true
             ? {
-                action: 'Lorebook Agent',
+                action: 'Agente de Lorebook',
                 success: true,
                 status: 'completed',
-                message: 'Lorebook Agent command completed.',
+                message: 'Comando del Agente de Lorebook completado.',
             }
             : {
-                action: 'Lorebook Agent',
+                action: 'Agente de Lorebook',
                 success: false,
                 status: 'failed',
-                message: 'Lorebook Agent command did not complete.',
+                message: 'El comando del Agente de Lorebook no se completó.',
             };
     } catch (err) {
         const actionLabel = action.name === 'command_state_tracker'
-            ? 'State Tracker'
+            ? 'Rastreador de Estado'
+            : action.name === 'command_map_updater'
+                ? 'Actualizador de Mapas'
             : action.name === 'act_for_user'
-                ? 'Player Turn'
-                : 'Lorebook Agent';
+                ? 'Turno del Jugador'
+                : 'Agente de Lorebook';
         return {
             action: actionLabel,
             success: false,
             status: 'failed',
-            message: err?.message || 'The command failed.',
+            message: err?.message || 'El comando falló.',
         };
     }
 }
@@ -1141,14 +1248,6 @@ async function executeCompanionAction(action) {
  * @param {{ summaryFailed?: boolean }} [options]
  * @returns {string}
  */
-export function formatCompanionActionReceipt(results, options = {}) {
-    const lines = results.map((result) => `${result.success ? '✓' : '✗'} ${result.action}: ${result.message}`);
-    if (options.summaryFailed) {
-        lines.push('', 'The action result above is authoritative. The update finished, but I could not generate an additional conversational summary.');
-    }
-    return lines.join('\n');
-}
-
 /**
  * Player actions are already visible in SillyTavern's main chat. Return the
  * Companion's table-side reaction instead of echoing a mechanical receipt.
@@ -1396,8 +1495,8 @@ function ensureChatShell(panel) {
     const mp = activeModePrefs();
     host.innerHTML = `
         <div class="rt-tutorial-header">
-            <button type="button" class="rpg-tracker-nav-btn rt-tutorial-back" id="rt-tutorial-back" title="Volver al Rastreador de Estado">← Volver</button>
-            <button type="button" class="rpg-tracker-icon-btn rt-chat-detach-btn" id="rt-chat-detach-btn" title="Desacoplar Acompañante de Aventura" aria-label="Desacoplar Acompañante de Aventura">⧉</button>
+            <button type="button" class="rpg-tracker-nav-btn rt-tutorial-back" id="rt-tutorial-back" title="Back to State Tracker">← Back</button>
+            <button type="button" class="rpg-tracker-icon-btn rt-chat-detach-btn" id="rt-chat-detach-btn" title="Detach Adventure Companion" aria-label="Detach Adventure Companion">⧉</button>
             <div class="rt-chat-tutorial-mode-wrap">
                 <label class="rt-chat-tutorial-mode-toggle" title="Adjuntar la guía de Multihog a cada solicitud del Acompañante de Aventura">
                     <input type="checkbox" id="rt-chat-tutorial-mode" ${_prefs.tutorialMode ? 'checked' : ''}>
@@ -1406,20 +1505,20 @@ function ensureChatShell(panel) {
                 <button type="button" class="rt-chat-tutorial-info-btn" id="rt-chat-tutorial-info-btn" aria-label="Acerca del Modo Tutorial" aria-haspopup="dialog" aria-expanded="false">?</button>
                 <div class="rt-chat-tutorial-info" id="rt-chat-tutorial-info" role="dialog" aria-label="Acerca del Modo Tutorial" style="display:none;">
                     <strong>MODO TUTORIAL</strong>
-                    <span>Inyecta la documentación en Markdown de Multihog en cada solicitud del Acompañante de Aventura. Es excelente mientras aprendes el sistema, pero los veteranos pueden desactivarlo para ahorrar algunos miles de tokens. Ese costo adicional suele ser insignificante con un modelo recomendado como Gemini Flash-Lite, Flash o modelos locales en llama.cpp.</span>
+                    <span>Inyecta el archivo Markdown de documentación de Multihog en cada solicitud del Acompañante de Aventura. Es excelente mientras aprendes el sistema, pero los veteranos pueden dejarlo desactivado para ahorrar tokens de entrada.</span>
                 </div>
             </div>
             <div class="rt-chat-gear-wrap">
                 <button type="button" class="rpg-tracker-icon-btn rt-chat-gear-btn" id="rt-chat-gear-btn" title="Opciones de CHAT" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear"></i></button>
                 <div class="rt-chat-gear-menu" id="rt-chat-gear-menu" style="display:none;" role="menu">
                     <div class="rt-chat-gear-section">
-                        <span class="rt-chat-gear-section-label">Revisión de Historia</span>
-                        <div class="rt-tutorial-lookback" title="Incluir mensajes del chat de SillyTavern como contexto de la historia.">
-                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-tutorial-lookback" value="${mp.lookback}" min="0" max="100" aria-label="Story lookback message count">
+                        <span class="rt-chat-gear-section-label">Historial de historia</span>
+                        <div class="rt-tutorial-lookback" title="Incluir mensajes de chat de SillyTavern como contexto de la historia.">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-tutorial-lookback" value="${mp.lookback}" min="0" max="100" aria-label="Cantidad de mensajes de historial">
                             <span class="rt-tutorial-lookback-unit">msgs</span>
-                            <label class="rt-tutorial-lookback-all" title="Incluir todo el historial de chat">
+                            <label class="rt-tutorial-lookback-all" title="Incluir todo el historial del chat">
                                 <input type="checkbox" id="rt-tutorial-lookback-all" ${mp.lookbackAll ? 'checked' : ''}>
-                                <span>todos</span>
+                                <span>todo</span>
                             </label>
                         </div>
                     </div>
@@ -1431,9 +1530,9 @@ function ensureChatShell(panel) {
                         <input type="checkbox" id="rt-chat-inject-memo" ${_prefs.injectMemo ? 'checked' : ''}>
                         <span>Inyectar Rastreador de Estado</span>
                     </label>
-                    <label class="rt-chat-gear-item" role="menuitemcheckbox" title="Attach the player-facing current site map (Visuals/Map knowledge).">
+                    <label class="rt-chat-gear-item" role="menuitemcheckbox" title="Adjuntar el mapa del lugar actual de cara al jugador (conocimiento de Visuales/Mapa).">
                         <input type="checkbox" id="rt-chat-inject-map" ${_prefs.injectMap ? 'checked' : ''}>
-                        <span>Inject current site map</span>
+                        <span>Inyectar mapa del lugar actual</span>
                     </label>
                 </div>
             </div>
@@ -1458,7 +1557,7 @@ function welcomeHtml() {
     return `
         <div class="rt-tutorial-msg rt-tutorial-msg-bot rt-tutorial-welcome">
             <div class="rt-tutorial-msg-label">Acompañante de Aventura</div>
-            <div class="rt-tutorial-msg-body">Pregúntame sobre Multihog, genera ideas o discute tu aventura, o pídeme cualquiera de estas tres cosas: actualizar el Rastreador de Estado, actualizar el Agente de Lorebook o tomar tu siguiente turno (mensaje de chat / CYOA), sin necesidad de palabras clave especiales. No puedo operar los menús de la interfaz por mí mismo. Activa el Modo Tutorial cuando desees incluir la guía del framework adjunta a cada solicitud.</div>
+            <div class="rt-tutorial-msg-body">Pregúntame sobre Multihog, genera ideas o discute tu aventura, o pídeme cualquiera de estas cuatro cosas: actualizar el Rastreador de Estado, actualizar el Agente de Lorebook, actualizar el mapa del lugar activo (Actualizador de Mapas) o tomar tu siguiente turno (mensaje de chat / CYOA), sin necesidad de palabras clave especiales. No puedo operar los menús de la interfaz por mí mismo. Activa el Modo Tutorial cuando desees incluir la guía del framework adjunta a cada solicitud.</div>
         </div>`;
 }
 
@@ -1636,7 +1735,7 @@ function updateChatDetachButton() {
     if (!(button instanceof HTMLElement)) return;
     const detached = !!_detachedChatPanel;
     button.textContent = detached ? '↓' : '⧉';
-    button.title = detached ? t('companion.reattach', 'Reacoplar Acompañante de Aventura') : t('companion.detach', 'Desacoplar Acompañante de Aventura');
+    button.title = detached ? 'Re-attach Adventure Companion' : 'Detach Adventure Companion';
     button.setAttribute('aria-label', button.title);
 }
 
@@ -1735,13 +1834,13 @@ export function detachAdventureCompanion({ persist = true } = {}) {
                 <span>${COMPANION_HEADER_TITLE}</span>
             </div>
             <div class="rpg-tracker-header-right">
-                <button type="button" class="rpg-tracker-icon-btn" id="rt-chat-collapse-btn" title="Plegar Acompañante de Aventura" aria-label="Plegar Acompañante de Aventura" aria-expanded="true"><i class="fa-solid fa-chevron-up"></i></button>
-                <button type="button" class="rpg-tracker-icon-btn" id="rt-chat-reattach-btn" title="Reacoplar Acompañante de Aventura" aria-label="Reacoplar Acompañante de Aventura">↓</button>
+                <button type="button" class="rpg-tracker-icon-btn" id="rt-chat-collapse-btn" title="Collapse Adventure Companion" aria-label="Collapse Adventure Companion" aria-expanded="true"><i class="fa-solid fa-chevron-up"></i></button>
+                <button type="button" class="rpg-tracker-icon-btn" id="rt-chat-reattach-btn" title="Re-attach Adventure Companion" aria-label="Re-attach Adventure Companion">↓</button>
             </div>
         </div>
         <div class="rt-chat-detached-body"></div>
-        <div class="rt-resizer-br" title="Redimensionar"></div>
-        <div class="rt-resizer-bl" title="Redimensionar"></div>
+        <div class="rt-resizer-br" title="Resize"></div>
+        <div class="rt-resizer-bl" title="Resize"></div>
     `;
     const body = floating.querySelector('.rt-chat-detached-body');
     if (!(body instanceof HTMLElement)) return;
@@ -1957,15 +2056,15 @@ async function sendMessage() {
         mp.history.push({ role: 'assistant', content: reply });
     } catch (err) {
         if (err?.name === 'AbortError') {
-            mp.history.push({ role: 'assistant', content: '(Cancelado.)' });
+            mp.history.push({ role: 'assistant', content: '(Cancelled.)' });
         } else {
             console.error('[CHAT]', err);
             const msg = err?.message || String(err);
             mp.history.push({
                 role: 'assistant',
-                content: `No se pudo conectar con el modelo. Comprueba la configuración de conexión del Acompañante de Aventura.\n\n${msg}`,
+                content: `I could not reach the model. Check Adventure Companion connection settings.\n\n${msg}`,
             });
-            toastr['error']('La solicitud de CHAT ha fallado — consulta la conversación.', 'CHAT');
+            toastr['error']('CHAT request failed — see conversation.', 'CHAT');
         }
     } finally {
         _abort = null;

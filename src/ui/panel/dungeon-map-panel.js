@@ -112,13 +112,13 @@ function spawnGeometry() {
 function renderDetachedBody(scene) {
     const map = scene?.dungeonMap;
     if (!map?.document) {
-        return '<div class="rt-dungeon-graph-empty">No hay una ubicación mapeada en la posición actual.</div>';
+        return '<div class="rt-dungeon-graph-empty">No mapped site at the current location.</div>';
     }
     const graph = buildDungeonMapGraph(map.document, dungeonMapGraphOptions(
         scene.rawLocationText || scene.resolvedPath || '',
     ));
     if (!graph.nodes.length) {
-        return '<div class="rt-dungeon-graph-empty">Aún no hay habitaciones reveladas.</div>';
+        return '<div class="rt-dungeon-graph-empty">No revealed rooms yet.</div>';
     }
     return `<div class="rt-dungeon-graph-scroll rt-dungeon-graph-scroll-expanded">${renderDungeonMapGraphSvg(graph, {
         compact: false,
@@ -393,27 +393,48 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         <div class="rt-dungeon-map-toolbar">
             <label class="rt-dungeon-map-reveal-toggle"><input type="checkbox" class="rt-dungeon-map-reveal-all"${revealAll ? ' checked' : ''}> Reveal All</label>
         </div>
-        <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Map view">
-            <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Map Entries</button>
-            <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" ${revealAll ? '' : 'disabled '}title="${revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON'}"><i class="fa-solid fa-code"></i> Raw JSON</button>
+        <section class="rt-dungeon-map-updater-section">
+            <div class="rt-dungeon-map-updater-header">
+                <div class="rt-dungeon-map-updater-title"><i class="fa-solid fa-arrows-rotate"></i> Map Updater</div>
+            </div>
+        </section>
+        <div class="rt-dungeon-map-view-row">
+            <div class="rt-dungeon-map-view-switch" role="tablist" aria-label="Vista del mapa">
+                <button type="button" class="rt-dungeon-map-view-btn rt-dungeon-map-view-btn-active" data-map-view="readable" role="tab" aria-selected="true"><i class="fa-solid fa-list"></i> Entradas del Mapa</button>
+                <button type="button" class="rt-dungeon-map-view-btn" data-map-view="raw" role="tab" aria-selected="false" ${revealAll ? '' : 'disabled '}title="${revealAll ? 'Editar JSON del mapa sin formato' : 'Activa Revelar Todo para editar el JSON sin formato'}"><i class="fa-solid fa-code"></i> JSON sin formato</button>
+            </div>
+            <button type="button" class="menu_button interactable rt-map-updater-direct-toggle" title="Mostrar u ocultar prompt directo del Actualizador de Mapas" aria-expanded="true"><i class="fa-solid fa-comment-dots"></i> Prompt Directo</button>
+        </div>
+        <div class="rt-map-updater-direct-panel">
+            <div class="rt-map-updater-direct-bar">
+                <textarea class="rt-map-updater-direct-input text_pole" rows="2" placeholder="Instruir al Actualizador de Mapas solo para este lugar… (Enter para ejecutar, Shift+Enter para nueva línea)"></textarea>
+                <div class="rt-map-updater-direct-actions">
+                    <label class="rt-map-updater-direct-lookback-label" title="Revisión de historia reciente para esta ejecución manual del Actualizador de Mapas">
+                        Ctx
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="rt-map-updater-direct-lookback" min="0" max="100" value="10">
+                    </label>
+                    <button type="button" class="rt-map-updater-direct-run menu_button interactable"><i class="fa-solid fa-play"></i> Ejecutar</button>
+                </div>
+            </div>
+            <span class="rt-map-updater-direct-status" role="status" aria-live="polite"></span>
         </div>
         <div class="rt-dungeon-graph-scroll rt-dungeon-map-popup-graph" data-map-graph></div>
         <div class="rt-dungeon-map-readable" data-map-panel="readable"></div>
         <div class="rt-dungeon-map-raw-wrap" data-map-panel="raw" hidden>
             <div class="rt-dungeon-map-raw-toolbar">
-                <button type="button" class="menu_button interactable rt-dungeon-map-raw-save"><i class="fa-solid fa-floppy-disk"></i> Save JSON</button>
+                <button type="button" class="menu_button interactable rt-dungeon-map-raw-save"><i class="fa-solid fa-floppy-disk"></i> Guardar JSON</button>
                 <span class="rt-dungeon-map-raw-status" role="status" aria-live="polite"></span>
             </div>
-            <textarea class="rt-dungeon-map-raw" spellcheck="false" aria-label="Map JSON editor"></textarea>
+            <textarea class="rt-dungeon-map-raw" spellcheck="false" aria-label="Editor JSON del mapa"></textarea>
         </div>
         <section class="rt-dungeon-map-evolution-section">
             <div class="rt-dungeon-map-evolution-header">
-                <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Map Evolution History</div>
-                <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Map Evolution: Run Now</button>
-                <button type="button" class="menu_button interactable rt-dungeon-map-testing-ground"><i class="fa-solid fa-flask"></i> Testing Ground</button>
+                <div class="rt-dungeon-map-evolution-title"><i class="fa-solid fa-clock-rotate-left"></i> Historial de Evolución de Mapas</div>
+                <button type="button" class="menu_button interactable rt-dungeon-map-evolve-now"><i class="fa-solid fa-wand-magic-sparkles"></i> Evolución de Mapas: Ejecutar Ahora</button>
+                <button type="button" class="menu_button interactable rt-dungeon-map-testing-ground"><i class="fa-solid fa-flask"></i> Campo de Pruebas</button>
             </div>
             <div class="rt-dungeon-map-run-status" role="status" aria-live="polite"></div>
-            <div class="rt-dungeon-map-evolution-privacy">Material summaries follow Reveal All; quiet checkpoints never reveal hidden map contents.</div>
+            <div class="rt-dungeon-map-evolution-privacy">Los resúmenes materiales siguen Revelar Todo; los puntos de control silenciosos nunca revelan contenidos ocultos del mapa.</div>
             <div class="rt-dungeon-map-evolution-history"></div>
         </section>`;
     const readable = popupDom.querySelector('.rt-dungeon-map-readable');
@@ -455,7 +476,7 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         );
         if (rawButton) {
             rawButton.disabled = !revealAll;
-            rawButton.title = revealAll ? 'Edit raw map JSON' : 'Turn on Reveal All to edit raw JSON';
+            rawButton.title = revealAll ? 'Editar JSON del mapa sin formato' : 'Activa Revelar Todo para editar el JSON sin formato';
         }
         if (rawSave) rawSave.disabled = !revealAll;
         if (!revealAll && currentView === 'raw') setMapView('readable');
@@ -494,7 +515,7 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
     }
     raw?.addEventListener('input', () => {
         rawDirty = true;
-        if (rawStatus) rawStatus.textContent = 'Unsaved changes.';
+        if (rawStatus) rawStatus.textContent = 'Cambios no guardados.';
     });
     rawSave?.addEventListener('click', async () => {
         if (!revealAll || !raw) return;
@@ -502,28 +523,28 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         if (!parsed.ok) {
             if (rawStatus) rawStatus.textContent = parsed.errors.join(' ');
             if (typeof globalThis.toastr?.error === 'function') {
-                globalThis.toastr.error(parsed.errors.join(' '), 'Map JSON', { timeOut: 8000 });
+                globalThis.toastr.error(parsed.errors.join(' '), 'JSON del Mapa', { timeOut: 8000 });
             }
             return;
         }
         rawSave.disabled = true;
-        if (rawStatus) rawStatus.textContent = 'Saving…';
+        if (rawStatus) rawStatus.textContent = 'Guardando…';
         try {
             const routerSpec = '../../../router.js';
             const { persistManualDungeonMapDocument } = await import(routerSpec);
             await persistManualDungeonMapDocument(site, parsed.document);
             currentDocument = parsed.document;
             rawDirty = false;
-            if (rawStatus) rawStatus.textContent = 'Saved.';
+            if (rawStatus) rawStatus.textContent = 'Guardado.';
             if (typeof globalThis.toastr?.success === 'function') {
-                globalThis.toastr.success(`Map JSON saved for ${site}.`, 'Map Inspector', { timeOut: 4000 });
+                globalThis.toastr.success(`JSON del mapa guardado para ${site}.`, 'Inspector de Mapas', { timeOut: 4000 });
             }
             await reloadInspectorFromLiveMap({ resetRaw: true });
         } catch (error) {
             const message = String(error?.message || error);
             if (rawStatus) rawStatus.textContent = message;
             if (typeof globalThis.toastr?.error === 'function') {
-                globalThis.toastr.error(message, 'Map JSON', { timeOut: 10000 });
+                globalThis.toastr.error(message, 'JSON del Mapa', { timeOut: 10000 });
             }
         } finally {
             rawSave.disabled = !revealAll;
@@ -531,15 +552,15 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
     });
     runButton?.addEventListener('click', async () => {
         if (runtimeState.isLoreOrMapAgentBusyRef?.()) {
-            if (runStatus) runStatus.textContent = 'Another lore or map agent is already running.';
+            if (runStatus) runStatus.textContent = 'Otro agente de lore o mapas ya se está ejecutando.';
             return;
         }
         if (typeof runtimeState.runMapEvolutionPassRef !== 'function') {
-            if (runStatus) runStatus.textContent = 'Map Evolution is not available yet.';
+            if (runStatus) runStatus.textContent = 'La Evolución de Mapas no está disponible aún.';
             return;
         }
         runButton.disabled = true;
-        if (runStatus) runStatus.textContent = `Running Map Evolution for ${site}…`;
+        if (runStatus) runStatus.textContent = `Ejecutando Evolución de Mapas para ${site}…`;
         try {
             const result = await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true, siteRoots: [site] });
             if (result?.ok) {
@@ -547,20 +568,20 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
                 const applied = Number(result.applied) || 0;
                 const noops = Number(result.noops) || 0;
                 if (runStatus) runStatus.textContent = applied
-                    ? `Map Evolution committed ${applied} material update${applied === 1 ? '' : 's'} for ${site}.`
+                    ? `Evolución de Mapas aplicó ${applied} actualización${applied === 1 ? '' : 'es'} material${applied === 1 ? '' : 'es'} para ${site}.`
                     : noops
-                        ? `Map Evolution considered ${site} and made no material change.`
-                        : `Map Evolution completed for ${site}.`;
+                        ? `Evolución de Mapas evaluó ${site} y no realizó cambios materiales.`
+                        : `Evolución de Mapas completada para ${site}.`;
             } else {
                 const skipped = String(result?.skipped || '');
                 if (runStatus) runStatus.textContent = skipped === 'busy'
-                    ? 'Another lore or map agent is already running.'
+                    ? 'Otro agente de lore o mapas ya se está ejecutando.'
                     : skipped === 'location_mapping_off'
-                        ? 'Persistent Maps is off.'
-                        : `Map Evolution could not complete for ${site}.`;
+                        ? 'Mapas Persistentes está desactivado.'
+                        : `La Evolución de Mapas no pudo completarse para ${site}.`;
             }
         } catch (error) {
-            if (runStatus) runStatus.textContent = `Map Evolution failed: ${String(error?.message || error)}`;
+            if (runStatus) runStatus.textContent = `La Evolución de Mapas falló: ${String(error?.message || error)}`;
         } finally {
             runButton.disabled = false;
         }
@@ -570,8 +591,12 @@ export async function openDungeonMapReadablePopup(mapDocument, { siteLabel = '',
         await openMapEvolutionTestingGround({ siteRoot: site });
         await reloadInspectorFromLiveMap();
     });
+    bindMapUpdaterDirectControls(popupDom, {
+        siteRoot: site,
+        onSuccess: () => reloadInspectorFromLiveMap(),
+    });
     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
-        okButton: 'Close', cancelButton: false, wide: true, large: true,
+        okButton: 'Cerrar', cancelButton: false, wide: true, large: true,
         allowVerticalScrolling: true,
         leftAlign: true,
     });
@@ -601,15 +626,15 @@ export function ensureDetachedDungeonMapPanel(handlers = {}) {
     panel.innerHTML = `
         <div class="rpg-tracker-header rt-detached-header" id="rt-dungeon-map-detached-header">
             <div class="rpg-tracker-header-left">
-                <span><i class="fa-solid fa-map-location-dot"></i> Mapa de Ubicación</span>
+                <span><i class="fa-solid fa-map-location-dot"></i> Site map</span>
             </div>
             <div class="rpg-tracker-header-right">
-                <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
-                <button type="button" class="rpg-tracker-icon-btn rt-reattach-btn" title="Reacoplar">✕</button>
+                <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
+                <button type="button" class="rpg-tracker-icon-btn rt-reattach-btn" title="Re-attach">✕</button>
             </div>
         </div>
         <div class="rpg-tracker-content rpg-tracker-detached-body" id="rt-dungeon-map-detached-body"></div>
-        <div class="rt-resizer-br rt-detached-resizer-br" title="Redimensionar"></div>
+        <div class="rt-resizer-br rt-detached-resizer-br" title="Resize"></div>
     `;
     document.body.appendChild(panel);
 
@@ -670,7 +695,7 @@ export function updateDetachedDungeonMapPanel(scene, handlers = {}) {
     const merged = { ...(panel._dungeonMapHandlers || {}), ...handlers };
     panel._dungeonMapHandlers = merged;
     panel._dungeonMapScene = scene;
-    const site = scene?.dungeonMap?.siteRoot || scene?.dungeonMap?.document?.site || 'Mapa de Ubicación';
+    const site = scene?.dungeonMap?.siteRoot || scene?.dungeonMap?.document?.site || 'Site map';
     const title = panel.querySelector('.rpg-tracker-header-left span');
     if (title) {
         title.replaceChildren();
@@ -701,6 +726,160 @@ export function reattachDungeonMapPanel() {
     document.getElementById(PANEL_ID)?.remove();
 }
 
+function mapUpdaterToast(kind, message, title = 'Actualizador de Mapas') {
+    const toast = globalThis.toastr;
+    if (!toast || !message) return;
+    if (kind === 'success') toast.success(message, title);
+    else if (kind === 'info') toast.info(message, title);
+    else if (kind === 'warning') toast.warning(message, title);
+    else toast.error(message, title);
+}
+
+function summarizeMapUpdaterResult(result) {
+    const skipped = result?.skipped;
+    if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
+        return { kind: 'warning', message: 'Mapas Persistentes está desactivado.' };
+    }
+    if (skipped === 'no_active_map') return { kind: 'warning', message: 'No hay un mapa de mazmorra o asentamiento activo.' };
+    if (skipped === 'no_such_map') return { kind: 'warning', message: 'No se pudo cargar ese lugar mapeado.' };
+    if (skipped === 'disabled') return { kind: 'warning', message: 'El Actualizador de Mapas está desactivado.' };
+    if (skipped === 'busy') return { kind: 'warning', message: 'Otro agente ya se está ejecutando.' };
+    if (skipped === 'stopped') return { kind: 'info', message: 'Detenido.' };
+    if (result?.ok && result?.noop) return { kind: 'info', message: 'No hubo cambios duraderos.' };
+    if (result?.ok) return { kind: 'success', message: 'Actualización de ocupación aplicada.' };
+    return { kind: 'error', message: 'No se pudo aplicar una actualización válida de ocupación.' };
+}
+
+function bindMapUpdaterDirectControls(root, { siteRoot = null, onSuccess } = {}) {
+    const scope = root?.querySelector?.('.rt-immersion-map') || root;
+    if (!scope) return;
+
+    const toggle = scope.querySelector('.rt-map-updater-direct-toggle');
+    const panel = scope.querySelector('.rt-map-updater-direct-panel');
+    const input = scope.querySelector('.rt-map-updater-direct-input');
+    const lookbackInput = scope.querySelector('.rt-map-updater-direct-lookback');
+    const runButtons = scope.querySelectorAll('.rt-map-updater-direct-run');
+    const status = scope.querySelector('.rt-map-updater-direct-status');
+
+    const settings = getSettings();
+
+    const setPanelOpen = (open) => {
+        if (!panel) return;
+        panel.hidden = !open;
+        if (!siteRoot) {
+            settings.mapUpdaterDirectPromptOpen = open;
+            void saveSettings();
+        }
+        if (toggle) {
+            toggle.classList.toggle('active', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        if (open && input) input.focus();
+    };
+
+    const setStatus = (text) => {
+        if (status) status.textContent = text || '';
+    };
+
+    setPanelOpen(siteRoot ? true : Boolean(settings.mapUpdaterDirectPromptOpen));
+    if (input) input.value = siteRoot ? '' : (settings.mapUpdaterDirectPrompt || '');
+    if (lookbackInput) {
+        lookbackInput.value = String(settings.mapUpdaterDirectLookback ?? settings.routerLookback ?? 10);
+    }
+
+    const runManual = async ({ clearInput = false } = {}) => {
+        if (typeof runtimeState.isLoreOrMapAgentBusyRef === 'function' && runtimeState.isLoreOrMapAgentBusyRef()) {
+            mapUpdaterToast('warning', 'Otro agente ya se está ejecutando.');
+            return;
+        }
+        const run = runtimeState.runMapUpdaterPassRef;
+        if (typeof run !== 'function') {
+            mapUpdaterToast('error', 'El Actualizador de Mapas no está disponible aún.');
+            return;
+        }
+        const s = getSettings();
+        const directInstruction = input ? String(input.value || '').trim() : '';
+        const lookback = lookbackInput
+            ? Math.max(0, parseInt(String(lookbackInput.value), 10) || 0)
+            : (s.mapUpdaterDirectLookback ?? s.routerLookback ?? 10);
+        if (lookbackInput) {
+            s.mapUpdaterDirectLookback = lookback;
+            lookbackInput.value = String(lookback);
+        }
+        for (const button of runButtons) button.disabled = true;
+        setStatus('Ejecutando Actualizador de Mapas…');
+        try {
+            const result = await run({
+                isManual: true,
+                lookback,
+                directInstruction,
+                siteRoot: siteRoot || null,
+            });
+            const summary = summarizeMapUpdaterResult(result);
+            mapUpdaterToast(summary.kind, summary.message);
+            setStatus(summary.message);
+            if (result?.ok) {
+                if (typeof onSuccess === 'function') {
+                    await onSuccess();
+                } else if (typeof runtimeState.refreshImmersionView === 'function') {
+                    await runtimeState.refreshImmersionView();
+                }
+            }
+            if (clearInput && input) {
+                input.value = '';
+                if (!siteRoot) {
+                    s.mapUpdaterDirectPrompt = '';
+                    void saveSettings();
+                }
+            }
+        } catch (error) {
+            const message = String(error?.message || error);
+            mapUpdaterToast('error', message);
+            setStatus(message);
+        } finally {
+            for (const button of runButtons) button.disabled = false;
+        }
+    };
+
+    if (toggle && panel) {
+        toggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setPanelOpen(panel.hidden);
+        });
+    }
+
+    if (input) {
+        input.addEventListener('input', () => {
+            if (siteRoot) return;
+            const s = getSettings();
+            s.mapUpdaterDirectPrompt = String(input.value || '');
+            void saveSettings();
+        });
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void runManual({ clearInput: true });
+            }
+        });
+    }
+
+    if (lookbackInput) {
+        lookbackInput.addEventListener('change', () => {
+            const s = getSettings();
+            s.mapUpdaterDirectLookback = Math.max(0, Math.min(100, parseInt(String(lookbackInput.value), 10) || 0));
+            lookbackInput.value = String(s.mapUpdaterDirectLookback);
+            void saveSettings();
+        });
+    }
+
+    scope.querySelector('.rt-map-updater-direct-run')?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void runManual({ clearInput: true });
+    });
+}
+
 /** Bind pop-out / reattach / area clicks inside a Visuals/Map embed. */
 export function bindDungeonMapEmbedEvents(root, {
     scene,
@@ -711,6 +890,7 @@ export function bindDungeonMapEmbedEvents(root, {
     if (!root) return;
     bindAreaClicks(root, onAreaClick);
     bindDungeonMapPan(root);
+    bindMapUpdaterDirectControls(root);
     root.querySelectorAll('.rt-dungeon-map-details').forEach(button => {
         button.addEventListener('click', (event) => {
             event.preventDefault();

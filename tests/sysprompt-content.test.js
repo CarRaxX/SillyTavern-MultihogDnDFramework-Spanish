@@ -58,6 +58,19 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         for (const source of sources) expect(source).not.toMatch(abbreviatedDamage);
     });
 
+    it('keeps every shipped mapping module synchronized with the root source text', () => {
+        const normalize = (value) => String(value).replaceAll('\r\n', '\n');
+        const mappingModule = (value) => normalize(value).match(
+            /<dungeon_reality_and_hidden_mapping>[\s\S]*?<\/dungeon_reality_and_hidden_mapping>/,
+        )?.[0];
+        const source = mappingModule(readFileSync(new URL('../dungeon_reality_and_hidden_mapping.txt', import.meta.url), 'utf8'));
+
+        expect(mappingModule(RT_PROMPTS['sysprompt.txt'])).toBe(source);
+        expect(mappingModule(RT_PROMPTS['sysprompt_legacy.txt'])).toBe(source);
+        expect(mappingModule(readFileSync(new URL('../sysprompt.txt', import.meta.url), 'utf8'))).toBe(source);
+        expect(mappingModule(readFileSync(new URL('../sysprompt_legacy.txt', import.meta.url), 'utf8'))).toBe(source);
+    });
+
     it('ships the short Map Architect and external-agent ownership contract in both narrator prompts', () => {
         const sources = [
             RT_PROMPTS['sysprompt.txt'],
@@ -67,28 +80,45 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         ];
 
         for (const source of sources) {
-            expect(source).toContain('When to map. Before narrating entry into an unmapped site');
-            expect(source).toContain('settlement is implied anywhere in the scene');
-            expect(source).toContain('Only map a standalone building as DUNGEON');
-            expect(source).toContain('Isolated low-risk interiors need not be mapped');
-            expect(source).toContain('When establishing a footer for the first time, invent the site name now');
-            expect(source).toContain('copied character-for-character from the Location footer — never translated, expanded, or retitled');
-            expect(source).toContain('kind DUNGEON');
-            expect(source).toContain('kind SETTLEMENT');
-            expect(source).toContain('SETTLEMENT maps are district-scale');
-            expect(source).toContain('districts and major landmarks only');
-            expect(source).toContain('Never map a sub-place');
-            expect(source).toContain('Wilderness, roads, and other travel terrain between sites are never mapped');
-            expect(source).toContain('this segment is flavor, not a new mapped site');
-            expect(source).toContain('You may add a minor room or feature if play requires it');
-            expect(source).toContain('never design, emit, or describe the hidden map yourself');
+            expect(source).toContain('When an unmapped site warrants a stable graph');
+            expect(source).toContain('DUNGEON: high-risk room graph');
+            expect(source).toContain('INTERIOR: significant lower-risk multi-room site');
+            expect(source).toContain('SETTLEMENT: town/city/village as a whole, district-scale');
+            expect(source).toContain('ordinary named shops, inns, chapels, and houses are BUILDING');
+            expect(source).toContain('Only one map can be created at a time');
+            expect(source).toContain('unmapped "transition space" between granularly mapped areas of interest');
+            expect(source).toContain('A map-worthy high-risk map within a SETTLEMENT is a SUBDUNGEON');
+            expect(source).toContain('fresh chat may begin inside a standalone DUNGEON/INTERIOR');
+            expect(source).toContain('include: ["Exact Current SUB* Name"]');
+            expect(source).toContain('leave the child standalone');
+            expect(source).toContain('Promotion first reclassifies the BUILDING');
+            expect(source).toContain('Importance alone is not sufficient');
+            expect(source).toContain('BUILDING interiors use lazy asset generation and are empty on initialization');
+            expect(source).toContain('When the player expresses the intent to enter BUILDING');
+            expect(source).toContain('an external Map Updater agent fills it out with its own asset content');
+            expect(source).toContain('the map is not a strict limitation, especially in SETTLEMENT areas');
+            expect(source).toContain('Successful Perception checks do not spawn new enemies');
+            expect(source).toContain('perception checks only reveal them (if they exist.)');
+            expect(source).toContain('rumors are canoninized by the Map Updater');
+            expect(source).not.toContain('A first-entry footer remains a retry fallback');
+            expect(source).not.toContain('establishes its objective hidden contents before your next narration');
+            expect(source).toContain('optional settlement-only include[]');
+            expect(source).toContain('creation-only for SETTLEMENT absorption');
+            expect(source).toContain('BUILDING has no map unless explicitly promoted');
+            expect(source).toContain('exact canonical names, never translated, expanded, or retitled');
+            expect(source).toContain('BUILDING keeps the SETTLEMENT active');
+            expect(source).toContain('mapped child becomes active at the deepest matching footer segment');
+            expect(source).toContain('Hosted child reality includes a compact host brief');
+            expect(source).toContain('may be four or more tiers');
+            expect(source).toContain('always append the exact current mapped area after the complete site breadcrumb');
+            expect(source).toContain('Never refer to unmapped BUILDINGs positionally in the footer');
+            expect(source).toContain('Main Street, General Store');
+            expect(source).toContain('private objective canon');
             expect(source).toContain('[DUNGEON_REALITY — INTERNAL GM CANON]');
             expect(source).toContain('[MAPPED_SITES — INTERNAL]');
-            expect(source).toContain('re-entering via a different threshold is still the same site');
             expect(source).not.toContain('<div hidden data-dungeon-map>');
             expect(source).not.toContain('one valid JSON object');
             expect(source).not.toContain('CreateDungeonMap');
-            expect(source).toContain('external Map Updater agent');
             expect(source).not.toContain('Occupancy on the attached map may lag');
             expect(source).not.toContain('own cadence (often every turn)');
             expect(source).not.toContain('use the latest DUNGEON_REALITY block and do not invent catch-up facts');

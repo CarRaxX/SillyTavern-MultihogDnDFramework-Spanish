@@ -12,7 +12,7 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { inferMapArchitectArgs, runMapArchitect } from './map-architect.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, deleteDungeonMapFromLocationEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
-import { isMapUpdaterRunning, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
+import { isMapUpdaterRunning, onMapUpdaterUserMessage, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
@@ -58,6 +58,11 @@ import { stripDungeonMapSection } from './dungeon-reality.js';
 import { cloneCampaignStackToPrefix } from './src/features/chat/clone-campaign-stack.js';
 import { branchCampaignChat, isBranchSeedInProgress } from './src/features/chat/branch-campaign.js';
 import { onChatRenamedMigrate } from './src/features/chat/chat-rename-migrate.js';
+import {
+    COMPANION_BY_CHAT_KEY,
+    MEMO_RECOVERY_KEY,
+    localChatMapHasEntry,
+} from './src/features/chat/local-chat-map.js';
 import {
     initSettingsOverlay,
     openSettingsOverlay,
@@ -380,6 +385,7 @@ runtimeState.refreshTrackerViewRef = () => {
 };
 runtimeState.applyMapEvolutionTickSettingsToUiRef = applyMapEvolutionTickSettingsToUi;
 runtimeState.runMapEvolutionPassRef = runMapEvolutionPass;
+runtimeState.runMapUpdaterPassRef = runMapUpdaterPass;
 runtimeState.loadMappedEvolutionSiteRef = loadMappedEvolutionSite;
 runtimeState.isLoreOrMapAgentBusyRef = () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning();
 
@@ -2131,8 +2137,16 @@ function onChatChanged(newChatId) {
                 console.warn('[RPG Tracker] Branch seed guard active but partition missing for', resolvedId);
             }
         } else {
+            // Capture genuine browser-local destination entries before the reset
+            // writes its own empty Adventure Companion / recovery shells there.
+            const preexistingLocalMapKeys = [COMPANION_BY_CHAT_KEY, MEMO_RECOVERY_KEY]
+                .filter((key) => localChatMapHasEntry(key, resolvedId));
             resetUnseenChatState(s);
-            runtimeState.pendingUnseenChatReset = { oldId: oldChatId, newId: resolvedId };
+            runtimeState.pendingUnseenChatReset = {
+                oldId: oldChatId,
+                newId: resolvedId,
+                preexistingLocalMapKeys,
+            };
         }
     } else if (!found && typeof globalThis._rpgLoadAdventureCompanionForChat === 'function') {
         // Partition missing but chatStates entry may exist empty — still hydrate companion map
@@ -2275,7 +2289,7 @@ function updatePanelStatus() {
     // Keep in-panel power button in sync
     if (enableBtn) {
         enableBtn.style.opacity = settings.enabled ? '' : '0.35';
-        enableBtn.title = settings.enabled ? 'Desactivar Rastreador de Estado' : 'Activar Rastreador de Estado';
+        enableBtn.title = settings.enabled ? 'Disable State Tracker' : 'Enable State Tracker';
     }
     // Keep settings sidebar checkbox in sync
     const sidebarEnableCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_enabled'));
@@ -2290,7 +2304,7 @@ function updatePanelStatus() {
         const header = panel.querySelector('.rpg-tracker-header');
         if (header) /** @type {HTMLElement} */ (header).style.pointerEvents = 'auto';
         pauseBtn.textContent = '▶';
-        pauseBtn.title = 'Reanudar Rastreador';
+        pauseBtn.title = 'Resume Tracker';
         if (pauseBanner) pauseBanner.textContent = '';
     } else if (settings.paused) {
         // Paused — visible panel, pause banner shown
@@ -2298,15 +2312,15 @@ function updatePanelStatus() {
         panel.classList.add('is-paused');
         indicator.classList.add('active');
         pauseBtn.textContent = '▶';
-        pauseBtn.title = 'Reanudar Rastreador';
-        if (pauseBanner) pauseBanner.textContent = 'ACTUALIZACIONES DEL RASTREADOR PAUSADAS';
+        pauseBtn.title = 'Resume Tracker';
+        if (pauseBanner) pauseBanner.textContent = 'TRACKER UPDATES PAUSED';
     } else {
         // Active
         panel.classList.remove('is-disabled');
         panel.classList.remove('is-paused');
         indicator.classList.add('active');
         pauseBtn.textContent = '⏸';
-        pauseBtn.title = 'Pausar Rastreador';
+        pauseBtn.title = 'Pause Tracker';
         if (pauseBanner) pauseBanner.textContent = '';
     }
 
@@ -3136,7 +3150,7 @@ function refreshProfileDropdown() {
 }
 
 /** Shared Popup options for long help/docs dialogs (scrollable on mobile). */
-const RT_HELP_POPUP_OPTS = { okButton: 'Entendido', cancelButton: false, allowVerticalScrolling: true };
+const RT_HELP_POPUP_OPTS = { okButton: 'Got it', cancelButton: false, allowVerticalScrolling: true };
 
 async function showRngExplanation() {
     const { Popup } = SillyTavern.getContext();
@@ -3148,44 +3162,45 @@ async function showRngExplanation() {
     const ol = (items) => `<ol style="margin: 6px 0 0 0; padding-left: 20px; text-align: left; list-style-position: outside;">${items.map(t => `<li style="margin-bottom: 4px;">${t}</li>`).join('')}</ol>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 520px; text-align: left;">
-                ${card('🔧', 'RollTheDice (Llamadas a Herramientas)',
-        `<p style="margin: 0 0 8px 0;"><b>RollTheDice</b> se invoca bajo demanda durante la acción. Cuando la IA decide realizar una prueba:</p>
+                ${card('🔧', 'RollTheDice',
+        `<p style="margin: 0 0 8px 0;"><b>RollTheDice</b> is called on-demand. It can inject into the context in the middle of an output. Well, not really — LLMs can't receive inputs mid-output. What happens is this:</p>
                     ${ol([
-                        'La IA empieza a generar su mensaje narrativo.',
-                        'Se da cuenta de que necesita una tirada.',
-                        'Invoca la herramienta y <b>pausa</b> la generación.',
-                        'RollTheDice ejecuta el dado y devuelve el resultado exacto.',
-                        'La IA lee el resultado de la tirada (éxito o fallo) con la Clase de Dificultad (CD) ya fijada.',
-                        'La IA continúa narrando la escena con el resultado de la tirada en su contexto.',
+                        'LLM starts outputting its normal narrative message.',
+                        'It realizes it needs a roll.',
+                        'It calls the tool and <b>stops</b> outputting.',
+                        'RollTheDice runs its code and produces a result, nudging the LLM to retry if it messed up the tool-call JSON.',
+                        'LLM reads the result from the RollTheDice tool, sees a number and success or failure.',
+                        'LLM continues narrating now with the roll result in its context.',
                     ])}
-                    <p style="margin: 10px 0 0 0;"><b>Ventajas:</b> La IA no conoce el resultado del dado de antemano. Es 100% imparcial y libre de adulación.</p>
-                    <p style="margin: 6px 0 0 0;"><b>Inconvenientes:</b> Interrumpe la respuesta en partes, consume más tokens de entrada al pausar y reanudar, y puede generar pequeña latencia.</p>`
+                    <p style="margin: 10px 0 0 0;"><b>Pros:</b> LLM can't know the numbers beforehand. Completely sycophancy-proof in every circumstance.</p>
+                    <p style="margin: 6px 0 0 0;"><b>Cons:</b> Breaks the output into chunks; costs more because every interrupt re-sends the whole context/story (input tokens); can cause latency.</p>`
     )}
-                ${card('🎲', 'Cola RNG Pre-Generada',
-        `<p style="margin: 0 0 8px 0;">Cómo funciona:</p>
+                ${card('🎲', 'RNG Queue',
+        `<p style="margin: 0 0 8px 0;">How it works:</p>
                     ${ol([
-                        'Los números de los dados son calculados previamente con JavaScript e inyectados antes del mensaje del usuario.',
-                        'La IA solo debe tomar los números de la cola en orden estricto e integrarlos en la historia.',
+                        'Numbers are pre-rolled with JavaScript. The LLM always sees numbers in context, prepended to the last user input.',
+                        'The LLM only has to pick numbers from the queue in order and "slot them in."',
                     ])}
-                    <p style="margin: 10px 0 0 0;"><b>Ventajas:</b> Permite múltiples tiradas en una sola respuesta sin pausas; menor costo de tokens y latencia nula.</p>
-                    <p style="margin: 6px 0 0 0;"><b>Inconvenientes:</b> La IA puede "ver" el número que viene en la cola, aunque en combate y con CYOA este riesgo queda neutralizado.</p>`
+                    <p style="margin: 10px 0 0 0;"><b>Pros:</b> Any number of rolls within a single output; no breaks in output necessary; costs less.</p>
+                    <p style="margin: 6px 0 0 0;"><b>Cons:</b> The LLM can <b>see</b> what number is coming up, potentially lowballing a skill-check DC so that you can pass — though this is in theory; it might not actually do that. It's just possible.</p>`
     )}
-                ${card('🧭', 'Modo CYOA + Combate (Neutralizan la vista previa)',
-        `<p style="margin: 0 0 8px 0;"><b>El Modo CYOA</b> soluciona el problema de previsión de la cola. Fuerza a la IA a comprometerse con la Clase de Dificultad (CD) en la opción del turno <b>anterior</b> (ej. <code>Ganzúa CD 18</code>). Esa CD queda bloqueada. Al tirar en el turno siguiente, la CD ya estaba decidida.</p>
-                    <p style="margin: 0 0 8px 0;">Lo mismo aplica al <b>combate</b>, que funciona en una grilla determinista de iniciativa y turnos.</p>`
+                ${card('🧭', 'CYOA Mode + combat fix the queue',
+        `<p style="margin: 0 0 8px 0;"><b>CYOA Mode</b> fixes the queue's foresight problem. It forces the LLM to commit to the numbers at the end of the <b>previous</b> output, in the choice — e.g. <code>Lockpicking DC 18</code>. That DC is locked in. When it sees the roll on the next turn, the DC is already decided.</p>
+                    <p style="margin: 0 0 8px 0;">Same goes for <b>combat</b>, which works on a deterministic initiative/turn grid. That also prevents sycophancy.</p>
+                    <p style="margin: 0;"><b>RNG Queue only fails</b> in freeform/narrative situations <b>without</b> CYOA Mode — which is why it isn't recommended for that specifically.</p>`
     )}
                 <div style="background: rgba(255,200,50,0.08); border: 1px solid rgba(255,200,50,0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.88em; text-align: left;">
-                    <b style="color: #ffcc33;">⚠ Importante:</b> RollTheDice requiere activar <b>"Habilitar llamadas a funciones"</b> en la configuración de respuesta de IA de SillyTavern.
+                    <b style="color: #ffcc33;">⚠ Important:</b> RollTheDice requires <b>"Enable function calling"</b> in SillyTavern's AI Response Configuration.
                 </div>
-                ${card('📋', '¿Qué sistema debo utilizar?',
+                ${card('📋', 'Which system should I use?',
         `<ul style="margin: 4px 0 0 0; padding-left: 20px; text-align: left; list-style-position: outside;">
-                        <li style="margin-bottom: 4px;"><b>Pre-Generado + Herramientas (Recomendado sin CYOA):</b> Fuera de combate la IA usa <b>RollTheDice</b>; durante el combate activo usa exclusivamente la <b>Cola RNG</b>.</li>
-                        <li style="margin-bottom: 4px;"><b>Con Modo CYOA:</b> Prefiere la <b>Cola RNG</b> — las CDs ya están comprometidas en las opciones anteriores.</li>
-                        <li><b>Solo Pre-Generado:</b> Exclusivamente por cola. Ideal si tu modelo no soporta llamadas a funciones. Perfecto para combate y CYOA.</li>
+                        <li style="margin-bottom: 4px;"><b>Pre-Seeded + Tool Calls (recommended without CYOA):</b> Outside combat the model sees only <b>RollTheDice</b>; during an active combat round it sees only the <b>RNG Queue</b>. Prompt and tool schema switch together.</li>
+                        <li style="margin-bottom: 4px;"><b>With CYOA Mode:</b> Prefer the <b>RNG Queue</b> — choice DCs are already committed, so foresight isn't a sycophancy risk.</li>
+                        <li><b>Pre-Seeded Only:</b> Queue-only. Use if your model doesn't support function/tool calling. Fine for combat and CYOA; weaker for freeform narrative without CYOA.</li>
                     </ul>`
     )}
             </div>`;
-    await Popup.show.confirm('🎲 Explicación de Sistemas RNG', popupBody, RT_HELP_POPUP_OPTS);
+    await Popup.show.confirm('🎲 RNG Systems Explained', popupBody, RT_HELP_POPUP_OPTS);
 }
 
 /**
@@ -3200,12 +3215,12 @@ async function showNarrativePacingExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('Normal (sin instrucciones de longitud)', 'Narración equilibrada. El narrador puede parafrasear o expandir sutilmente tus diálogos y acciones cuando se ajuste al personaje, sin imponer una restricción de longitud.')}
-                ${card('Respuestas Más Cortas', 'Mantiene la longitud de las respuestas moderada y evita que se extiendan en exceso, conservando el estilo narrativo normal.')}
-                ${card('Modo de Alta Autonomía (High-Agency)', 'Mantiene las respuestas entre cortas y moderadas, dejando más espacio para que intervengas y dirijas la escena.')}
-                ${card('Modo Tiempo Libre / Vida Cotidiana', 'Utiliza un ritmo relajado y evita forzar tramas cargadas de acción o épicas de "salvar el mundo". Ideal para momentos cotidianos y desarrollo de personajes.')}
+                ${card('Normal (no length instructions)', 'Balanced narration. The narrator may lightly paraphrase or expand your dialogue and actions when it fits your character, without imposing an output-length instruction.')}
+                ${card('Shorter Outputs', 'Keeps the output length modest and discourages it from drifting out of control, while preserving the normal narration style.')}
+                ${card('High-Agency Mode', 'Keeps outputs short to moderate in length. Also does not have the instruction of lightly expanding on your actions, likely leaving more room for you to respond and direct the scene.')}
+                ${card('Downtime/Slice of Life Mode', 'Uses a relaxed pace and avoids forcing action-heavy or “save the world” plots. Best for everyday life, character moments, and low-stakes roleplay.')}
             </div>`;
-    await Popup.show.confirm('Explicación de Ritmo Narrativo', popupBody, RT_HELP_POPUP_OPTS);
+    await Popup.show.confirm('Narrative Pacing Explained', popupBody, RT_HELP_POPUP_OPTS);
 }
 
 async function showQuestsHardcoreExplanation() {
@@ -3217,12 +3232,12 @@ async function showQuestsHardcoreExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('⏳', 'Plazos Límite (Deadlines)',
-        `Añade restricciones de tiempo a las misiones. El prompt del sistema le indica a los PNJs que asignen plazos temporales. Si el plazo vence sin completar la misión, esta se da por fallada automáticamente.`
+                ${card('⏳', 'Deadlines',
+        `Adds time-sensitive constraints to quests. The system prompt instructs NPCs to attach deadlines to tasks they give you. If the deadline passes without turning in the quest, it auto-fails. Forces you to prioritise — you can't just accept every task and grind at your leisure.`
     )}
-                ${card('🎭', 'Frustración (Experimental)', `Requiere Plazos Límite. Un submodo donde las misiones <em>no</em> fallan automáticamente al vencer el plazo. En su lugar, el nivel de satisfacción del PNJ disminuye conforme pasa el tiempo. Puedes entregar la misión con retraso, pero la recepción no será cálida.`, true)}
+                ${card('🎭', 'Frustration', `Requires Deadlines. A sub-mode where quests <em>don't</em> auto-fail at the deadline. Instead, each quest giver has an NPC happiness level that starts high and quickly drops the longer you leave it past due. The rate of decline depends on the NPC's personality, which the model infers from their archetype and tone. You can still turn the quest in late — but the reception won't be warm.`, true)}
             </div>`;
-    await Popup.show.confirm('📋 Explicación de Mecánicas de Misiones', popupBody, RT_HELP_POPUP_OPTS);
+    await Popup.show.confirm('📋 Quest Mechanics Explained', popupBody, RT_HELP_POPUP_OPTS);
 }
 
 async function showComponentsExplanation() {
@@ -3234,36 +3249,36 @@ async function showComponentsExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('🎲', 'Tiradas de Botín',
-        `Al obtener botín, se realizan tiradas de dados para determinar su calidad (común, raro, valioso). Añade variedad y recompensas significativas.`
+                ${card('🎲', 'Loot Rolls',
+        `When loot is received, dice rolls are made to determine its quality — whether something is a battered common item or a rare find. Adds meaningful variance to rewards.`
     )}
-                ${card('🌍', 'Eventos Aleatorios',
-        `Se lanzan eventos aleatorios cuando pasa el tiempo o durante viajes. Un encuentro fortuito, un cambio de clima o una emboscada: situaciones dinámicas que mantienen el mundo vivo.`
+                ${card('🌍', 'Random Event Rolls',
+        `Random events are rolled when time skips or travel occurs. A chance encounter, a weather shift, an ambush — things that happen without the player initiating them. Keeps the world feeling alive.`
     )}
-                ${card('💤', 'Restricciones de Descanso (≥9h entre descansos)',
-        `El descanso está limitado a una vez cada 9 horas de tiempo en el juego. Evita abusar del descanso para curarse tras cada combate y refleja la realidad de no poder dormir a demanda.`
+                ${card('💤', 'Resting Restrictions (=>9h between rests)',
+        `Resting is limited to once every 9 hours of in-game time. Prevents exploiting rest as a free heal between every fight, and reflects the reality that you can't just nap on demand.`
     )}
-                ${card('⛺', 'Grupo en Reserva (Benched Party)',
-        `Rastrea a los miembros del grupo que están temporalmente ausentes (hospitalizados, explorando, capturados) en un listado separado [BENCHED PARTY]. El narrador mantendrá su separación hasta que la historia los reúna.`
+                ${card('⛺', 'Benched Party',
+        `Tracks party members who are temporarily away from you — hospitalized, scouting ahead, captured, sent on a side task, etc. — in a separate [BENCHED PARTY] roster while reunion remains plausible. The GM is told what this means so it won't narrate them back at your side until the story brings them back on-screen. Benched members become eligible for off-screen simulation updates via World Reports (🌍), allowing the simulator to advance their individual subplots in the background. Turn off if you don't want temporary separations tracked separately from your active party.`
     )}
-                ${card('🗺️', 'Mapas Persistentes (Alpha)',
-        `Al entrar en un lugar mapeado (mazmorra, ruina, fortaleza, guarida, pueblo o ciudad), el Arquitecto de Mapas genera un mapa objetivo oculto (a escala de habitaciones para interiores o distritos para asentamientos). El narrador inventa tiendas e interiores sobre dicho esqueleto. Requiere llamadas a funciones habilitadas.`
+                ${card('🗺️', 'Persistent Maps (Alpha)',
+        `When you enter a mapped site — dungeon, ruin, stronghold, lair, town, or city — a dedicated Map Architect builds a hidden objective map (room-scale for interiors, district-scale for settlements). The GM may invent shops and interiors against that skeleton. Alpha: expect sharp edges. Function calling must be enabled.`
     )}
-                ${card('🧭', 'Modo CYOA (opciones de acción cada turno)',
-        `Estilo Elige tu propia aventura: el narrador concluye sus respuestas con opciones numeradas de acción para que selecciones tu siguiente paso.`
+                ${card('🧭', 'CYOA Mode (action choices every turn)',
+        `Choose-your-own-adventure style: the narrator ends outputs with numbered courses of action and fitting emojis so you can pick what to do next.`
     )}
-                ${card('💞', 'Sistema de Relaciones (Amistad y Afecto)',
-        `Rastrea la amistad, afecto o reputación general entre el jugador y los PNJs. Calcula automáticamente los cambios según las acciones y los visualiza con barras personalizadas.`
+                ${card('💞', 'Relationship System (Friendship & Affection)',
+        `Tracks friendship, affection, or general reputation deltas between the user and NPCs. Automatically calculates shifts from the chat tone/actions, and visualizes them using custom tracking bars.`
     )}
             </div>`;
-    await Popup.show.confirm('🧩 Explicación de Componentes', popupBody, RT_HELP_POPUP_OPTS);
+    await Popup.show.confirm('🧩 Components Explained', popupBody, RT_HELP_POPUP_OPTS);
 }
 
 /**
  * Shows a settings help icon's title text in a popup (mobile-friendly tap/click).
  * Desktop hover still uses the native title tooltip.
  */
-async function showSettingsHelpPopup(message, title = 'ℹ️ Ayuda') {
+async function showSettingsHelpPopup(message, title = 'ℹ️ Help') {
     const text = String(message || '').trim();
     if (!text) return;
     const { Popup } = SillyTavern.getContext();
@@ -3281,7 +3296,7 @@ function bindSettingsHelpIcons() {
     container.querySelectorAll(selector).forEach(icon => {
         icon.setAttribute('role', 'button');
         icon.setAttribute('tabindex', '0');
-        icon.setAttribute('aria-label', 'Mostrar ayuda');
+        icon.setAttribute('aria-label', 'Show help');
     });
 
     const openHelp = (icon) => {
@@ -3321,60 +3336,73 @@ async function showLorebookAgentDocumentation() {
     const { Popup } = SillyTavern.getContext();
     const content = `
                         <div style="text-align: left; font-size: 13px; line-height: 1.5; padding-right: 8px;">
-                            <h3 style="margin-top: 0; color: var(--rt-custom-accent, #3498db);">El Agente de Lorebook</h3>
-                            <p>Un bibliotecario narrativo autónomo. Escanea tu chat reciente, detecta cambios y escribe o actualiza entradas directamente en tus libros de lore en SillyTavern, sin necesidad de entrada manual.</p>
+                            <h3 style="margin-top: 0; color: var(--rt-custom-accent, #3498db);">The Lorebook Agent</h3>
+                            <p>An autonomous narrative librarian. It scans your recent chat, decides what has changed, and writes new or updated entries directly into your SillyTavern lorebooks — no manual data entry needed.</p>
 
-                            <h4 style="margin-bottom: 5px;">⏱️ ¿Con qué frecuencia ejecutar el Agente de Lorebook?</h4>
-                            <p>Por defecto, el agente se ejecuta cada 3 mensajes, pero existen diferencias a considerar:</p>
+                            <h4 style="margin-bottom: 5px;">⏱️ How Often to Run Lorebook Agent?</h4>
+                            <p>By default, the Agent runs every 3 messages, but there are tradeoffs to consider:</p>
                             <ul style="padding-left: 20px; margin-top: 0;">
-                                <li><b>Ventajas de ejecutar con menor frecuencia:</b> Crea entradas más coherentes y consolidadas.</li>
-                                <li><b>Inconvenientes de ejecutar con menor frecuencia:</b> Las activaciones dependerán más de palabras clave.</li>
+                                <li><b>Pros of running less often:</b> It can make more coherent entries without excess granularity (though the cleanup tool can retroactively fix this).</li>
+                                <li><b>Cons of running less often:</b> Activations will rely more on keywords and might not be quite as pinpoint.</li>
                             </ul>
-                            <p style="margin-top:4px;">El rango recomendado es cada <b>1-3</b> mensajes.</p>
+                            <p style="margin-top:4px;">The recommended range is every <b>1-3</b> messages.</p>
 
-                            <h4 style="margin-bottom: 5px;">🤖 Modos de Funcionamiento</h4>
+                            <h4 style="margin-bottom: 5px;">🤖 Operating Modes</h4>
                             <ul style="padding-left: 20px; margin-top: 0;">
-                                <li><b>Modo Básico (Etiquetas)</b> — El modelo genera etiquetas estructuradas que el Agente analiza directamente:<br>
-                                    <code style="font-size:11px;">[[NPC: Nombre | Descripción | palabra1, palabra2]]</code><br>
-                                    Tipos soportados: <code>NPC</code>, <code>LOC</code>, <code>FAC</code>, <code>QUEST</code>, <code>EVENT</code>, además de <code>[[ACTIVATE: nombre]]</code>, <code>[[DEACTIVATE: nombre]]</code>, <code>[[DELETE: nombre]]</code>.<br>
-                                    Ideal para modelos locales o pequeños (Gemma 4, Mistral Small, Qwen, Llama.cpp, etc.).</li>
-                                <li style="margin-top:8px;"><b>Modo Avanzado (Herramientas)</b> — Bucle ReAct multiturno: el modelo razona (<i>Pensamiento</i>), ejecuta una herramienta (<i>Acción</i>), recibe el resultado (<i>Observación</i>) y repite hasta finalizar. Herramientas: <code>record</code>, <code>update</code>, <code>activate</code>, <code>deactivate</code>, <code>delete</code> y <code>search</code>. Se recomiendan modelos con llamadas a funciones fiables como Gemini Flash-Lite, Flash, Deepseek o modelos locales avanzados.</li>
+                                <li><b>Basic Mode (Tags)</b> — The model outputs structured tags the Agent parses directly:<br>
+                                    <code style="font-size:11px;">[[NPC: Name | Description | keyword1, keyword2]]</code><br>
+                                    Supported types: <code>NPC</code>, <code>LOC</code>, <code>FAC</code>, <code>QUEST</code>, <code>EVENT</code>, plus <code>[[ACTIVATE: name]]</code>, <code>[[DEACTIVATE: name]]</code>, <code>[[DELETE: name]]</code>.<br>
+                                    Ideal for smaller/local models (Mistral Small, Gemma, Qwen, etc.).</li>
+                                <li style="margin-top:8px;"><b>Advanced Mode (Tools)</b> — Multi-turn ReAct loop: the model reasons (<i>Thought</i>), calls a tool (<i>Action</i>), receives a result (<i>Observation</i>), and repeats until it calls <code>finish</code> or hits Max Turns. Tools include <code>record</code>, <code>update</code>, <code>activate</code>, <code>deactivate</code>, <code>delete</code>, and <code>search</code>. I've been recommending Gemini Flash-Lite and Flash, but Deepseek V4 Flash 0731 and GPT-5.6 Luna are also very promising and seriously inexpensive. I'm not sure which is best yet, so treat these as tentative options. GPT-5x Mini or even Nano can also be good.</li>
                             </ul>
 
-                            <h4 style="margin-bottom: 5px;">🧠 Memoria Basada en Atención</h4>
-                            <p>El Agente ve dos niveles de contenido en el libro de lore:</p>
+                            <h4 style="margin-bottom: 5px;">🧠 Attention-Based Memory</h4>
+                            <p>The Agent sees two tiers of lorebook content:</p>
                             <ul style="padding-left: 20px; margin-top: 0;">
-                                <li><b>Entradas Activas</b> — contenido completo visible en el contexto del Agente. Activadas por palabras clave o gestionadas vía <b>Claves de Lore Activas</b>.</li>
-                                <li><b>Entradas Inactivas</b> — listadas solo por nombre y palabras clave (sin cuerpo). El Agente debe activarlas primero para leer o modificar su contenido.</li>
+                                <li><b>Active entries</b> — full content is visible in the Agent's context. Keyword-triggered by SillyTavern and managed via <b>Active Lore Keys</b>.</li>
+                                <li><b>Inactive entries</b> — listed only by name and keywords (no content). The Agent must activate them first to read or update their body.</li>
                             </ul>
-                            <p style="margin-top:4px;"><b>Claves Activas Máximas</b> limita cuántas entradas pueden estar activas al mismo tiempo.</p>
+                            <p style="margin-top:4px;"><b>Max Active</b> caps how many entries can be active simultaneously (FIFO pruning keeps token cost predictable).</p>
 
-                            <h4 style="margin-bottom: 5px;">📂 Registros de Campaña</h4>
-                            <p>El Agente escribe directamente en el sistema nativo de libros de lore de SillyTavern, creando libros organizados para la campaña actual (ej. <i>Eldoria_NPCs</i>, <i>Eldoria_Locations</i>, <i>Eldoria_Factions</i>). Todos los libros se muestran agrupados por tipo. Haz clic en cualquier carpeta para expandirla y en cualquier entrada para ver su contenido. Los libros se activan y desactivan automáticamente según el chat actual, sin necesidad de intervención manual. Esto incluye la <b>Sección del Mundo</b> (<code>{prefix}_World</code>) creada por el motor de Progresión del Mundo.</p>
-                            <p style="margin-top:4px;">Cuando <b>Mostrar Imágenes de Ubicación</b> está habilitado o el grupo se encuentra en un lugar mapeado, el encabezado del panel alterna entre <b>Registros de Campaña</b> y <b>Visuales / Mapa</b>. De lo contrario, solo se muestra el árbol estándar de Registros de Campaña.</p>
+                            <h4 style="margin-bottom: 5px;">📂 Campaign Records</h4>
+                            <p>The Agent writes directly into SillyTavern's native Lorebook system, creating namespaced campaign books for the current story (e.g. <i>Eldoria_NPCs</i>, <i>Eldoria_Locations</i>, <i>Eldoria_Factions</i>). All books for the active campaign are shown here, grouped by type. Click any folder to expand it; click any entry to read its full content. Books are automatically activated and deactivated based on the current chat — no manual action needed. This includes the <b>World Section</b> (<code>{prefix}_World</code>) created by the World Progression engine, which houses off-screen progression reports.</p>
+                            <p style="margin-top:4px;">When <b>Show Location Images</b> is enabled or the party is inside a mapped site, the panel header switches between <b>Campaign Records</b> and <b>Visuals/Map</b>. Otherwise only the standard Campaign Records tree is shown.</p>
 
-                            <h4 style="margin-bottom: 5px;">🗺️ Imágenes de Ubicación y Visuales / Mapa</h4>
-                            <p>El arte de escena es opcional y está desactivado por defecto. Puedes habilitarlo en <b>Ajustes de la Extensión → Retratos → Imágenes de Ubicación y Visualización</b>.</p>
+                            <h4 style="margin-bottom: 5px;">🗺️ Location Images &amp; Visuals/Map</h4>
+                            <p>Location scene art is <b>opt-in</b> and <b>off by default</b>. Enable it from <b>Extension Settings → Portraits → Location Images &amp; Visualization</b>.</p>
                             <ul style="padding-left: 20px; margin-top: 0;">
-                                <li><b>Mostrar Imágenes de Ubicación</b> — Interruptor principal. Al activarlo, el libro de Ubicaciones obtiene arte de escena jerárquico: miniaturas en el árbol, imágenes panorámicas 16:9 en la vista de detalle, subida por arrastrar y soltar, y el selector <b>Registros de Campaña / Visuales / Mapa</b> en este panel. También se activa automáticamente si habilitas el Modo de Visualización en Tiempo Real o la Generación Automática de Ubicaciones.</li>
-                                <li><b>Generar Ubicaciones Automáticamente</b> — Arte de escena en segundo plano para nuevas entradas de ubicación en el libro de lore que no tengan imagen. Mutuamente excluyente con el Modo de Visualización en Tiempo Real.</li>
-                                <li><b>Incluir PNJs Presentes en los Prompts de Escena</b> — Incluye a los PNJs mencionados en la respuesta más reciente del narrador junto con el personaje del jugador en los prompts de generación de imágenes de ubicación.</li>
-                                <li><b>Modo de Visualización en Tiempo Real</b> — Genera imágenes de ubicación en Visuales / Mapa según el contexto del chat y los personajes presentes. Elige un activador: <b>Al entrar en la ubicación</b>, <b>Al cambiar de ubicación</b> o <b>Cada N respuestas</b>.</li>
+                                <li><b>Show Location Images</b> — Master toggle. When on, the Locations book gains hierarchical scene art: thumbnails on the location tree, wide 16:9 images in detail view, drag-and-drop upload, and the <b>Campaign Records / Visuals/Map</b> switch in this panel. Also turns on automatically if you enable Real-Time Visualization Mode or Auto-Generate Locations.</li>
+                                <li><b>Auto-Generate Locations</b> — Background scene art for new location lorebook entries that do not already have an image. Mutually exclusive with Real-Time Visualization Mode.</li>
+                                <li><b>Include Present NPCs in Location Scene Prompts</b> — Injects NPCs named in the latest narrator output (Present-Now name scanner: first/last name only, not Lorebook Agent keys) plus the linked Player Character into location image prompts. Locked on while Real-Time Visualization Mode is active.</li>
+                                                <li><b>Real-Time Visualization Mode</b> — Generates location images in Visuals/Map from current chat context and characters present. Choose a trigger: <b>On location enter</b> (once per place with no image), <b>On location change</b> (fresh image on each path change including revisits), or <b>Every N outputs</b> (still regenerates on location change, plus every N chat outputs — set N to 1 for every output). Enables Show Location Images and present-NPC prompts as a locked bundle; disables Auto-Generate Locations. Can be turned on without Show Location Images already being enabled first.</li>
                             </ul>
-                            <p style="margin-top:8px;"><b>Visuales / Mapa</b> (panel del agente) muestra la ubicación actual: imagen panorámica cuando el arte de escena está activo, mapa de la ubicación filtrado por conocimiento cuando estás dentro de una mazmorra mapeada, y tarjetas de personajes presentes (PNJs activos del libro de lore más el personaje del jugador vinculado). El mapa de la ubicación se puede desacoplar en su propia ventana. Al hacer clic en la imagen panorámica, una habitación revelada o una tarjeta de personaje, se abre su correspondiente ficha de lore. En la raíz de una ubicación mapeada, el chip cian <b>MAPA</b> abre el inspector privado del GM y la <b>X</b> adyacente elimina solo ese <code>[MAP]</code> (el bloque CORE permanece). Las ubicaciones no mapeadas muestran un botón <b>+ MAPA</b>: Automático emplea un turno del Arquitecto de Mapas para inferir entrada/tipo/escala/amenaza/premisa del lore y la historia reciente y luego genera el mapa; Manual permite rellenar los mismos campos por ti mismo. El botón <b>Añadir ubicación mapeada</b> en el encabezado crea una nueva raíz y su mapa. El arte de escena se genera según tus ajustes de Imágenes de Ubicación.</p>
-                            <p style="margin-top:4px;"><i>Consejo: Con el Modo de Visualización en Tiempo Real activo, usa Visuales / Mapa en el Agente de Lorebook para ver el arte de la escena según te desplazas por la historia.</i></p>
+                            <p style="margin-top:8px;"><b>Visuals/Map</b> (agent panel) shows the current location: a wide location hero image when scene art is on, a knowledge-filtered site map while inside a mapped dungeon, and tiles for characters present (active Lorebook NPCs plus the linked Player Character). The site map can be popped out into its own window. Click the hero, a revealed room, or a tile to open the matching location or character card. On a mapped Location root, the cyan <b>MAP</b> chip opens the private GM inspector and the adjacent <b>X</b> removes only that <code>[MAP]</code> (CORE stays). Unmapped location roots show a muted <b>+ MAP</b>: Auto spends one Map Architect turn to fill entrance/kind/scale/threat/premise from lore plus recent story, then generates the map; Manual is the same fields filled by you. The Locations header <b>Add mapped location</b> button creates a new root and its map. Auto takes a name, optional brief, and story lookback (0 = no chat); Manual is the same fields filled by you. The location name is always added as a keyword. The narrator is not involved. Scene art is generated according to your Location Images settings — either on lorebook entry creation (Auto-Generate Locations) or on arrival (Real-Time Visualization Mode).</p>
+                            <p style="margin-top:4px;"><i>Tip: With Real-Time Visualization Mode on, use Visuals/Map in the Lorebook Agent to see scene art as you move through the story (trigger depends on your Real-Time settings).</i></p>
 
-                            <h4 style="margin-bottom: 5px;">🧹 Limpieza y Compresión</h4>
-                            <p>Para optimizar el tamaño de contexto, el framework utiliza un sistema de limpieza doble: purga de entradas inactivas y compresión por el Archivista de Lorebook.</p>
+                            <h4 style="margin-bottom: 5px;">🧹 Cleanup & Compression</h4>
+                            <p>To keep context sizes optimized, the framework uses a two-fold cleanup system:</p>
+                            <ul style="padding-left: 20px; margin-top: 0;">
+                                <li><b>Active Key Pruning:</b> When the active entry count exceeds the configured limit, the oldest activated entries are automatically deactivated (pruned) to make room for new ones.</li>
+                                <li><b>Archivist Compression:</b> You can trigger a cleanup pass globally (via the broom button in the agent header) or on a targeted entry. The <b>Lorebook Archivist</b> will compress bloated entries and consolidate duplicates to save tokens while keeping unique facts and timelines intact.</li>
+                            </ul>
+                            <p style="margin-top:4px;"><i>Note: Standard Agent passes and standard cleanup/pruning do not process the World book reports. Those are managed independently via World Progression settings.</i></p>
 
-                            <h4 style="margin-bottom: 5px;">↩ Navegación por Historial</h4>
-                            <p>La barra <b>← [ EN VIVO ] →</b> en la parte inferior permite retroceder entre instantáneas del libro de lore y rehacer pasos deshinchados.</p>
+                            <h4 style="margin-bottom: 5px;">↩ History Navigation</h4>
+                            <p>The <b>← [ LIVE ] →</b> bar at the bottom lets you step back through lorebook snapshots and redo steps you've undone — just like the State Tracker's memo history. Each agent pass is snapshotted before it runs (up to 5 saved). A new pass clears the redo stack.</p>
 
-                            <h4 style="margin-bottom: 5px;">🛠️ Repertorio Modular</h4>
-                            <p>Activa o desactiva qué tipos de entidades rastrea el Agente (PNJs, Ubicaciones, Facciones, Misiones, Eventos) y añade <b>Etiquetas Personalizadas</b>.</p>
+                            <h4 style="margin-bottom: 5px;">🛠️ Modular Repertoire</h4>
+                            <p>Toggle which entity types the Agent tracks (NPCs, Locations, Factions, Quests, Events) and add <b>Custom Tags</b> for anything world-specific. Every module's system prompt snippet is editable so you control exactly how the AI records data.</p>
+
+                            <h4 style="margin-bottom: 5px;">🕹️ Controls Reference</h4>
+                            <ul style="padding-left: 20px; margin-top: 0;">
+                                <li><b>Main Lookback</b>: Messages the Agent scans during automatic post-generation runs.</li>
+                                <li><b>Max Turns</b>: Maximum ReAct loop iterations before the Agent is forced to finish (Advanced Mode).</li>
+                                <li><b>Max Active</b>: Maximum simultaneously active lore entries.</li>
+                                <li><b>Direct Command</b>: Runs a one-off agent pass with a custom instruction and its own lookback window — useful for targeted research or corrections.</li>
+                            </ul>
                         </div>
                     `;
-    await Popup.show.confirm('📖 Documentación del Agente de Lorebook', content, RT_HELP_POPUP_OPTS);
+    await Popup.show.confirm('📖 Lorebook Agent Documentation', content, RT_HELP_POPUP_OPTS);
 }
 
 function refreshPortraitPromptPresetsList() {
@@ -5116,15 +5144,15 @@ async function runPortraitMigrationIfNeeded() {
 }
 
 const CONNECTION_SETTINGS_UI = [
-    { key: 'state_tracker', control: '#rpg_tracker_connection_source', slot: '#rpg_connection_slot_state_tracker', label: 'Rastreador de Estado', recommendation: 'Recomiendo un modelo de nivel medio/económico como Gemma 4 12B, serie Gemini Flash/Flash-Lite o DeepSeek V4 Flash.' },
-    { key: 'combat_override', control: '#rpg_combat_api_override', slot: '#rpg_connection_slot_combat_override', label: 'Sustitución de API en Combate' },
-    { key: 'lorebook_agent', control: '#rpg_tracker_router_source', slot: '#rpg_connection_slot_lorebook_agent', label: 'Agente de Lorebook', recommendation: 'Funcionan bien los mismos modelos que con el Rastreador de Estado.' },
-    { key: 'adventure_companion', control: '#rpg_adventure_companion_connection_source', slot: '#rpg_connection_slot_adventure_companion', label: 'Acompañante de Aventura' },
-    { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Asistente de Sistemas de Juego', recommendation: 'Recomiendo usar un modelo más potente como Sonnet o superior para sistemas complejos.' },
-    { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Arquitecto de Mapas', recommendation: 'Se recomienda un modelo con capacidad de razonamiento para topologías coherentes, secretos y colocación de entidades.' },
-    { key: 'map_runtime', control: '#rpg_map_runtime_connection_source', slot: '#rpg_connection_slot_map_runtime', label: 'Actualizador y Evolución de Mapas', recommendation: 'La ocupación y evolución fuera de pantalla pueden usar un modelo más ligero que el Arquitecto de Mapas.' },
-    { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'Progresión del Mundo' },
-    { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Generación de Retratos', recommendation: 'Un modelo ligero funciona perfectamente.' },
+    { key: 'state_tracker', control: '#rpg_tracker_connection_source', slot: '#rpg_connection_slot_state_tracker', label: 'State Tracker', recommendation: 'I recommend a cheap mid-tier model such as GPT-5.6 Luna, Gemini Flash/Flash-Lite series, or Deepseek V4 Flash latest.' },
+    { key: 'combat_override', control: '#rpg_combat_api_override', slot: '#rpg_connection_slot_combat_override', label: 'Combat API Override' },
+    { key: 'lorebook_agent', control: '#rpg_tracker_router_source', slot: '#rpg_connection_slot_lorebook_agent', label: 'Lorebook Agent', recommendation: 'Same models work fine here as with the State Tracker.' },
+    { key: 'adventure_companion', control: '#rpg_adventure_companion_connection_source', slot: '#rpg_connection_slot_adventure_companion', label: 'Adventure Companion' },
+    { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Game System Wizard', recommendation: 'I recommend using a somewhat better model here such as Sonnet 5 or above for more robust and complex systems. Your mileage varies a lot here. Experiment.' },
+    { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Map Architect', recommendation: 'A capable reasoning model is recommended for coherent topology, hidden information, and entity placement. Map Architect builds the foundation map; give it a stronger model than occupancy and evolution.' },
+    { key: 'map_runtime', control: '#rpg_map_runtime_connection_source', slot: '#rpg_connection_slot_map_runtime', label: 'Map Updater & Evolution', recommendation: 'Occupancy and off-screen evolution can use a cheaper model than Map Architect. JSON discipline still helps.' },
+    { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'World Progression' },
+    { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Portrait Generation', recommendation: 'A lightweight model should do fine.' },
 ];
 
 function normalizeCentralConnectionDrawer(drawer, key, label, recommendation = '') {
@@ -5192,7 +5220,7 @@ function organizeConnectionSettingsUI() {
             const shortcut = document.createElement('div');
             shortcut.className = 'rt-connection-shortcut';
             shortcut.dataset.connectionKey = definition.key;
-            shortcut.innerHTML = `<span><b>Conexión de ${definition.label}</b><small>Gestionado en Conexiones y Modelos.</small></span><button type="button" class="menu_button interactable rt-connection-shortcut-button" data-connection-target="${definition.key}"><i class="fa-solid fa-plug"></i> Configurar</button>`;
+            shortcut.innerHTML = `<span><b>${definition.label} connection</b><small>Managed in Connections &amp; Models.</small></span><button type="button" class="menu_button interactable rt-connection-shortcut-button" data-connection-target="${definition.key}"><i class="fa-solid fa-plug"></i> Configure</button>`;
             originalParent.insertBefore(shortcut, drawer);
         }
 
@@ -5203,7 +5231,7 @@ function organizeConnectionSettingsUI() {
     normalizeCentralConnectionDrawer(
         document.getElementById('rpg_character_creation_connection_drawer'),
         'character_creation',
-        'Creación de Personajes y Modos Iniciales',
+        'Character Creation & Starting Modes',
     );
 }
 
@@ -6866,6 +6894,7 @@ function organizeConnectionSettingsUI() {
         eventSource.on(event_types.GENERATION_STARTED, onGenerationStarted);
         eventSource.on(event_types.GENERATION_ENDED, onGenerationEnded);
         eventSource.on(event_types.GENERATION_STOPPED, onGenerationEnded);
+        if (event_types.MESSAGE_SENT) eventSource.on(event_types.MESSAGE_SENT, onMapUpdaterUserMessage);
         if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, onMapArchitectAssistantMessage);
         const catchUpMapArchitectFence = () => {
             setTimeout(() => { void onMapArchitectAssistantMessage(undefined, 'normal'); }, 0);
@@ -10251,12 +10280,6 @@ RULES:
         }
         routerPresetSelect.on('change', function () {
             settings.routerCompletionPresetId = String($(this).val() || '');
-            saveSettings();
-        });
-
-        $('#rpg_tracker_router_max_tokens').val(settings.routerMaxTokens || '').on('input', function () {
-            const val = parseInt($(this).val(), 10);
-            settings.routerMaxTokens = isNaN(val) || val < 0 ? 0 : val;
             saveSettings();
         });
 

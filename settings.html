@@ -666,7 +666,7 @@
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Eventos Aleatorios</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Restricciones de Descanso (≥9h entre descansos)</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Grupo en Reserva (Benched Party)</span></label>
-                                <label class="checkbox_label" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra/ruina (a escala de habitaciones) o pueblo/ciudad (a escala de distritos). Nuevos mapas requieren CreateAreaMap (llamadas a funciones) o el abridor por comando de texto abajo."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha)</span></label>
+                                <label class="checkbox_label" title="Alpha: construye asentamientos a escala de distritos y mazmorras o interiores significativos a escala de habitaciones. Los edificios de asentamiento siguen siendo activos a menos que CreateAreaMap los promocione explícitamente."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha)</span></label>
                                 <div id="rpg_map_architect_opener_components" class="flex-container flexFlowColumn gap-1" style="padding-left: 20px; display: none;">
                                     <small style="display:block; font-weight:bold; opacity:0.65; text-transform:uppercase; font-size:0.7em; letter-spacing:0.4px;">Abridor del Arquitecto de Mapas</small>
                                     <label class="checkbox_label" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
@@ -1327,7 +1327,7 @@
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
                         <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4; margin-bottom: 8px;">
-                            Mapas ocultos para mazmorras (a escala de habitaciones) y asentamientos (a escala de distritos). El <b>Arquitecto de Mapas</b> crea el primer mapa con su propia conexión (un modelo más potente). El <b>Actualizador de Mapas</b> y la <b>Evolución de Mapas</b> comparten una segunda conexión para la ocupación y cambios fuera de pantalla. Cada pase tiene su propio cajón.
+                            Mapas persistentes para mazmorras e interiores significativos (a escala de habitaciones) y asentamientos (a escala de distritos). Los edificios ordinarios de asentamiento permanecen en su distrito hasta que <b>CreateAreaMap</b> promocione uno explícitamente. El <b>Arquitecto de Mapas</b> crea el primer mapa con su propia conexión; el <b>Actualizador de Mapas</b> y la <b>Evolución de Mapas</b> comparten una segunda conexión para la ocupación y cambios fuera de pantalla.
                         </div>
 
                         <div class="inline-drawer">

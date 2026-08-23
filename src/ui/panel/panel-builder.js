@@ -28,8 +28,9 @@ const MAPS_GUIDE_HTML = `
         <p>It also means that you can go away and come back later, and the collapsed passage is still there to be cleared. It makes everything very real and immersive.</p>
         <p>Even better, while you’re away, Map Evolution may run and bring something like a rival adventuring group to the same passage and they may begin to clear it for you or something. They may blow it up with explosives, and you may come back to an open passage! The reason for the opened path is recorded by Map Evolution, so the GM knows why the passage is open. And you’ll likely find the adventuring group inside, which will make for a very interesting encounter indeed. “Wait, you opened the collapsed path <em>FOR me?</em>”</p>
         <h3 style="margin:18px 0 6px;color:#bae6fd;">How Are They Created and Injected in Context?</h3>
-        <p>The GM creates maps automatically when you enter a dungeon (kind DUNGEON) or a town (kind SETTLEMENT) by calling the Map Architect. It does not create maps for wilderness or insignificant areas. This is so that the number of maps remains sensible. Not everything needs to be a map.</p>
-        <p>Maps are injected while you’re inside the mapped location, or for the next GM response when your message contains the exact complete location name. Partial names, aliases, and fuzzy matches do not activate a map. This keeps large map context scoped while still grounding the GM when you announce travel to a mapped place.</p>
+        <p>The GM creates a district-scale SETTLEMENT map for a town or city, a room-scale DUNGEON map for a significant dangerous complex, or a room-scale INTERIOR map for a significant low-risk multi-room site. Ordinary shops, inns, chapels, and homes are BUILDING assets on their settlement district; props and set-dressing are OBJECT assets. Wilderness and insignificant places are not mapped.</p>
+        <p>A settlement may absorb existing DUNGEON or INTERIOR maps when it is first created. The settlement receives matching SUBDUNGEON or SUBINTERIOR assets, while each peer keeps its independent room graph and remembers its host. Calling CreateAreaMap for an exact settlement building or nested site is the explicit promotion signal; Map Updater and Map Evolution never guess that promotion.</p>
+        <p>The deepest exact footer match activates: a mapped nested peer wins over its host, while a BUILDING or unmapped SUB site keeps the settlement active. Leaving the peer reactivates the settlement. Partial names, aliases, and fuzzy matches do not activate a map.</p>
         <p>You can also create maps manually from the “+ Add Mapped Location” button in the Locations header, or you can press the “+ MAP” button on any Location lore entry header.</p>
         <h3 style="margin:18px 0 6px;color:#bae6fd;">Editing Maps</h3>
         <p>You can edit maps directly by editing the JSON object. Open a map, then click on “&lt;/&gt; Raw JSON”. I will later add a proper graphical map editor. For now this is the only way.</p>
@@ -167,7 +168,7 @@ async function populateMapCreationContextOptions(root, ctx) {
     }
 }
 
-async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtml, { runMapArchitect, inferMapArchitectArgs, lookbackDefault } = {}) {
+async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtml, { runMapArchitect, inferMapArchitectArgs, listMappedEvolutionSites, lookbackDefault } = {}) {
     const site = String(siteRoot || '').trim();
     if (!site) return { ok: false, error: 'No location root to map.' };
     const ctx = SillyTavern.getContext();
@@ -176,66 +177,79 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
 
     const loreEntry = premiseFromLocationContent(locationContent);
     const premiseDefault = loreEntry
-        || `${site} is a location root requested for a Persistent Map. Stay consistent with established story.`;
+        || `${site} es una ubicación raíz solicitada para un Mapa Persistente. Mantén coherencia con la historia establecida.`;
     const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
+    const mappedSites = typeof listMappedEvolutionSites === 'function'
+        ? await listMappedEvolutionSites().catch(() => [])
+        : [];
+    const eligibleIncludes = mappedSites.filter(item => ['DUNGEON', 'INTERIOR'].includes(item.kind) && !item.hostSite && item.siteRoot !== site);
+    const includeOptions = eligibleIncludes.length
+        ? eligibleIncludes.map(item => `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-map-include-site="${escapeHtml(item.siteRoot)}"> ${escapeHtml(item.siteRoot)} <span style="opacity:.6">(${item.kind})</span></label>`).join('')
+        : '<span style="opacity:.6">No hay pares de MAZMORRA/INTERIOR disponibles.</span>';
     const html = `
         <div style="text-align:left;font-size:0.9em;line-height:1.4;">
-            <p>Create a private map for <b>${escapeHtml(site)}</b> with Map Architect. The narrator is not involved.</p>
+            <p>Crear un mapa privado para <b>${escapeHtml(site)}</b> con el Arquitecto de Mapas. El narrador no interviene.</p>
             <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Automático</label>
                 <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="manual" onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
             </div>
             <div id="rt-map-create-auto" style="margin-top:8px;">
-                <p style="margin:0 0 6px;">Map Architect fills entrance, kind, scale, threat, and premise from this location's lore and recent story, then generates the map.</p>
-                <label style="display:block;">Story lookback
+                <p style="margin:0 0 6px;">El Arquitecto de Mapas deduce la entrada, tipo, escala, amenaza y premisa a partir del lore de esta ubicación y la historia reciente, y luego genera el mapa.</p>
+                <label style="display:block;">Revisión de historia
                     <input id="rt-map-create-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 no utiliza mensajes recientes del chat.</p>
             </div>
             <div id="rt-map-create-manual" hidden>
                 <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="SETTLEMENT" checked> Settlement</label>
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="DUNGEON"> Dungeon</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='MODERATE'"> Asentamiento</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='HIGH'"> Mazmorra</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="INTERIOR" onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='LOW'"> Interior</label>
                 </div>
-                <label style="display:block;margin-top:8px;">Entrance
-                    <input id="rt-map-create-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Entrada
+                    <input id="rt-map-create-entrance" type="text" value="Entrada" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
                 <div style="display:flex;gap:8px;margin-top:8px;">
-                    <label style="flex:1;">Scale
+                    <label style="flex:1;">Escala
                         <select id="rt-map-create-scale" style="width:100%;margin-top:3px;">
-                            <option value="SMALL">SMALL</option>
-                            <option value="MEDIUM" selected>MEDIUM</option>
-                            <option value="LARGE">LARGE</option>
+                            <option value="SMALL">SMALL (Pequeña)</option>
+                            <option value="MEDIUM" selected>MEDIUM (Mediana)</option>
+                            <option value="LARGE">LARGE (Grande)</option>
                         </select>
                     </label>
-                    <label style="flex:1;">Threat
-                        <select id="rt-map-create-threat" style="width:100%;margin-top:3px;">
-                            <option value="LOW">LOW</option>
-                            <option value="MODERATE" selected>MODERATE</option>
-                            <option value="HIGH">HIGH</option>
-                            <option value="DEADLY">DEADLY</option>
+                    <label style="flex:1;">Amenaza
+                         <select id="rt-map-create-threat" style="width:100%;margin-top:3px;">
+                             <option value="NONE">NONE (Ninguna)</option>
+                             <option value="LOW">LOW (Baja)</option>
+                            <option value="MODERATE" selected>MODERATE (Moderada)</option>
+                            <option value="HIGH">HIGH (Alta)</option>
+                            <option value="DEADLY">DEADLY (Mortal)</option>
                         </select>
                     </label>
                 </div>
-                <label style="display:block;margin-top:8px;">Premise
+                <label style="display:block;margin-top:8px;">Premisa
                     <textarea id="rt-map-create-premise" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;">${escapeHtml(premiseDefault)}</textarea>
                 </label>
+                <details style="margin-top:8px;">
+                    <summary style="cursor:pointer;">Absorber pares mapeados existentes (solo ASENTAMIENTO)</summary>
+                    <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">${includeOptions}</div>
+                </details>
             </div>
             <details style="margin-top:10px;">
-                <summary style="cursor:pointer;">Optional reference context</summary>
-                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
-                <label style="display:block;font-weight:600;">Lorebooks</label>
-                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
-                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
+                <summary style="cursor:pointer;">Contexto de referencia opcional</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Las fuentes seleccionadas se envían al Arquitecto de Mapas incluso con revisión de historia en 0.</p>
+                <label style="display:block;font-weight:600;">Libros de Lore</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Cargando libros de lore…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Fichas de personaje</label>
                 <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
             </details>
         </div>
     `;
 
     let form = null;
-    const choice = await Popup.show.confirm('Create map', html, {
-        okButton: 'Generate map',
-        cancelButton: 'Cancel',
+    const choice = await Popup.show.confirm('Crear mapa', html, {
+        okButton: 'Generar mapa',
+        cancelButton: 'Cancelar',
         onClosing: (popup) => {
             if (popup.result) {
                 const root = popup.dlg;
@@ -243,7 +257,7 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                 form = {
                     mode: popupChecked(root, 'rt-map-create-mode', 'auto'),
                     kind,
-                    entrance: popupValue(root, '#rt-map-create-entrance', 'Entrance') || 'Entrance',
+                    entrance: popupValue(root, '#rt-map-create-entrance', 'Entrada') || 'Entrada',
                     scale: popupValue(root, '#rt-map-create-scale', 'MEDIUM').toUpperCase(),
                     threat: popupValue(root, '#rt-map-create-threat', defaultMapSiteThreat(kind)).toUpperCase(),
                     premise: popupValue(root, '#rt-map-create-premise', '') || premiseDefault,
@@ -253,6 +267,8 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                     characterCards: [...root.querySelectorAll('input[data-map-context-character-card]:checked')]
                         .map(input => selectedCharacterCardReference(ctx.characters?.[Number(input.dataset.mapContextCharacterCard)]))
                         .filter(Boolean),
+                    include: [...root.querySelectorAll('input[data-map-include-site]:checked')]
+                        .map(input => String(input.dataset.mapIncludeSite || '').trim()).filter(Boolean),
                 };
             }
             return true;
@@ -260,7 +276,7 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
         onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
-    if (!form) return { ok: false, error: 'Could not read the map form.' };
+    if (!form) return { ok: false, error: 'No se pudo leer el formulario del mapa.' };
 
     try {
         if (form.mode === 'manual') {
@@ -271,6 +287,7 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                 scale: form.scale,
                 threat: form.threat,
                 premise: form.premise,
+                include: form.include,
                 allowOffsite: true,
                 lorebookNames: form.lorebookNames,
                 characterCards: form.characterCards,
@@ -279,9 +296,9 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
         }
 
         if (typeof inferMapArchitectArgs !== 'function') {
-            return { ok: false, error: 'Map Architect auto-fill is not available.' };
+            return { ok: false, error: 'El auto-rellenado del Arquitecto de Mapas no está disponible.' };
         }
-        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        try { globalThis.toastr?.info?.(`Completando resumen del mapa para ${site}…`, 'Arquitecto de Mapas', { timeOut: 4000 }); } catch (_) { /* best effort */ }
         const inferred = await inferMapArchitectArgs({
             site,
             loreEntry: loreEntry || premiseDefault,
@@ -307,79 +324,93 @@ function parseKeywordInput(value) {
     return String(value || '').split(/[,;\n]/).map(part => part.trim()).filter(Boolean);
 }
 
-async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitectArgs, lookbackDefault } = {}) {
+async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitectArgs, listMappedEvolutionSites, escapeHtml, lookbackDefault } = {}) {
     const ctx = SillyTavern.getContext();
     const { Popup } = ctx || {};
-    if (!Popup?.show?.confirm) return { ok: false, error: 'Popup API is not available.' };
+    if (!Popup?.show?.confirm) return { ok: false, error: 'La API de Popup no está disponible.' };
     const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
+    const mappedSites = typeof listMappedEvolutionSites === 'function'
+        ? await listMappedEvolutionSites().catch(() => [])
+        : [];
+    const eligibleIncludes = mappedSites.filter(item => ['DUNGEON', 'INTERIOR'].includes(item.kind) && !item.hostSite);
+    const safe = typeof escapeHtml === 'function' ? escapeHtml : value => String(value || '');
+    const includeOptions = eligibleIncludes.length
+        ? eligibleIncludes.map(item => `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-map-include-site="${safe(item.siteRoot)}"> ${safe(item.siteRoot)} <span style="opacity:.6">(${item.kind})</span></label>`).join('')
+        : '<span style="opacity:.6">No hay pares de MAZMORRA/INTERIOR disponibles.</span>';
 
     const html = `
         <div style="text-align:left;font-size:0.9em;line-height:1.4;">
-            <p>Create a new location root and generate its private map. The narrator is not involved.</p>
-            <label style="display:block;margin-top:8px;">Location name
-                <input id="rt-map-loc-name" type="text" placeholder="Exact site root, no ::" style="width:100%;margin-top:3px;box-sizing:border-box;">
+            <p>Crear una nueva ubicación raíz y generar su mapa privado. El narrador no interviene.</p>
+            <label style="display:block;margin-top:8px;">Nombre de la ubicación
+                <input id="rt-map-loc-name" type="text" placeholder="Nombre raíz exacto del lugar, sin ::" style="width:100%;margin-top:3px;box-sizing:border-box;">
             </label>
             <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Automático</label>
                 <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="manual" onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
             </div>
             <div id="rt-map-loc-auto" style="margin-top:8px;">
-                <label style="display:block;">Brief
-                    <textarea id="rt-map-loc-brief" placeholder="What this place is. Map Architect fills the rest." style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                <label style="display:block;">Resumen
+                    <textarea id="rt-map-loc-brief" placeholder="Qué es este lugar. El Arquitecto de Mapas completa el resto." style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
                 </label>
-                <label style="display:block;margin-top:8px;">Story lookback
+                <label style="display:block;margin-top:8px;">Revisión de historia
                     <input id="rt-map-loc-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat — name and brief only.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 no utiliza mensajes recientes del chat — solo nombre y resumen.</p>
             </div>
             <div id="rt-map-loc-manual" hidden>
-                <label style="display:block;margin-top:8px;">Extra keywords
-                    <input id="rt-map-loc-keys" type="text" placeholder="Optional aliases, comma-separated" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Palabras clave adicionales
+                    <input id="rt-map-loc-keys" type="text" placeholder="Alias opcionales, separados por comas" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">The location name is added automatically. Max 6 total.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">El nombre de la ubicación se añade automáticamente. Máximo 6 en total.</p>
                 <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="SETTLEMENT" checked> Settlement</label>
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="DUNGEON"> Dungeon</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='MODERATE'"> Asentamiento</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='HIGH'"> Mazmorra</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="INTERIOR" onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='LOW'"> Interior</label>
                 </div>
-                <label style="display:block;margin-top:8px;">Entrance
-                    <input id="rt-map-loc-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Entrada
+                    <input id="rt-map-loc-entrance" type="text" value="Entrada" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
                 <div style="display:flex;gap:8px;margin-top:8px;">
-                    <label style="flex:1;">Scale
+                    <label style="flex:1;">Escala
                         <select id="rt-map-loc-scale" style="width:100%;margin-top:3px;">
-                            <option value="SMALL">SMALL</option>
-                            <option value="MEDIUM" selected>MEDIUM</option>
-                            <option value="LARGE">LARGE</option>
+                            <option value="SMALL">SMALL (Pequeña)</option>
+                            <option value="MEDIUM" selected>MEDIUM (Mediana)</option>
+                            <option value="LARGE">LARGE (Grande)</option>
                         </select>
                     </label>
-                    <label style="flex:1;">Threat
-                        <select id="rt-map-loc-threat" style="width:100%;margin-top:3px;">
-                            <option value="LOW">LOW</option>
-                            <option value="MODERATE" selected>MODERATE</option>
-                            <option value="HIGH">HIGH</option>
-                            <option value="DEADLY">DEADLY</option>
+                    <label style="flex:1;">Amenaza
+                         <select id="rt-map-loc-threat" style="width:100%;margin-top:3px;">
+                             <option value="NONE">NONE (Ninguna)</option>
+                             <option value="LOW">LOW (Baja)</option>
+                            <option value="MODERATE" selected>MODERATE (Moderada)</option>
+                            <option value="HIGH">HIGH (Alta)</option>
+                            <option value="DEADLY">DEADLY (Mortal)</option>
                         </select>
                     </label>
                 </div>
-                <label style="display:block;margin-top:8px;">Premise
-                    <textarea id="rt-map-loc-premise" placeholder="Established facts for CORE and the map" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
-                </label>
+                 <label style="display:block;margin-top:8px;">Premisa
+                    <textarea id="rt-map-loc-premise" placeholder="Hechos establecidos para el CORE y el mapa" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                 </label>
+                 <details style="margin-top:8px;">
+                     <summary style="cursor:pointer;">Absorber pares mapeados existentes (solo ASENTAMIENTO)</summary>
+                     <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">${includeOptions}</div>
+                 </details>
             </div>
             <details style="margin-top:10px;">
-                <summary style="cursor:pointer;">Optional reference context</summary>
-                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
-                <label style="display:block;font-weight:600;">Lorebooks</label>
-                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
-                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
+                <summary style="cursor:pointer;">Contexto de referencia opcional</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Las fuentes seleccionadas se envían al Arquitecto de Mapas incluso con revisión de historia en 0.</p>
+                <label style="display:block;font-weight:600;">Libros de Lore</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Cargando libros de lore…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Fichas de personaje</label>
                 <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
             </details>
         </div>
     `;
 
     let form = null;
-    const choice = await Popup.show.confirm('Add mapped location', html, {
-        okButton: 'Create location and map',
-        cancelButton: 'Cancel',
+    const choice = await Popup.show.confirm('Añadir ubicación mapeada', html, {
+        okButton: 'Crear ubicación y mapa',
+        cancelButton: 'Cancelar',
         onClosing: (popup) => {
             if (popup.result) {
                 const root = popup.dlg;
@@ -396,10 +427,12 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                         .filter(Boolean),
                     locationKeys: parseKeywordInput(popupValue(root, '#rt-map-loc-keys')),
                     kind,
-                    entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrance') || 'Entrance',
+                    entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrada') || 'Entrada',
                     scale: popupValue(root, '#rt-map-loc-scale', 'MEDIUM').toUpperCase(),
                     threat: popupValue(root, '#rt-map-loc-threat', defaultMapSiteThreat(kind)).toUpperCase(),
                     premise: popupValue(root, '#rt-map-loc-premise'),
+                    include: [...root.querySelectorAll('input[data-map-include-site]:checked')]
+                        .map(input => String(input.dataset.mapIncludeSite || '').trim()).filter(Boolean),
                 };
             }
             return true;
@@ -407,15 +440,15 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
         onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
-    if (!form) return { ok: false, error: 'Could not read the mapped location form.' };
+    if (!form) return { ok: false, error: 'No se pudo leer el formulario de la ubicación mapeada.' };
 
     const site = form.site;
-    if (!site) return { ok: false, error: 'Location name is required.' };
-    if (site.includes('::')) return { ok: false, error: 'Use a location root name, not a nested :: path.' };
+    if (!site) return { ok: false, error: 'El nombre de la ubicación es obligatorio.' };
+    if (site.includes('::')) return { ok: false, error: 'Usa un nombre de ubicación raíz, no una ruta anidada con ::.' };
 
     try {
         if (form.mode === 'manual') {
-            if (!form.premise) return { ok: false, error: 'Premise is required. It becomes the location CORE and the map brief.' };
+            if (!form.premise) return { ok: false, error: 'La premisa es obligatoria. Se convierte en el CORE de la ubicación y en el resumen del mapa.' };
             await runMapArchitect({
                 site,
                 entrance: form.entrance,
@@ -423,6 +456,7 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                 scale: form.scale,
                 threat: form.threat,
                 premise: form.premise,
+                include: form.include,
                 allowOffsite: true,
                 requireNew: true,
                 locationKeys: form.locationKeys,
@@ -434,9 +468,9 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
         }
 
         if (typeof inferMapArchitectArgs !== 'function') {
-            return { ok: false, error: 'Map Architect auto-fill is not available.' };
+            return { ok: false, error: 'El auto-rellenado del Arquitecto de Mapas no está disponible.' };
         }
-        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        try { globalThis.toastr?.info?.(`Completando resumen del mapa para ${site}…`, 'Arquitecto de Mapas', { timeOut: 4000 }); } catch (_) { /* best effort */ }
         const inferred = await inferMapArchitectArgs({
             site,
             userBrief: form.userBrief,
@@ -2148,88 +2182,88 @@ export function createPanel(dependencies) {
                                         const curS = getSettings();
 
                                         const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
-                                    <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ Ajustes de PNJs</div>
+                                    <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ NPC Settings</div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Mostrar Retratos de PNJs</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show NPC Portraits</label>
                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                                             <input type="checkbox" id="rt-npc-portraits" ${curS.npcPortraits !== false ? 'checked' : ''}
                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcPortraits !== false ? 'Habilitado' : 'Deshabilitado'}</span>
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcPortraits !== false ? 'Enabled' : 'Disabled'}</span>
                                         </label>
                                     </div>
-                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Al desactivar, los PNJs usan la vista de lista compacta (como Eventos/Ubicaciones) y la generación automática de retratos se apaga.</div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">When disabled, NPCs use the compact list view (like Events/Locations) and NPC portrait auto-generation is turned off.</div>
 
                                     <div style="margin-bottom:14px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Objetivo de Palabras Totales para PNJs Principales</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Major NPC Total Word Target</label>
                                         <input type="number" id="rt-npc-major-words" value="${curS.npcMajorWords ?? 225}" min="1" max="5000" step="5"
                                             style="width:100%;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:13px;box-sizing:border-box;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">PNJs recurrentes e importantes para la trama. Predeterminado: 225 palabras totales en todas las secciones</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Recurring, plot-important NPCs. Default: 225 words total across all sections</div>
                                     </div>
 
                                     <div style="margin-bottom:14px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Objetivo de Palabras Totales para PNJs Secundarios</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Minor NPC Total Word Target</label>
                                         <input type="number" id="rt-npc-minor-words" value="${curS.npcMinorWords ?? 135}" min="1" max="5000" step="5"
                                             style="width:100%;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:13px;box-sizing:border-box;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Comerciantes, guardias, encuentros ocasionales. Predeterminado: 135 palabras totales en todas las secciones</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Shopkeepers, guards, one-off encounters. Default: 135 words total across all sections</div>
                                     </div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Sistema de Relaciones (BETA)</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Relationship System (BETA)</label>
                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                                             <input type="checkbox" id="rt-npc-rel-bars" ${curS.npcRelationshipBars ? 'checked' : ''}
                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipBars ? 'Habilitado' : 'Deshabilitado'}</span>
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipBars ? 'Enabled' : 'Disabled'}</span>
                                         </label>
                                     </div>
-                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Muestra barras de seguimiento de Amistad/Afecto en fichas y emergentes de PNJ. También añade campos de relación al prompt.</div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Shows Friendship/Affection tracking bars on NPC cards and popups. Also adds relationship fields to the AI instruction.</div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Mostrar Notificación Flotante de Relaciones</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Relationship Float Feedback</label>
                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                                             <input type="checkbox" id="rt-npc-rel-toast" ${curS.npcRelationshipToast !== false ? 'checked' : ''}
                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Habilitado' : 'Deshabilitado'}</span>
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Enabled' : 'Disabled'}</span>
                                         </label>
                                     </div>
-                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Muestra un gráfico flotante de Amistad/Afecto que se eleva y desvanece cuando estos valores cambian.</div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Shows a floating Friendship/Affection graphic that rises and fades when those values change.</div>
 
                                     <div style="margin-bottom:14px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Modo de Importación "Añadir Tal Cual"</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">"Add as is" Import Mode</label>
                                         <div style="display:flex;flex-direction:column;gap:5px;">
-                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Envuelve el contenido original de la ficha en etiquetas [CORE][/CORE] exactamente como está escrito. Sin intervención de IA.">
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Wraps the card's raw content in [CORE][/CORE] tags exactly as written. No AI involvement.">
                                                 <input type="radio" name="rt-npc-add-as-is-mode" value="literal" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'literal' ? 'checked' : ''}
                                                     style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
-                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>Literal</b> — envuelve la ficha exactamente en [CORE][/CORE]. Sin IA.</span>
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>Literal</b> — wraps the card verbatim in [CORE][/CORE]. No AI.</span>
                                             </label>
-                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Envía la ficha a la IA para una revisión lógica mínima. Solo corrige conflictos de mundo/época. Redacción original preservada lo máximo posible.">
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Sends the card to AI for a minimal logical review. Only corrects world/era conflicts. Original writing is preserved as completely as possible.">
                                                 <input type="radio" name="rt-npc-add-as-is-mode" value="ai_review" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'ai_review' ? 'checked' : ''}
                                                     style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
-                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>Revisión IA</b> — corrección mínima solo para conflictos de época/mundo. Redacción original preservada.</span>
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>AI Review</b> — minimal fix pass for era/world conflicts only. Original writing preserved.</span>
                                             </label>
                                         </div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Controla lo que ocurre al hacer clic en "+ Añadir tal cual" en una ficha de personaje.</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Controls what happens when you click "+ Add as is" on a character card.</div>
                                     </div>
 
                                     <div style="margin-bottom:14px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Límite Máximo de Relaciones — este chat (rango ±)</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Relationship Max — this chat (± range)</label>
                                         <input type="number" id="rt-npc-rel-max" value="${getNpcRelationshipMax(curS)}" min="10" max="10000" step="10"
                                             style="width:100%;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:13px;box-sizing:border-box;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Escala de relación solo para este chat. Rango de Amistad/Afecto de −N a +N. Los nuevos chats inician desde el predeterminado en Ajustes (actualmente ${getNpcRelationshipMaxDefault(curS)}).</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Per-story scale for this chat only. Friendship/Affection range −N to +N. New chats start from the default in Extension Settings (currently ${getNpcRelationshipMaxDefault(curS)}).</div>
                                     </div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Ignorar Límites de Caracteres al Importar Fichas</label>
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Ignore Character Limits When Importing Character Cards</label>
                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                                             <input type="checkbox" id="rt-ignore-npc-limits" ${curS.ignoreNpcImportLimits ? 'checked' : ''}
                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.ignoreNpcImportLimits ? 'Habilitado' : 'Deshabilitado'}</span>
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.ignoreNpcImportLimits ? 'Enabled' : 'Disabled'}</span>
                                         </label>
                                     </div>
-                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:10px;">Omite la sección &lt;CORE LENGTH TARGETS&gt; del prompt del PNJ.</div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:10px;">Omits the &lt;CORE LENGTH TARGETS&gt; section from the NPC prompt.</div>
                                     
                                     <button id="rt-btn-edit-npc-sections-inline" style="width:100%;background:rgba(180, 100, 255, 0.15);border:1px solid rgba(180, 100, 255, 0.4);color:white;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;transition:background 0.2s;">
-                                        <i class="fa-solid fa-puzzle-piece"></i> Editar Secciones de PNJ
+                                        <i class="fa-solid fa-puzzle-piece"></i> Edit NPC Sections
                                     </button>
                                 </div>`;
 
@@ -2376,9 +2410,11 @@ export function createPanel(dependencies) {
                                         addMappedBtn.disabled = true;
                                         try {
                                             const choice = await promptAndCreateMappedLocation({
-                                                runMapArchitect,
-                                                inferMapArchitectArgs,
-                                                lookbackDefault: getSettings()?.mapArchitectLookback,
+                                                 runMapArchitect,
+                                                 inferMapArchitectArgs,
+                                                 listMappedEvolutionSites,
+                                                 escapeHtml,
+                                                 lookbackDefault: getSettings()?.mapArchitectLookback,
                                             });
                                             if (choice?.cancelled) return;
                                             if (choice?.ok) {
@@ -3698,6 +3734,7 @@ export function createPanel(dependencies) {
                                                     {
                                                         runMapArchitect,
                                                         inferMapArchitectArgs,
+                                                        listMappedEvolutionSites,
                                                         lookbackDefault: getSettings()?.mapArchitectLookback,
                                                     },
                                                 );
@@ -4658,89 +4695,99 @@ ${namingRule}`;
                         return;
                     }
                     const visible = filtered.slice(0, displayCount);
-                    for (const card of visible) {
+                    for (const char of visible) {
                         const item = document.createElement('div');
                         item.className = 'rt-charpicker-item';
 
-                        const avatar = document.createElement('div');
-                        avatar.className = 'rt-charpicker-avatar';
-                        if (card.avatarUrl || (card.avatar && card.avatar !== 'none')) {
+                        const avatarDiv = document.createElement('div');
+                        avatarDiv.className = 'rt-charpicker-avatar';
+                        if (char.avatar && char.avatar !== 'none') {
                             const img = document.createElement('img');
-                            img.src = card.avatarUrl || `/characters/${encodeURIComponent(card.avatar)}`;
+                            img.src = `/characters/${encodeURIComponent(char.avatar)}`;
                             img.loading = 'lazy';
-                            img.alt = card.name;
+                            img.alt = char.name;
                             img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'rt-charpicker-avatar-placeholder', textContent: '👤' })); };
-                            avatar.appendChild(img);
+                            avatarDiv.appendChild(img);
                         } else {
-                            avatar.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
+                            avatarDiv.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
                         }
 
-                        const info = document.createElement('div');
-                        info.className = 'rt-charpicker-info';
-
+                        const infoDiv = document.createElement('div');
+                        infoDiv.className = 'rt-charpicker-info';
                         const nameEl = document.createElement('div');
                         nameEl.className = 'rt-charpicker-name';
-                        nameEl.textContent = card.name;
+                        nameEl.textContent = char.name || 'Unnamed';
+                        const descEl = document.createElement('div');
+                        descEl.className = 'rt-charpicker-desc';
+                        descEl.textContent = (char.description || char.personality || 'No description').substring(0, 120);
+                        infoDiv.appendChild(nameEl);
+                        infoDiv.appendChild(descEl);
 
-                        const metaEl = document.createElement('div');
-                        metaEl.className = 'rt-charpicker-meta';
-                        metaEl.textContent = card.creator ? `Por ${card.creator}` : 'Ficha nativa';
+                        const btnsDiv = document.createElement('div');
+                        btnsDiv.className = 'rt-charpicker-btns';
 
-                        info.appendChild(nameEl);
-                        info.appendChild(metaEl);
-
-                        const actions = document.createElement('div');
-                        actions.className = 'rt-charpicker-actions';
-
-                        const addAsIsBtn = document.createElement('button');
-                        addAsIsBtn.className = 'rt-charpicker-add-btn secondary';
-                        addAsIsBtn.textContent = '📋 Añadir Tal Cual';
-                        addAsIsBtn.title = 'Añadir ficha preservando su contenido original.';
-                        addAsIsBtn.addEventListener('click', async (e) => {
-                            e.stopPropagation();
-                            addAsIsBtn.disabled = true;
-                            addAsIsBtn.textContent = '⏳ Procesando...';
+                        const directBtn = document.createElement('button');
+                        directBtn.className = 'rt-charpicker-add-btn direct';
+                        directBtn.textContent = '+ Add as is';
+                        directBtn.title = getSettings().npcAddAsIsMode === 'ai_review'
+                            ? 'AI Review mode: sends card to AI for a minimal logical review before adding (era/world conflicts only).'
+                            : 'Literal mode: wraps the card content in [CORE][/CORE] exactly as written. No AI involved.';
+                        directBtn.addEventListener('click', async () => {
+                            const mode = getSettings().npcAddAsIsMode ?? 'ai_review';
+                            directBtn.disabled = true;
+                            directBtn.textContent = mode === 'ai_review' ? '⏳ Reviewing...' : '⏳ Adding...';
                             try {
-                                const generatedTag = await generateNpcFromCard(card, existingNpcNames, { mode: 'as_is' });
-                                if (!generatedTag) return;
-                                await showNpcPreviewAndAdd(generatedTag, card.name, 'Añadir PNJ', card.avatarUrl);
+                                if (mode === 'ai_review') {
+                                    // Minimal AI review pass — fix only world/era impossibilities
+                                    const reviewed = await minimalReviewNpcWithAI(char);
+                                    if (!reviewed) { directBtn.disabled = false; directBtn.textContent = '+ Add as is'; return; }
+                                    await showNpcPreviewAndAdd(reviewed, char.name, 'NPC Creator', char.avatar);
+                                } else {
+                                    // Literal — wrap verbatim, no AI
+                                    const ok = await createNpcFromCharCard(char, bookName);
+                                    if (ok) {
+                                        toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
+                                        dismissOverlay();
+                                        await refreshManifest();
+                                    }
+                                }
+                            } catch (err) {
+                                toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
                             } finally {
-                                addAsIsBtn.disabled = false;
-                                addAsIsBtn.textContent = '📋 Añadir Tal Cual';
+                                directBtn.disabled = false;
+                                directBtn.textContent = '+ Add as is';
                             }
                         });
 
-                        const adaptBtn = document.createElement('button');
-                        adaptBtn.className = 'rt-charpicker-add-btn';
-                        adaptBtn.textContent = '🤖 Adaptar a la Historia';
-                        adaptBtn.title = 'Adaptar el personaje al contexto de la campaña actual.';
-                        adaptBtn.addEventListener('click', async (e) => {
-                            e.stopPropagation();
-                            adaptBtn.disabled = true;
-                            adaptBtn.textContent = '⏳ Generando...';
+                        const aiBtn = document.createElement('button');
+                        aiBtn.className = 'rt-charpicker-add-btn ai-adapt';
+                        aiBtn.textContent = '🤖 Fit into Story';
+                        aiBtn.addEventListener('click', async () => {
+                            aiBtn.disabled = true;
+                            aiBtn.textContent = '⏳ Adapting...';
                             try {
-                                const generatedTag = await generateNpcFromCard(card, existingNpcNames, { mode: 'fit' });
-                                if (!generatedTag) return;
-                                await showNpcPreviewAndAdd(generatedTag, card.name, 'Añadir PNJ', card.avatarUrl);
+                                const adapted = await adaptNpcWithAI(char);
+                                if (!adapted) { aiBtn.disabled = false; aiBtn.textContent = '🤖 Fit into Story'; return; }
+                                await showNpcPreviewAndAdd(adapted, char.name, 'NPC Creator', char.avatar);
+                            } catch (err) {
+                                toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
                             } finally {
-                                adaptBtn.disabled = false;
-                                adaptBtn.textContent = '🤖 Adaptar a la Historia';
+                                aiBtn.disabled = false;
+                                aiBtn.textContent = '🤖 Fit into Story';
                             }
                         });
 
-                        actions.appendChild(addAsIsBtn);
-                        actions.appendChild(adaptBtn);
-
-                        item.appendChild(avatar);
-                        item.appendChild(info);
-                        item.appendChild(actions);
+                        btnsDiv.appendChild(aiBtn);
+                        btnsDiv.appendChild(directBtn);
+                        item.appendChild(avatarDiv);
+                        item.appendChild(infoDiv);
+                        item.appendChild(btnsDiv);
                         listContainer.appendChild(item);
                     }
-
                     if (visible.length < filtered.length) {
                         const loadMore = document.createElement('div');
                         loadMore.className = 'rt-charpicker-load-more';
-                        loadMore.textContent = `Mostrar más (${visible.length} de ${filtered.length})`;
+                        loadMore.textContent = `Show more (${visible.length} of ${filtered.length})`;
                         loadMore.addEventListener('click', () => { displayCount += 10; renderList(); });
                         listContainer.appendChild(loadMore);
                     }
@@ -4759,43 +4806,43 @@ ${namingRule}`;
 
                 const hintEl = document.createElement('div');
                 hintEl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:8px;line-height:1.5;';
-                hintEl.textContent = 'Describe al PNJ con tus propias palabras. La IA lo expandirá en una entrada completa del libro de lore adecuada al contexto de la campaña.';
+                hintEl.textContent = 'Describe the NPC in your own words. The AI will expand it into a full lorebook entry fitting the current campaign.';
                 freeformPanel.appendChild(hintEl);
 
                 const nameLabel = document.createElement('label');
                 nameLabel.className = 'rt-npc-form-label';
-                nameLabel.textContent = 'Nombre (opcional)';
+                nameLabel.textContent = 'Name (optional)';
                 const nameInput = document.createElement('input');
                 nameInput.className = 'rt-npc-form-input';
                 nameInput.type = 'text';
-                nameInput.placeholder = 'ej. Igor, Mira Voss, …';
+                nameInput.placeholder = 'e.g. Igor, Mira Voss, …';
                 nameInput.style.marginBottom = '8px';
 
                 const descLabel = document.createElement('label');
                 descLabel.className = 'rt-npc-form-label';
-                descLabel.textContent = 'Descripción / Concepto *';
+                descLabel.textContent = 'Description / Concept *';
                 const descInput = document.createElement('textarea');
                 descInput.className = 'rt-npc-form-input';
                 descInput.rows = 5;
-                descInput.placeholder = 'ej. Un imponente guerrero bovino, estoico y de humor seco, superviviente de la gran batalla…';
+                descInput.placeholder = 'e.g. A massive bovine warrior, stoic and dry-witted, survivor of the Tether-Break…';
                 descInput.style.marginBottom = '4px';
 
                 const genBtn = document.createElement('button');
                 genBtn.className = 'rt-npc-generate-btn';
-                genBtn.textContent = '🤖 Generar PNJ';
+                genBtn.textContent = '🤖 Generate NPC';
                 genBtn.addEventListener('click', async () => {
                     const rawDesc = descInput.value.trim();
-                    if (!rawDesc) { toastr['warning']('Por favor ingresa una descripción.', 'Creador de PNJ'); return; }
+                    if (!rawDesc) { toastr['warning']('Please enter a description.', 'NPC Creator'); return; }
                     genBtn.disabled = true;
-                    genBtn.textContent = '⏳ Generando...';
+                    genBtn.textContent = '⏳ Generating...';
                     try {
                         const generated = await generateNpcFromFreeform(nameInput.value.trim(), rawDesc, existingNpcNames);
                         if (!generated) return;
-                        const nameFallback = nameInput.value.trim() || 'Nuevo PNJ';
-                        await showNpcPreviewAndAdd(generated, nameFallback, 'Creador de PNJ');
+                        const nameFallback = nameInput.value.trim() || 'New NPC';
+                        await showNpcPreviewAndAdd(generated, nameFallback, 'NPC Creator');
                     } finally {
                         genBtn.disabled = false;
-                        genBtn.textContent = '🤖 Generar PNJ';
+                        genBtn.textContent = '🤖 Generate NPC';
                     }
                 });
 
@@ -4812,19 +4859,19 @@ ${namingRule}`;
 
                 const hintEl = document.createElement('div');
                 hintEl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:10px;line-height:1.5;';
-                hintEl.textContent = 'Elige un rol en la historia a continuación o escribe uno personalizado. La IA generará un PNJ adecuado al contexto de la campaña.';
+                hintEl.textContent = 'Pick a story role below, or type a custom one. The AI will generate a fitting NPC grounded in the current campaign context.';
                 archetypePanel.appendChild(hintEl);
 
                 const archetypes = [
-                    { id: 'Enemigo', icon: '⚔️' },
-                    { id: 'Archienemigo', icon: '💀' },
-                    { id: 'Amante', icon: '❤️' },
-                    { id: 'Familiar / Pariente', icon: '👨‍👩‍👧' },
-                    { id: 'Compañero / Aliado', icon: '🛡️' },
-                    { id: 'Mercader', icon: '🪙' },
-                    { id: 'Desconocido Misterioso', icon: '🎭' },
+                    { id: 'Enemy', icon: '⚔️' },
+                    { id: 'Arch Nemesis', icon: '💀' },
+                    { id: 'Lover', icon: '❤️' },
+                    { id: 'Family Relative', icon: '👨‍👩‍👧' },
+                    { id: 'Companion / Ally', icon: '🛡️' },
+                    { id: 'Merchant', icon: '🪙' },
+                    { id: 'Mysterious Stranger', icon: '🎭' },
                     { id: 'Rival', icon: '🧙' },
-                    { id: 'Personalizado', icon: '✍️' },
+                    { id: 'Custom', icon: '✍️' },
                 ];
 
                 let selectedArchetype = '';
@@ -4835,13 +4882,13 @@ ${namingRule}`;
 
                 const customLabel = document.createElement('label');
                 customLabel.className = 'rt-npc-form-label';
-                customLabel.textContent = 'Arquetipo / Rol Personalizado *';
+                customLabel.textContent = 'Custom Archetype / Role *';
                 customLabel.style.display = 'none';
 
                 const customInput = document.createElement('input');
                 customInput.className = 'rt-npc-form-input';
                 customInput.type = 'text';
-                customInput.placeholder = 'ej. Mentor, Tabernero, Maestro de Gremio...';
+                customInput.placeholder = 'e.g. Mentor, Bartender, Guildmaster...';
                 customInput.style.marginBottom = '8px';
                 customInput.style.display = 'none';
 
@@ -4852,7 +4899,7 @@ ${namingRule}`;
                     chip.addEventListener('click', () => {
                         selectedArchetype = id;
 
-                        if (id === 'Personalizado') {
+                        if (id === 'Custom') {
                             customLabel.style.display = 'block';
                             customInput.style.display = 'block';
                             customInput.value = '';
@@ -4881,40 +4928,40 @@ ${namingRule}`;
 
                 const nameLabel = document.createElement('label');
                 nameLabel.className = 'rt-npc-form-label';
-                nameLabel.textContent = 'Nombre (opcional)';
+                nameLabel.textContent = 'Name (optional)';
                 const nameInput = document.createElement('input');
                 nameInput.className = 'rt-npc-form-input';
                 nameInput.type = 'text';
-                nameInput.placeholder = 'Dejar en blanco para que la IA elija';
+                nameInput.placeholder = 'Leave blank to let the AI choose';
                 nameInput.style.marginBottom = '8px';
 
                 const conceptLabel = document.createElement('label');
                 conceptLabel.className = 'rt-npc-form-label';
-                conceptLabel.textContent = 'Concepto / Prompt adicional (opcional)';
+                conceptLabel.textContent = 'Extra concept / prompt (optional)';
                 const conceptInput = document.createElement('textarea');
                 conceptInput.className = 'rt-npc-form-input';
                 conceptInput.rows = 2;
-                conceptInput.placeholder = 'ej. exsoldado, usa dagas envenenadas, doppelgänger en secreto…';
+                conceptInput.placeholder = 'e.g. ex-soldier, uses poison daggers, secretly a doppelganger…';
                 conceptInput.style.marginBottom = '4px';
 
                 const genBtn = document.createElement('button');
                 genBtn.className = 'rt-npc-generate-btn';
-                genBtn.textContent = '🤖 Generar PNJ';
+                genBtn.textContent = '🤖 Generate NPC';
                 genBtn.addEventListener('click', async () => {
                     const role = customInput.value.trim();
-                    if (!role) { toastr['warning']('Por favor selecciona o escribe un arquetipo/rol primero.', 'Creador de PNJ'); return; }
+                    if (!role) { toastr['warning']('Please select or enter an archetype/role first.', 'NPC Creator'); return; }
                     genBtn.disabled = true;
-                    genBtn.textContent = '⏳ Generando...';
+                    genBtn.textContent = '⏳ Generating...';
                     try {
                         const generated = await generateNpcFromArchetype(
                             role, nameInput.value.trim(), conceptInput.value.trim(), existingNpcNames
                         );
                         if (!generated) return;
                         const nameFallback = nameInput.value.trim() || role;
-                        await showNpcPreviewAndAdd(generated, nameFallback, 'Creador de PNJ');
+                        await showNpcPreviewAndAdd(generated, nameFallback, 'NPC Creator');
                     } finally {
                         genBtn.disabled = false;
-                        genBtn.textContent = '🤖 Generar PNJ';
+                        genBtn.textContent = '🤖 Generate NPC';
                     }
                 });
 
@@ -5358,7 +5405,7 @@ ${namingRule}`;
 
                 const chip0 = document.createElement('span');
                 chip0.style.cssText = chipSt;
-                chip0.title = 'Fijo — siempre el nombre de la entrada';
+                chip0.title = 'Fixed — always the entry name';
                 chip0.textContent = fixed0;
                 bar.appendChild(chip0);
 
@@ -5374,7 +5421,7 @@ ${namingRule}`;
                     const inp = document.createElement('input');
                     inp.type = 'text';
                     inp.value = label;
-                    inp.title = 'Renombrar este hueco — la IA rellena esta sección según su nombre';
+                    inp.title = 'Rename this slot — the AI fills this section based on its name';
                     inp.style.cssText = inpSt;
                     inp.style.width = Math.max(28, label.length * 7) + 'px';
                     inp.addEventListener('input', () => { inp.style.width = Math.max(28, inp.value.length * 7) + 'px'; });
@@ -5389,7 +5436,7 @@ ${namingRule}`;
 
                     const rmBtn = document.createElement('button');
                     rmBtn.style.cssText = rmSt;
-                    rmBtn.title = 'Eliminar este hueco';
+                    rmBtn.title = 'Remove this slot';
                     rmBtn.textContent = '×';
                     rmBtn.addEventListener('click', () => {
                         const s = parseSegs(bar.dataset.fmt);
@@ -5404,7 +5451,7 @@ ${namingRule}`;
 
                 const addBtn = document.createElement('button');
                 addBtn.style.cssText = addSt;
-                addBtn.title = 'Añadir un hueco';
+                addBtn.title = 'Add a slot';
                 addBtn.textContent = '+';
                 addBtn.addEventListener('click', () => {
                     const s = parseSegs(bar.dataset.fmt);
@@ -5422,7 +5469,7 @@ ${namingRule}`;
 
                 const chipLast = document.createElement('span');
                 chipLast.style.cssText = chipSt;
-                chipLast.title = 'Fijo — siempre palabras clave de búsqueda separadas por comas';
+                chipLast.title = 'Fixed — always comma-separated search keywords';
                 chipLast.textContent = fixedEnd;
                 bar.appendChild(chipLast);
 
@@ -5454,12 +5501,12 @@ ${namingRule}`;
                 // its prompt tag (LOC) so the naming never appears to mismatch the user's own books.
                 const bookCategory = MODULE_BOOK_CATEGORY?.[id];
                 const moduleLabel = bookCategory
-                    ? `${bookCategory} <span style="opacity:0.6; font-weight:normal;" title="Etiqueta de prompt utilizada en la salida del Agente de Lorebook — el libro de lore real se llama ..._${bookCategory}">(${config.tag})</span>`
+                    ? `${bookCategory} <span style="opacity:0.6; font-weight:normal;" title="Prompt tag used in the Lorebook Agent's output — the actual lorebook is named ..._${bookCategory}">(${config.tag})</span>`
                     : config.tag;
                 header.innerHTML = `
                         <input type="checkbox" class="rt-agent-module-check" ${config.enabled ? 'checked' : ''} style="cursor:pointer; margin:0; flex-shrink:0;">
                         <span style="font-size:0.769em; font-weight:bold; opacity:0.7; flex:1;">${moduleLabel}</span>
-                        <button class="rt-agent-module-reset" style="background:transparent; border:none; color:var(--rt-accent); cursor:pointer; font-size:0.692em; padding:0 4px; opacity:0.5;" title="Restablecer huecos e instrucción por defecto"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+                        <button class="rt-agent-module-reset" style="background:transparent; border:none; color:var(--rt-accent); cursor:pointer; font-size:0.692em; padding:0 4px; opacity:0.5;" title="Reset slots and instruction to default"><i class="fa-solid fa-arrow-rotate-left"></i></button>
                     `;
                 header.querySelector('.rt-agent-module-check').addEventListener('change', (e) => {
                     const st = getSettings();
@@ -5467,7 +5514,7 @@ ${namingRule}`;
                     saveSettings();
                 });
                 header.querySelector('.rt-agent-module-reset').addEventListener('click', () => {
-                    if (confirm(`¿Restablecer los huecos e instrucción del módulo ${id.toUpperCase()} a los valores por defecto?`)) {
+                    if (confirm(`Reset ${id.toUpperCase()} module slots and instruction to default?`)) {
                         const st = getSettings();
                         if (DEFAULT_MODULES[id]) {
                             if (id === 'npc') {
@@ -6708,9 +6755,9 @@ ${namingRule}`;
     updateMenu.className = 'rt-update-menu';
     updateMenu.style.display = 'none';
     updateMenu.innerHTML = `
-            <div class="rt-menu-item" id="rt-update-regular"><b>Actualización Regular</b><small>Desde el último mensaje del usuario</small></div>
-            <div class="rt-menu-item" id="rt-update-custom"><b>Actualización con Historial</b><small>Últimos N mensajes</small></div>
-            <div class="rt-menu-item" id="rt-update-full"><b>Auditoría de Contexto Completo</b><small>Reexaminar todo el historial</small></div>
+            <div class="rt-menu-item" id="rt-update-regular"><b>Regular Update</b><small>Since last user message</small></div>
+            <div class="rt-menu-item" id="rt-update-custom"><b>Lookback Update</b><small>Last N messages</small></div>
+            <div class="rt-menu-item" id="rt-update-full"><b>Full Context Audit</b><small>Re-examine whole history</small></div>
         `;
     panel.appendChild(updateMenu);
 
@@ -6752,14 +6799,14 @@ ${namingRule}`;
     overflowMenu.className = 'rt-overflow-menu';
     overflowMenu.style.display = 'none';
     overflowMenu.innerHTML = `
-        <div class="rt-overflow-section-header">Acciones</div>
-        <div class="rt-overflow-item" id="rt-ov-enable"><span class="rt-ov-icon">⏻</span><span id="rt-ov-enable-label">Activar / Desactivar</span></div>
-        <div class="rt-overflow-item" id="rt-ov-pause"><span class="rt-ov-icon">⏸</span><span id="rt-ov-pause-label">Pausar Rastreador</span></div>
-        <div class="rt-overflow-item" id="rt-ov-portraits"><span class="rt-ov-icon">🖼️</span><span>Acciones de Retrato</span></div>
-        <div class="rt-overflow-section-header">Actualizar Estado</div>
-        <div class="rt-overflow-item" id="rt-ov-upd-regular"><span class="rt-ov-icon">🔄</span><span>Actualización Regular</span><small>Desde el último mensaje del usuario</small></div>
-        <div class="rt-overflow-item" id="rt-ov-upd-custom"><span class="rt-ov-icon">🔄</span><span>Actualización con Historial</span><small>Últimos N mensajes</small></div>
-        <div class="rt-overflow-item" id="rt-ov-upd-full"><span class="rt-ov-icon">🔄</span><span>Auditoría de Contexto Completo</span><small>Reexaminar todo el historial</small></div>
+        <div class="rt-overflow-section-header">Actions</div>
+        <div class="rt-overflow-item" id="rt-ov-enable"><span class="rt-ov-icon">⏻</span><span id="rt-ov-enable-label">Enable / Disable</span></div>
+        <div class="rt-overflow-item" id="rt-ov-pause"><span class="rt-ov-icon">⏸</span><span id="rt-ov-pause-label">Pause Tracker</span></div>
+        <div class="rt-overflow-item" id="rt-ov-portraits"><span class="rt-ov-icon">🖼️</span><span>Portrait Actions</span></div>
+        <div class="rt-overflow-section-header">Update State</div>
+        <div class="rt-overflow-item" id="rt-ov-upd-regular"><span class="rt-ov-icon">🔄</span><span>Regular Update</span><small>Since last user message</small></div>
+        <div class="rt-overflow-item" id="rt-ov-upd-custom"><span class="rt-ov-icon">🔄</span><span>Lookback Update</span><small>Last N messages</small></div>
+        <div class="rt-overflow-item" id="rt-ov-upd-full"><span class="rt-ov-icon">🔄</span><span>Full Context Audit</span><small>Re-examine whole history</small></div>
     `;
     panel.appendChild(overflowMenu);
 
@@ -6776,9 +6823,9 @@ ${namingRule}`;
             // Refresh dynamic labels
             const s = getSettings();
             const enableLabel = overflowMenu.querySelector('#rt-ov-enable-label');
-            if (enableLabel) enableLabel.textContent = s.enabled ? 'Desactivar Rastreador' : 'Activar Rastreador';
+            if (enableLabel) enableLabel.textContent = s.enabled ? 'Disable Tracker' : 'Enable Tracker';
             const pauseLabel = overflowMenu.querySelector('#rt-ov-pause-label');
-            if (pauseLabel) pauseLabel.textContent = s.trackerPaused ? 'Reanudar Rastreador' : 'Pausar Rastreador';
+            if (pauseLabel) pauseLabel.textContent = s.trackerPaused ? 'Resume Tracker' : 'Pause Tracker';
             overflowMenu.style.display = 'flex';
             const closeOv = () => { overflowMenu.style.display = 'none'; document.removeEventListener('click', closeOv); };
             setTimeout(() => document.addEventListener('click', closeOv), 10);
