@@ -9,10 +9,16 @@ export function isBaseSectionEnabled(tag, settings) {
     return mods[tag] !== false;
 }
 
+/** Returns the unlocked override that belongs to the current chat/setup. */
+export function findActiveUnlockedBaseOverride(library, tag) {
+    return (library || []).find(p =>
+        p.origin === 'unlocked_base' && p.baseTag === tag && p._chatSetupMember !== false,
+    ) || null;
+}
+
 /** Whether the section that actually occupies a base slot is currently enabled. */
 export function isEffectiveSectionEnabled(tag, settings) {
-    const override = (settings.customSyspromptLibrary || [])
-        .find(p => p.origin === 'unlocked_base' && p.baseTag === tag && p._chatSetupMember !== false);
+    const override = findActiveUnlockedBaseOverride(settings.customSyspromptLibrary, tag);
     return override ? !!override.enabled : isBaseSectionEnabled(tag, settings);
 }
 
@@ -25,15 +31,29 @@ export function isLocationMappingEnabled(settings) {
     return isEffectiveSectionEnabled(LOCATION_MAPPING_SECTION_TAG, settings);
 }
 
+/**
+ * Runtime kill switch for CYOA prompt injection and choice-button binding.
+ * Follows the Components / Control Room enable flag and the master tracker toggle.
+ */
+export function isCyoaEnabled(settings) {
+    if (!settings?.enabled) return false;
+    return isEffectiveSectionEnabled('CYOA_mode', settings);
+}
+
+/**
+ * Runtime kill switch for Lorebook Agent injection, auto-passes, and keyword scans.
+ * Requires the master framework power toggle and the Lorebook Agent preference.
+ * Powering the framework off stops LA without clearing `routerEnabled`.
+ */
+export function isLorebookAgentRuntimeActive(settings) {
+    return !!settings?.enabled && !!settings?.routerEnabled;
+}
+
 /** Keep the Components checkbox and any unlocked override in lockstep. */
 export function setLocationMappingEnabled(enabled, settings) {
     if (!settings) return;
     if (!settings.syspromptModules) settings.syspromptModules = {};
     settings.syspromptModules[LOCATION_MAPPING_SECTION_TAG] = !!enabled;
-    const override = (settings.customSyspromptLibrary || []).find(p =>
-        p.origin === 'unlocked_base'
-        && p.baseTag === LOCATION_MAPPING_SECTION_TAG
-        && p._chatSetupMember !== false,
-    );
+    const override = findActiveUnlockedBaseOverride(settings.customSyspromptLibrary, LOCATION_MAPPING_SECTION_TAG);
     if (override) override.enabled = !!enabled;
 }

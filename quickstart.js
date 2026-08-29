@@ -8,12 +8,13 @@ import {
 } from './character-creator.js';
 import { saveSettings, autoApplySysprompt } from './src/app/runtime-bridge.js';
 import { pickGenreCharacterName } from './src/state/character-names.js';
-import { t } from './src/i18n/index.js';
 import {
     buildInstantActionOpeningMessage,
     buildInstantActionPromptSection,
+    extractInstantActionLevel,
     normalizeInstantActionInstructions,
     resolveInstantActionPlayerCardWords,
+    rollInstantActionLevel,
 } from './src/state/instant-action-instructions.js';
 
 /** @type {boolean} */
@@ -130,17 +131,22 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
         const archetypes = getArchetypesForGenre(validGenre);
         const className = pickRandomArchetype(archetypes);
         const noLevel = s.onboardingLevel === 'none';
-        const level = noLevel ? null : (parseInt(String(s.onboardingLevel || 1), 10) || 1);
+        const level = noLevel ? null : rollInstantActionLevel(secureRandom);
         const gearTier = s.onboardingGearTier || 'auto';
         const wordCount = resolveInstantActionPlayerCardWords(
             s.onboardingPersonaWords || '150',
             s.onboardingPersonaWordsCustom,
         );
         const genreLabel = GENRE_LABELS[validGenre] || validGenre;
+        const setupLevel = extractInstantActionLevel(instantActionInstructions);
+        const levelDetail = setupLevel != null
+            ? `Lv ${setupLevel} (Initial Setup)`
+            : (noLevel ? 'no levels' : `Lv ${level}`);
         const creationDetails = [
             genreLabel,
             instantActionInstructions ? 'custom setup' : className,
             nameVal || 'AI-chosen name',
+            levelDetail,
         ].join(' · ');
 
         setQuickStartStatus(root, `Creating character (${creationDetails})…`);

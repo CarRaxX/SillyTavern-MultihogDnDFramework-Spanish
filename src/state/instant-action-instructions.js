@@ -32,20 +32,41 @@ export function extractInstantActionLevel(value) {
     return null;
 }
 
+const INSTANT_ACTION_LEVEL_MIN = 1;
+const INSTANT_ACTION_LEVEL_MAX = 10;
+
+/**
+ * Roll a random starting level for Instant Action (1–10 inclusive).
+ * Instant Action does not use the Other Ways level dropdown — only Initial Setup
+ * can override this roll when it names an explicit level.
+ * @param {() => number} [random] 0..1 RNG for tests
+ * @returns {number}
+ */
+export function rollInstantActionLevel(random = Math.random) {
+    const r = random();
+    const span = INSTANT_ACTION_LEVEL_MAX - INSTANT_ACTION_LEVEL_MIN + 1;
+    return INSTANT_ACTION_LEVEL_MIN + Math.floor(r * span);
+}
+
+/** @returns {{ min: number, max: number }} */
+export function getInstantActionLevelRange() {
+    return { min: INSTANT_ACTION_LEVEL_MIN, max: INSTANT_ACTION_LEVEL_MAX };
+}
+
 /** Prompt section shared with Instant Action character generation. */
 export function buildInstantActionPromptSection(value) {
     const instructions = normalizeInstantActionInstructions(value);
     if (!instructions) return '';
     return `
 
---- CONFIGURACIÓN INICIAL: ---
+--- INITIAL SETUP: ---
 ${instructions}
-Sigue estas instrucciones para el personaje, el entorno inicial, la premisa, el tono o cualquier otro detalle solicitado. Cuando entren en conflicto con valores aleatorios por defecto (incluyendo clase, nivel, nombre y situación inicial), estas instrucciones tienen prioridad. Preserva todo el formato de salida requerido.`;
+Follow these instructions for the character, starting setting, premise, tone, or any other requested details. Where they conflict with randomly rolled defaults — including class, level, name, and starting situation — these instructions win. Preserve all required output formatting.`;
 }
 
 /** Opening user message that grounds the narrator in the same one-time guidance. */
 export function buildInstantActionOpeningMessage(value) {
     const instructions = normalizeInstantActionInstructions(value);
-    if (!instructions) return 'Comenzar la aventura';
-    return `Comenzar la aventura.\n\nConfiguración Inicial:\n${instructions}`;
+    if (!instructions) return 'Begin the adventure';
+    return `Begin the adventure.\n\nInitial Setup:\n${instructions}`;
 }

@@ -2,6 +2,7 @@ import { runtimeState } from '../../app/runtime-state.js';
 import { applyChatSetup, resetChatSetupToStock } from '../../state/chat-setup.js';
 import { ensureDungeonMapHistory } from '../../state/dungeon-map-history.js';
 import { summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
+import { isLorebookAgentRuntimeActive } from '../../state/section-enabled.js';
 
 /** Restores one chat-linked tracker snapshot and synchronizes dependent UI. */
 export function createChatStateLoader({
@@ -35,6 +36,10 @@ export function createChatStateLoader({
     const s = getSettings();
     const saved = s.chatStates?.[chatId];
     if (!saved) return false;
+
+    // Every successful projection records its owner before any later extension
+    // can ask SillyTavern to save the shared extensionSettings object.
+    s.chatStateProjectionOwner = chatId;
 
     if (s.chatSetupLinkEnabled) {
         if (!applyChatSetup(s, saved.setup)) resetChatSetupToStock(s);
@@ -75,6 +80,8 @@ export function createChatStateLoader({
     s.routerLastRunAt = saved.routerLastRunAt ?? 0;
     s.mapUpdaterLastRunChatLength = saved.mapUpdaterLastRunChatLength ?? 0;
     s.mapUpdaterLastRunAt = saved.mapUpdaterLastRunAt ?? 0;
+    s.mapUpdaterLastSiteRoot = saved.mapUpdaterLastSiteRoot || '';
+    s.mapUpdaterPendingExitRoot = saved.mapUpdaterPendingExitRoot || '';
     s.mapEvolutionLastFiredBySite = JSON.parse(JSON.stringify(saved.mapEvolutionLastFiredBySite || {}));
     s.mapEvolutionBacklogBySite = JSON.parse(JSON.stringify(saved.mapEvolutionBacklogBySite || {}));
     s.mapEvolutionThreadsBySite = JSON.parse(JSON.stringify(saved.mapEvolutionThreadsBySite || {}));
@@ -90,9 +97,14 @@ export function createChatStateLoader({
     s.mapEvolutionWorldReportApplications = JSON.parse(JSON.stringify(saved.mapEvolutionWorldReportApplications || {}));
     s.pcCharacterBlockSeeded = !!saved.pcCharacterBlockSeeded;
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
+    s.stateTrackerDirectPrompt = saved.stateTrackerDirectPrompt || '';
     s.mapUpdaterDirectPrompt = saved.mapUpdaterDirectPrompt || '';
     s.mapUpdaterDirectLookback = saved.mapUpdaterDirectLookback ?? saved.routerLookback ?? 10;
     s.mapUpdaterDirectPromptOpen = !!saved.mapUpdaterDirectPromptOpen;
+    s.mapEvolutionDirectPrompt = saved.mapEvolutionDirectPrompt || '';
+    s.mapEvolutionDirectLookback = saved.mapEvolutionDirectLookback ?? 10;
+    s.mapArchitectDirectPrompt = saved.mapArchitectDirectPrompt || '';
+    s.mapArchitectDirectLookback = saved.mapArchitectDirectLookback ?? 10;
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;
     s.worldProgressionHistoryLookback = saved.worldProgressionHistoryLookback ?? 0;
     s.worldProgressionInjectionPosition = saved.worldProgressionInjectionPosition ?? 4;
@@ -319,7 +331,7 @@ export function createChatStateLoader({
 
     // Patch any managed entries that don't yet have disable:true so ST's
     // native keyword scanner cannot inject them on user-message send.
-    if (s.routerEnabled) {
+    if (isLorebookAgentRuntimeActive(s)) {
         scheduleDeferred(() => {
             disableManagedEntries().catch(e => console.warn('[RPG Tracker] disableManagedEntries on chat change failed:', e));
         });

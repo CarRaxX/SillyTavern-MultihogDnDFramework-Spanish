@@ -24,6 +24,7 @@ import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js'
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
+import { normalizeMapTheme, normalizeSavedMapThemePresets } from './map-themes.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -143,6 +144,12 @@ function getSettingsInternal(extensionSettings) {
         s.agentConsoleOpen = localStorage.getItem('rpg_tracker_agent_console_open') === 'true';
     } else {
         localStorage.setItem('rpg_tracker_agent_console_open', String(s.agentConsoleOpen));
+    }
+    if (localStorage.getItem('rpg_tracker_agent_terminal_tab') !== null) {
+        const tab = localStorage.getItem('rpg_tracker_agent_terminal_tab');
+        s.agentTerminalTab = ['state_tracker', 'lorebook_agent', 'map_updater', 'map_evolution', 'map_architect'].includes(tab) ? tab : 'lorebook_agent';
+    } else {
+        localStorage.setItem('rpg_tracker_agent_terminal_tab', String(s.agentTerminalTab || 'lorebook_agent'));
     }
     if (localStorage.getItem('rpg_tracker_agent_map_evo_open') !== null) {
         s.agentMapEvolutionOpen = localStorage.getItem('rpg_tracker_agent_map_evo_open') === 'true';
@@ -948,6 +955,167 @@ function getSettingsInternal(extensionSettings) {
         s.settingsVersion = '2026.8.24.9';
     }
 
+    // 2026.8.24.15: active PARTY members cannot remain CREATURE map assets.
+    // Replace only the untouched prompt shipped by the preceding release.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.15')) {
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '16608:8a2263ff') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.15';
+    }
+
+    // 2026.8.24.17: bounded recursive map hosting and explicit offsite
+    // attachTo guidance. Replace only untouched shipped map prompts.
+    if (isOlderThan(s.settingsVersion, '2026.8.24.17')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '18194:ff193c43') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapUpdaterSystemPrompt) === '16929:720ad8e2') {
+            s.mapUpdaterSystemPrompt = DEFAULT_MAP_UPDATER_SYSTEM_PROMPT;
+        }
+        if (promptSignature(s.mapEvolutionSystemPrompt) === '19809:21b3adcd') {
+            s.mapEvolutionSystemPrompt = DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.24.17';
+    }
+
+    // 2026.8.32.1: Map Architect now locks topology first and runs the
+    // customizable system prompt only for content placement. Replace only the
+    // untouched one-pass prompt; preserve user-authored customization.
+    if (isOlderThan(s.settingsVersion, '2026.8.32.1')) {
+        if (promptSignature(s.mapArchitectSystemPrompt) === '18972:6771d6ba') {
+            s.mapArchitectSystemPrompt = DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT;
+        }
+        s.settingsVersion = '2026.8.32.1';
+    }
+
+    // 2026.8.35: NPC Species CORE field now asks for gender (alongside race/subtype).
+    // Refresh only untouched factory Species descriptions; leave custom edits alone.
+    if (isOlderThan(s.settingsVersion, '2026.8.35')) {
+        const OLD_NPC_SPECIES_DESC = 'Species/race and any subtype — static identity that essentially never changes after the NPC is first recorded.';
+        const newNpcSpeciesDesc = DEFAULT_NPC_SECTIONS.find(sec => sec.id === 'sec_species')?.description;
+        const refreshSpeciesDesc = (sections) => {
+            if (!Array.isArray(sections) || !newNpcSpeciesDesc) return;
+            for (const sec of sections) {
+                if (sec?.id === 'sec_species' && sec.description === OLD_NPC_SPECIES_DESC) {
+                    sec.description = newNpcSpeciesDesc;
+                }
+            }
+        };
+        refreshSpeciesDesc(s.npcCoreSections);
+        if (s.npcSectionPresets && typeof s.npcSectionPresets === 'object') {
+            for (const preset of Object.values(s.npcSectionPresets)) {
+                refreshSpeciesDesc(preset?.sections || preset);
+            }
+        }
+        s.settingsVersion = '2026.8.35';
+    }
+
+    // 2026.8.48.1: increase current-map detail/cadence while slowing remote maps.
+    // Migrate only the untouched legacy 8h/8h pair; preserve any customized cadence.
+    if (isOlderThan(s.settingsVersion, '2026.8.48.1')) {
+        if (Number(s.mapEvolutionIntervalHours) === 8 && Number(s.mapEvolutionOnSiteIntervalHours) === 8) {
+            s.mapEvolutionIntervalHours = 12;
+            s.mapEvolutionOnSiteIntervalHours = 1;
+            s.mapEvolutionOnSiteIntervalMinutes = 0;
+        }
+        s.settingsVersion = '2026.8.48.1';
+    }
+
+    // 2026.8.49.1: stock prompt moved <relationship_tracking> above <homebrew_and_custom_classes>.
+    // Swap those Control Room keys when still in the prior stock relative order.
+    if (isOlderThan(s.settingsVersion, '2026.8.49.1')) {
+        const homebrewKey = 'base:homebrew_and_custom_classes';
+        const relationshipKey = 'base:relationship_tracking';
+        const swapHomebrewRelationshipOrder = (order) => {
+            if (!Array.isArray(order)) return;
+            const hi = order.indexOf(homebrewKey);
+            const ri = order.indexOf(relationshipKey);
+            if (hi === -1 || ri === -1 || ri <= hi) return;
+            order[hi] = relationshipKey;
+            order[ri] = homebrewKey;
+        };
+        swapHomebrewRelationshipOrder(s.syspromptSectionOrder);
+        for (const snapshot of Object.values(s.chatStates || {})) {
+            swapHomebrewRelationshipOrder(snapshot?.setup?.syspromptSectionOrder);
+        }
+        s.settingsVersion = '2026.8.49.1';
+    }
+
+    // 2026.8.54: departed living identities use LEFT so cause/actor/threads survive.
+    // Surgical replace of the old FLEEING-or-REMOVE leave guidance; custom prompts
+    // that never contained those sentences are left alone.
+    if (isOlderThan(s.settingsVersion, '2026.8.54')) {
+        const oldEvoLeave = '- Leaving this site: SET_ASSET state FLEEING or REMOVE_ASSET, with detail naming the destination in prose. You cannot MOVE_ASSET to another map.';
+        const newEvoLeave = [
+            '- Departing this site: SET_ASSET state LEFT (LEAVING is accepted and stored as LEFT). Keep the record so cause, actor, detail, and threads survive. Name the destination in detail. FLEEING is panic still on this map. Once they have actually left, use LEFT — not FLEEING, and not REMOVE_ASSET. You cannot MOVE_ASSET to another map.',
+            '- A later return to THIS site: SET_ASSET the existing LEFT record back to ACTIVE. Arriving from another site as someone this map has never recorded (see PRIOR EVOLUTION digest): ADD_ASSET here.',
+            '- REMOVE_ASSET deletes the record and its causal history. Use it only for mistaken clutter or when nothing of that identity should be remembered. Never REMOVE_ASSET a departure, visit, or flight that later ticks should continue.',
+        ].join('\n');
+        if (typeof s.mapEvolutionSystemPrompt === 'string' && s.mapEvolutionSystemPrompt.includes(oldEvoLeave)) {
+            s.mapEvolutionSystemPrompt = s.mapEvolutionSystemPrompt.replace(oldEvoLeave, newEvoLeave);
+        }
+        const oldEvoExample = 'Realize a reported departure:\n{"operation_id":"evo-day2-0800-odran-fled","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"FLEEING","knowledge":"KNOWN","detail":"Departed for the Hall of the Ember-Ancestors.","cause":"Fled after the ossuary pack was destroyed by the party.","actor":"party"}]}';
+        const newEvoExample = [
+            'Calm departure / finished visit (keep the record; do not REMOVE_ASSET):',
+            '{"operation_id":"evo-day2-1500-odran-left","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"LEFT","knowledge":"KNOWN","detail":"Returned to the Hall of the Ember-Ancestors after checking the ossuary.","cause":"Came to inspect the emptied ossuary, then left for home.","actor":"odran","thread_status":"resolved"}]}',
+            '',
+            'Panic still on this map (running/hiding; they have not left the site yet):',
+            '{"operation_id":"evo-day2-0800-odran-fled","operations":[{"op":"SET_ASSET","evidence":"EVOLVED","asset_id":"odran","state":"FLEEING","knowledge":"KNOWN","detail":"Bolting toward the ossuary threshold.","cause":"Fled after the ossuary pack was destroyed by the party.","actor":"party"}]}',
+        ].join('\n');
+        if (typeof s.mapEvolutionSystemPrompt === 'string' && s.mapEvolutionSystemPrompt.includes(oldEvoExample)) {
+            s.mapEvolutionSystemPrompt = s.mapEvolutionSystemPrompt.replace(oldEvoExample, newEvoExample);
+        }
+        if (typeof s.mapUpdaterSystemPrompt === 'string' && s.mapUpdaterSystemPrompt.includes('NPC left the site permanently')) {
+            s.mapUpdaterSystemPrompt = s.mapUpdaterSystemPrompt
+                .replace('REMOVE vs DESTROYED (both valid — choose by lasting occupancy)', 'REMOVE vs DESTROYED vs LEFT (choose by lasting occupancy and identity)')
+                .replace('DESTROYED/DEAD/FLED/CAPTURED/TAKEN', 'DESTROYED/DEAD/FLEEING/LEFT/CAPTURED/TAKEN')
+                .replace('mistaken/retracted asset, NPC left the site permanently, summon dismissed into nothing', 'mistaken/retracted asset, summon dismissed into nothing')
+                .replace(
+                    '- REMOVE_ASSET is additional, not a substitute for DESTROYED.',
+                    '- SET_ASSET state LEFT when a living CREATURE/GROUP departed this site (a visit that ended, going home, moving on). Keep the record so cause, actor, detail, and threads survive. Name the destination in detail. FLEEING is panic still on this map. Do not REMOVE_ASSET a departure.\n- REMOVE_ASSET is additional, not a substitute for DESTROYED or LEFT.',
+                );
+        }
+        s.settingsVersion = '2026.8.54';
+    }
+
+    // 2026.8.55: relationship bars off by factory default; migrate untouched shipped-on default.
+    if (isOlderThan(s.settingsVersion, '2026.8.55')) {
+        if (s.npcRelationshipBars === true) {
+            s.npcRelationshipBars = false;
+            if (s.routerModules?.npc) {
+                s.routerModules.npc.instruction = buildNpcInstruction(
+                    s.npcMajorWords ?? s.npcMajorTokens,
+                    s.npcMinorWords ?? s.npcMinorTokens,
+                    false,
+                    s,
+                );
+            }
+        }
+        s.settingsVersion = '2026.8.55';
+    }
+
+    // 2026.8.71: global Evolution story on all due maps; default lookback 20; REMOVE_ASSET for narrative contradictions.
+    if (isOlderThan(s.settingsVersion, '2026.8.71')) {
+        if (s.mapEvolutionLookback === 10) {
+            s.mapEvolutionLookback = 20;
+        }
+        const oldRemove = '- REMOVE_ASSET deletes the record and its causal history. Use it only for mistaken clutter or when nothing of that identity should be remembered. Never REMOVE_ASSET a departure, visit, or flight that later ticks should continue.';
+        const newRemove = [
+            '- RECENT STORY may establish that someone still ACTIVE here actually left, joined the party elsewhere, or died off-map. Reconcile that contradiction on THIS map. Prefer LEFT when cause, destination, or a later return matters. REMOVE_ASSET when play clearly treats the identity as gone with no local thread to preserve (for example joined [PARTY] away from here).',
+            '- REMOVE_ASSET deletes the record and its causal history. Use it for mistaken clutter, identities play treats as gone with no local thread to preserve, or stale ACTIVE occupancy contradicted by RECENT STORY. Prefer SET_ASSET LEFT when cause, destination, or a later return matters. Never REMOVE_ASSET a departure you expect later ticks to continue.',
+        ].join('\n');
+        if (typeof s.mapEvolutionSystemPrompt === 'string' && s.mapEvolutionSystemPrompt.includes(oldRemove)) {
+            s.mapEvolutionSystemPrompt = s.mapEvolutionSystemPrompt.replace(oldRemove, newRemove);
+        }
+        const oldDepart = '- Departing this site: SET_ASSET state LEFT (LEAVING is accepted and stored as LEFT). Keep the record so cause, actor, detail, and threads survive. Name the destination in detail. FLEEING is panic still on this map. Once they have actually left, use LEFT — not FLEEING, and not REMOVE_ASSET. You cannot MOVE_ASSET to another map.';
+        const newDepart = '- Departing this site: SET_ASSET state LEFT (LEAVING is accepted and stored as LEFT). Keep the record so cause, actor, detail, and threads survive. Name the destination in detail. FLEEING is panic still on this map. Once they have actually left, use LEFT — not FLEEING. You cannot MOVE_ASSET to another map.';
+        if (typeof s.mapEvolutionSystemPrompt === 'string' && s.mapEvolutionSystemPrompt.includes(oldDepart)) {
+            s.mapEvolutionSystemPrompt = s.mapEvolutionSystemPrompt.replace(oldDepart, newDepart);
+        }
+        s.settingsVersion = '2026.8.71';
+    }
+
     // Stamp factory version even when a release has no field rewrites
     // (8.28.0 mapped-site index is prompt/injection only).
     if (isOlderThan(s.settingsVersion, FACTORY_SETTINGS_VERSION)) {
@@ -1039,17 +1207,41 @@ function getSettingsInternal(extensionSettings) {
         s.mapRuntimeOpenaiModel = s.mapArchitectOpenaiModel || '';
         s.mapRuntimeConnectionSeeded = true;
     }
+    if (!s.mapEvolutionConnectionSeeded) {
+        s.mapEvolutionConnectionSource = s.mapRuntimeConnectionSource ?? 'default';
+        s.mapEvolutionConnectionProfileId = s.mapRuntimeConnectionProfileId || '';
+        s.mapEvolutionCompletionPresetId = s.mapRuntimeCompletionPresetId || '';
+        s.mapEvolutionOllamaUrl = s.mapRuntimeOllamaUrl || 'http://localhost:11434';
+        s.mapEvolutionOllamaModel = s.mapRuntimeOllamaModel || '';
+        s.mapEvolutionOpenaiUrl = s.mapRuntimeOpenaiUrl || '';
+        s.mapEvolutionOpenaiKey = s.mapRuntimeOpenaiKey || '';
+        s.mapEvolutionOpenaiModel = s.mapRuntimeOpenaiModel || '';
+        s.mapEvolutionConnectionSeeded = true;
+    }
     const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
     s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'all';
     const tickCount = Number(s.mapEvolutionTickCount);
     s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
+    s.mapEvolutionIntervalHours = (() => {
+        const hours = Math.floor(Number(s.mapEvolutionIntervalHours));
+        return Number.isFinite(hours) ? Math.max(1, Math.min(168, hours)) : 12;
+    })();
     s.mapEvolutionOnSiteIntervalHours = (() => {
         const hours = Math.floor(Number(s.mapEvolutionOnSiteIntervalHours));
-        if (!Number.isFinite(hours)) return 8;
+        if (!Number.isFinite(hours)) return 1;
         if (hours === 0) return 0;
         return Math.max(1, Math.min(168, hours));
+    })();
+    s.mapEvolutionOnSiteIntervalMinutes = (() => {
+        const minutes = Math.floor(Number(s.mapEvolutionOnSiteIntervalMinutes));
+        return Number.isFinite(minutes) ? Math.max(0, Math.min(59, minutes)) : 0;
+    })();
+    s.mapEvolutionOnSitePreset = s.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic';
+    s.mapEvolutionLookback = (() => {
+        const n = Math.floor(Number(s.mapEvolutionLookback));
+        return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 20;
     })();
     if (!s.mapEvolutionIntervalHoursBySite || typeof s.mapEvolutionIntervalHoursBySite !== 'object' || Array.isArray(s.mapEvolutionIntervalHoursBySite)) {
         s.mapEvolutionIntervalHoursBySite = {};
@@ -1062,6 +1254,9 @@ function getSettingsInternal(extensionSettings) {
         s.mapEvolutionThreadsBySite = {};
     }
     s.dungeonMapRevealAll = !!s.dungeonMapRevealAll;
+    s.mapTheme = normalizeMapTheme(s.mapTheme);
+    s.savedMapThemePresets = normalizeSavedMapThemePresets(s.savedMapThemePresets);
+    s.activeMapThemePresetId = typeof s.activeMapThemePresetId === 'string' ? s.activeMapThemePresetId : '';
     if (!s.mapEvolutionWorldReportApplications || typeof s.mapEvolutionWorldReportApplications !== 'object') {
         s.mapEvolutionWorldReportApplications = {};
     }
@@ -1279,6 +1474,8 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitGeneratorSource',
     'portraitSkipPromptDialog',
     'hideImageGenToasts',
+    'portraitUseStoryLookback',
+    'portraitStoryLookback',
     'portraitAutoGenerateParty',
     'portraitAutoGeneratePlayer',
     'portraitAutoGenerateEnemies',
@@ -1323,22 +1520,35 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'mapRuntimeOpenaiKey',
     'mapRuntimeOpenaiModel',
     'mapRuntimeConnectionSeeded',
+    'mapEvolutionConnectionSource',
+    'mapEvolutionConnectionProfileId',
+    'mapEvolutionCompletionPresetId',
+    'mapEvolutionOllamaUrl',
+    'mapEvolutionOllamaModel',
+    'mapEvolutionOpenaiUrl',
+    'mapEvolutionOpenaiKey',
+    'mapEvolutionOpenaiModel',
+    'mapEvolutionConnectionSeeded',
     'mapUpdaterEnabled',
     'mapUpdaterRunEvery',
     'mapUpdaterMaxTokens',
     'mapUpdaterSystemPrompt',
+    'mapTheme',
+    'savedMapThemePresets',
+    'activeMapThemePresetId',
     'mapEvolutionEnabled',
     'mapEvolutionIntervalHours',
     'mapEvolutionOnSiteIntervalHours',
+    'mapEvolutionOnSiteIntervalMinutes',
+    'mapEvolutionOnSitePreset',
+    'mapEvolutionLookback',
     'mapEvolutionMaxTokens',
     'mapEvolutionCompressEnabled',
     'mapEvolutionCompressThreshold',
     'mapEvolutionNarratorCommitTokens',
     'mapEvolutionCompressSystemPrompt',
-    'mapEvolutionTickScope',
-    'mapEvolutionTickCount',
-    'mapEvolutionTickRandomize',
-    'mapEvolutionSelectedRoots',
+    // Tick targeting is operational campaign state: mapped roots differ by chat.
+    // Keep these fields in chatStates so reload restores the active campaign's choices.
     'mapEvolutionSystemPrompt',
     'worldConnectionSource',
     'worldConnectionProfileId',

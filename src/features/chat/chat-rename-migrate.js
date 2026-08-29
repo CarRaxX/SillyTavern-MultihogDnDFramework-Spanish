@@ -71,13 +71,14 @@ const KNOWN_PARTITION_KEYS = new Set([
     'modules', 'blockOrder', 'stockPrompts', 'quests', 'historyIndex',
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
-    'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt',
+    'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt', 'mapUpdaterLastSiteRoot', 'mapUpdaterPendingExitRoot',
     'mapEvolutionLastFiredBySite', 'mapEvolutionBacklogBySite', 'mapEvolutionThreadsBySite', 'mapEvolutionLastSiteRoot', 'mapEvolutionPendingExitRoot',
     'dungeonMapRevealAll',
     'mapEvolutionTickScope', 'mapEvolutionTickCount', 'mapEvolutionTickRandomize', 'mapEvolutionSelectedRoots',
     'mapEvolutionIntervalHoursBySite',
-    'pcCharacterBlockSeeded', 'routerDirectPrompt', 'mapUpdaterDirectPrompt', 'mapUpdaterDirectPromptOpen',
-    'routerDirectLookback', 'mapUpdaterDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
+    'pcCharacterBlockSeeded', 'routerDirectPrompt', 'stateTrackerDirectPrompt', 'mapUpdaterDirectPrompt', 'mapUpdaterDirectPromptOpen',
+    'mapEvolutionDirectPrompt', 'mapArchitectDirectPrompt',
+    'routerDirectLookback', 'mapUpdaterDirectLookback', 'mapEvolutionDirectLookback', 'mapArchitectDirectLookback', 'routerDefaultPosition', 'routerDefaultDepth',
     'routerDefaultOrder', 'routerDefaultRole', 'loreInjectionPosition',
     'loreInjectionDepth', 'loreInjectionRole', 'worldProgressionLookback',
     'worldProgressionHistoryLookback', 'worldProgressionInjectionPosition',
@@ -117,7 +118,7 @@ export function partitionHasCampaignSubstance(p) {
     if (Object.keys(p).some((key) => !KNOWN_PARTITION_KEYS.has(key))) return true;
     if (['currentMemo', 'lastDelta', 'worldProgressionLastFiredPeriodLabel',
         'worldProgressionSkeletonAtmosphereSummary', 'lastImmersionSceneArtPath',
-        'mapEvolutionLastSiteRoot']
+        'mapUpdaterLastSiteRoot', 'mapEvolutionLastSiteRoot']
         .some((key) => hasText(p[key]))) return true;
     if (['combatDefeatedUi', 'memoHistory', 'dungeonMapHistory', 'quests', 'activeRouterKeys',
         'activeWorldKeys', 'keywordActivatedKeys', 'routerLog', 'campaignBooks']
@@ -272,6 +273,10 @@ export async function onChatRenamedMigrate(detail, deps) {
 
     if (runtimeState.currentChatId === oldId) {
         runtimeState.currentChatId = newId;
+    }
+    if (migratedPartition && s.chatStateProjectionOwner === oldId) {
+        s.chatStateProjectionOwner = newId;
+        settingsChanged = true;
     }
 
     // If we are on the renamed chat, ensure live state matches the migrated partition.
