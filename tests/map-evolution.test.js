@@ -6,6 +6,7 @@ import {
     appendEvolutionBacklogEntry,
     appendEvolutionThreads,
     applyCompressedThreadDigests,
+    annotateEvolutionSitePresence,
     buildReportOutcomeStamps,
     clearEvolutionHistoryForSite,
     collectEvolutionArcSubjects,
@@ -18,9 +19,12 @@ import {
     describeEvolutionTimeWindow,
     estimateMapHistoryTokens,
     evolutionHistoryNeedsCompression,
+    evolutionIntervalHoursForSettings,
     filterSitesByRoots,
+    formatMapEvolutionRecentStory,
     formatNarratorSiteActivity,
     normalizeMapEvolutionCompressThreshold,
+    normalizeMapEvolutionLookback,
     normalizeMapEvolutionNarratorCommitTokens,
     partitionCompressibleThreads,
     pickCompleteNarratorCommits,
@@ -71,6 +75,37 @@ const docks = {
 };
 
 describe('Map Evolution', () => {
+    it('treats story lookback 0 as empty rather than the whole chat', () => {
+        expect(normalizeMapEvolutionLookback(0)).toBe(0);
+        expect(normalizeMapEvolutionLookback(12)).toBe(12);
+        expect(normalizeMapEvolutionLookback(999)).toBe(100);
+        expect(normalizeMapEvolutionLookback('')).toBe(20);
+        const chat = [
+            { is_user: true, mes: 'Alpha turn' },
+            { is_user: false, mes: 'Narrator one' },
+            { is_user: true, mes: 'Beta turn' },
+            { is_user: false, mes: 'Narrator two' },
+        ];
+        expect(formatMapEvolutionRecentStory(chat, { mapEvolutionLookback: 0 })).toBe('');
+        expect(formatMapEvolutionRecentStory(chat, { mapEvolutionLookback: 10 }, 0)).toBe('');
+        const story = formatMapEvolutionRecentStory(chat, { mapEvolutionLookback: 1 });
+        expect(story).toContain('Beta turn');
+        expect(story).not.toContain('Alpha turn');
+    });
+
+    it('supplies the same global recent story to every due map when lookback > 0', () => {
+        const chat = [
+            { is_user: true, mes: 'Alpha turn' },
+            { is_user: false, mes: 'Narrator one' },
+            { is_user: true, mes: 'Beta turn' },
+            { is_user: false, mes: 'Narrator two' },
+        ];
+        const story = formatMapEvolutionRecentStory(chat, { mapEvolutionLookback: 2 });
+        expect(story).toContain('Beta turn');
+        expect(story).toContain('Narrator two');
+        expect(story).toContain('Alpha turn');
+    });
+
     it('ships a dedicated prompt that occupancy never sees', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('You are Map Evolution');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evidence "EVOLVED"');
@@ -84,7 +119,7 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('logical and narrative sense');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('ACCUMULATED EVOLUTION BACKLOG');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('frequent short intervals have not been treated as independent resets');
-        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('CreateAreaMap owns peer-map promotion');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('CreateAreaMap owns peer-map attachment');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('INTERIOR: evolve room-scale');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('and larger unrest');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('BUILDING may contain CREATURE/GROUP/OBJECT/LOOT/HAZARD/TRAP');
@@ -118,6 +153,10 @@ describe('Map Evolution', () => {
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('TIME MECHANICS');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('set duration to ""');
         expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('leave it for Map Updater');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('SET_ASSET state LEFT');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('stale ACTIVE occupancy contradicted by RECENT STORY');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).toContain('evo-day2-1600-guide-removed');
+        expect(DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).not.toContain('Leaving this site: SET_ASSET state FLEEING or REMOVE_ASSET');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('Every operation MUST include cause');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('ONE GROUP with count');
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).toContain('"count":5');
@@ -130,14 +169,17 @@ describe('Map Evolution', () => {
     it('summarizes a sequential digest without dumping operations JSON', () => {
         const line = summarizeEvolutionDigest('Forgotten Tomb', {
             operations: [
-                { op: 'SET_ASSET', asset_id: 'odran', state: 'FLEEING', cause: 'Fled after the ossuary pack was destroyed.', actor: 'party' },
-                { op: 'REMOVE_ASSET', asset_id: 'odran', cause: 'Left for the Hall of the Ember-Ancestors.' },
+                { op: 'SET_ASSET', asset_id: 'odran', state: 'LEFT', cause: 'Came to inspect the ossuary, then left.', actor: 'odran' },
+                { op: 'SET_ASSET', asset_id: 'ash-wight', state: 'FLEEING', cause: 'Fled after the ossuary pack was destroyed.', actor: 'party' },
+                { op: 'REMOVE_ASSET', asset_id: 'clutter-chair', cause: 'Mistaken ambient clutter.' },
             ],
         });
         expect(line).not.toContain('Forgotten Tomb:');
-        expect(line).toContain('odran FLEEING');
+        expect(line).toContain('odran LEFT');
+        expect(line).toContain('by odran');
+        expect(line).toContain('ash-wight FLEEING');
         expect(line).toContain('by party');
-        expect(line).toContain('odran removed from map');
+        expect(line).toContain('clutter-chair removed from map');
         expect(line).not.toContain('"op"');
 
         const many = summarizeEvolutionDigest('Hall', {
@@ -195,10 +237,49 @@ describe('Map Evolution', () => {
         expect(bubble.area.id).toBe('threshold');
     });
 
+    it('treats only the footer site-root as current, not a trail BUILDING named after another map', () => {
+        const thornbrook = {
+            siteRoot: 'Thornbrook',
+            document: {
+                version: 3,
+                site: 'Thornbrook',
+                kind: 'SETTLEMENT',
+                areas: [{ id: 'north-road', name: 'North Road', knowledge: 'DISCOVERED', geometry: [], connections: [] }],
+                assets: [{
+                    id: 'northeast-trail-toward-coldwater-creek',
+                    kind: 'BUILDING',
+                    name: 'Northeast Trail toward Coldwater Creek',
+                    location: 'north-road',
+                    state: 'ACTIVE',
+                    knowledge: 'KNOWN',
+                    notEntered: true,
+                }],
+            },
+        };
+        const hall = { siteRoot: 'Hall of the Ember-Ancestors', document: { site: 'Hall of the Ember-Ancestors', kind: 'DUNGEON', areas: [], assets: [] } };
+        const coldwater = { siteRoot: 'Coldwater Creek', document: { site: 'Coldwater Creek', kind: 'DUNGEON', areas: [], assets: [] } };
+        const annotated = annotateEvolutionSitePresence(
+            [hall, thornbrook, coldwater],
+            'Coldwater Creek, Central Forge Hall',
+        );
+        expect(annotated.currentRoot).toBe('Coldwater Creek');
+        expect(annotated.sites.filter(site => site.current).map(site => site.siteRoot)).toEqual(['Coldwater Creek']);
+        const hoursFor = evolutionIntervalHoursForSettings({
+            mapEvolutionIntervalHours: 6,
+            mapEvolutionOnSiteIntervalHours: 1,
+            mapEvolutionOnSiteIntervalMinutes: 0,
+        }, annotated.currentRoot);
+        expect(hoursFor('Thornbrook')).toBe(6);
+        expect(hoursFor('Hall of the Ember-Ancestors')).toBe(6);
+        expect(hoursFor('Coldwater Creek')).toBe(1);
+    });
+
     it('stamps a first-visit baseline and later fires on elapsed in-world hours', () => {
         expect(siteEvolutionDue(null, 8 * 60, 4)).toEqual({ due: false, baseline: true });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 3 * 60, 4)).toEqual({ due: false, baseline: false });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 4 * 60, 4)).toEqual({ due: true, baseline: false });
+        expect(siteEvolutionDue(8 * 60, 8 * 60 + 29, 0.5)).toEqual({ due: false, baseline: false });
+        expect(siteEvolutionDue(8 * 60, 8 * 60 + 30, 0.5)).toEqual({ due: true, baseline: false });
         expect(siteEvolutionDue(8 * 60, 8 * 60 + 48 * 60, 0)).toEqual({ due: false, baseline: false });
         expect(siteEvolutionDue(null, 8 * 60, 0)).toEqual({ due: false, baseline: true });
     });
@@ -769,6 +850,18 @@ describe('Map Evolution', () => {
         expect(getSiteEvolutionIntervalOverride({}, 'Bunker Theta')).toBeNull();
         expect(setSiteEvolutionIntervalOverride({ 'bunker theta': 4 }, 'Bunker Theta', '')).toEqual({});
         expect(setSiteEvolutionIntervalOverride({}, 'Bunker Theta', 0)).toEqual({ 'bunker theta': 0 });
+        expect(resolveSiteEvolutionIntervalHours('Current Site', { currentRoot: 'Current Site' })).toBe(1);
+        expect(resolveSiteEvolutionIntervalHours('Current Site', {
+            currentRoot: 'Current Site',
+            onSiteIntervalHours: 0,
+            onSiteIntervalMinutes: 30,
+        })).toBe(0.5);
+        expect(resolveSiteEvolutionIntervalHours('Current Site', {
+            currentRoot: 'Current Site',
+            onSiteIntervalHours: 0,
+            onSiteIntervalMinutes: 0,
+        })).toBe(0);
+        expect(resolveSiteEvolutionIntervalHours('Other Site', { currentRoot: 'Current Site' })).toBe(12);
     });
 
     it('picks due maps from per-site intervals while leaving others waiting', () => {
@@ -831,6 +924,13 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Omitted thread_status defaults to open');
         expect(evolution).toContain('directional prose, not explicit deltas');
         expect(evolution).toContain('EVOLUTION TIME WINDOW (AUTHORITATIVE)');
+        expect(evolution).toContain('LEVEL OF DETAIL — CURRENT MAP (TACTICAL AND FELT)');
+        expect(evolution).toContain('one or two meaningful, causal developments the party could discover soon');
+        expect(evolution).toContain('Map Updater owns observed/current-area events');
+        expect(evolution).toContain("if (!partyIsHere || onSitePreset === 'standard') return '';");
+        expect(evolution).toContain("settings.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic'");
+        expect(evolution).not.toContain('LEVEL OF DETAIL — OTHER MAP');
+        expect(evolution).not.toContain('Evolve this map at lower resolution');
         expect(evolution).toContain('ACCUMULATED EVOLUTION BACKLOG (THIS SITE)');
         expect(evolution).toContain('Do not choose noop solely because the latest interval is short');
         expect(evolution).toContain('settings.mapEvolutionLastFiredBySite?.[siteKey]');
@@ -841,6 +941,8 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('delete transaction.report_outcomes');
         expect(evolution).toContain('siteRoots');
         expect(evolution).toContain('listMappedEvolutionSites');
+        expect(evolution).toContain('annotateEvolutionSitePresence');
+        expect(evolution).not.toContain('normalizeDungeonLabel(currentLocation).includes(normalizeDungeonLabel(site.siteRoot))');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
         expect(evolution).toContain("{ stream: true, debugSource: 'Map Evolution' }");
@@ -862,8 +964,8 @@ describe('Map Evolution', () => {
         expect(updater).not.toContain('EVOLVED');
         expect(updater).not.toContain('groundMapsAfterWorldProgression');
 
-        expect(hooks).toContain('await runMapUpdaterPass()');
-        expect(hooks.indexOf('await runMapUpdaterPass()')).toBeLessThan(hooks.indexOf('await maybeRunWorldProgression()'));
+        expect(hooks).toContain('mapResult = await runMapUpdaterPass');
+        expect(hooks.indexOf('mapResult = await runMapUpdaterPass')).toBeLessThan(hooks.indexOf('await maybeRunWorldProgression()'));
         expect(hooks.indexOf('await maybeRunWorldProgression()')).toBeLessThan(hooks.indexOf('await maybeRunMapEvolution()'));
         expect(hooks).not.toContain('groundMapsAfterWorldProgression');
         expect(hooks).toContain('maybeRollbackMapEvolutionForSwipe');
@@ -871,11 +973,26 @@ describe('Map Evolution', () => {
 
         expect(settingsMarkup).toContain('<b>Map Evolution</b>');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_enabled"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_connection_source"');
+        expect(settingsMarkup).toContain('Uses the Map Evolution connection');
+        expect(settingsMarkup).not.toContain('Map Updater &amp; Evolution');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_interval_hours"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_onsite_interval_hours"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_onsite_interval_minutes"');
+        expect(settingsMarkup).toContain('id="rpg_map_evolution_onsite_preset"');
+        expect(settingsMarkup).toContain('High Dynamism — tactical and soon discoverable');
+        expect(settingsMarkup).toContain('Standard — same behavior as background maps');
+        expect(defaultsSource).toContain('mapEvolutionIntervalHours: 12');
+        expect(defaultsSource).toContain('mapEvolutionConnectionSource: "default"');
+        expect(defaultsSource).not.toContain('mapEvolutionConnectionSeeded');
+        expect(defaultsSource).toContain('mapEvolutionOnSiteIntervalHours: 1');
+        expect(defaultsSource).toContain('mapEvolutionOnSiteIntervalMinutes: 0');
+        expect(defaultsSource).toContain("mapEvolutionOnSitePreset: 'dynamic'");
+        expect(indexSource).toContain("settings.mapEvolutionOnSitePreset = String($(this).val() || '') === 'standard' ? 'standard' : 'dynamic'");
         expect(settingsMarkup).toContain('<b>Per-map interval</b>');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_site_list_header"');
         expect(panelMarkup).toContain('id="rt-agent-map-evo-onsite-interval"');
+        expect(panelMarkup).toContain('id="rt-agent-map-evo-onsite-minutes"');
         expect(evolution).toContain('evolutionIntervalHoursForSettings');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_world_report_lookback"');
         expect(settingsMarkup).toContain('Reports never trigger an immediate map fan-out');
@@ -893,25 +1010,36 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('does not enable or disable a per-map timer');
         expect(indexSource).not.toContain("$('#rpg_map_evolution_selected_row').toggle(scope === 'selected')");
         expect(indexSource).toContain("$('#rpg_map_evolution_interval_selected_hint').toggle(scope === 'selected')");
+        expect(settingsMarkup).toMatch(/id="rpg_map_evolution_lookback"[^>]*max="100"/);
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_max_tokens"[^>]*max="32000"/);
         expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_enabled"');
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_compress_threshold"[^>]*value="10000"/);
         expect(settingsMarkup).toMatch(/id="rpg_map_evolution_narrator_commit_tokens"[^>]*value="2000"/);
         expect(settingsMarkup).toContain('Map Evolution memory');
         expect(settingsMarkup).toContain('transferred to the <b>narrator</b>');
+        expect(defaultsSource).toContain('mapEvolutionLookback: 20');
         expect(defaultsSource).toContain('mapEvolutionCompressThreshold: 10000');
         expect(defaultsSource).toContain('mapEvolutionNarratorCommitTokens: 2000');
+        expect(indexSource).toContain('rpg_map_evolution_lookback');
         expect(indexSource).toContain('rpg_map_evolution_narrator_commit_tokens');
         expect(hooks).toContain('mapEvolutionNarratorCommitTokens');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_compress_prompt"');
         expect(evolution).toContain('Number(settings.mapEvolutionMaxTokens) || 25000');
+        expect(evolution).toContain('formatMapEvolutionRecentStory');
+        expect(evolution).toContain('## RECENT STORY');
+        expect(evolution).toContain('This block may be empty');
+        expect(evolution).toContain('Map Updater runs only on the party\'s current map');
+        expect(evolution).toContain('AUTHORITATIVE RECENT STORY CONTRACT');
+        expect(evolution).not.toContain('Use this only to ground off-screen change');
+        expect(evolution).toContain('lookback = null');
         expect(evolution).toContain('maybeCompressSiteThreads');
         expect(evolution).toContain('mapEvolutionCompressThreshold');
         expect(evolution).toContain('compressing evolution history');
         expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('You are Map Evolution History Compression');
         expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('Open threads must survive unchanged');
         expect(DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT).toContain('do not rewrite them');
-        expect(evolution).toContain('mapRuntimeConnectionSource');
+        expect(evolution).toContain('mapEvolutionConnectionSource');
+        expect(evolution).not.toContain('mapRuntimeConnectionSource');
         expect(evolution).not.toContain('mapArchitectConnectionSource');
         expect(panelMarkup).toContain('id="rt-research-map-evolution"');
         expect(indexSource).toContain('rpg_map_evolution_evolve_now');

@@ -46,6 +46,25 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
         for (const source of sources) expect(source.replaceAll('\r\n', '\n')).toContain(expectedBlock);
     });
 
+    it('ships the travel random-event contract in every narrator prompt source', () => {
+        const expectedBlock = `<random_events>
+Travel/time-skips only, not spammed. Pop a number: ≥14 = event occurs. If event, pop again: ≤8 negative, 9–11 ambiguous, ≥12 favorable. Not used for rest interruption.
+
+If the party is traveling through a dangerous area, you can narrate enemy encounters anyway, regardless of the random event roll. It is not the only source of enemies during travel.
+</random_events>`;
+        const sources = [
+            RT_PROMPTS['sysprompt.txt'],
+            RT_PROMPTS['sysprompt_legacy.txt'],
+            readFileSync(new URL('../sysprompt.txt', import.meta.url), 'utf8'),
+            readFileSync(new URL('../sysprompt_legacy.txt', import.meta.url), 'utf8'),
+        ];
+
+        for (const source of sources) {
+            expect(source.replaceAll('\r\n', '\n')).toContain(expectedBlock);
+            expect(source).not.toContain('Batch both RollTheDice calls together');
+        }
+    });
+
     it('spells out damage types in every shipped combat prompt example', () => {
         const sources = [
             readFileSync(new URL('../constants.js', import.meta.url), 'utf8'),
@@ -87,11 +106,14 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).toContain('ordinary named shops, inns, chapels, and houses are BUILDING');
             expect(source).toContain('Only one map can be created at a time');
             expect(source).toContain('unmapped "transition space" between granularly mapped areas of interest');
-            expect(source).toContain('A map-worthy high-risk map within a SETTLEMENT is a SUBDUNGEON');
+            expect(source).toContain('A map-worthy high-risk child is a SUBDUNGEON');
+            expect(source).toContain('attach a nested map from anywhere without moving the player');
+            expect(source).toContain('No BUILDING, OBJECT, or pre-created SUB* asset is required');
+            expect(source).toContain('limited to three mapped documents');
             expect(source).toContain('fresh chat may begin inside a standalone DUNGEON/INTERIOR');
             expect(source).toContain('include: ["Exact Current SUB* Name"]');
             expect(source).toContain('leave the child standalone');
-            expect(source).toContain('Promotion first reclassifies the BUILDING');
+            expect(source).toContain('runtime creates the SUBDUNGEON/SUBINTERIOR gateway');
             expect(source).toContain('Importance alone is not sufficient');
             expect(source).toContain('BUILDING interiors use lazy asset generation and are empty on initialization');
             expect(source).toContain('When the player expresses the intent to enter BUILDING');
@@ -105,9 +127,11 @@ Out-of-range attack attempt → note {{user}} couldn't attack due to range; ask 
             expect(source).toContain('optional settlement-only include[]');
             expect(source).toContain('creation-only for SETTLEMENT absorption');
             expect(source).toContain('BUILDING has no map unless explicitly promoted');
-            expect(source).toContain('exact canonical names, never translated, expanded, or retitled');
-            expect(source).toContain('BUILDING keeps the SETTLEMENT active');
-            expect(source).toContain('mapped child becomes active at the deepest matching footer segment');
+            expect(source).toContain('Invent `site` as this new place\'s name');
+            expect(source).toContain('it does not need to already appear in the live Location footer');
+            expect(source).toContain('the exact names this map will use');
+            expect(source).toContain('BUILDING keeps its parent map active');
+            expect(source).toContain('mapped child becomes active at the deepest complete matching footer path');
             expect(source).toContain('Hosted child reality includes a compact host brief');
             expect(source).toContain('may be four or more tiers');
             expect(source).toContain('always append the exact current mapped area after the complete site breadcrumb');

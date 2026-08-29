@@ -13,7 +13,7 @@ const LIVE_TRAP_STATES = new Set(['ARMED', 'ACTIVE', 'ALERT', 'IDLE']);
 const STRESSED_STATES = new Set(['FLEEING', 'DAMAGED', 'ALERT']);
 
 const KIND_ART = {
-    CREATURE: new URL('./src/ui/SVG/creature.svg', import.meta.url).href,
+    CREATURE: new URL('./src/ui/SVG/man-person.svg', import.meta.url).href,
     GROUP: new URL('./src/ui/SVG/group.svg', import.meta.url).href,
     TRAP: new URL('./src/ui/SVG/trap.svg', import.meta.url).href,
     HAZARD: new URL('./src/ui/SVG/hazard-sign.svg', import.meta.url).href,
@@ -28,13 +28,32 @@ const KIND_ART = {
     OTHER: new URL('./src/ui/SVG/other.svg', import.meta.url).href,
 };
 
-const SLASH_OVERLAY = '<path d="M2 10.1 L10.1 2" fill="none" stroke="#0b1220" stroke-width="2.5" stroke-linecap="round"/><path d="M2 10.1 L10.1 2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>';
-const CROSS_OVERLAY = '<path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="#0b1220" stroke-width="2.4" stroke-linecap="round"/><path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round"/>';
+const SLASH_OVERLAY = '<path d="M2 10.1 L10.1 2" fill="none" stroke="#0b1220" stroke-width="2.5" stroke-linecap="round" pointer-events="none"/><path d="M2 10.1 L10.1 2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" pointer-events="none"/>';
+const CROSS_OVERLAY = '<path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="#0b1220" stroke-width="2.4" stroke-linecap="round" pointer-events="none"/><path d="M2.3 2.3 L9.7 9.7 M9.7 2.3 L2.3 9.7" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" pointer-events="none"/>';
 
 export const MAP_ICON_SIZE = { compact: 16.9, expanded: 18.2 };
 export const MAP_ICON_GAP = 6;
-export const MAP_ICON_MAX = { compact: 6, expanded: 7 };
+export const MAP_ICON_MAX = { compact: 5, expanded: 6 };
 export const MAP_NODE_FONT = { compact: 13, expanded: 15.6 };
+
+const KIND_ART_STYLE_ID = 'rt-dungeon-graph-kind-art';
+
+/**
+ * One shared stylesheet for kind masks instead of per-icon inline mask-image.
+ * Inline masks recost every glyph on hover; a single rule per kind stays cached.
+ */
+export function ensureDungeonMapKindArtStyles() {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById(KIND_ART_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = KIND_ART_STYLE_ID;
+    style.textContent = Object.entries(KIND_ART).map(([kind, href]) => {
+        const cls = kind.toLowerCase();
+        const url = JSON.stringify(href);
+        return `.rt-dungeon-graph-icon-${cls} .rt-dungeon-graph-icon-art{-webkit-mask-image:url(${url});mask-image:url(${url});}`;
+    }).join('');
+    document.head.appendChild(style);
+}
 
 const ICON_STACK = {
     compact: { padTop: 4, gap: 3, padBottom: 3 },
@@ -94,7 +113,8 @@ function isPlayerVisibleAsset(asset) {
 
 function isPlacedAsset(asset) {
     if (!asset?.location) return false;
-    return String(asset.state || '').toUpperCase() !== 'REMOVED';
+    const status = String(asset.state || '').toUpperCase();
+    return status !== 'REMOVED' && status !== 'LEFT' && status !== 'LEAVING';
 }
 
 /**
@@ -137,7 +157,6 @@ function overlayForMood(mood) {
 }
 
 function renderOneIcon(icon, x, y, size) {
-    const href = escapeXml(KIND_ART[icon.kind] || KIND_ART.OTHER);
     const scale = size / 12;
     const knowledgeClass = `rt-dungeon-graph-icon-${String(icon.knowledge || 'known').toLowerCase()}`;
     const classes = [
@@ -149,7 +168,7 @@ function renderOneIcon(icon, x, y, size) {
     const count = Number.isInteger(icon.count) ? String(icon.count) : '';
     return `<g class="${classes}" data-icon="${escapeXml(icon.token)}" data-asset-name="${escapeXml(icon.name)}" data-asset-kind="${escapeXml(icon.kind)}" data-asset-state="${escapeXml(icon.state)}" data-asset-knowledge="${escapeXml(icon.knowledge)}" data-asset-detail="${escapeXml(icon.detail || '')}"${count ? ` data-asset-count="${escapeXml(count)}"` : ''} transform="translate(${x},${y}) scale(${scale})" stroke="none">
         <rect class="rt-dungeon-graph-icon-hit" x="0" y="0" width="12" height="12" fill="transparent" pointer-events="all"></rect>
-        <image class="rt-dungeon-graph-icon-art" href="${href}" width="12" height="12" preserveAspectRatio="xMidYMid meet" pointer-events="none"></image>
+        <rect class="rt-dungeon-graph-icon-art" x="0" y="0" width="12" height="12" fill="currentColor" pointer-events="none"></rect>
         ${overlayForMood(icon.mood)}
     </g>`;
 }
@@ -188,6 +207,26 @@ export function renderDungeonGraphAssetTipHtml(asset = {}) {
     }`;
 }
 
+function serializeOverflowAssets(icons = []) {
+    return escapeXml(JSON.stringify(icons.map(icon => ({
+        name: icon.name,
+        kind: icon.kind,
+        state: icon.state,
+        knowledge: icon.knowledge,
+        detail: icon.detail,
+        count: icon.count,
+    }))));
+}
+
+/** Stacked inspector cards for assets hidden behind a +N overflow badge. */
+export function renderDungeonGraphOverflowTipHtml(assets = []) {
+    const list = Array.isArray(assets) ? assets : [];
+    if (!list.length) return '';
+    return `<div class="rt-dungeon-graph-overflow-tip">${
+        list.map(asset => `<div class="rt-dungeon-graph-overflow-tip-item">${renderDungeonGraphAssetTipHtml(asset)}</div>`).join('')
+    }</div>`;
+}
+
 /**
  * Render a centered icon row for a room node.
  * @param {object[]} icons
@@ -212,7 +251,12 @@ export function renderAreaAssetIconsSvg(icons, { cx, y, compact = true } = {}) {
     });
     if (overflow > 0) {
         const label = `+${overflow}`;
-        parts.push(`<text class="rt-dungeon-graph-icon-overflow" x="${x + size / 2}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="${overflowSize}">${label}</text>`);
+        const hidden = list.slice(max);
+        const slotX = x;
+        parts.push(`<g class="rt-dungeon-graph-icon-overflow" data-overflow-assets="${serializeOverflowAssets(hidden)}" transform="translate(${slotX},${top})">
+        <rect class="rt-dungeon-graph-icon-overflow-hit" x="0" y="0" width="${size}" height="${size}" fill="transparent" pointer-events="all"></rect>
+        <text x="${size / 2}" y="${size / 2}" text-anchor="middle" dominant-baseline="middle" font-size="${overflowSize}" pointer-events="none">${label}</text>
+    </g>`);
     }
     return `<g class="rt-dungeon-graph-icons">${parts.join('')}</g>`;
 }

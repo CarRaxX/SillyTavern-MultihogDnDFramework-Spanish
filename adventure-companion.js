@@ -8,7 +8,7 @@ import { getSettings } from './state-manager.js';
 import { cleanToolCallMessage, memoForGmContext } from './memo-processor.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { isRouterRunning, runRouterPass, sendDirectPrompt } from './src/app/runtime-bridge.js';
-import { isLocationMappingEnabled, isEffectiveSectionEnabled } from './src/state/section-enabled.js';
+import { isCyoaEnabled, isLorebookAgentRuntimeActive, isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { formatDungeonMapForPlayer, stripDungeonMapSection } from './dungeon-reality.js';
 import { clampFloatingPanelToViewport, isMobileLayout, makeDraggable, makeResizableBL, makeResizableBR, resolveViewportClampedGeometry } from './ui-geometry.js';
 
@@ -874,7 +874,7 @@ export function getCurrentCyoaChoices(root = document) {
  */
 function buildActForUserContext() {
     const settings = getSettings();
-    const cyoaActive = isEffectiveSectionEnabled('CYOA_mode', settings);
+    const cyoaActive = isCyoaEnabled(settings);
     if (!cyoaActive) {
         return `## ACT FOR USER MODE
 CYOA is inactive. If the player clearly asks you to take their turn, call act_for_user with action_text containing the concise player message to submit. Include brief, organic commentary reacting to your move without repeating it or inventing the outcome.`;
@@ -1015,30 +1015,30 @@ function companionActionArgs(action) {
 function summarizeMapUpdaterCompanionResult(result) {
     const skipped = result?.skipped;
     if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
-        return { success: false, status: 'unavailable', message: 'Mapas Persistentes está desactivado.' };
+        return { success: false, status: 'unavailable', message: 'Persistent Maps is off.' };
     }
     if (skipped === 'no_active_map') {
-        return { success: false, status: 'unavailable', message: 'No hay un mapa de mazmorra o asentamiento activo.' };
+        return { success: false, status: 'unavailable', message: 'No active dungeon or settlement map.' };
     }
     if (skipped === 'no_such_map') {
-        return { success: false, status: 'unavailable', message: 'No se pudo cargar ese lugar mapeado.' };
+        return { success: false, status: 'unavailable', message: 'That mapped site could not be loaded.' };
     }
     if (skipped === 'disabled') {
-        return { success: false, status: 'disabled', message: 'El Actualizador de Mapas está desactivado.' };
+        return { success: false, status: 'disabled', message: 'Map Updater is disabled.' };
     }
     if (skipped === 'busy') {
-        return { success: false, status: 'busy', message: 'Otro agente ya se está ejecutando.' };
+        return { success: false, status: 'busy', message: 'Another agent is already running.' };
     }
     if (skipped === 'stopped') {
-        return { success: true, status: 'stopped', message: 'Detenido.' };
+        return { success: true, status: 'stopped', message: 'Stopped.' };
     }
     if (result?.ok && result?.noop) {
-        return { success: true, status: 'noop', message: 'No hubo cambios duraderos en el mapa.' };
+        return { success: true, status: 'noop', message: 'Nothing durable changed on the map.' };
     }
     if (result?.ok) {
-        return { success: true, status: 'completed', message: 'Actualización de ocupación del mapa aplicada.' };
+        return { success: true, status: 'completed', message: 'Map occupancy update applied.' };
     }
-    return { success: false, status: 'failed', message: 'No se pudo aplicar una actualización válida de ocupación del mapa.' };
+    return { success: false, status: 'failed', message: 'Could not apply a valid map occupancy update.' };
 }
 
 /**
@@ -1049,7 +1049,7 @@ async function executeCompanionAction(action) {
     try {
         if (action.name === 'act_for_user') {
             const settings = getSettings();
-            const cyoaActive = isEffectiveSectionEnabled('CYOA_mode', settings);
+            const cyoaActive = isCyoaEnabled(settings);
             const actionText = String(action.action_text || '').trim();
             // A free-form player message deliberately remains available in
             // CYOA mode. When present, it takes precedence over a choice.
@@ -1057,68 +1057,68 @@ async function executeCompanionAction(action) {
                 const choices = getCurrentCyoaChoices();
                 if (!choices.length) {
                     return {
-                        action: 'Turno del Jugador',
+                        action: 'Player Turn',
                         success: false,
                         status: 'unavailable',
-                        message: 'CYOA está activo, pero no hay botones de opción disponibles actualmente.',
+                        message: 'CYOA is active, but no current choice buttons are available.',
                     };
                 }
                 const choiceIndex = Number(action.choice_index);
                 if (!Number.isInteger(choiceIndex) || choiceIndex < 1 || choiceIndex > choices.length) {
                     return {
-                        action: 'Turno del Jugador',
+                        action: 'Player Turn',
                         success: false,
                         status: 'invalid_choice',
-                        message: `Elige un choice_index de CYOA entre 1 y ${choices.length}.`,
+                        message: `Choose a CYOA choice_index from 1 to ${choices.length}.`,
                     };
                 }
                 const selected = choices[choiceIndex - 1];
                 selected.button.click();
                 return {
-                    action: 'Turno del Jugador',
+                    action: 'Player Turn',
                     success: true,
                     status: 'submitted',
-                    message: `Opción de CYOA enviada: ${selected.text}`,
+                    message: `Submitted CYOA choice: ${selected.text}`,
                     terminal: true,
                 };
             }
 
             if (!actionText) {
                 return {
-                    action: 'Turno del Jugador',
+                    action: 'Player Turn',
                     success: false,
                     status: 'missing_action',
                     message: cyoaActive
-                        ? 'Proporciona action_text o un choice_index de CYOA válido para el turno del jugador.'
-                        : 'Proporciona action_text para el turno del jugador.',
+                        ? 'Provide action_text or a valid CYOA choice_index for the player turn.'
+                        : 'Provide action_text for the player turn.',
                 };
             }
             const textarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('send_textarea'));
             const sendBtn = /** @type {HTMLElement|null} */ (document.getElementById('send_but'));
             if (!textarea || !sendBtn || typeof sendBtn.click !== 'function') {
                 return {
-                    action: 'Turno del Jugador',
+                    action: 'Player Turn',
                     success: false,
                     status: 'unavailable',
-                    message: 'El campo de entrada de chat de SillyTavern no está disponible.',
+                    message: 'The SillyTavern chat input is not available.',
                 };
             }
             if ('disabled' in sendBtn && sendBtn.disabled) {
                 return {
-                    action: 'Turno del Jugador',
+                    action: 'Player Turn',
                     success: false,
                     status: 'busy',
-                    message: 'El campo de entrada de chat de SillyTavern está ocupado actualmente.',
+                    message: 'The SillyTavern chat input is currently busy.',
                 };
             }
             textarea.value = actionText;
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
             sendBtn.click();
             return {
-                action: 'Turno del Jugador',
+                action: 'Player Turn',
                 success: true,
                 status: 'submitted',
-                message: `Acción del jugador enviada: ${actionText}`,
+                message: `Submitted player action: ${actionText}`,
                 terminal: true,
             };
         }
@@ -1127,17 +1127,17 @@ async function executeCompanionAction(action) {
             const result = await sendDirectPrompt(action.instruction);
             if (result && typeof result === 'object') {
                 return {
-                    action: 'Rastreador de Estado',
+                    action: 'State Tracker',
                     success: !!result.success,
                     status: String(result.status || (result.success ? 'completed' : 'failed')),
-                    message: String(result.message || (result.success ? 'Comando del Rastreador de Estado completado.' : 'Comando del Rastreador de Estado falló.')),
+                    message: String(result.message || (result.success ? 'State Tracker command completed.' : 'State Tracker command failed.')),
                 };
             }
             return {
-                action: 'Rastreador de Estado',
+                action: 'State Tracker',
                 success: false,
                 status: 'failed',
-                message: 'El Rastreador de Estado no reportó un resultado.',
+                message: 'State Tracker did not report a result.',
             };
         }
 
@@ -1145,35 +1145,35 @@ async function executeCompanionAction(action) {
             const settings = getSettings();
             if (!isLocationMappingEnabled(settings)) {
                 return {
-                    action: 'Actualizador de Mapas',
+                    action: 'Map Updater',
                     success: false,
                     status: 'unavailable',
-                    message: 'Mapas Persistentes está desactivado.',
+                    message: 'Persistent Maps is off.',
                 };
             }
             if (settings.mapUpdaterEnabled === false) {
                 return {
-                    action: 'Actualizador de Mapas',
+                    action: 'Map Updater',
                     success: false,
                     status: 'disabled',
-                    message: 'El Actualizador de Mapas está desactivado.',
+                    message: 'Map Updater is disabled.',
                 };
             }
             if (typeof runtimeState.isLoreOrMapAgentBusyRef === 'function' && runtimeState.isLoreOrMapAgentBusyRef()) {
                 return {
-                    action: 'Actualizador de Mapas',
+                    action: 'Map Updater',
                     success: false,
                     status: 'busy',
-                    message: 'Otro agente ya se está ejecutando.',
+                    message: 'Another agent is already running.',
                 };
             }
             const run = runtimeState.runMapUpdaterPassRef;
             if (typeof run !== 'function') {
                 return {
-                    action: 'Actualizador de Mapas',
+                    action: 'Map Updater',
                     success: false,
                     status: 'unavailable',
-                    message: 'El Actualizador de Mapas no está disponible aún.',
+                    message: 'Map Updater is not available yet.',
                 };
             }
             const lookback = settings.mapUpdaterDirectLookback ?? settings.routerLookback ?? 10;
@@ -1187,55 +1187,55 @@ async function executeCompanionAction(action) {
                 await runtimeState.refreshImmersionView();
             }
             return {
-                action: 'Actualizador de Mapas',
+                action: 'Map Updater',
                 ...summary,
             };
         }
 
         const settings = getSettings();
-        if (!settings.routerEnabled) {
+        if (!isLorebookAgentRuntimeActive(settings)) {
             return {
-                action: 'Agente de Lorebook',
+                action: 'Lorebook Agent',
                 success: false,
                 status: 'disabled',
-                message: 'El Agente de Lorebook está desactivado.',
+                message: 'Lorebook Agent is disabled.',
             };
         }
         if (isRouterRunning()) {
             return {
-                action: 'Agente de Lorebook',
+                action: 'Lorebook Agent',
                 success: false,
                 status: 'busy',
-                message: 'El Agente de Lorebook ya se está ejecutando.',
+                message: 'Lorebook Agent is already running.',
             };
         }
         const completed = await runRouterPass(null, action.instruction, null, true);
         return completed === true
             ? {
-                action: 'Agente de Lorebook',
+                action: 'Lorebook Agent',
                 success: true,
                 status: 'completed',
-                message: 'Comando del Agente de Lorebook completado.',
+                message: 'Lorebook Agent command completed.',
             }
             : {
-                action: 'Agente de Lorebook',
+                action: 'Lorebook Agent',
                 success: false,
                 status: 'failed',
-                message: 'El comando del Agente de Lorebook no se completó.',
+                message: 'Lorebook Agent command did not complete.',
             };
     } catch (err) {
         const actionLabel = action.name === 'command_state_tracker'
-            ? 'Rastreador de Estado'
+            ? 'State Tracker'
             : action.name === 'command_map_updater'
-                ? 'Actualizador de Mapas'
+                ? 'Map Updater'
             : action.name === 'act_for_user'
-                ? 'Turno del Jugador'
-                : 'Agente de Lorebook';
+                ? 'Player Turn'
+                : 'Lorebook Agent';
         return {
             action: actionLabel,
             success: false,
             status: 'failed',
-            message: err?.message || 'El comando falló.',
+            message: err?.message || 'The command failed.',
         };
     }
 }
@@ -1248,6 +1248,14 @@ async function executeCompanionAction(action) {
  * @param {{ summaryFailed?: boolean }} [options]
  * @returns {string}
  */
+export function formatCompanionActionReceipt(results, options = {}) {
+    const lines = results.map((result) => `${result.success ? '✓' : '✗'} ${result.action}: ${result.message}`);
+    if (options.summaryFailed) {
+        lines.push('', 'The action result above is authoritative. The update finished, but I could not generate an additional conversational summary.');
+    }
+    return lines.join('\n');
+}
+
 /**
  * Player actions are already visible in SillyTavern's main chat. Return the
  * Companion's table-side reaction instead of echoing a mechanical receipt.
@@ -1498,50 +1506,50 @@ function ensureChatShell(panel) {
             <button type="button" class="rpg-tracker-nav-btn rt-tutorial-back" id="rt-tutorial-back" title="Back to State Tracker">← Back</button>
             <button type="button" class="rpg-tracker-icon-btn rt-chat-detach-btn" id="rt-chat-detach-btn" title="Detach Adventure Companion" aria-label="Detach Adventure Companion">⧉</button>
             <div class="rt-chat-tutorial-mode-wrap">
-                <label class="rt-chat-tutorial-mode-toggle" title="Adjuntar la guía de Multihog a cada solicitud del Acompañante de Aventura">
+                <label class="rt-chat-tutorial-mode-toggle" title="Attach the Multihog guide to every Adventure Companion request">
                     <input type="checkbox" id="rt-chat-tutorial-mode" ${_prefs.tutorialMode ? 'checked' : ''}>
-                    <span>MODO TUTORIAL</span>
+                    <span>TUTORIAL MODE</span>
                 </label>
-                <button type="button" class="rt-chat-tutorial-info-btn" id="rt-chat-tutorial-info-btn" aria-label="Acerca del Modo Tutorial" aria-haspopup="dialog" aria-expanded="false">?</button>
-                <div class="rt-chat-tutorial-info" id="rt-chat-tutorial-info" role="dialog" aria-label="Acerca del Modo Tutorial" style="display:none;">
-                    <strong>MODO TUTORIAL</strong>
-                    <span>Inyecta el archivo Markdown de documentación de Multihog en cada solicitud del Acompañante de Aventura. Es excelente mientras aprendes el sistema, pero los veteranos pueden dejarlo desactivado para ahorrar tokens de entrada.</span>
+                <button type="button" class="rt-chat-tutorial-info-btn" id="rt-chat-tutorial-info-btn" aria-label="About Tutorial Mode" aria-haspopup="dialog" aria-expanded="false">?</button>
+                <div class="rt-chat-tutorial-info" id="rt-chat-tutorial-info" role="dialog" aria-label="About Tutorial Mode" style="display:none;">
+                    <strong>TUTORIAL MODE</strong>
+                    <span>Injects the Multihog documentation Markdown file into every Adventure Companion request. It is great while learning the system, but veterans can leave it off to avoid a few thousand extra input tokens. That added cost is usually negligible with inexpensive models such as Gemini Flash-Lite/Flash, Deepseek V4 Flash 0731, or GPT-5.6 Luna.</span>
                 </div>
             </div>
             <div class="rt-chat-gear-wrap">
-                <button type="button" class="rpg-tracker-icon-btn rt-chat-gear-btn" id="rt-chat-gear-btn" title="Opciones de CHAT" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear"></i></button>
+                <button type="button" class="rpg-tracker-icon-btn rt-chat-gear-btn" id="rt-chat-gear-btn" title="CHAT options" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear"></i></button>
                 <div class="rt-chat-gear-menu" id="rt-chat-gear-menu" style="display:none;" role="menu">
                     <div class="rt-chat-gear-section">
-                        <span class="rt-chat-gear-section-label">Historial de historia</span>
-                        <div class="rt-tutorial-lookback" title="Incluir mensajes de chat de SillyTavern como contexto de la historia.">
-                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-tutorial-lookback" value="${mp.lookback}" min="0" max="100" aria-label="Cantidad de mensajes de historial">
+                        <span class="rt-chat-gear-section-label">Story lookback</span>
+                        <div class="rt-tutorial-lookback" title="Include SillyTavern chat messages as story context.">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-tutorial-lookback" value="${mp.lookback}" min="0" max="100" aria-label="Story lookback message count">
                             <span class="rt-tutorial-lookback-unit">msgs</span>
-                            <label class="rt-tutorial-lookback-all" title="Incluir todo el historial del chat">
+                            <label class="rt-tutorial-lookback-all" title="Include the entire chat history">
                                 <input type="checkbox" id="rt-tutorial-lookback-all" ${mp.lookbackAll ? 'checked' : ''}>
-                                <span>todo</span>
+                                <span>all</span>
                             </label>
                         </div>
                     </div>
                     <label class="rt-chat-gear-item" role="menuitemcheckbox">
                         <input type="checkbox" id="rt-chat-inject-lore" ${_prefs.injectLore ? 'checked' : ''}>
-                        <span>Inyectar lore del Agente de Lorebook</span>
+                        <span>Inject Lorebook Agent lore</span>
                     </label>
                     <label class="rt-chat-gear-item" role="menuitemcheckbox">
                         <input type="checkbox" id="rt-chat-inject-memo" ${_prefs.injectMemo ? 'checked' : ''}>
-                        <span>Inyectar Rastreador de Estado</span>
+                        <span>Inject State Tracker</span>
                     </label>
-                    <label class="rt-chat-gear-item" role="menuitemcheckbox" title="Adjuntar el mapa del lugar actual de cara al jugador (conocimiento de Visuales/Mapa).">
+                    <label class="rt-chat-gear-item" role="menuitemcheckbox" title="Attach the player-facing current site map (Visuals/Map knowledge).">
                         <input type="checkbox" id="rt-chat-inject-map" ${_prefs.injectMap ? 'checked' : ''}>
-                        <span>Inyectar mapa del lugar actual</span>
+                        <span>Inject current site map</span>
                     </label>
                 </div>
             </div>
-            <button type="button" class="rpg-tracker-nav-btn rt-tutorial-clear" id="rt-tutorial-clear" title="Limpiar la conversación del Acompañante de Aventura">Limpiar</button>
+            <button type="button" class="rpg-tracker-nav-btn rt-tutorial-clear" id="rt-tutorial-clear" title="Clear the Adventure Companion conversation">Clear</button>
         </div>
         <div class="rt-tutorial-messages" id="rt-tutorial-messages" role="log" aria-live="polite"></div>
         <div class="rt-tutorial-composer">
             <textarea class="rt-tutorial-input" id="rt-tutorial-input" rows="2" placeholder=""></textarea>
-            <button type="button" class="rpg-tracker-prompt-send rt-tutorial-send" id="rt-tutorial-send" title="Enviar">▶</button>
+            <button type="button" class="rpg-tracker-prompt-send rt-tutorial-send" id="rt-tutorial-send" title="Send">▶</button>
         </div>
     `;
     host.dataset.rtTutorialReady = SHELL_VERSION;
@@ -1556,8 +1564,8 @@ function getMessageEl() {
 function welcomeHtml() {
     return `
         <div class="rt-tutorial-msg rt-tutorial-msg-bot rt-tutorial-welcome">
-            <div class="rt-tutorial-msg-label">Acompañante de Aventura</div>
-            <div class="rt-tutorial-msg-body">Pregúntame sobre Multihog, genera ideas o discute tu aventura, o pídeme cualquiera de estas cuatro cosas: actualizar el Rastreador de Estado, actualizar el Agente de Lorebook, actualizar el mapa del lugar activo (Actualizador de Mapas) o tomar tu siguiente turno (mensaje de chat / CYOA), sin necesidad de palabras clave especiales. No puedo operar los menús de la interfaz por mí mismo. Activa el Modo Tutorial cuando desees incluir la guía del framework adjunta a cada solicitud.</div>
+            <div class="rt-tutorial-msg-label">Adventure Companion</div>
+            <div class="rt-tutorial-msg-body">Ask me about Multihog, brainstorm or discuss your adventure, or ask me to do one of four things: update the State Tracker, update the Lorebook Agent, update the active site map (Map Updater), or take your next turn (chat message / CYOA)—no special command wording required. I can't operate Multihog UI menus myself. Enable Tutorial Mode when you want the framework guide attached to every request.</div>
         </div>`;
 }
 
@@ -1573,7 +1581,7 @@ function renderTranscript() {
     box.innerHTML = history.map((m) => {
         const isUser = m.role === 'user';
         const cls = isUser ? 'rt-tutorial-msg-user' : 'rt-tutorial-msg-bot';
-        const who = isUser ? 'Tú' : label;
+        const who = isUser ? 'You' : label;
         const body = isUser ? escapeHtml(m.content).replace(/\n/g, '<br>') : formatBotHtml(m.content);
         return `<div class="rt-tutorial-msg ${cls}"><div class="rt-tutorial-msg-label">${escapeHtml(who)}</div><div class="rt-tutorial-msg-body">${body}</div></div>`;
     }).join('');

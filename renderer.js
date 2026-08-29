@@ -1,8 +1,7 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage, getBarAnimateChanges } from './state-manager.js';
 import { lookupCustomPortraitSrc } from './portrait-storage.js';
 import { escapeHtml, decodeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline, isEmergentQuest } from './memo-processor.js';
-import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, TAG_DISPLAY_NAMES, renderStartingGearTierOptions } from './constants.js';
-import { t } from './src/i18n/index.js';
+import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, renderStartingGearTierOptions, TAG_DISPLAY_NAMES } from './constants.js';
 import { isResolvedCombatantStatusLine, parseCombatSideHeader } from './src/state/combat-persistence.js';
 import { buildDisplayGroupRenderPlan } from './src/features/display-groups.js';
 
@@ -105,109 +104,32 @@ export function renderDayNightBadge(str) {
 
     export const STOCK_FIELD_RULES = {
         'combat': 'numbers',
-        'combate': 'numbers',
         'gear': 'highlight',
-        'equipo': 'highlight',
-        'proficiencies': 'pills',
-        'competencias': 'pills',
         'attr': 'highlight',
         'attributes': 'highlight',
-        'atributos': 'highlight',
-        'atrib': 'highlight',
         'skills': 'pills',
-        'habilidades': 'pills',
         'key skills': 'pills',
         'saves': 'numbers',
-        'salvaciones': 'numbers',
         'status': 'pills',
-        'estado': 'pills',
         'traits': 'pills',
-        'rasgos': 'pills',
         'abilities': 'pills',
-        'capacidades': 'pills',
-        'capacidad': 'pills',
         'other': 'pills',
-        'otros': 'pills',
-        'otro': 'pills',
         'resistances': 'pills',
-        'resistencias': 'pills',
         'res': 'pills',
         'hd': 'hd_pips',
-        'dg': 'hd_pips',
         'weapon': 'highlight',
-        'arma': 'highlight',
         'att/def': 'numbers',
-        'atq/def': 'numbers',
         'primary weapon': 'highlight',
         'spells': 'spell_group',
-        'conjuros': 'spell_group',
-        'hechizos': 'spell_group',
-        'ac': 'text',
-        'ca': 'text'
+        'ac': 'text'
     };
-
-    const SUB_LABEL_TRANSLATIONS = {
-        'combat:': 'Combate:',
-        'combate:': 'Combate:',
-        'gear:': 'Equipo:',
-        'equipo:': 'Equipo:',
-        'proficiencies:': 'Competencias:',
-        'competencias:': 'Competencias:',
-        'attr:': 'Atributos:',
-        'attributes:': 'Atributos:',
-        'atributos:': 'Atributos:',
-        'atrib:': 'Atributos:',
-        'saves:': 'Salvaciones:',
-        'salvaciones:': 'Salvaciones:',
-        'skills:': 'Habilidades:',
-        'habilidades:': 'Habilidades:',
-        'key skills:': 'Habilidades Clave:',
-        'traits:': 'Rasgos:',
-        'rasgos:': 'Rasgos:',
-        'abilities:': 'Capacidades:',
-        'capacidades:': 'Capacidades:',
-        'status:': 'Estado:',
-        'estado:': 'Estado:',
-        'hd:': 'DG:',
-        'dg:': 'DG:',
-        'other:': 'Otros:',
-        'otros:': 'Otros:',
-        'otro:': 'Otros:',
-        'info:': 'Información:',
-        'spells:': 'Conjuros:',
-        'conjuros:': 'Conjuros:',
-        'hechizos:': 'Conjuros:',
-        'ac:': 'CA:',
-        'ca:': 'CA:',
-        'res:': 'Res:',
-        'resistances:': 'Resistencias:',
-        'weapon:': 'Arma:',
-        'arma:': 'Arma:',
-        'att/def:': 'Atq/Def:',
-        'atq/def:': 'Atq/Def:'
-    };
-
-    function translateSubFieldValue(val) {
-        if (!val) return val;
-        return val
-            .replace(/\bHealthy\b/gi, 'Sano')
-            .replace(/\b(\d+)\s+attacks?\b/gi, (m, n) => `${n} ${parseInt(n, 10) === 1 ? 'ataque' : 'ataques'}`)
-            .replace(/\bRanged\b/gi, 'A distancia')
-            .replace(/\bMelee\b/gi, 'Cuerpo a cuerpo')
-            .replace(/\bBase AC\b/gi, 'CA Base')
-            .replace(/\bTotal AC\b/gi, 'CA Total');
-    }
 
     export function renderSubFieldByRule(rule, line, barId = null, options = {}) {
         const colonIdx = line.indexOf(':');
         // If there's no colon, the whole line is the value (no label)
         const hasLabel = colonIdx !== -1;
-        const rawLabelText = hasLabel ? line.substring(0, colonIdx + 1).trim() : '';
-        const rawValue     = hasLabel ? line.substring(colonIdx + 1).trim() : line.trim();
-
-        const displayLabelText = SUB_LABEL_TRANSLATIONS[rawLabelText.toLowerCase()] || rawLabelText;
-        const value = translateSubFieldValue(rawValue);
-
+        const labelText = hasLabel ? line.substring(0, colonIdx + 1).trim() : '';
+        const value     = hasLabel ? line.substring(colonIdx + 1).trim() : line.trim();
         // Badge color overrides belong to the badge value itself. Applying the
         // same color to a preceding label (for example `Status:` in
         // `Status: ((BADGEPINK)) Respected`) visually merges the label into the
@@ -216,8 +138,8 @@ export function renderDayNightBadge(str) {
         // label means `Hunger: ((BARBLUE)) 75/100` colors only the bar.
         const colorLabel = rule.color && !['badge', 'badge_colored', 'pills', 'pill_colored', 'hp_bar', 'xp_bar', 'progress'].includes(rule.renderType);
         const labelStyle = colorLabel ? ` style="color:${rule.color}"` : '';
-        const labelHtml  = displayLabelText
-            ? `<span class="rt-entity-sub-label"${labelStyle}>${escapeHtmlWithColor(displayLabelText)}</span>`
+        const labelHtml  = labelText
+            ? `<span class="rt-entity-sub-label"${labelStyle}>${escapeHtmlWithColor(labelText)}</span>`
             : '';
 
         switch (rule.renderType) {
@@ -480,22 +402,30 @@ export function renderDayNightBadge(str) {
                 return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
             }
             case 'slots': {
-                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                const pm = value.match(/(\d+(?:\.\d+)?|\.\d+)\s*\/\s*(\d+(?:\.\d+)?|\.\d+)/);
                 if (pm) {
-                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const rawCurrent = Number(pm[1]), rawMax = Number(pm[2]);
+                    const cur = Math.max(0, Math.min(rawCurrent, rawMax));
+                    const max = rawMax;
                     const extra = value.replace(pm[0], '').trim();
                     let barBg = rule.color ? rule.color : '#aaaaaa';
                     if (barId) barBg = getBarBackground(barId, barBg, max > 0 ? (cur/max)*100 : 0);
-                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}"` : '';
                     
                     let slotsHtml = '';
-                    for (let i = 0; i < max; i++) {
-                        const isFilled = i < cur;
-                        slotsHtml += `<div class="rt-slot ${isFilled ? 'filled' : 'empty'}" style="${isFilled ? `background:${barBg};` : ''}"></div>`;
+                    for (let i = 0; i < Math.ceil(max); i++) {
+                        const fill = Math.max(0, Math.min(1, cur - i));
+                        const isFilled = fill >= 1;
+                        const isPartial = fill > 0 && fill < 1;
+                        const fillHtml = fill > 0
+                            ? `<span class="rt-slot-fill" style="width:${fill * 100}%;background:${barBg};"></span>`
+                            : '';
+                        slotsHtml += `<div class="rt-slot ${isFilled ? 'filled' : isPartial ? 'partial' : 'empty'}">${fillHtml}</div>`;
                     }
+                    const tooltip = `${labelText || 'Value'} ${pm[1]}/${pm[2]}${extra ? ` ${extra}` : ''}`;
                     
                     return `<div class="rt-entity-sub-line rt-slots-row">${labelHtml}
-                        <div class="rt-slots-container"${recolorData}>${slotsHtml}</div>
+                        <div class="rt-slots-container"${recolorData} title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">${slotsHtml}</div>
                         <span class="rt-slots-label">${extra ? escapeHtml(extra) : ''}</span>
                     </div>`;
                 }
@@ -622,96 +552,32 @@ export function renderDayNightBadge(str) {
         if (hm && hm[2] && hm[3]) {
             const cur = parseInt(hm[2].replace(/,/g, ''), 10);
             const max = parseInt(hm[3].replace(/,/g, ''), 10);
-            if (max > 30) {
-                pipsHtml = `<span class="rt-hd-label">[ ${escapeHtmlWithColor(hm[1].trim())} ]</span> <span class="rt-hd-text-val">(${cur}/${max})</span>`;
-            } else {
-                pipsHtml = `<span class="rt-hd-label">[ ${escapeHtmlWithColor(hm[1].trim())} ]</span> <span class="rt-hd-pips">${Array.from({ length: max }, (_, i) => `<span class="rt-hd-pip${i < cur ? ' rt-hd-available' : ''}"></span>`).join('')}</span>`;
-            }
+            pipsHtml = `<span class="rt-hd-label">[ ${escapeHtmlWithColor(hm[1].trim())} ]</span> <span class="rt-hd-pips">${Array.from({ length: max }, (_, i) => `<span class="rt-hd-pip${i < cur ? ' rt-hd-available' : ''}"></span>`).join('')}</span>`;
         }
-        return `<div class="rt-entity-sub-line"><span class="rt-entity-sub-label" title="Dados de Golpe / Hit Dice (usados para recuperar vida durante Descansos Cortos)">HD:</span> <span>${pipsHtml}</span></div>`;
-    }
-
-    const SPANISH_TO_ENGLISH_SPELLS = {
-        'bola de fuego': 'fireball', 'fireball': 'fireball',
-        'proyectil magico': 'magic-missile', 'proyectil mágico': 'magic-missile', 'magic missile': 'magic-missile',
-        'curar heridas': 'cure-wounds', 'cure wounds': 'cure-wounds',
-        'manos ardientes': 'burning-hands', 'burning hands': 'burning-hands',
-        'escudo': 'shield', 'shield': 'shield',
-        'luz': 'light', 'light': 'light',
-        'mano de mago': 'mage-hand', 'mage hand': 'mage-hand',
-        'armadura de mago': 'mage-armor', 'mage armor': 'mage-armor',
-        'rayo de escarcha': 'ray-of-frost', 'ray of frost': 'ray-of-frost',
-        'rayo de hechiceria': 'witch-bolt', 'rayo de hechicería': 'witch-bolt', 'witch bolt': 'witch-bolt',
-        'rayo abrasador': 'scorching-ray', 'scorching ray': 'scorching-ray',
-        'paso brumoso': 'misty-step', 'misty step': 'misty-step',
-        'invisibilidad': 'invisibility', 'invisibility': 'invisibility',
-        'volar': 'fly', 'fly': 'fly',
-        'sugerencia': 'suggestion', 'suggestion': 'suggestion',
-        'contrahechizo': 'counterspell', 'counterspell': 'counterspell',
-        'disipar magia': 'dispel-magic', 'dispel magic': 'dispel-magic',
-        'relampago': 'lightning-bolt', 'relámpago': 'lightning-bolt', 'lightning bolt': 'lightning-bolt',
-        'patron hipnotico': 'hypnotic-pattern', 'patrón hipnótico': 'hypnotic-pattern', 'hypnotic pattern': 'hypnotic-pattern',
-        'muro de fuego': 'wall-of-fire', 'wall of fire': 'wall-of-fire',
-        'polimorfia': 'polymorph', 'polymorph': 'polymorph',
-        'cono de frio': 'cone-of-cold', 'cono de frío': 'cone-of-cold', 'cone of cold': 'cone-of-cold',
-        'palabra de curacion': 'healing-word', 'palabra de curación': 'healing-word', 'healing word': 'healing-word',
-        'truco de la cuerda': 'rope-trick', 'rope trick': 'rope-trick',
-        'descarga de fuego': 'fire-bolt', 'fire bolt': 'fire-bolt',
-        'agarre electrizante': 'shocking-grasp', 'shocking grasp': 'shocking-grasp',
-        'ilusion menor': 'minor-illusion', 'ilusión menor': 'minor-illusion', 'minor illusion': 'minor-illusion',
-        'prestidigitacion': 'prestidigitation', 'prestidigitación': 'prestidigitation', 'prestidigitation': 'prestidigitation',
-        'orientacion': 'guidance', 'orientación': 'guidance', 'guidance': 'guidance',
-        'llama sagrada': 'sacred-flame', 'sacred flame': 'sacred-flame',
-        'pista de la bruja': 'hex', 'hex': 'hex',
-        'marca del cazador': 'hunters-mark', 'hunters mark': 'hunters-mark',
-        'identificar': 'identify', 'identify': 'identify',
-        'grasa': 'grease', 'grease': 'grease',
-        'dormir': 'sleep', 'sleep': 'sleep',
-        'caida de pluma': 'feather-fall', 'caída de pluma': 'feather-fall', 'feather fall': 'feather-fall',
-        'detectar magia': 'detect-magic', 'detect magic': 'detect-magic',
-        'orbe cromatico': 'chromatic-orb', 'orbe cromático': 'chromatic-orb', 'chromatic orb': 'chromatic-orb'
-    };
-
-    function resolveSpellUrl(name) {
-        const normalized = name.toLowerCase().trim();
-        if (SPANISH_TO_ENGLISH_SPELLS[normalized]) {
-            return `https://dnd5e.wikidot.com/spell:${SPANISH_TO_ENGLISH_SPELLS[normalized]}`;
-        }
-        const noAccents = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (SPANISH_TO_ENGLISH_SPELLS[noAccents]) {
-            return `https://dnd5e.wikidot.com/spell:${SPANISH_TO_ENGLISH_SPELLS[noAccents]}`;
-        }
-        // Custom homebrew spell created by AI / user: fallback to Google D&D 5e search to prevent 404
-        return `https://www.google.com/search?q=dnd+5e+spell+${encodeURIComponent(name)}`;
+        return `<div class="rt-entity-sub-line"><span class="rt-entity-sub-label">HD:</span> <span>${pipsHtml}</span></div>`;
     }
 
     export function renderSpellGroups(val) {
-        const cleanVal = val.replace(/^(?:Spells:|Conjuros:|Hechizos:)\s*/i, '');
-        const isCompound = /\|/.test(cleanVal) && /(?:Level\s*\d+|Cantrips?|Nivel\s*\d+|Trucos?)/i.test(cleanVal);
-        const groups = isCompound ? cleanVal.split(/\s*\|\s*/) : [cleanVal];
+        const isCompound = /\|/.test(val) && /(?:Level\s*\d+|Cantrips?)/i.test(val);
+        const groups = isCompound ? val.split(/\s*\|\s*/) : [val];
         let html = '';
         for (const group of groups) {
-            const groupText = group.trim().replace(/^(?:Spells:|Conjuros:|Hechizos:)\s*/i, '');
-            const m = groupText.match(/^(Level\s*\d+|Cantrips?|Nivel\s*\d+|Trucos?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*(?::\s*(.+))?$/i);
+            const m = group.trim().match(/^(Level\s*\d+|Cantrips?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*(?::\s*(.+))?$/i);
             if (!m) continue;
             const [, lbl, availStr, maxStr, spellList] = m;
-            const isCantrip = /cantrip|truco/i.test(lbl);
+            const isCantrip = /cantrip/i.test(lbl);
             let pipsHtml = '';
             if (!isCantrip && availStr !== undefined && maxStr !== undefined) {
                 const avail = parseInt(availStr, 10), maxSlots = parseInt(maxStr, 10);
-                if (maxSlots > 30) {
-                    pipsHtml = `<span class="rt-slot-text">(${avail}/${maxSlots})</span>`;
-                } else {
-                    pipsHtml = `<span class="rt-slot-pips">${Array.from({ length: maxSlots }, (_, i) =>
-                        `<span class="rt-slot-pip${i < avail ? ' rt-slot-available' : ' rt-slot-used'}"></span>`).join('')}</span>`;
-                }
+                pipsHtml = `<span class="rt-slot-pips">${Array.from({ length: maxSlots }, (_, i) =>
+                    `<span class="rt-slot-pip${i < avail ? ' rt-slot-available' : ' rt-slot-used'}"></span>`).join('')}</span>`;
             }
             let spellsHtml = '';
             if (spellList) {
                 spellsHtml = spellList.split(',').map(s => {
                     const name = s.trim();
-                    const url = resolveSpellUrl(name);
-                    return `<a href="${url}" target="_blank" class="rt-spell-name" title="Ver hechizo">${escapeHtmlWithColor(name)}</a>`;
+                    const slug = name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]+/g, '-');
+                    return `<a href="https://dnd5e.wikidot.com/spell:${slug}" target="_blank" class="rt-spell-name" title="View spell on Wikidot">${escapeHtmlWithColor(name)}</a>`;
                 }).join('');
             }
             html += `<div class="rt-spell-row"><span class="rt-spell-level">${escapeHtmlWithColor(lbl.trim())}</span><div class="rt-spell-inline-group"><div class="rt-spell-list">${pipsHtml}${spellsHtml}</div></div></div>`;
@@ -1292,35 +1158,27 @@ export function renderDayNightBadge(str) {
         }
 
         const colonIdx = displayText.indexOf(':');
-        const cleanTextForParen = displayText.replace(/\.$/, '').trim();
-        const parenMatch = cleanTextForParen.match(/^(.+?)\s*\((.+)\)$/);
-
-        let namePart = '';
-        let descPart = '';
-
         if (colonIdx !== -1) {
-            namePart = displayText.substring(0, colonIdx).trim();
-            descPart = displayText.substring(colonIdx + 1).trim();
-        } else if (parenMatch) {
-            namePart = parenMatch[1].trim();
-            descPart = parenMatch[2].trim();
-            if (!descPart.endsWith('.')) descPart += '.';
-        }
+            const namePart = displayText.substring(0, colonIdx).trim();
+            const descPart = displayText.substring(colonIdx + 1).trim();
 
-        if (namePart && descPart) {
+            // Extract resource count from the name part (e.g. "Rage (2/2 per day)")
             let iconHtml = '';
             const resourceMatch = namePart.match(/(\d+)\s*\/\s*(\d+)/);
             if (resourceMatch) {
                 iconHtml = `<span class="rt-unit-icon">${escapeHtmlWithColor(resourceMatch[0])}</span>`;
             }
-            return `<div class="rt-entity-sub-line rt-units-container"><span class="${pillClass}">
-                <span class="rt-unit-name">${escapeHtmlWithColor(namePart)}</span>
-                ${iconHtml}
-                <span class="rt-unit-descr">(${escapeHtmlWithColor(descPart)})</span>
-            </span></div>`;
+
+            if (descPart) {
+                return `<div class="rt-entity-sub-line rt-units-container"><span class="${pillClass}">
+                    <span class="rt-unit-name">${escapeHtmlWithColor(namePart)}</span>
+                    ${iconHtml}
+                    <span class="rt-unit-descr">${escapeHtmlWithColor(descPart)}</span>
+                </span></div>`;
+            }
         }
 
-        // Fall back to a simple no-description pill
+        // No colon — fall back to a simple no-description pill
         return `<div class="rt-entity-sub-line rt-units-container"><span class="${pillClass} no-desc"><span class="rt-unit-name">${escapeHtmlWithColor(displayText)}</span></span></div>`;
     };
 
@@ -1799,16 +1657,15 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 }
                             }
                         }
-                        return `<div class="rt-card-line"><b>Último Descanso:</b>&nbsp;${escapeHtmlWithColor(restVal)}${append}</div>`;
+                        return `<div class="rt-card-line"><b>Last Rest:</b>&nbsp;${escapeHtmlWithColor(restVal)}${append}</div>`;
                     }
                     const asMarker = tryRenderMarker(line, tag, '', idx);
                     if (asMarker !== null) return asMarker;
                     const { emoji: lineEmoji, color } = getTimeOfDayInfo(line);
                     const linePrefix = lineEmoji ? `<span class="rt-tod-emoji" style="margin-right:4px;">${lineEmoji}</span>` : '';
-                    const timeText = line.replace(/^Current Time:\s*/i, 'Hora Actual: ');
                     const content = (color !== 'inherit') 
-                        ? `<span style="color: ${color};">${escapeHtmlWithColor(timeText)}</span>`
-                        : escapeHtmlWithColor(timeText);
+                        ? `<span style="color: ${color};">${escapeHtmlWithColor(line)}</span>`
+                        : escapeHtmlWithColor(line);
                     return `<div class="rt-card-line">${linePrefix}${content}</div>`;
                 });
             }
@@ -1870,10 +1727,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     const asMarker = tryRenderMarker(line, tag, '', idx);
                     if (asMarker !== null) return asMarker;
 
-                    const m = line.match(/^(Level\s*\d+|Cantrips?|Nivel\s*\d+|Trucos?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*:\s*(.+)$/i);
+                    const m = line.match(/^(Level\s*\d+|Cantrips?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*:\s*(.+)$/i);
                     if (!m) return `<div class="rt-card-item">${escapeHtmlWithColor(line)}</div>`;
                     const [, label, availStr, maxStr, spellList] = m;
-                    const isCantrip = /cantrip|truco/i.test(label);
+                    const isCantrip = /cantrip/i.test(label);
                     let pipsHtml = '';
                     if (!isCantrip && availStr !== undefined && maxStr !== undefined) {
                         const avail = parseInt(availStr, 10), max = parseInt(maxStr, 10);
@@ -1884,8 +1741,11 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     }
                     const spells = spellList.split(',').map(s => {
                         const name = s.trim();
-                        const url = resolveSpellUrl(name);
-                        return `<a href="${url}" target="_blank" class="rt-spell-name" title="Ver hechizo">${escapeHtmlWithColor(name)}</a>`;
+                        const slug = name.toLowerCase()
+                            .replace(/'/g, '')
+                            .replace(/[^a-z0-9]+/g, '-');
+                        const url = `https://dnd5e.wikidot.com/spell:${slug}`;
+                        return `<a href="${url}" target="_blank" class="rt-spell-name" title="View spell on Wikidot">${escapeHtmlWithColor(name)}</a>`;
                     }).join('');
                     return `<div class="rt-spell-row">
                         <span class="rt-spell-level">${escapeHtmlWithColor(label.trim())}</span>
@@ -1956,8 +1816,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                             // Build tooltip combining effect (if any) and worth
                             const tooltipParts = [];
-                            if (effectVal) tooltipParts.push(`Efecto: ${effectVal}`);
-                            tooltipParts.push(`Valor: ${worthVal}`);
+                            if (effectVal) tooltipParts.push(`Effect: ${effectVal}`);
+                            tooltipParts.push(`Worth: ${worthVal}`);
                             titleAttr = ` title="${escapeHtml(tooltipParts.join('\n'))}"`;
 
                             if (worthMode === 'display') {
@@ -2010,9 +1870,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     // Section subheader (e.g. "Gear:", "Other Items:") — plain text header line
                     if (/^[A-Za-z][A-Za-z\s]*:\s*$/.test(line.trim())) {
                         flushBullets();
-                        const rawHeader = line.trim().replace(/:$/, '').trim();
-                        const headerMap = { 'gear': 'Equipo', 'other items': 'Otros Objetos' };
-                        const headerText = headerMap[rawHeader.toLowerCase()] || rawHeader;
+                        const headerText = line.trim().replace(/:$/, '').trim();
                         inventoryResults.push(`<div class="rt-inventory-subheader">${escapeHtml(headerText)}</div>`);
                         continue;
                     }
@@ -2123,70 +1981,73 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             const startTimeInputVal = obSettings.initialTime || '08:00 AM';
 
             return `<div class="rt-empty" style="text-align: left; align-items: flex-start; padding: 12px; gap: 10px; overflow-y: auto;">
+                <a class="rt-discord-btn" href="https://discord.gg/bgjAeWEc2p" target="_blank" rel="noopener noreferrer" title="Join Discord">
+                    <img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord — Join Server" height="20">
+                </a>
                 <a class="rt-bmc-btn" href="https://buymeacoffee.com/multihog" target="_blank" rel="noopener noreferrer" title="Buy Me a Coffee">
                     <img src="${escapeHtml(BUY_ME_A_COFFEE_ICON)}" alt="" width="14" height="20">
                     <span>Buy Me a Coffee</span>
                 </a>
                 <div style="text-align: center; width: 100%; margin-bottom: 2px; flex-shrink: 0;">
-                    <div class="rt-empty-icon rt-onboarding-crest" aria-label="Fencers guarding a shield">
+                    <div class="rt-empty-icon rt-onboarding-crest" aria-label="Esgrimistas protegiendo un escudo">
                         <span class="rt-onboarding-crest-fencer" aria-hidden="true">🤺</span>
                         <span class="rt-onboarding-crest-shield" aria-hidden="true">🛡️</span>
                         <span class="rt-onboarding-crest-fencer rt-onboarding-crest-fencer-mirrored" aria-hidden="true">🤺</span>
                     </div>
                     <div style="font-size: 16px; font-weight: bold; color: var(--rt-text);">Multihog D&D Framework</div>
-                    <div style="margin: 8px auto 0; max-width: 520px; color: var(--rt-text-muted); font-size: 0.9em; line-height: 1.4;">¡Bienvenido a Multihog D&D Framework! Para ver las novedades más recientes, consulta la <a href="https://github.com/MultihogAurelius/SillyTavern-MultihogDnDFramework/releases" target="_blank" rel="noopener noreferrer" style="color: var(--rt-accent);">sección de Publicaciones (Releases) en GitHub</a>, que utilizo a modo de blog de desarrollo.</div>
+                    <div style="margin: 8px auto 0; max-width: 520px; color: var(--rt-text-muted); font-size: 0.9em; line-height: 1.4;">¡Bienvenido a Multihog D&D Framework! Para ver las adiciones y novedades más recientes, consulta la <a href="https://github.com/MultihogAurelius/SillyTavern-MultihogDnDFramework/releases" target="_blank" rel="noopener noreferrer" style="color: var(--rt-accent);">sección de Releases en GitHub</a>.</div>
                 </div>
 
                 <div class="rt-onboarding-hero">
                     <button type="button" class="rt-onboarding-hero-btn rt-random-char-btn" data-archetype="char_roll">🎲 Creador de Personajes</button>
-                    <div class="rt-onboarding-hero-sub">Crea tu personaje paso a paso: plantillas, Ficha de Jugador en el Agente de Lorebook y generación completa de estadísticas.</div>
+                    <div class="rt-onboarding-hero-sub">Crea tu personaje paso a paso: preajustes, Ficha de Jugador en Lorebook y generación completa de estadísticas.</div>
                 </div>
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Acción Instantánea</div>
-                    <div class="rt-quickstart-sub">Elige un género literario, opcionalmente escribe un nombre o una Configuración Inicial y comienza. Si dejas el nombre en blanco, la IA elegirá uno. La extensión usará tu Configuración del Narrador, generará el resto del personaje y creará una Ficha de Jugador en el Agente de Lorebook junto con una persona de solo nombre en SillyTavern. Desmarca "¿Enviar Mensaje Inicial?" si prefieres escribir tú mismo tu primera acción en lugar de dejar que la IA abra la campaña.</div>
-                    <div class="rt-quickstart-genres" role="group" aria-label="Quick Start genre">
+                    <div class="rt-quickstart-sub">Elige un género, opcionalmente introduce un nombre o Configuración Inicial, y comienza. Deja el nombre en blanco para que la IA lo elija. La extensión utiliza tu Configuración del Narrador, genera un nivel aleatorio (1–10), clase y otros detalles no especificados, y crea una Ficha de Jugador en el Agente de Lorebook junto con una persona de ST solo con nombre. Desmarca Enviar Mensaje Inicial si deseas escribir tu propia primera acción.</div>
+                    <div class="rt-quickstart-genres" role="group" aria-label="Género de Acción Instantánea">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasía</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Moderno</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="scifi" aria-pressed="false">🚀 Ciencia Ficción</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="horror" aria-pressed="false">👻 Terror</button>
                     </div>
                     <div class="rt-quickstart-name-picker">
-                        <input type="text" class="rt-quickstart-name" id="rt-quickstart-name" placeholder="Opcional: escribe, genera o deja que la IA elija" aria-label="Nombre opcional del personaje de Acción Instantánea" autocomplete="off" />
+                        <input type="text" class="rt-quickstart-name" id="rt-quickstart-name" placeholder="Opcional — escribe, tira o deja que la IA elija" aria-label="Nombre opcional de personaje en Acción Instantánea" autocomplete="off" />
                         <button type="button" class="rt-quickstart-roll-btn" id="rt-quickstart-roll-name" disabled>🎲 Generar Nombre</button>
                     </div>
                     <label class="rt-quickstart-instructions-label" for="rt-quickstart-instructions">
                         <span>Configuración Inicial (opcional)</span>
-                        <small>Guía el personaje, entorno, premisa o tono. Todo lo que dejes sin especificar se generará aleatoriamente.</small>
+                        <small>Guía el personaje, ambientación, premisa o tono. Todo lo no especificado se generará al azar.</small>
                     </label>
-                    <textarea class="rt-quickstart-instructions" id="rt-quickstart-instructions" rows="2" maxlength="1000" placeholder="Ej. Una exploradora de 28 años con ballesta, comenzando en un pueblo fronterizo azotado por la tormenta" aria-label="Configuración Inicial opcional de Acción Instantánea"></textarea>
+                    <textarea class="rt-quickstart-instructions" id="rt-quickstart-instructions" rows="2" maxlength="1000" placeholder="ej. Una exploradora de 28 años con ballesta, comenzando en un pueblo fronterizo azotado por tormentas" aria-label="Configuración Inicial opcional de Acción Instantánea"></textarea>
                     <div class="rt-quickstart-options">
                         <div class="rt-quickstart-player-card-length">
                             <label for="rt-quickstart-persona-words">Longitud de Ficha de Jugador</label>
-                            <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Recuento de palabras de la Ficha de Jugador">
+                            <select id="rt-quickstart-persona-words" class="text_pole" aria-label="Recuento de palabras de Ficha de Jugador en Acción Instantánea">
                                 ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
                                     const selected = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
                                     return `<option value="${n}"${selected}>${n} palabras</option>`;
                                 }).join('')}
-                                <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Personalizada…</option>
+                                <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Personalizado…</option>
                             </select>
-                            <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras" />
+                            <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras en Acción Instantánea" />
                         </div>
                         <div class="rt-quickstart-starter-message">
-                            <label for="rt-quickstart-send-starter" title="Si está marcado, la IA inicia la campaña automáticamente en cuanto el personaje esté listo.">
+                            <label for="rt-quickstart-send-starter" title="Si está marcado, la IA inicia automáticamente la campaña tan pronto como el personaje generado esté listo.">
                                 <span>¿Enviar Mensaje Inicial?</span>
                                 <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''} aria-label="Enviar Mensaje Inicial" />
                             </label>
-                            <span class="rt-cr-help-icon" title="Si está marcado, la IA inicia la campaña automáticamente en cuanto el personaje esté listo.">?</span>
+                            <span class="rt-cr-help-icon" title="Si está marcado, la IA inicia automáticamente la campaña tan pronto como el personaje generado esté listo.">?</span>
                         </div>
                     </div>
                     <button type="button" class="rt-quickstart-begin-btn" id="rt-quickstart-begin" disabled>⚡ Comenzar Acción Instantánea</button>
-                    <div class="rt-quickstart-status" id="rt-quickstart-status">Selecciona un género literario para comenzar</div>
+                    <div class="rt-quickstart-status" id="rt-quickstart-status">Selecciona un género para comenzar</div>
                 </div>
 
                 <div class="rt-onboarding-secondary rt-onboarding-drawer rt-onboarding-other-drawer">
                 <button type="button" class="rt-onboarding-drawer-toggle" id="rt-onboarding-drawer-toggle" aria-expanded="false" aria-controls="rt-onboarding-drawer-body">
-                    <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Otras Formas de Iniciar<small>Ajusta el inicio, crea una Ficha de Jugador o importa un personaje</small></span></span>
+                    <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Otras Formas de Iniciar<small>Ajusta tu inicio, crea una Ficha de Jugador o importa un personaje</small></span></span>
                     <span class="rt-onboarding-drawer-chevron" aria-hidden="true">&#9656;</span>
                 </button>
                 <div class="rt-onboarding-drawer-body" id="rt-onboarding-drawer-body">
@@ -2195,7 +2056,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 4px 0; flex-shrink: 0;">
                     <div class="rt-onboarding-config-row">
                         <div class="rt-onboarding-field">
-                            <span class="rt-onboarding-field-label">Nivel <span class="rt-cr-help-icon" title="Elige 'N/A' si tu sistema no utiliza niveles numéricos; las generaciones Personalizada y Persona no crearán nivel, XP ni indicadores de nivel tipo D&D.">?</span></span>
+                            <span class="rt-onboarding-field-label">Nivel <span class="rt-cr-help-icon" title="Elige 'N/A' si tu sistema no utiliza niveles numéricos de personaje — la generación personalizada y de persona no inventará un nivel, EXP o indicador de nivel estilo D&D.">?</span></span>
                             <select id="rt-starting-level" class="text_pole" style="width: auto; min-width: 60px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
                                 <option value="none"${onboardingLevelIsNone ? ' selected' : ''}>N/A — Sin Niveles</option>
                                 ${[...Array(20).keys()].map(i => {
@@ -2206,44 +2067,44 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             </select>
                         </div>
                         <div class="rt-onboarding-field">
-                            <span class="rt-onboarding-field-label">Género Literario</span>
+                            <span class="rt-onboarding-field-label">Género</span>
                             <select id="rt-onboarding-genre" class="text_pole" style="width: auto; min-width: 90px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
-                                <option value="fantasy" ${onboardingGenre === 'fantasy' ? 'selected' : ''}>⚔️ Fantasía RPG</option>
+                                <option value="fantasy" ${onboardingGenre === 'fantasy' ? 'selected' : ''}>⚔️ Rol Fantasía</option>
                                 <option value="realistic" ${onboardingGenre === 'realistic' ? 'selected' : ''}>🏙️ Moderno / Realista</option>
                                 <option value="scifi" ${onboardingGenre === 'scifi' ? 'selected' : ''}>🚀 Ciencia Ficción</option>
                                 <option value="horror" ${onboardingGenre === 'horror' ? 'selected' : ''}>👻 Terror</option>
                             </select>
                         </div>
                         <div class="rt-onboarding-field">
-                            <span class="rt-onboarding-field-label">Nivel de Equipamiento</span>
+                            <span class="rt-onboarding-field-label">Nivel de Equipo</span>
                             <select id="rt-onboarding-gear-tier" class="text_pole" title="Qué tan bien equipado debe estar el personaje generado." style="width: auto; min-width: 110px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
                                 ${gearTierOptions}
                             </select>
                         </div>
                         <div class="rt-onboarding-field">
-                            <span class="rt-onboarding-field-label">Fecha y Hora</span>
+                            <span class="rt-onboarding-field-label">Hora y Fecha</span>
                             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                                <div class="rt-seg-toggle" id="rt-onboarding-date-seg" role="group" title="Elige el formato de calendario para el seguimiento de [TIME].">
+                                <div class="rt-seg-toggle" id="rt-onboarding-date-seg" role="group" title="Elige el formato de calendario para el bloque [TIEMPO].">
                                     <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Día 1</button>
                                     <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
                                 </div>
                                 <input type="text" id="rt-onboarding-start-date" class="text_pole" value="${startDateInputVal}" placeholder="01/01/2026" style="width: 80px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a); display: ${useDdMmYy ? 'inline-block' : 'none'};" />
-                                <div class="rt-seg-toggle" id="rt-onboarding-clock-seg" role="group" title="Elige el formato de reloj para el seguimiento de [TIME].">
+                                <div class="rt-seg-toggle" id="rt-onboarding-clock-seg" role="group" title="Elige el formato del reloj para el bloque [TIEMPO].">
                                     <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
                                     <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
                                 </div>
-                                <input type="text" id="rt-onboarding-start-time" class="text_pole" value="${startTimeInputVal}" placeholder="${use24h ? '08:00' : '08:00 AM'}" title="Initial time of day for the very first [TIME] block." style="width: 74px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a);" />
+                                <input type="text" id="rt-onboarding-start-time" class="text_pole" value="${startTimeInputVal}" placeholder="${use24h ? '08:00' : '08:00 AM'}" title="Hora inicial del día para el primer bloque [TIEMPO]." style="width: 74px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a);" />
                             </div>
                         </div>
                     </div>
                     <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.85em; margin: 2px 0;">
                         <input type="checkbox" id="rt-onboarding-combat-guide-cb" ${obSettings.onboardingUseCombatScalingGuide !== false ? 'checked' : ''} />
                         <span>Usar Guía de Escalado de Combate y Habilidades</span>
-                        <span class="rt-cr-help-icon" title="Cuando está activado, la IA se guía por una referencia clásica de progresión de combate y habilidades tipo d20. Desactívalo si estás usando tu propio sistema casero y no deseas lenguaje de escalado estilo D&D.">?</span>
+                        <span class="rt-cr-help-icon" title="Cuando está activado, la IA se guía por una referencia clásica de combate d20/BAB. Desactívalo si usas un sistema propio.">?</span>
                     </label>
-                    <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Instrucciones personalizadas para personaje/ambientación (ej. Londres victoriano, marine espacial, realismo crudo, hacker cyberpunk...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;">${escapeHtml(obSettings.onboardingCustomInstructions || '')}</textarea>
+                    <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Instrucciones personalizadas de ambientación/personaje (ej. Londres victoriano, marine espacial, realismo crudo, decker cyberpunk...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;">${escapeHtml(obSettings.onboardingCustomInstructions || '')}</textarea>
                     <div class="rt-quickstart-name-picker rt-onboarding-name-picker">
-                        <input type="text" class="rt-quickstart-name" id="rt-onboarding-rolled-name" placeholder="Genera o escribe un nombre" aria-label="Other Ways character name" autocomplete="off" />
+                        <input type="text" class="rt-quickstart-name" id="rt-onboarding-rolled-name" placeholder="Genera o escribe un nombre" aria-label="Nombre del personaje en Otras Formas" autocomplete="off" />
                         <button type="button" class="rt-quickstart-roll-btn" id="rt-onboarding-roll-name">🎲 Generar Nombre</button>
                     </div>
                     <div class="rt-onboarding-name-hint" id="rt-onboarding-name-hint">Genera un nombre acorde al género antes de usar Personalizado.</div>
@@ -2251,10 +2112,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                             <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.88em;">
                                 <input type="checkbox" id="rt-onboarding-player-card-cb"${obSettings.onboardingCreatePersona ? ' checked' : ''} />
-                                <span>Crear Ficha de Jugador en el Agente de Lorebook (Recomendado)</span>
+                                <span>Crear Ficha de Jugador en Agente de Lorebook (Recomendado)</span>
                             </label>
-                            <span class="rt-cr-help-icon" title="Cuando está marcado, la IA escribe una apariencia detallada, personalidad, hábitos y trasfondo para una Ficha de Jugador en el Agente de Lorebook. Aparecerá una vista previa para que puedas editarla, regenerarla o copiarla.">?</span>
-                            <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Conteo de palabras:</span>
+                            <span class="rt-cr-help-icon" title="Cuando está marcado, la IA redacta apariencia, personalidad, hábitos y trasfondo para una Ficha de Jugador en el Agente de Lorebook.">?</span>
+                            <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Recuento de palabras:</span>
                             <select id="rt-onboarding-persona-words" class="text_pole" style="width:65px; font-size:11px; height:22px; padding:2px 4px;">
                                 ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
                                     const sel = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
@@ -2269,7 +2130,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 <input type="checkbox" id="rt-onboarding-st-persona-cb"${obSettings.onboardingCreateSillyTavernPersona !== false ? ' checked' : ''} />
                                 <span>Crear Persona de ST (Recomendado)</span>
                             </label>
-                            <span class="rt-cr-help-icon" title="Crea y selecciona una persona de SillyTavern con el nombre del personaje. Esto hace que los mensajes enviados usen ese nombre de jugador; los detalles permanecen en el Agente de Lorebook.">?</span>
+                            <span class="rt-cr-help-icon" title="Crea y selecciona una persona de SillyTavern con el nombre del personaje.">?</span>
                         </div>
                     </div>
                 </div>
@@ -2304,23 +2165,23 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                         <button id="rt-pc-import-back" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;">← Volver</button>
                         <span style="flex:1; display:flex; align-items:center; gap:6px;">
-                            <span style="font-weight:bold; color:var(--rt-accent); font-size:0.95em;">📥 Importar Ficha como Personaje Jugador</span>
+                            <span style="font-weight:bold; color:var(--rt-accent); font-size:0.95em;">📥 Importar Ficha de Personaje como PJ</span>
                             <button class="rt-edit-pc-sections-btn" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:1.1em; opacity:0.8; padding:0; margin-top:-2px;" title="Editar Secciones de Formato de PJ">⚙️</button>
                         </span>
                     </div>
-                    <div style="font-size:10px; color:rgba(255,255,255,0.45); line-height:1.4;"><b>Añadir Tal Cual</b> = La IA preserva el texto original, solo soluciona imposibilidades de época/mundo · <b>Adaptar a la Historia</b> = adaptación completa al contexto de la campaña.</div>
+                    <div style="font-size:10px; color:rgba(255,255,255,0.45); line-height:1.4;"><b>Añadir tal cual</b> = la IA preserva la redacción original, corrigiendo solo anacronismos · <b>Adaptar a la Historia</b> = adaptación completa a la ambientación de la campaña.</div>
                     <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                        <label style="font-size:11px; color:rgba(255,255,255,0.6); white-space:nowrap;">Longitud de Ficha del Jugador</label>
+                        <label style="font-size:11px; color:rgba(255,255,255,0.6); white-space:nowrap;">Longitud de Ficha</label>
                         <select id="rt-pc-import-wordselect" style="background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:2px 4px; font-size:11px; box-sizing:border-box;">
-                            <option value="same">Igual a la Ficha</option>
+                            <option value="same">Igual que la Ficha</option>
                             <option value="150">Corta (~150 palabras)</option>
-                            <option value="300">Mediana (~300 palabras)</option>
+                            <option value="300">Media (~300 palabras)</option>
                             <option value="500">Larga (~500 palabras)</option>
                             <option value="custom">Personalizada...</option>
                         </select>
                         <input id="rt-pc-import-wordcount" type="number" value="150" min="50" max="5000" step="25"
                             style="display:none; width:60px; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;">
-                        <span style="font-size:10px; color:rgba(255,255,255,0.35);">(Solo para Adaptar a la Historia)</span>
+                        <span style="font-size:10px; color:rgba(255,255,255,0.35);">(Solo en Adaptar a la Historia)</span>
                     </div>
                     <input id="rt-pc-import-search" type="text" placeholder="Buscar personajes..." style="width:100%; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:5px; padding:5px 8px; font-size:12px; box-sizing:border-box;">
                     <div id="rt-pc-import-list" style="display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; padding-right:2px;"></div>
@@ -2334,23 +2195,23 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <span style="font-weight:bold; color:var(--rt-accent); font-size:0.95em;">🎲 Creador de Personajes</span>
                             <button class="rt-edit-pc-sections-btn" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:1.1em; opacity:0.8; padding:0; margin-top:-2px;" title="Editar Secciones de Formato de PJ">⚙️</button>
                         </span>
-                        <button id="rt-cr-reset-btn" class="rt-cr-reset-btn" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;" title="Limpiar todos los campos">🗑 Reiniciar</button>
+                        <button id="rt-cr-reset-btn" class="rt-cr-reset-btn" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;" title="Limpiar todos los campos">🗑 Restablecer</button>
                     </div>
                     <!-- Presets Bar -->
                     <div id="rt-cr-presets-bar" style="display:flex; align-items:center; gap:5px; padding:4px 0 3px; border-bottom:1px solid rgba(255,255,255,0.08);">
-                        <span style="font-size:0.78em; opacity:0.55; white-space:nowrap;">📋 Plantillas:</span>
+                        <span style="font-size:0.78em; opacity:0.55; white-space:nowrap;">📋 Preajustes:</span>
                         <select id="rt-cr-preset-select" class="text_pole" style="flex:1; font-size:11px; height:22px; padding:2px 4px;">
-                            <option value="">— Seleccionar plantilla —</option>
+                            <option value="">— Seleccionar preajuste —</option>
                         </select>
                         <button id="rt-cr-preset-load-btn" style="background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:inherit; font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Cargar</button>
                         <button id="rt-cr-preset-delete-btn" style="background:rgba(220,50,50,0.12); border:1px solid rgba(220,50,50,0.4); border-radius:4px; color:rgba(255,100,100,0.9); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Eliminar</button>
-                        <button id="rt-cr-preset-save-btn" title="Guardar campos actuales como una nueva plantilla" style="background:none; border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:var(--rt-accent); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">＋ Guardar</button>
+                        <button id="rt-cr-preset-save-btn" title="Guardar campos actuales como preajuste" style="background:none; border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:var(--rt-accent); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">＋ Guardar</button>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
                             <label class="rt-cr-label" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                                 <span>Nombre</span>
-                                <button id="rt-cr-random-name" class="interactable" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; padding:0; margin:0; font-size:1.1em; line-height:1;" title="Generar nombre aleatorio">🎲</button>
+                                <button id="rt-cr-random-name" class="interactable" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; padding:0; margin:0; font-size:1.1em; line-height:1;" title="Generar un nombre aleatorio">🎲</button>
                             </label>
                             <input id="rt-cr-name" class="text_pole rt-cr-input" type="text" />
                         </div>
@@ -2363,33 +2224,33 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input id="rt-cr-age" class="text_pole rt-cr-input" type="text" />
                         </div>
                         <div class="rt-cr-field" style="flex:1.35 1 0%;">
-                            <label class="rt-cr-label" style="display:inline-flex; align-items:center; gap:3px; white-space:nowrap;">Orientación Sexual <span class="rt-cr-help-icon" style="width:14px;height:14px;font-size:0.65em;" title="Necesaria para el sistema de relaciones y opciones románticas de CYOA — sin esto, el objetivo de afecto/romance con PNJs es impreciso.">?</span></label>
+                            <label class="rt-cr-label" style="display:inline-flex; align-items:center; gap:3px; white-space:nowrap;">Orientación Sexual <span class="rt-cr-help-icon" style="width:14px;height:14px;font-size:0.65em;" title="Necesario para el sistema de relaciones y opciones románticas de CYOA.">?</span></label>
                             <input id="rt-cr-orientation" class="text_pole rt-cr-input" type="text" />
                         </div>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Especie / Raza</label>
+                            <label class="rt-cr-label">Especie</label>
                             <input id="rt-cr-species" class="text_pole rt-cr-input" type="text" />
                         </div>
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Etnia / Origen</label>
+                            <label class="rt-cr-label">Etnia</label>
                             <input id="rt-cr-ethnicity" class="text_pole rt-cr-input" type="text" />
                         </div>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Género / Ambientación <span class="rt-cr-help-icon" title="Debes seleccionar un género específico para ver sus clases relacionadas en el desplegable de Clase. De lo contrario, solo se muestran clases genéricas.">?</span></label>
+                            <label class="rt-cr-label">Género <span class="rt-cr-help-icon" title="Debes seleccionar un género para ver sus clases relacionadas en el desplegable.">?</span></label>
                             <select id="rt-cr-genre" class="text_pole rt-cr-input">
-                                <option value="">✨ Ninguno — La IA decide por el contexto</option>
-                                <option value="fantasy">⚔️ Fantasía / RPG</option>
-                                <option value="realistic">🏙️ Contemporáneo / Moderno</option>
+                                <option value="">✨ Ninguno — La IA decide según el contexto</option>
+                                <option value="fantasy">⚔️ Rol Fantasía</option>
+                                <option value="realistic">🏙️ Moderno</option>
                                 <option value="scifi">🚀 Ciencia Ficción</option>
-                                <option value="horror">👻 Terror / Horror</option>
+                                <option value="horror">👻 Terror</option>
                             </select>
                         </div>
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Nivel <span class="rt-cr-help-icon" title="Elige 'N/A' si tu sistema no utiliza niveles numéricos; la IA no inventará nivel, XP ni indicador de nivel tipo D&D.">?</span></label>
+                            <label class="rt-cr-label">Nivel <span class="rt-cr-help-icon" title="Elige 'N/A' si tu sistema no utiliza niveles numéricos de personaje.">?</span></label>
                             <select id="rt-cr-level" class="text_pole rt-cr-input">
                                 <option value="none"${onboardingLevelIsNone ? ' selected' : ''}>N/A — Sin Niveles (Sistema Personalizado)</option>
                                 ${[...Array(20).keys()].map(i => { const l = i + 1; return `<option value="${l}"${!onboardingLevelIsNone && l === onboardingLevelNum ? ' selected' : ''}>Nivel ${l}</option>`; }).join('')}
@@ -2398,7 +2259,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Calidad del Equipo <span class="rt-cr-help-icon" title="Qué tan bien equipado debe estar el personaje — desde equipo inicial común hasta objetos heroicos con nombre. Se escala automáticamente con el nivel. Elige 'Ninguno' para omitir la guía de equipo.">?</span></label>
+                            <label class="rt-cr-label">Nivel de Equipo <span class="rt-cr-help-icon" title="Qué tan bien equipado debe estar el personaje. Auto escala con el nivel. Elige 'Ninguno' para omitir la guía de equipo.">?</span></label>
                             <select id="rt-cr-gear-tier" class="text_pole rt-cr-input">
                                 ${gearTierOptions}
                             </select>
@@ -2408,25 +2269,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <div class="rt-cr-field" style="width:100%;">
                             <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.88em; font-weight:normal;">
                                 <input type="checkbox" id="rt-cr-combat-guide-cb" ${obSettings.onboardingUseCombatScalingGuide !== false ? 'checked' : ''} />
-                                <span>Use Combat &amp; Skill Scaling Guide</span>
-                                <span class="rt-cr-help-icon" title="When enabled, the AI is guided by a classic d20/BAB-style combat and skill progression reference. Turn this off if you're using your own homebrew system and don't want D&D-flavored scaling language influencing the result.">?</span>
+                                <span>Usar Guía de Escalado de Combate y Habilidades</span>
+                                <span class="rt-cr-help-icon" title="Cuando está activado, la IA se guía por una referencia clásica de combate d20/BAB. Desactívalo si usas un sistema propio.">?</span>
                             </label>
                         </div>
                     </div>
                     <div class="rt-cr-row rt-cr-time-row">
                         <div class="rt-cr-field" style="width:100%;">
-                            <label class="rt-cr-label">Fecha y Hora <span class="rt-cr-help-icon" title="Formato de reloj y calendario para el seguimiento de [TIME] en los memos. Día 1 = conteo de días narrativo; DD/MM/YYYY = fechas reales. La última casilla establece la hora inicial del día.">?</span></label>
+                            <label class="rt-cr-label">Hora y Fecha <span class="rt-cr-help-icon" title="Formato de fecha y hora para el seguimiento [TIEMPO]. Día 1 = recuento narrativo; DD/MM/YYYY = fechas de calendario real.">?</span></label>
                             <div class="rt-cr-time-controls">
-                                <div class="rt-seg-toggle" id="rt-cr-date-seg" role="group" title="Elige el formato de calendario para el seguimiento de [TIME].">
+                                <div class="rt-seg-toggle" id="rt-cr-date-seg" role="group" title="Elige el formato de calendario para el bloque [TIEMPO].">
                                     <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Día 1</button>
                                     <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
                                 </div>
                                 <input type="text" id="rt-cr-start-date" class="text_pole rt-cr-input" value="${startDateInputVal}" placeholder="01/01/2026" style="width: 92px; text-align: center; display: ${useDdMmYy ? 'inline-block' : 'none'};" />
-                                <div class="rt-seg-toggle" id="rt-cr-clock-seg" role="group" title="Elige el formato de reloj para el seguimiento de [TIME].">
+                                <div class="rt-seg-toggle" id="rt-cr-clock-seg" role="group" title="Elige el formato del reloj para el bloque [TIEMPO].">
                                     <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
                                     <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
                                 </div>
-                                <input type="text" id="rt-cr-start-time" class="text_pole rt-cr-input" value="${startTimeInputVal}" placeholder="${use24h ? '08:00' : '08:00 AM'}" title="Hora inicial del día para el primer bloque [TIME]." style="width: 84px; text-align: center;" />
+                                <input type="text" id="rt-cr-start-time" class="text_pole rt-cr-input" value="${startTimeInputVal}" placeholder="${use24h ? '08:00' : '08:00 AM'}" title="Hora inicial del día para el primer bloque [TIEMPO]." style="width: 84px; text-align: center;" />
                             </div>
                         </div>
                     </div>
@@ -2438,35 +2299,35 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
                             <label class="rt-cr-label">Rasgos</label>
-                            <textarea id="rt-cr-traits" class="text_pole rt-cr-input" placeholder="Dejar en blanco — la IA inventa los rasgos" rows="2" style="resize:vertical;"></textarea>
+                            <textarea id="rt-cr-traits" class="text_pole rt-cr-input" placeholder="Deja en blanco — la IA inventa rasgos" rows="2" style="resize:vertical;"></textarea>
                         </div>
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Habilidades</label>
-                            <textarea id="rt-cr-abilities" class="text_pole rt-cr-input" placeholder="Dejar en blanco — la IA genera las habilidades" rows="2" style="resize:vertical;"></textarea>
+                            <label class="rt-cr-label">Capacidades</label>
+                            <textarea id="rt-cr-abilities" class="text_pole rt-cr-input" placeholder="Deja en blanco — la IA genera capacidades" rows="2" style="resize:vertical;"></textarea>
                         </div>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Trasfondo <span class="rt-cr-help-icon" title="No necesitas escribir una historia completa. Una breve pista guía a la IA (ej. 'exsoldado', 'criado en los barrios bajos'). Deja en blanco y la IA creará un trasfondo adecuado.">?</span></label>
-                            <input id="rt-cr-background" class="text_pole rt-cr-input" type="text" placeholder="ej. exsoldado, criado en los barrios bajos…" />
+                            <label class="rt-cr-label">Trasfondo <span class="rt-cr-help-icon" title="Una breve sugerencia guía a la IA (ej. 'creció en las calles', 'ex-soldado', 'noble exiliado'). Deja en blanco y la IA inventará un trasfondo adecuado.">?</span></label>
+                            <input id="rt-cr-background" class="text_pole rt-cr-input" type="text" />
                         </div>
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Apariencia <span class="rt-cr-help-icon" title="Una breve pista es suficiente (ej. 'alto, cabello oscuro, ojos verdes'). Deja en blanco y la IA creará la descripción completa.">?</span></label>
-                            <input id="rt-cr-appearance" class="text_pole rt-cr-input" type="text" placeholder="ej. alto, cabello oscuro, ojos verdes…" />
+                            <label class="rt-cr-label">Apariencia <span class="rt-cr-help-icon" title="Una sugerencia es suficiente (ej. 'alto, pelo rojo, cicatriz en la mejilla'). Deja en blanco y la IA creará una descripción completa.">?</span></label>
+                            <input id="rt-cr-appearance" class="text_pole rt-cr-input" type="text" />
                         </div>
                     </div>
                     <div class="rt-cr-field" style="width:100%;">
                         <label class="rt-cr-label">Información Adicional</label>
-                        <textarea id="rt-cr-additional" class="text_pole rt-cr-input" placeholder="Restricciones extra, notas de ambientación…" rows="2" style="resize:vertical; width:100%;"></textarea>
+                        <textarea id="rt-cr-additional" class="text_pole rt-cr-input" placeholder="Restricciones adicionales, notas de ambientación…" rows="2" style="resize:vertical; width:100%;"></textarea>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:5px; flex-shrink:0; padding:4px 0;">
                         <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                             <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.88em;">
-                                <input type="checkbox" id="rt-cr-player-card-cb" checked />
-                                <span>Crear Ficha de Jugador en el Agente de Lorebook (Recomendado)</span>
+                                <input type="checkbox" id="rt-cr-player-card-cb" />
+                                <span>Crear Ficha de Jugador en Agente de Lorebook (Recomendado)</span>
                             </label>
-                            <span class="rt-cr-help-icon" title="Cuando está marcado, la IA escribe una apariencia detallada, personalidad, hábitos y trasfondo para una Ficha de Jugador en el Agente de Lorebook. Aparecerá una vista previa para que puedas editarla, regenerarla o copiarla.">?</span>
-                            <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Conteo de palabras:</span>
+                            <span class="rt-cr-help-icon" title="Cuando está marcado, la IA redacta apariencia, personalidad, hábitos y trasfondo para una Ficha de Jugador en el Agente de Lorebook.">?</span>
+                            <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Recuento de palabras:</span>
                             <select id="rt-cr-persona-words" class="text_pole" style="width:65px; font-size:11px; height:22px; padding:2px 4px;">
                                 <option value="100">100</option>
                                 <option value="150" selected>150</option>
@@ -2485,7 +2346,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 <input type="checkbox" id="rt-cr-st-persona-cb" checked />
                                 <span>Crear Persona de ST (Recomendado)</span>
                             </label>
-                            <span class="rt-cr-help-icon" title="Crea y selecciona una persona de SillyTavern con el nombre del personaje. Esto hace que los mensajes enviados usen ese nombre de jugador; los detalles permanecen en el Agente de Lorebook.">?</span>
+                            <span class="rt-cr-help-icon" title="Crea y selecciona una persona de SillyTavern con el nombre del personaje.">?</span>
                         </div>
                     </div>
                     <button id="rt-cr-generate-btn" style="width:100%; padding:8px 12px; background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.6); border-radius:5px; color:var(--rt-text,#eee); font-size:0.92em; font-weight:bold; cursor:pointer; letter-spacing:0.03em;">🎲 Generar Personaje</button>
@@ -2494,19 +2355,20 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-divider"><span>Cómo Funciona</span></div>
 
                 <div class="rt-onboarding-prompt-backup-note" role="note" style="font-size:12px;line-height:1.4;padding:8px 10px;border-left:3px solid var(--rt-accent);background:rgba(120,80,220,0.1);border-radius:4px;">
-                    <b>NOTA:</b> Multihog D&amp;D Framework aplica automáticamente su propio prompt del sistema. Si deseas restaurar tu prompt anterior, ve a los ajustes de la extensión: General y Visual -> Núcleo -> Restaurar copia de seguridad al Principal.
+                    <b>NOTA:</b> Multihog D&amp;D Framework aplica automáticamente su propio prompt de sistema. Si deseas restaurar tu prompt anterior, ve a los ajustes de la extensión: General y Visuales -> Núcleo -> Restaurar copia de seguridad en Principal.
+                    <div style="margin-top:8px;">Un resumidor es <b>obligatorio</b> para comprimir el contexto con esta extensión. Recomiendo <a href="https://github.com/Lodactio/Extension-Summaryception" target="_blank" rel="noopener noreferrer">Summaryception</a>, que crea resúmenes y oculta/fantasma mensajes automáticamente. Solo necesitas que el narrador vea los últimos ~10 mensajes literales; el resto se mantiene en memoria gestionada por el Agente de Lorebook (integrado en Multihog) y Summaryception.</div>
                 </div>
 
                 <div class="rt-onboarding-how-it-works">
-                    <div><b style="color: var(--rt-accent);">Seguimiento Automático:</b> Conforme juegas, la extensión analiza inteligentemente las respuestas del asistente utilizando lenguaje natural. Detecta pérdidas de PV, nuevo botín o activaciones de combate, ejecutando pases en segundo plano para actualizar el estado.</div>
+                    <div><b style="color: var(--rt-accent);">Seguimiento Automático:</b> A medida que juegas, la extensión analiza inteligentemente las respuestas del asistente con lenguaje natural. Detecta pérdidas de PV, nuevo botín o desencadenantes de combate, ejecutando pases en segundo plano para actualizar el estado.</div>
 
-                    <div><b style="color: var(--rt-accent);">Inyección en el Prompt:</b> El State Memo y la Cola RNG se inyectan sin problemas en tu prompt saliente. Actúa como la "fuente de la verdad", asegurando que el modelo narrador/DM vea con precisión PV, inventario y resultados mecánicos. ¡FUNCIONA PERFECTAMENTE!</div>
+                    <div><b style="color: var(--rt-accent);">Inyección en el Prompt:</b> El Memorando de Estado y la Cola de RNG se inyectan sin problemas en el prompt saliente. Actúa como la "fuente de la verdad", garantizando que el narrador/modelo GM vea con precisión los PV, inventario y resultados mecánicos. ¡TODO FUNCIONA™ de forma transparente!</div>
 
-                    <div><b style="color: var(--rt-accent);">Agente de Lorebook 🤖:</b> Ábrelo desde la pestaña <b>Agente de Lorebook</b> en la parte superior del panel del Rastreador de Estado y preferiblemente desacóplalo. Gestiona de forma autónoma tu libro de lore (creando, actualizando, activando, desactivando y eliminando entradas). Haz clic en <b>?</b> dentro del panel del agente para ver la documentación completa.</div>
+                    <div><b style="color: var(--rt-accent);">Agente de Lorebook 🤖:</b> Ábrelo desde la pestaña <b>Agente de Lorebook</b> en la parte superior del panel del Rastreador de Estado y preferiblemente desacóplalo. Gestiona de forma autónoma tu lorebook: creando, actualizando, activando, desactivando y eliminando entradas según evoluciona tu historia. Haz clic en <b>?</b> dentro del panel del agente para ver la documentación completa.</div>
 
-                    <div><b style="color: var(--rt-accent);">Progresión del Mundo 🌍:</b> Simula las condiciones a escala de ubicación y corrientes generales a intervalos regulares del mundo. Lee dosieres completos de lore de ubicaciones sin mapas ocultos, rota por los lugares menos cubiertos recientemente y redacta prosa direccional para el narrador y posteriores pasadas de Evolución de Mapas. Un Esqueleto del Mundo puede sembrar ubicaciones no descubiertas y contexto regional. La consolidación de atrasos comprime informes antiguos. Configura estas opciones dentro de Progresión del Mundo en los Ajustes de la Extensión.</div>
+                    <div><b style="color: var(--rt-accent);">Progresión del Mundo 🌍:</b> Simula condiciones a escala de ubicación y corrientes más amplias a intervalos regulares dentro del mundo. Lee expedientes completos de lore de ubicaciones sin mapas ocultos, rota por los lugares menos cubiertos recientemente y redacta prosa direccional para el narrador y posteriores pases de Evolución de Mapas. Un Esqueleto del Mundo puede sembrar ubicaciones no descubiertas y contexto regional. La Consolidación de Historial comprime informes antiguos. Configura estas opciones en Progresión del Mundo en los Ajustes de la Extensión.</div>
 
-                    <div><b style="color: var(--rt-accent);">Evolución de Mapas 🗺️:</b> Hace que los mapas y ubicaciones sean dinámicos. Las mazmorras y pueblos evolucionan y generan hilos argumentales de forma autónoma en segundo plano (o incluso mientras estás en el lugar). ¿Limpiaste media mazmorra, saliste y volviste? Los enemigos pueden haber recibido refuerzos o preparado emboscadas. Se puede configurar para ejecutarse con mayor o menor frecuencia en la sección de Mapas Persistentes de los ajustes.</div>
+                    <div><b style="color: var(--rt-accent);">Evolución de Mapas 🗺️:</b> Hace que los mapas y ubicaciones sean dinámicos. Las mazmorras y asentamientos evolucionan y generan tramas de forma autónoma en segundo plano (incluso mientras estás en la ubicación). ¿Limpiaste media mazmorra, saliste y regresaste? El enemigo puede haber recibido refuerzos o preparado emboscadas. Se puede configurar para ejecutarse con mayor o menor frecuencia en la sección de Mapas Persistentes de los ajustes.</div>
                 </div>
 
                 <div class="rt-onboarding-divider"><span>¿Necesitas Ayuda?</span></div>
@@ -2514,9 +2376,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-chat-tip" role="note">
                     <div class="rt-onboarding-chat-tip-title">¿Necesitas ayuda? Prueba esto:</div>
                     <ol class="rt-onboarding-help-list">
-                        <li>Mira este <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">video tutorial básico</a> para empezar.</li>
-                        <li>Habla con el bot <button type="button" class="rt-onboarding-open-chat" id="rt-onboarding-open-chat">Acompañante de Aventura</button>. Tiene acceso a una guía completa del framework cuando el Modo Tutorial está habilitado.</li>
-                        <li>Únete al <a href="https://discord.gg/sillytavern" target="_blank" rel="noopener noreferrer">Discord de SillyTavern</a> y entra a la sección de extensiones para consultar dudas directamente.</li>
+                        <li>Mira <a href="https://www.youtube.com/watch?v=82Lt9pRYFS0" target="_blank" rel="noopener noreferrer">este video tutorial básico</a> para comenzar.</li>
+                        <li>Habla con el bot <button type="button" class="rt-onboarding-open-chat" id="rt-onboarding-open-chat">Acompañante de Aventura</button>. Tiene acceso a un amplio documento sobre la extensión cuando el Modo Tutorial está activado.</li>
                     </ol>
                 </div>
 
@@ -2525,142 +2386,151 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-setup-guide">
                     <b class="rt-onboarding-setup-title">Configuración Inicial:</b>
                     <ol class="rt-onboarding-setup-list">
-                        <li>Asegúrate de que las <b>Llamadas a Funciones (Function Calling)</b> estén habilitadas en tu ajuste de Chat Completion si deseas tiradas de dados híbridas y el abridor por defecto de Mapas Persistentes (<b>CreateAreaMap</b>). Puedes omitir las llamadas a funciones: configura el abridor del Arquitecto de Mapas en <b>Comando de texto</b> bajo Configuración del Narrador (cuando Mapas Persistentes esté activado) y usa la Cola RNG. Puedes desactivar Mapas Persistentes en Sistemas de Juego / Componentes.</li>
-                        <li>Configura tus conexiones en los ajustes de conexión de la extensión. Recomiendo un modelo ligero, rápido y económico para todo excepto para el narrador/GM principal. Más detalles abajo.</li>
-                        <li>Crea una ficha de personaje para tu "narrador" (ej. Director de Juego). <b>Deja los campos vacíos</b>, ya que el framework gestiona toda la lógica mediante el prompt del sistema.</li>
-                        <li>Usa una de las opciones de creación de personajes anteriores para definir tu personaje. Puedes usar la opción Creador de Personajes para especificar los detalles, usar "Otras Formas de Iniciar" para un resumen rápido o usar "Acción Instantánea" para empezar más rápido.</li>
+                        <li><b>La API debe ser Chat Completion</b> — SillyTavern lista la opción heredada Text Completion primero. Si está seleccionada, esta extensión no funcionará. Abre el menú desplegable de API de la izquierda y elige Chat Completion.</li>
+                        <li>Asegúrate de que <b>Llamadas a funciones (Function Calling)</b> esté activado en tu preajuste de Chat Completion si deseas tiradas de herramientas RNG Híbrido y el comando inicial predeterminado de Mapas Persistentes (<b>CreateAreaMap</b>). Puedes omitir las llamadas a funciones: configura el iniciador del Arquitecto de Mapas en <b>Comando de texto</b> bajo Configuración del Narrador (cuando Mapas Persistentes esté activado) y usa RNG Pre-sembrado. <i>Puedes</i> desactivar Mapas Persistentes en Sistemas de Juego / Componentes.</li>
+                        <li>Configura tus conexiones en los ajustes de conexión de la extensión. Recomiendo un modelo ligero, rápido y económico para todo excepto el narrador/GM principal.</li>
+                        <li>Crea una ficha de personaje para el narrador. Deja el contenido de la ficha vacío, ya que el framework maneja toda la lógica a través del prompt de sistema principal de ST.
+                            <div class="rt-onboarding-gm-create">
+                                <label class="rt-onboarding-gm-label" for="rt-onboarding-gm-name">Nombre de ficha del narrador</label>
+                                <input id="rt-onboarding-gm-name" class="text_pole rt-onboarding-gm-name" type="text" value="Game Master" placeholder="Game Master" maxlength="120" aria-label="Nombre de ficha del narrador">
+                                <button type="button" class="rt-onboarding-open-chat" id="rt-onboarding-create-gm">Crear ficha de narrador</button>
+                            </div>
+                            <div class="rt-onboarding-gm-note">Multihog no utiliza un formato de chat 1 a 1, sino un formato narrativo similar a una novela que permite gestionar múltiples personajes con fluidez. Los mensajes se atribuyen a un narrador, no a un único personaje.</div>
+                        </li>
+                        <li>Utiliza una de las opciones de creación de personajes anteriores para generar un nuevo personaje. Puedes usar el Creador de Personajes para especificarlo claramente, Otras Formas de Iniciar para una descripción general, o Acción Instantánea para empezar más rápido.</li>
                     </ol>
-                </div>
                     <div style="margin-top: 8px;">
-                        🪙 <b>Optimización de Tokens:</b> Para reducir el costo de tokens, especialmente en modo de herramientas, considera usar una extensión de resumen como <b>Summaryception</b>. La resumización combinada con el <b>Agente de Lorebook</b> garantizará que la IA se mantenga enfocada.
+                        🪙 <b>Optimización de Tokens:</b> Un resumidor que <b>oculte mensajes literales</b> es esencial — sin él, el uso de herramientas y las conversaciones largas dispararán el coste de tokens. Utiliza algo como <a href="https://github.com/Lodactio/Extension-Summaryception" target="_blank" rel="noopener noreferrer"><b>Summaryception</b></a> que oculta automáticamente los mensajes antiguos para que el narrador solo vea los últimos ~10 turnos literales. Combinado con el <b>Agente de Lorebook</b>, la memoria reside en el lore y en resúmenes en vez de en el chat crudo, manteniendo el rumbo de la IA y los costes bajos.
                     </div>
                     <div style="margin-top: 12px;">
-                        🤖 <b>¿Qué Modelo Utilizar?</b><br><br>
-                        Para el Narrador, recomendamos probar <b>MiMo 2.5 Pro</b>, <b>DeepSeek V4 Pro / Flash</b> o modelos potentes locales en llama.cpp (como Gemma 4 12B QAT/UD).<br><br>
-                        Para el Rastreador de Estado y el Agente de Lorebook, los modelos ligeros y rápidos como <b>Gemini Flash-Lite</b>, <b>Flash</b> o tu modelo local en servidor son ideales.<br><br>
-                        Si tu modelo piensa demasiado durante el combate, activa <b>Sustitución de API en Combate</b> en los ajustes del Rastreador de Estado para cambiar automáticamente a un modelo súper rápido en combate.
+                        🤖 <b>¿Qué modelo usar?</b><br><br>
+                        Para el narrador, recomiendo probar al menos los siguientes:<br>
+                        <ul style="margin: 4px 0 10px 20px; padding-left: 16px;"><li>MiMo 2.5 Pro</li><li>Deepseek V4 Pro y Flash reciente</li><li>GPT-5.6 Luna, por su gran relación calidad-precio.</li></ul>
+                        <i>Para el Rastreador de Estado y el Agente de Lorebook, he estado recomendando los modelos Gemini Flash-Lite y Flash, o Deepseek V4 Flash y GPT-5.6 Luna por su bajo coste y excelente rendimiento.</i><br><br>
+                        <i>Si tu modelo tarda demasiado pensando en combate, activa</i> <b>Sustitución de API en Combate</b> <i>en los ajustes del Rastreador — cambiará automáticamente cuando la etiqueta</i> <code>[COMBAT]</code> <i>esté activa en el rastreador y regresará al terminar.</i><br><br>
+                        Estas son recomendaciones, no reglas: experimenta según tu estilo de juego.
                     </div>
                 </div>
 
                 <!-- Narrator Configuration (Salad Bar) -->
                 <div class="rt-onboarding-secondary rt-onboarding-drawer rt-onboarding-narrator-drawer">
                     <button type="button" class="rt-onboarding-drawer-toggle" id="rt-onboarding-narrator-drawer-toggle" aria-expanded="false" aria-controls="rt-onboarding-narrator-drawer-body">
-                        <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Configuración del Narrador<small>Ajusta ritmo, RNG, misiones y sistemas opcionales</small></span></span>
+                        <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Configuración del Narrador<small>Ritmo narrativo, RNG, misiones y sistemas opcionales</small></span></span>
                         <span class="rt-onboarding-drawer-chevron" aria-hidden="true">&#9656;</span>
                     </button>
                     <div class="rt-onboarding-drawer-body" id="rt-onboarding-narrator-drawer-body">
                     <div class="rt-onboarding-drawer-body-inner">
                     <div class="rt-onboarding-narrator-content" style="width: 100%; box-sizing: border-box;">
-                    <small style="display: block; margin-bottom: 8px; opacity: 0.65; font-style: italic; line-height: 1.3;">Selecciona tus modos y componentes preferidos. Los cambios se aplican automáticamente a tu prompt del sistema.</small>
+                    <small style="display: block; margin-bottom: 8px; opacity: 0.65; font-style: italic; line-height: 1.3;">Select your preferred modes and components. Changes apply to your system prompt automatically.</small>
 
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
-                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Ritmo / Longitud de Respuesta</span>
-                        <button type="button" class="rt-narrative-pacing-help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;">¿Qué es esto?</button>
+                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Pacing/Output Length</span>
+                        <button type="button" class="rt-narrative-pacing-help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;">What are these?</button>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="normal" id="rt_onboarding_narrative_pacing_normal" /><span>Normal (sin instrucciones de longitud)</span></label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="shorter_outputs" id="rt_onboarding_narrative_pacing_shorter_outputs" /><span>Respuestas Más Cortas</span></label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="high_agency" id="rt_onboarding_narrative_pacing_high_agency" /><span>Modo de Alta Autonomía (High-Agency)</span></label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="downtime" id="rt_onboarding_narrative_pacing_downtime" /><span>Modo Tiempo Libre / Vida Cotidiana</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="normal" id="rt_onboarding_narrative_pacing_normal" /><span>Normal (no length instructions)</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="shorter_outputs" id="rt_onboarding_narrative_pacing_shorter_outputs" /><span>Shorter Outputs</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="high_agency" id="rt_onboarding_narrative_pacing_high_agency" /><span>High-Agency Mode</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="downtime" id="rt_onboarding_narrative_pacing_downtime" /><span>Downtime/Slice of Life Mode</span></label>
                     </div>
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
-                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Generación de Números Aleatorios (RNG)</span>
-                        <button class="rt-rng-help-icon" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;" title="Abrir explicación de sistemas RNG">¿Qué es esto?</button>
+                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">RNG</span>
+                        <button class="rt-rng-help-icon" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;" title="Open RNG systems explanation">What are these?</button>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="radio" name="rt_onboarding_rng_mode" value="hybrid" id="rt_onboarding_rng_hybrid" />
-                            <span>Pre-Generado + Llamadas a Herramientas (Recomendado sin CYOA)</span>
+                            <span>Pre-Seeded + Tool Calls (Recommended without CYOA Mode)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="radio" name="rt_onboarding_rng_mode" value="legacy" id="rt_onboarding_rng_legacy" />
-                            <span>Solo Pre-Generado (Recomendado con CYOA)</span>
+                            <span>Pre-Seeded Only (Recommended with CYOA Mode)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="radio" name="rt_onboarding_rng_mode" value="none" id="rt_onboarding_rng_none" />
-                            <span>Sin RNG (el LLM inventa los números, no recomendado)</span>
+                            <span>No RNG (LLM makes up numbers, not recommended)</span>
                         </label>
                     </div>
 
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">
-                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Misiones</span>
-                        <button class="rt-quests-hardcore-help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;" title="Explicar mecánicas de misiones hardcore">¿Qué es esto?</button>
+                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Quests</span>
+                        <button class="rt-quests-hardcore-help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;" title="Explain hardcore quest mechanics">What are these?</button>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_quests_enabled" />
-                            <span>Habilitar Misiones</span>
+                            <span>Enable Quests</span>
                         </label>
                         <div id="rt_onboarding_quest_options" style="padding-left: 20px; display: none; flex-direction: column; gap: 4px;">
                             <div style="margin-top: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">
-                                <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold;">Hardcore / Opcional</span>
+                                <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold;">Hardcore / Optional</span>
                             </div>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                 <input type="checkbox" id="rt_onboarding_quests_deadlines" />
-                                <span>Plazos Límite (Deadlines)</span>
+                                <span>Deadlines</span>
                             </label>
                             <div id="rt_onboarding_quests_frustration_wrap" style="padding-left: 20px; display: none;">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" id="rt_onboarding_quests_frustration" />
-                                    <span style="opacity: 0.9;">↳ Frustración (Experimental)</span>
+                                    <span style="opacity: 0.9;">↳ Frustration (Experimental)</span>
                                 </label>
                             </div>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                 <input type="checkbox" id="rt_onboarding_quests_show_archive" checked />
-                                <span>Mostrar misiones completadas/falladas</span>
+                                <span>Show completed/failed quests</span>
                             </label>
                         </div>
                     </div>
 
-                    <div style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">Componentes Opcionales</div>
+                    <div style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">Optional Components</div>
                     <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_loot" />
-                            <span>🎲 Tiradas de Botín</span>
+                            <span>🎲 Loot Rolls</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_random_events" />
-                            <span>🌍 Eventos Aleatorios</span>
+                            <span>🌍 Random Event Rolls</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_resting" />
-                            <span>💤 Restricciones de Descanso (≥9h entre descansos)</span>
+                            <span>💤 Resting Restrictions (=&gt;9h between rests)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_party_bench" />
-                            <span>⛺ Grupo en Reserva (Rastrea compañeros ausentes)</span>
+                            <span>⛺ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
                         <div>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: genera un mapa objetivo oculto antes de explorar una mazmorra, ruina, pueblo o ciudad. Nuevos mapas requieren CreateAreaMap (llamadas a funciones) o el abridor por comando de texto abajo.">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. New maps need CreateAreaMap (function calling) or the text-command opener below.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
-                            <span>🗺️ Mapas Persistentes (Alpha)</span>
+                            <span>🗺️ Persistent Maps (Alpha)</span>
                         </label>
                         <div id="rt_onboarding_map_architect_opener_wrap" style="padding-left: 20px; display: none; flex-direction: column; gap: 4px;">
-                            <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold; margin-top: 2px;">Abridor del Arquitecto de Mapas</span>
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
+                            <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold; margin-top: 2px;">Map Architect opener</span>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Default. The narrator calls CreateAreaMap; SillyTavern pauses the turn until the map is ready.">
                                 <input type="radio" name="rt_onboarding_map_architect_opener" value="tool" id="rt_onboarding_map_architect_opener_tool" />
-                                <span>Llamada a función (CreateAreaMap) — requiere function calling</span>
+                                <span>Tool call (CreateAreaMap) — requires function calling</span>
                             </label>
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Para modelos o presets sin llamadas a funciones. El narrador emite un bloque [CREATE_AREA_MAP] y se detiene; el Arquitecto de Mapas se ejecuta y luego continúa la narración.">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="For models or presets without function calling. The narrator emits a [CREATE_AREA_MAP] block and stops; Map Architect runs, then narration continues.">
                                 <input type="radio" name="rt_onboarding_map_architect_opener" value="text" id="rt_onboarding_map_architect_opener_text" />
-                                <span>Comando de texto — sin llamadas a funciones</span>
+                                <span>Text command — no function calling</span>
                             </label>
                         </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />
-                            <span>🧭 Modo CYOA (opciones de acción cada turno)</span>
-                            <button id="rt_onboarding_cyoa_settings_btn" style="background:none;border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:inherit;font-size:0.75em;padding:1px 6px;cursor:pointer;flex-shrink:0;opacity:0.8;" title="Ajustes CYOA"><i class="fa-solid fa-gear"></i></button>
+                            <span>🧭 CYOA Mode (action choices every turn)</span>
+                            <button id="rt_onboarding_cyoa_settings_btn" style="background:none;border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:inherit;font-size:0.75em;padding:1px 6px;cursor:pointer;flex-shrink:0;opacity:0.8;" title="CYOA Settings"><i class="fa-solid fa-gear"></i></button>
                         </div>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_npc_rel_bars" />
-                            <span>💞 Sistema de Relaciones (Amistad y Afecto)</span>
+                            <span>💞 Relationship System (Friendship &amp; Affection)</span>
                         </label>
                     </div>
 
-                    <button id="rt_onboarding_btn_update_sysprompt" style="width: 100%; margin-top: 10px; padding: 7px 12px; background: rgba(0, 200, 140, 0.18); border: 1px solid #00c88c; border-radius: 4px; color: var(--rt-text, #eee); font-size: 0.88em; cursor: pointer;" title="Escribe el prompt del sistema en el cuadro principal según las opciones seleccionadas.">
-                        ↑ Aplicar Prompt del Sistema
+                    <button id="rt_onboarding_btn_update_sysprompt" style="width: 100%; margin-top: 10px; padding: 7px 12px; background: rgba(0, 200, 140, 0.18); border: 1px solid #00c88c; border-radius: 4px; color: var(--rt-text, #eee); font-size: 0.88em; cursor: pointer;" title="Writes the system prompt to your Quick Prompt Main box based on the options selected above.">
+                        ↑ Apply System Prompt
                     </button>
                 </div>
                 </div>
@@ -2668,9 +2538,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 </div>
                 <div class="rt-onboarding-connection-shortcut" style="width:100%;flex-shrink:0;">
                     <button type="button" class="menu_button interactable" id="rt-open-character-creation-connection-settings" style="width:100%;">
-                        <i class="fa-solid fa-plug-circle-bolt"></i> Conexión para Creación de Personajes
+                        <i class="fa-solid fa-plug-circle-bolt"></i> Character Creation Connection
                     </button>
-                    <small>Compartido por el Creador de Personajes, Acción Instantánea y Otras Formas de Iniciar. Configúralo en <b>Conexiones y Modelos</b> en los ajustes de la extensión.</small>
+                    <small>Shared by Character Creator, Instant Action, and Other Ways to Begin. Configure it under <b>Connections &amp; Models</b> in extension settings.</small>
                 </div>
             </div>`;
         }
@@ -2729,15 +2599,15 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
         if (tag === 'QUESTS') return ''; // Quest log has dedicated high-fidelity renderer, skip standard card
         const content = blocks[tag];
         if (content === undefined && filterTag) {
-            return `<div class="rt-empty">Waiting for ${tag} data...</div>`;
+            return `<div class="rt-empty">Esperando datos de ${TAG_DISPLAY_NAMES[tag] || tag}...</div>`;
         }
         if (content === undefined) return '';
 
         // If main panel context, filter out detached windows
         if (!uiOptions.bodyOnly && !filterTag && detached.has(tag)) {
             return `<div class="rt-detached-placeholder" data-tag="${tag}">
-                <span class="rt-placeholder-icon">⧉</span> ${tag} is detached
-                <button class="rt-reattach-btn-inline" data-tag="${tag}" title="Re-attach">↓</button>
+                <span class="rt-placeholder-icon">⧉</span> ${TAG_DISPLAY_NAMES[tag] || tag} está desacoplado
+                <button class="rt-reattach-btn-inline" data-tag="${tag}" title="Reacoplar">↓</button>
             </div>`;
         }
 
@@ -2783,19 +2653,19 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
         // Don't show detach button if already in detached context (filterTag provided)
         const detachBtn = !filterTag ? `
-            <button class="rt-detach-btn" data-tag="${tag}" title="Detach panel">
+            <button class="rt-detach-btn" data-tag="${tag}" title="Desacoplar panel">
                 ⧉
             </button>
         ` : '';
 
         const personaFromCharBtn = tag === 'CHARACTER' ? `
-            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create a Lorebook Agent Player Card from this CHARACTER sheet (uses the sheet plus the last 3 story messages)">
-                Create PC Card
+            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Crear una Ficha de Jugador en Lorebook desde esta hoja de PERSONAJE">
+                Crear Ficha PJ
             </button>
         ` : '';
 
         const fullViewBtn = NO_PAGINATE.has(renderType) ? '' : `
-            <button class="rt-fullview-btn${isFullView ? ' active' : ''}" data-tag="${tag}" title="${isFullView ? 'Switch to Paged View' : 'Switch to Full List'}">
+            <button class="rt-fullview-btn${isFullView ? ' active' : ''}" data-tag="${tag}" title="${isFullView ? 'Cambiar a Vista Paginada' : 'Cambiar a Lista Completa'}">
                 ${isFullView ? '📜' : '📑'}
             </button>
         `;
@@ -2832,7 +2702,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     ${personaFromCharBtn}
                     ${detachBtn}
                     ${fullViewBtn}
-                    ${uiOptions.showCategorySettings === false ? '' : `<button class="rt-category-settings-btn" data-tag="${tag}" title="Category Rendering Options">
+                    ${uiOptions.showCategorySettings === false ? '' : `<button class="rt-category-settings-btn" data-tag="${tag}" title="Opciones de Renderizado de Categoría">
                         <i class="fa-solid fa-cog"></i>
                     </button>`}
                     <span class="rt-item-count">${items.length} ${items.length === 1 ? 'entrada' : 'entradas'}</span>
@@ -2862,7 +2732,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             <div class="rt-section-header" data-tag="${key}">
                 <span>${escapeHtml(group.icon)} ${escapeHtml(group.name)}</span>
                 <div class="rt-section-header-right">
-                    <span class="rt-item-count">${tags.length} ${tags.length === 1 ? 'module' : 'modules'}</span>
+                    <span class="rt-item-count">${tags.length} ${tags.length === 1 ? 'módulo' : 'módulos'}</span>
                     <span class="rt-collapse-icon">${isCollapsed ? '&#9656;' : '&#9662;'}</span>
                 </div>
             </div>
@@ -3071,7 +2941,7 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
         return `<div class="rt-tabmode-wrap">
             <div class="rt-tabmode-pinned">${pinnedHtml}</div>
             ${vitalsHtml}
-            <div class="rt-empty">No additional modules to display.</div>
+            <div class="rt-empty">No hay módulos adicionales que mostrar.</div>
         </div>`;
     }
 
@@ -3085,12 +2955,12 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
         const tag = entry.tag;
         if (tag === 'QUESTS') return { icon: BLOCK_ICONS.QUESTS || '📋', label: TAG_DISPLAY_NAMES.QUESTS || 'Misiones' };
         const customField = (s.customFields || []).find(f => f.tag.toUpperCase() === tag);
-        return { icon: customField?.icon || BLOCK_ICONS[tag] || TAG_DISPLAY_NAMES[tag] || tag };
+        return { icon: customField?.icon || BLOCK_ICONS[tag] || TAG_DISPLAY_NAMES[tag] || tag, label: customField?.label || TAG_DISPLAY_NAMES[tag] || tag };
     };
 
     const tabBadge = (entry) => {
         if (entry.kind === 'group') {
-            return `<span class="rt-tab-badge" title="${entry.tags.length} grouped modules">${entry.tags.length}</span>`;
+            return `<span class="rt-tab-badge" title="${entry.tags.length} módulos agrupados">${entry.tags.length}</span>`;
         }
         const tag = entry.tag;
         if (tag === 'QUESTS') {
@@ -3104,7 +2974,7 @@ export function renderTabModeView(memo, sectionPages, questsCtx = null) {
         // PARTY's tab carries a secondary badge for its folded-in benched sub-panel count.
         if (tag === 'PARTY' && blocks['BENCHED PARTY'] !== undefined) {
             const benchedCount = extractBenchedRoster(blocks['BENCHED PARTY']).length;
-            if (benchedCount > 0) badges += `<span class="rt-tab-badge rt-tab-badge-secondary" title="Benched">⛺${benchedCount}</span>`;
+            if (benchedCount > 0) badges += `<span class="rt-tab-badge rt-tab-badge-secondary" title="En campamento">⛺${benchedCount}</span>`;
         }
         return badges;
     };
@@ -3157,9 +3027,9 @@ export function renderBottomXpBar(memo) {
  * so collapse/detach/reattach work identically to other blocks.
  * @param {object[]} quests
  * @param {string} currentTime  in-world time string e.g. "08:00 AM, Day 2"
- * @param {Set<string>} collapsed
- * @param {Set<string>} detached
- * @param {string|null} filterTag  if set, only render if tag === 'QUESTS'
+ * @param {Set<string>} collapsed  global collapsed-card tag set
+ * @param {Set<string>} detached   global detached-card tag set
+ * @param {string|null} [filterTag=null]  non-null when rendered inside a detached window
  * @returns {string}
  */
 export function renderQuestLog(quests, currentTime, collapsed, detached, filterTag = null) {
@@ -3169,26 +3039,26 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
 
     if (!filterTag && detached.has(TAG)) {
         return `<div class="rt-detached-placeholder" data-tag="${TAG}">
-            <span class="rt-placeholder-icon">⧉</span> QUESTS is detached
-            <button class="rt-reattach-btn-inline" data-tag="${TAG}" title="Re-attach">↓</button>
+            <span class="rt-placeholder-icon">⧉</span> ${TAG_DISPLAY_NAMES.QUESTS || 'MISIONES'} está desacoplado
+            <button class="rt-reattach-btn-inline" data-tag="${TAG}" title="Reacoplar">↓</button>
         </div>`;
     }
 
     const allQuests = quests || [];
     const isCollapsed = collapsed.has(TAG);
-    const detachBtn = !filterTag ? `<button class="rt-detach-btn" data-tag="${TAG}" title="Detach panel">⧉</button>` : '';
+    const detachBtn = !filterTag ? `<button class="rt-detach-btn" data-tag="${TAG}" title="Desacoplar panel">⧉</button>` : '';
 
     if (allQuests.length === 0) {
         return `<div class="rt-section-card${isCollapsed ? ' rt-collapsed' : ''}" data-tag="${TAG}">
             <div class="rt-section-header" data-tag="${TAG}">
-                <span>📋 QUESTS</span>
+                <span>📋 ${TAG_DISPLAY_NAMES.QUESTS || 'MISIONES'}</span>
                 <div class="rt-section-header-right">
                     ${detachBtn}
                     <span class="rt-item-count">0 entradas</span>
                     <span class="rt-collapse-icon">${isCollapsed ? '&#9656;' : '&#9662;'}</span>
                 </div>
             </div>
-            <div class="rt-section-body"><div class="rt-card-line" style="opacity:0.6;">${t('hud.noQuests', 'No hay misiones activas en este momento.')}</div></div>
+            <div class="rt-section-body"><div class="rt-card-line" style="opacity:0.6;">No hay misiones activas.</div></div>
         </div>`;
     }
 
@@ -3219,8 +3089,8 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         const fillPct      = Math.round((displayFrust + 1) * scale);
 
         const barTitle = showFrustration && moodData.label
-            ? `NPC Mood: ${label} (${frust >= 0 ? '+' : ''}${frust.toFixed(2)})`
-            : (hasDeadline && !emergent ? `Time Progress: ${label}` : '');
+            ? `Estado de ánimo del PNJ: ${label} (${frust >= 0 ? '+' : ''}${frust.toFixed(2)})`
+            : (hasDeadline && !emergent ? `Progreso de tiempo: ${label}` : '');
 
         // Tick mark at the neutral position (33%) and deadline position (67%)
         // Emergent quests: no NPC expects completion → no mood/frustration bar
@@ -3232,17 +3102,17 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
             </div>` : '';
 
         let statusBadgeClass = 'rt-quest-badge-active';
-        let statusLabel = t('quests.statusActive', 'Active');
-        if (quest.status === 'completed') { statusBadgeClass = 'rt-quest-badge-completed'; statusLabel = t('quests.statusCompleted', 'Completed'); }
-        if (quest.status === 'past deadline') { statusBadgeClass = 'rt-quest-badge-failed'; statusLabel = t('quests.statusPastDeadline', 'Past Deadline'); }
-        if (quest.status === 'failed')    { statusBadgeClass = 'rt-quest-badge-failed';    statusLabel = t('quests.statusFailed', 'Failed'); }
+        let statusLabel = 'Activa';
+        if (quest.status === 'completed') { statusBadgeClass = 'rt-quest-badge-completed'; statusLabel = 'Completada'; }
+        if (quest.status === 'past deadline') { statusBadgeClass = 'rt-quest-badge-failed'; statusLabel = 'Plazo Vencido'; }
+        if (quest.status === 'failed')    { statusBadgeClass = 'rt-quest-badge-failed';    statusLabel = 'Fallida'; }
 
         const questIsCompleted = quest.status === 'completed';
 
         const objectives = (quest.objectives || []).map(obj => {
             const done = obj.status === 'completed' || (questIsCompleted && obj.status !== 'failed');
             const failed = obj.status === 'failed';
-            const optLabel = obj.required ? '' : ' <span class="rt-quest-optional">(Optional)</span>';
+            const optLabel = obj.required ? '' : ' <span class="rt-quest-optional">(Opcional)</span>';
             let objClass = 'rt-quest-obj';
             if (done) objClass += ' rt-quest-obj-done';
             if (failed) objClass += ' rt-quest-obj-failed';
@@ -3279,7 +3149,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
             acceptedRow = `
                 <div class="rt-quest-deadline">
                     <div class="rt-quest-deadline-header">
-                        <span class="rt-entity-sub-label">Accepted:</span> ${escapeHtml(quest.accepted_time)} <i style="opacity: 0.7; font-size: 0.9em;">(${formatTimeDiff(diff, false)})</i>
+                        <span class="rt-entity-sub-label">Aceptada:</span> ${escapeHtml(quest.accepted_time)} <i style="opacity: 0.7; font-size: 0.9em;">(${formatTimeDiff(diff, false)})</i>
                     </div>
                 </div>`;
         }
@@ -3287,7 +3157,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         const deadlineRow = (hasDeadline && showDeadlines) ? `
             <div class="rt-quest-deadline" style="${acceptedRow ? 'border-top: none; margin-top: 0;' : ''}">
                 <div class="rt-quest-deadline-header">
-                    <span class="rt-entity-sub-label">Deadline:</span> ${escapeHtml(quest.deadline_time)}${timeLeftHtml}
+                    <span class="rt-entity-sub-label">Plazo:</span> ${escapeHtml(quest.deadline_time)}${timeLeftHtml}
                     ${showFrustration ? `<span class="rt-quest-mood-label" style="color:${barColor};">${label}</span>` : ''}
                 </div>
                 ${moodBarHtml}
@@ -3299,7 +3169,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         if (isFailed) cardClass += ' rt-quest-card-failed';
 
         const dismissBtn = dismissible
-            ? `<button type="button" class="rt-quest-dismiss-btn" data-quest-id="${escapeHtml(quest.id)}" title="Remove from log">✕</button>`
+            ? `<button type="button" class="rt-quest-dismiss-btn" data-quest-id="${escapeHtml(quest.id)}" title="Eliminar del registro">✕</button>`
             : '';
 
         return `<div class="${cardClass}" data-quest-id="${escapeHtml(quest.id)}">
@@ -3329,7 +3199,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
     const completedCardsHtml = completedQuests.map(q => renderQuestCard(q, { dismissible: true })).join('');
     const failedCardsHtml = failedQuests.map(q => renderQuestCard(q, { dismissible: true })).join('');
 
-    let bodyHtml = activeCardsHtml || '<div class="rt-card-line" style="opacity:0.6; padding: 10px;">No active quests.</div>';
+    let bodyHtml = activeCardsHtml || '<div class="rt-card-line" style="opacity:0.6; padding: 10px;">No hay misiones activas.</div>';
 
     if (completedQuests.length > 0) {
         const isCompletedCollapsed = collapsed.has(TAG + '_COMPLETED');
@@ -3375,13 +3245,13 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
 
     return `<div class="rt-section-card${isCollapsed ? ' rt-collapsed' : ''}" data-tag="${TAG}">
         <div class="rt-section-header" data-tag="${TAG}">
-            <span>📋 QUESTS</span>
+            <span>📋 ${TAG_DISPLAY_NAMES.QUESTS || 'MISIONES'}</span>
             <div class="rt-section-header-right">
                 ${detachBtn}
-                <button class="rt-category-settings-btn" data-tag="${TAG}" title="Category Rendering Options">
+                <button class="rt-category-settings-btn" data-tag="${TAG}" title="Opciones de Renderizado de Categoría">
                     <i class="fa-solid fa-cog"></i>
                 </button>
-                <span class="rt-item-count">${activeQuests.length} active</span>
+                <span class="rt-item-count">${activeQuests.length} ${activeQuests.length === 1 ? 'activa' : 'activas'}</span>
                 <span class="rt-collapse-icon">${isCollapsed ? '&#9656;' : '&#9662;'}</span>
             </div>
         </div>

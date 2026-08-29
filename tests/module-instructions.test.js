@@ -130,6 +130,53 @@ describe('getSettings fresh install', () => {
         expect(s.settingsVersion).toBe(FACTORY_SETTINGS_VERSION);
         expect(s.routerModules?.npc?.tag).toBe('NPC');
         expect(typeof s.routerModules?.npc?.instruction).toBe('string');
+        expect(s.mapEvolutionIntervalHours).toBe(12);
+        expect(s.mapEvolutionOnSiteIntervalHours).toBe(1);
+        expect(s.mapEvolutionOnSiteIntervalMinutes).toBe(0);
+        expect(s.mapEvolutionOnSitePreset).toBe('dynamic');
+    });
+
+    it('migrates only the untouched legacy Map Evolution cadence', () => {
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.35',
+            mapEvolutionIntervalHours: 8,
+            mapEvolutionOnSiteIntervalHours: 8,
+        };
+        const migrated = getSettings();
+        expect(migrated.mapEvolutionIntervalHours).toBe(12);
+        expect(migrated.mapEvolutionOnSiteIntervalHours).toBe(1);
+        expect(migrated.mapEvolutionOnSiteIntervalMinutes).toBe(0);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.35',
+            mapEvolutionIntervalHours: 8,
+            mapEvolutionOnSiteIntervalHours: 4,
+        };
+        const customized = getSettings();
+        expect(customized.mapEvolutionIntervalHours).toBe(8);
+        expect(customized.mapEvolutionOnSiteIntervalHours).toBe(4);
+        expect(customized.mapEvolutionOnSiteIntervalMinutes).toBe(0);
+    });
+
+    it('migrates shipped Map Evolution leave guidance without deleting customized cadences', () => {
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.49.1',
+            mapEvolutionLookback: 10,
+            mapEvolutionSystemPrompt: 'Keep this wrapper.\n- Leaving this site: SET_ASSET state FLEEING or REMOVE_ASSET, with detail naming the destination in prose. You cannot MOVE_ASSET to another map.\n- REMOVE_ASSET deletes the record and its causal history. Use it only for mistaken clutter or when nothing of that identity should be remembered. Never REMOVE_ASSET a departure, visit, or flight that later ticks should continue.\nEnd.',
+            mapUpdaterSystemPrompt: 'REMOVE vs DESTROYED (both valid — choose by lasting occupancy)\n- Default.\n- REMOVE_ASSET is additional, not a substitute for DESTROYED. Delete the record only when narration establishes nothing map-worthy remains: body disintegrated or was hauled away and gone, mistaken/retracted asset, NPC left the site permanently, summon dismissed into nothing.',
+        };
+        const migrated = getSettings();
+        expect(migrated.mapEvolutionLookback).toBe(20);
+        expect(migrated.mapEvolutionSystemPrompt).toContain('SET_ASSET state LEFT');
+        expect(migrated.mapEvolutionSystemPrompt).toContain('stale ACTIVE occupancy contradicted by RECENT STORY');
+        expect(migrated.mapEvolutionSystemPrompt).not.toContain('Leaving this site: SET_ASSET state FLEEING or REMOVE_ASSET');
+        expect(migrated.mapEvolutionSystemPrompt).toContain('Keep this wrapper.');
+        expect(migrated.mapUpdaterSystemPrompt).toContain('SET_ASSET state LEFT when a living CREATURE/GROUP departed');
+        expect(migrated.mapUpdaterSystemPrompt).not.toContain('NPC left the site permanently');
+        expect(migrated.settingsVersion).toBe(FACTORY_SETTINGS_VERSION);
     });
 
     it('includes implicit spell-slot and resource accounting in the State Tracker core prompt', () => {

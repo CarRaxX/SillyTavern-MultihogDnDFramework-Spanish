@@ -5,7 +5,11 @@
 import { DEFAULT_STOCK_PROMPTS } from '../../constants.js';
 import { MODULE_NAME } from './schema-sections.js';
 import { DEFAULT_MODULES } from './default-modules.js';
-import { getDefaultPortraitLocationSystemPrompt } from './portrait-prompts.js';
+import {
+    getDefaultPortraitCharacterSystemPrompt,
+    getDefaultPortraitLocationSystemPrompt,
+    getDefaultPortraitNpcSystemPrompt,
+} from './portrait-prompts.js';
 import { adjustPromptTimestamps } from './router-utils.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
@@ -13,6 +17,7 @@ import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from '../../map-evolution-compress-prompt.js';
 import { DEFAULT_WORLD_PROGRESSION_SYSTEM_PROMPT } from '../../world-progression-prompt.js';
 import { MAIN_SYSPROMPT_BACKUP_KEY } from './main-sysprompt-backup.js';
+import { DEFAULT_MAP_THEME } from './map-themes.js';
 import {
     DEFAULT_ROUTER_AUTO_PASS_RESTRICTION,
     DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT,
@@ -107,6 +112,8 @@ export function buildDefaultSettings() {
 
         agentConsoleOpen: true,
 
+        agentTerminalTab: 'lorebook_agent',
+
         agentModulesOpen: true,
 
         agentMapEvolutionOpen: false,
@@ -183,6 +190,9 @@ export function buildDefaultSettings() {
 
         agentFontSize: 13,
 
+        /** First-run API checklist. Dismissed overlay does not come back. */
+        apiSetupGateSeen: false,
+
         customSysprompt: false,
 
         /** When true (default), snapshot Quick Prompt Main before the framework overwrites it and restore on tracker disable. */
@@ -216,6 +226,14 @@ export function buildDefaultSettings() {
         /** When true, suppress info/success toasts from portrait/location AI auto-generation (errors still show). */
 
         hideImageGenToasts: false,
+
+        /** When true, portrait prompts include recent chat story context; when false, only NPC/PC card data. */
+
+        portraitUseStoryLookback: false,
+
+        /** Recent chat messages to include when portraitUseStoryLookback is on (character path previously used 5). */
+
+        portraitStoryLookback: 5,
 
         portraitAutoGenerateParty: false,
 
@@ -279,7 +297,7 @@ export function buildDefaultSettings() {
 
         locationImages: false,
 
-        npcRelationshipBars: true,
+        npcRelationshipBars: false,
         npcRelationshipUpdateMode: 'state_tracker',
         // Optional editable instruction for State Tracker relationship commands.
         // Blank uses the built-in prompt.
@@ -542,6 +560,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         directPromptContext: 5,
 
+        stateTrackerDirectPrompt: '',
+
         historyIndex: -1,
 
         fullAuditMaxTokens: 32000,
@@ -565,6 +585,10 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         openaiMaxTokens: 0,
 
         chatLinkEnabled: true,
+        // Identity of the chat whose linked story state is currently projected
+        // into the top-level settings fields. This is persistence provenance,
+        // not a user-facing preference.
+        chatStateProjectionOwner: '',
 
         /** Also bind Control Room sections and State Tracker module configuration to each chat. */
         chatSetupLinkEnabled: true,
@@ -1258,63 +1282,12 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 
         portraitPromptWordTarget: 200,
 
-        portraitNpcSystemPrompt: `You are a portrait prompt generator for AI image models. Given an NPC's lorebook description from an RPG campaign, output a single detailed image generation prompt.
+        /** Active factory preset id / `user:Name` when last loaded; empty if custom edits. */
+        activePortraitPromptPresetId: '',
 
+        portraitNpcSystemPrompt: getDefaultPortraitNpcSystemPrompt(),
 
-
-Focus on:
-
-- Physical appearance (race, build, facial features, skin color, hair) — draw primarily from the NPC's lorebook entry
-
-- Clothing, armor, equipment visible on the character
-
-- Pose and expression appropriate to the character's personality
-
-- Art style: high-quality fantasy portrait, dramatic lighting, detailed
-
-
-
-Rules:
-
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-
-- Keep it under {{wordtarget}} words.
-
-- The NPC lorebook entry is your PRIMARY source of truth for this character's appearance.
-
-- Use the narrator card and scene context only for world setting/art style guidance.
-
-- Focus on visual details. Do not include game stats, relationship values, or non-visual information.`,
-
-        portraitCharacterSystemPrompt: `You are a portrait prompt generator for AI image models. Given character context from an RPG game, output a single detailed image generation prompt suitable for an AI image model.
-
-
-
-You are provided with the full Lorebook Agent context — all currently active lore entries with their keywords and content — as well as the current game state. Use these to infer accurate visual details about the character, their world, and their situation.
-
-
-
-Focus on:
-
-- Physical appearance (race, build, facial features, skin color, hair)
-
-- Clothing, armor, equipment visible on the character
-
-- Pose and expression appropriate to the character's personality
-
-- Art style: high-quality fantasy portrait, dramatic lighting, detailed
-
-
-
-Rules:
-
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-
-- Keep it under {{wordtarget}} words.
-
-- A user persona is provided for reference. If it does NOT describe the character "{{name}}", ignore it entirely and do not use any of its details in the portrait prompt.
-
-- Focus on visual details. Do not include game stats, abilities, or non-visual information.`,
+        portraitCharacterSystemPrompt: getDefaultPortraitCharacterSystemPrompt(),
 
         portraitLocationSystemPrompt: getDefaultPortraitLocationSystemPrompt(false),
 
@@ -1362,9 +1335,31 @@ Rules:
 
         mapRuntimeOpenaiModel: "",
 
+        mapEvolutionConnectionSource: "default",
+
+        mapEvolutionConnectionProfileId: "",
+
+        mapEvolutionCompletionPresetId: "",
+
+        mapEvolutionOllamaUrl: "http://localhost:11434",
+
+        mapEvolutionOllamaModel: "",
+
+        mapEvolutionOpenaiUrl: "",
+
+        mapEvolutionOpenaiKey: "",
+
+        mapEvolutionOpenaiModel: "",
+
         mapUpdaterEnabled: true,
 
         dungeonMapRevealAll: false,
+
+        mapTheme: { ...DEFAULT_MAP_THEME },
+
+        savedMapThemePresets: {},
+
+        activeMapThemePresetId: 'factory:ember',
 
         mapUpdaterRunEvery: 1,
 
@@ -1376,19 +1371,37 @@ Rules:
 
         mapUpdaterLastRunAt: 0,
 
+        mapUpdaterLastSiteRoot: '',
+
+        mapUpdaterPendingExitRoot: '',
+
         mapUpdaterDirectPrompt: '',
 
         mapUpdaterDirectLookback: 10,
 
         mapUpdaterDirectPromptOpen: false,
 
+        mapEvolutionDirectPrompt: '',
+
+        mapEvolutionDirectLookback: 10,
+
+        mapArchitectDirectPrompt: '',
+
+        mapArchitectDirectLookback: 10,
+
         mapEvolutionEnabled: true,
 
-        mapEvolutionIntervalHours: 8,
+        mapEvolutionIntervalHours: 12,
 
-        mapEvolutionOnSiteIntervalHours: 8,
+        mapEvolutionOnSiteIntervalHours: 1,
+
+        mapEvolutionOnSiteIntervalMinutes: 0,
+
+        mapEvolutionOnSitePreset: 'dynamic',
 
         mapEvolutionIntervalHoursBySite: {},
+
+        mapEvolutionLookback: 20,
 
         mapEvolutionMaxTokens: 25000,
 
@@ -1556,7 +1569,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '2026.8.24.14';
+export const FACTORY_SETTINGS_VERSION = '2026.8.71';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */

@@ -115,7 +115,12 @@ describe('panel builder', () => {
         const source = readFileSync(new URL('../src/ui/panel/dungeon-map-panel.js', import.meta.url), 'utf8');
         expect(source).toContain('bindDungeonMapPan');
         expect(source).toContain('bindDungeonMapAssetPopups');
-        expect(source).toContain("anchor.closest('dialog, .popup')");
+        expect(source).toContain('document.body.appendChild(tip)');
+        expect(source).toContain("tip.setAttribute('popover', 'manual')");
+        expect(source).toContain('onClose: () => hideDungeonMapAssetTip()');
+        expect(source).toContain('ensureDungeonMapKindArtStyles');
+        expect(source).not.toContain("anchor.closest('dialog, .popup')");
+        expect(source).not.toContain('popupContent.dataset.assetTipScroll');
         expect(source).toContain("root.classList.contains('rt-dungeon-graph-scroll')");
         expect(source).toContain('openDungeonMapReadablePopup');
         expect(source).toContain('Reveal All');
@@ -144,7 +149,10 @@ describe('panel builder', () => {
         expect(source).toContain('await reloadInspectorFromLiveMap()');
         expect(source).toContain("siteRoots: [site]");
         expect(source).toContain('runtimeState.loadMappedEvolutionSiteRef(site)');
-        expect(source).toContain('dataset.didPan');
+        expect(source).toContain('mapAssetGlyphFromEventTarget');
+        expect(source).toContain('assetTipPinned');
+        expect(source).toContain("scroll.addEventListener('click'");
+        expect(source).toContain('pinDungeonMapAssetTip');
         expect(source).toContain('rt-dungeon-map-view-row');
         expect(source).toContain('Direct Prompt</button>');
         expect(source).toContain('bindMapUpdaterDirectControls(popupDom');
@@ -191,7 +199,7 @@ describe('panel builder', () => {
         expect(source).toContain("toastr['info']('Starting Map Evolution pass...')");
     });
 
-    it('shares Stop and Lorebook Terminal with Map Updater without NPC auto-portraits', () => {
+    it('shares Stop and tabbed Agent Console with Map Updater without NPC auto-portraits', () => {
         const source = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         expect(source).toContain('stopRouterPass()');
@@ -199,9 +207,10 @@ describe('panel builder', () => {
         expect(source).toContain('stopMapEvolutionPass()');
         expect(source).toContain("skipped === 'stopped'");
         expect(source).toContain("toastr['info']('Stopped.', 'Map Updater')");
-        expect(source).toContain("step.metadata?.source !== 'map_updater'");
-        expect(source).toContain("step.metadata?.source !== 'map_evolution'");
+        expect(source).toContain("source === 'lorebook_agent'");
         expect(source).toContain('checkAndTriggerAutoGenerations(refreshAll)');
+        expect(source).toContain('rt-agent-terminal-tabs');
+        expect(source).toContain('resolveTerminalSource');
         expect(indexSource).toContain("stopBtn.style.display = busy ? 'flex' : 'none'");
         expect(indexSource).toContain('const busy = !!running || isMapUpdaterRunning() || isMapEvolutionRunning()');
         expect(indexSource).toContain('stopMapUpdaterPass');

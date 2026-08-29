@@ -4,6 +4,16 @@ import { wireAgentWorldProgression } from './panel-world-progression.js';
 import { wireAgentMapEvolution } from './panel-map-evolution.js';
 import { wireAgentActivity } from './panel-agent-activity.js';
 import { buildPanelMarkup } from './panel-markup.js';
+import {
+    AGENT_PANEL_RUNNING_SOURCES,
+    AGENT_TERMINAL_TAB_IDS,
+    createEmptyTerminalBuffers,
+    isValidTerminalTab,
+    MANIFEST_REFRESH_SOURCES,
+    renderTerminalPane,
+    resolveTerminalSource,
+} from './agent-terminal.js';
+import { wireAgentTerminalDirectPrompts } from './agent-terminal-direct.js';
 import { createSceneViewController } from './panel-scene-view.js';
 import { createCoalescedRefresh } from './refresh-coalescer.js';
 import { getCardAppearanceSynopsis as buildCardAppearanceSynopsis, getCardLibraryBlurb } from './card-synopsis.js';
@@ -12,7 +22,7 @@ import { NEW_NPC_NAMING_RULE } from '../../state/defaults.js';
 import { openSettingsOverlay } from '../settings-overlay.js';
 import { extractDungeonMapSection, parseDungeonMapDocument, stripDungeonMapSection, defaultMapSiteThreat } from '../../../dungeon-reality.js';
 import { clearMemoAndMapHistory, getDungeonMapHistoryEntry } from '../../state/dungeon-map-history.js';
-import { isLocationMappingEnabled } from '../../state/section-enabled.js';
+import { isLorebookAgentRuntimeActive, isLocationMappingEnabled } from '../../state/section-enabled.js';
 import { openDungeonMapReadablePopup } from './dungeon-map-panel.js';
 import { buildAddLibraryNpcToPartyPrompt, buildApplyLibraryCardAsPcPrompt, extractLibraryIdentityContent, findLibraryNpcByName, getNpcLibrary, sanitizeNpcLibraryRecords } from '../../../npc-library-lib.js';
 
@@ -29,8 +39,8 @@ const MAPS_GUIDE_HTML = `
         <p>Even better, while you’re away, Map Evolution may run and bring something like a rival adventuring group to the same passage and they may begin to clear it for you or something. They may blow it up with explosives, and you may come back to an open passage! The reason for the opened path is recorded by Map Evolution, so the GM knows why the passage is open. And you’ll likely find the adventuring group inside, which will make for a very interesting encounter indeed. “Wait, you opened the collapsed path <em>FOR me?</em>”</p>
         <h3 style="margin:18px 0 6px;color:#bae6fd;">How Are They Created and Injected in Context?</h3>
         <p>The GM creates a district-scale SETTLEMENT map for a town or city, a room-scale DUNGEON map for a significant dangerous complex, or a room-scale INTERIOR map for a significant low-risk multi-room site. Ordinary shops, inns, chapels, and homes are BUILDING assets on their settlement district; props and set-dressing are OBJECT assets. Wilderness and insignificant places are not mapped.</p>
-        <p>A settlement may absorb existing DUNGEON or INTERIOR maps when it is first created. The settlement receives matching SUBDUNGEON or SUBINTERIOR assets, while each peer keeps its independent room graph and remembers its host. Calling CreateAreaMap for an exact settlement building or nested site is the explicit promotion signal; Map Updater and Map Evolution never guess that promotion.</p>
-        <p>The deepest exact footer match activates: a mapped nested peer wins over its host, while a BUILDING or unmapped SUB site keeps the settlement active. Leaving the peer reactivates the settlement. Partial names, aliases, and fuzzy matches do not activate a map.</p>
+        <p>A settlement may absorb existing DUNGEON or INTERIOR maps when it is first created. The GM may also attach a new DUNGEON or INTERIOR from anywhere by naming an exact existing parent map and one of its AREA cells; no BUILDING or player movement is required. SETTLEMENT, DUNGEON, and INTERIOR maps may host child peers up to three mapped levels. CreateAreaMap owns these SUBDUNGEON/SUBINTERIOR gateways; Map Updater and Map Evolution never guess or edit them.</p>
+        <p>The deepest complete footer path activates. Similar names remain distinct — “Cellar Crypt” does not match “Cellar Crypt Dungeon” — while leaving a peer reactivates its direct parent map.</p>
         <p>You can also create maps manually from the “+ Add Mapped Location” button in the Locations header, or you can press the “+ MAP” button on any Location lore entry header.</p>
         <h3 style="margin:18px 0 6px;color:#bae6fd;">Editing Maps</h3>
         <p>You can edit maps directly by editing the JSON object. Open a map, then click on “&lt;/&gt; Raw JSON”. I will later add a proper graphical map editor. For now this is the only way.</p>
@@ -77,6 +87,12 @@ function premiseFromLocationContent(content) {
         .replace(/\n{3,}/g, '\n\n')
         .trim()
         .slice(0, 1200);
+}
+
+function briefDescriptionFromPrompt(prompt, site = '') {
+    const text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) return site ? `${site} is a mapped location.` : '';
+    return text.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || text;
 }
 
 function popupControl(root, selector) {
@@ -177,7 +193,8 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
 
     const loreEntry = premiseFromLocationContent(locationContent);
     const premiseDefault = loreEntry
-        || `${site} es una ubicación raíz solicitada para un Mapa Persistente. Mantén coherencia con la historia establecida.`;
+        || `${site} is a location root requested for a Persistent Map. Stay consistent with established story.`;
+    const briefDescriptionDefault = briefDescriptionFromPrompt(premiseDefault, site);
     const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
     const mappedSites = typeof listMappedEvolutionSites === 'function'
         ? await listMappedEvolutionSites().catch(() => [])
@@ -185,71 +202,74 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
     const eligibleIncludes = mappedSites.filter(item => ['DUNGEON', 'INTERIOR'].includes(item.kind) && !item.hostSite && item.siteRoot !== site);
     const includeOptions = eligibleIncludes.length
         ? eligibleIncludes.map(item => `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-map-include-site="${escapeHtml(item.siteRoot)}"> ${escapeHtml(item.siteRoot)} <span style="opacity:.6">(${item.kind})</span></label>`).join('')
-        : '<span style="opacity:.6">No hay pares de MAZMORRA/INTERIOR disponibles.</span>';
+        : '<span style="opacity:.6">No eligible DUNGEON/INTERIOR peers.</span>';
     const html = `
         <div style="text-align:left;font-size:0.9em;line-height:1.4;">
-            <p>Crear un mapa privado para <b>${escapeHtml(site)}</b> con el Arquitecto de Mapas. El narrador no interviene.</p>
+            <p>Create a private map for <b>${escapeHtml(site)}</b> with Map Architect. The narrator is not involved.</p>
             <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Automático</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
                 <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-mode" value="manual" onchange="var a=document.getElementById('rt-map-create-auto');var m=document.getElementById('rt-map-create-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
             </div>
             <div id="rt-map-create-auto" style="margin-top:8px;">
-                <p style="margin:0 0 6px;">El Arquitecto de Mapas deduce la entrada, tipo, escala, amenaza y premisa a partir del lore de esta ubicación y la historia reciente, y luego genera el mapa.</p>
-                <label style="display:block;">Revisión de historia
+                <p style="margin:0 0 6px;">Map Architect fills entrance, kind, scale, threat, a detailed generation prompt, and a brief description from this location's lore and recent story, then generates the map.</p>
+                <label style="display:block;">Story lookback
                     <input id="rt-map-create-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 no utiliza mensajes recientes del chat.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat.</p>
             </div>
             <div id="rt-map-create-manual" hidden>
                 <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='MODERATE'"> Asentamiento</label>
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='HIGH'"> Mazmorra</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='MODERATE'"> Settlement</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='HIGH'"> Dungeon</label>
                     <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-create-kind" value="INTERIOR" onchange="var t=document.getElementById('rt-map-create-threat');if(t)t.value='LOW'"> Interior</label>
                 </div>
-                <label style="display:block;margin-top:8px;">Entrada
-                    <input id="rt-map-create-entrance" type="text" value="Entrada" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Entrance
+                    <input id="rt-map-create-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
                 <div style="display:flex;gap:8px;margin-top:8px;">
-                    <label style="flex:1;">Escala
+                    <label style="flex:1;">Scale
                         <select id="rt-map-create-scale" style="width:100%;margin-top:3px;">
-                            <option value="SMALL">SMALL (Pequeña)</option>
-                            <option value="MEDIUM" selected>MEDIUM (Mediana)</option>
-                            <option value="LARGE">LARGE (Grande)</option>
+                            <option value="SMALL">SMALL</option>
+                            <option value="MEDIUM" selected>MEDIUM</option>
+                            <option value="LARGE">LARGE</option>
                         </select>
                     </label>
-                    <label style="flex:1;">Amenaza
+                    <label style="flex:1;">Threat
                          <select id="rt-map-create-threat" style="width:100%;margin-top:3px;">
-                             <option value="NONE">NONE (Ninguna)</option>
-                             <option value="LOW">LOW (Baja)</option>
-                            <option value="MODERATE" selected>MODERATE (Moderada)</option>
-                            <option value="HIGH">HIGH (Alta)</option>
-                            <option value="DEADLY">DEADLY (Mortal)</option>
+                             <option value="NONE">NONE</option>
+                             <option value="LOW">LOW</option>
+                            <option value="MODERATE" selected>MODERATE</option>
+                            <option value="HIGH">HIGH</option>
+                            <option value="DEADLY">DEADLY</option>
                         </select>
                     </label>
                 </div>
-                <label style="display:block;margin-top:8px;">Premisa
-                    <textarea id="rt-map-create-premise" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;">${escapeHtml(premiseDefault)}</textarea>
+                <label style="display:block;margin-top:8px;">Map-generation prompt
+                    <textarea id="rt-map-create-prompt" style="width:100%;height:110px;margin-top:3px;box-sizing:border-box;resize:vertical;">${escapeHtml(premiseDefault)}</textarea>
+                </label>
+                <label style="display:block;margin-top:8px;">Brief description
+                    <input id="rt-map-create-brief-description" value="${escapeHtml(briefDescriptionDefault)}" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
                 <details style="margin-top:8px;">
-                    <summary style="cursor:pointer;">Absorber pares mapeados existentes (solo ASENTAMIENTO)</summary>
+                    <summary style="cursor:pointer;">Absorb existing mapped peers (SETTLEMENT only)</summary>
                     <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">${includeOptions}</div>
                 </details>
             </div>
             <details style="margin-top:10px;">
-                <summary style="cursor:pointer;">Contexto de referencia opcional</summary>
-                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Las fuentes seleccionadas se envían al Arquitecto de Mapas incluso con revisión de historia en 0.</p>
-                <label style="display:block;font-weight:600;">Libros de Lore</label>
-                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Cargando libros de lore…</div>
-                <label style="display:block;font-weight:600;margin-top:8px;">Fichas de personaje</label>
+                <summary style="cursor:pointer;">Optional reference context</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
+                <label style="display:block;font-weight:600;">Lorebooks</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
                 <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
             </details>
         </div>
     `;
 
     let form = null;
-    const choice = await Popup.show.confirm('Crear mapa', html, {
-        okButton: 'Generar mapa',
-        cancelButton: 'Cancelar',
+    const choice = await Popup.show.confirm('Create map', html, {
+        okButton: 'Generate map',
+        cancelButton: 'Cancel',
         onClosing: (popup) => {
             if (popup.result) {
                 const root = popup.dlg;
@@ -257,10 +277,11 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                 form = {
                     mode: popupChecked(root, 'rt-map-create-mode', 'auto'),
                     kind,
-                    entrance: popupValue(root, '#rt-map-create-entrance', 'Entrada') || 'Entrada',
+                    entrance: popupValue(root, '#rt-map-create-entrance', 'Entrance') || 'Entrance',
                     scale: popupValue(root, '#rt-map-create-scale', 'MEDIUM').toUpperCase(),
                     threat: popupValue(root, '#rt-map-create-threat', defaultMapSiteThreat(kind)).toUpperCase(),
-                    premise: popupValue(root, '#rt-map-create-premise', '') || premiseDefault,
+                    prompt: popupValue(root, '#rt-map-create-prompt', '') || premiseDefault,
+                    briefDescription: popupValue(root, '#rt-map-create-brief-description', '') || briefDescriptionDefault,
                     lookback: parseLookbackValue(popupValue(root, '#rt-map-create-lookback', lookbackValue), lookbackValue),
                     lorebookNames: [...root.querySelectorAll('input[data-map-context-lorebook]:checked')]
                         .map(input => String(input.dataset.mapContextLorebook || '').trim()).filter(Boolean),
@@ -276,7 +297,7 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
         onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
-    if (!form) return { ok: false, error: 'No se pudo leer el formulario del mapa.' };
+    if (!form) return { ok: false, error: 'Could not read the map form.' };
 
     try {
         if (form.mode === 'manual') {
@@ -286,7 +307,8 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
                 kind: form.kind,
                 scale: form.scale,
                 threat: form.threat,
-                premise: form.premise,
+                prompt: form.prompt,
+                brief_description: form.briefDescription,
                 include: form.include,
                 allowOffsite: true,
                 lorebookNames: form.lorebookNames,
@@ -296,9 +318,9 @@ async function promptAndRunLorebookAgentMap(siteRoot, locationContent, escapeHtm
         }
 
         if (typeof inferMapArchitectArgs !== 'function') {
-            return { ok: false, error: 'El auto-rellenado del Arquitecto de Mapas no está disponible.' };
+            return { ok: false, error: 'Map Architect auto-fill is not available.' };
         }
-        try { globalThis.toastr?.info?.(`Completando resumen del mapa para ${site}…`, 'Arquitecto de Mapas', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
         const inferred = await inferMapArchitectArgs({
             site,
             loreEntry: loreEntry || premiseDefault,
@@ -327,7 +349,7 @@ function parseKeywordInput(value) {
 async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitectArgs, listMappedEvolutionSites, escapeHtml, lookbackDefault } = {}) {
     const ctx = SillyTavern.getContext();
     const { Popup } = ctx || {};
-    if (!Popup?.show?.confirm) return { ok: false, error: 'La API de Popup no está disponible.' };
+    if (!Popup?.show?.confirm) return { ok: false, error: 'Popup API is not available.' };
     const lookbackValue = Math.max(0, Math.min(100, Number(lookbackDefault) || 12));
     const mappedSites = typeof listMappedEvolutionSites === 'function'
         ? await listMappedEvolutionSites().catch(() => [])
@@ -336,81 +358,84 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
     const safe = typeof escapeHtml === 'function' ? escapeHtml : value => String(value || '');
     const includeOptions = eligibleIncludes.length
         ? eligibleIncludes.map(item => `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-map-include-site="${safe(item.siteRoot)}"> ${safe(item.siteRoot)} <span style="opacity:.6">(${item.kind})</span></label>`).join('')
-        : '<span style="opacity:.6">No hay pares de MAZMORRA/INTERIOR disponibles.</span>';
+        : '<span style="opacity:.6">No eligible DUNGEON/INTERIOR peers.</span>';
 
     const html = `
         <div style="text-align:left;font-size:0.9em;line-height:1.4;">
-            <p>Crear una nueva ubicación raíz y generar su mapa privado. El narrador no interviene.</p>
-            <label style="display:block;margin-top:8px;">Nombre de la ubicación
-                <input id="rt-map-loc-name" type="text" placeholder="Nombre raíz exacto del lugar, sin ::" style="width:100%;margin-top:3px;box-sizing:border-box;">
+            <p>Create a new location root and generate its private map. The narrator is not involved.</p>
+            <label style="display:block;margin-top:8px;">Location name
+                <input id="rt-map-loc-name" type="text" placeholder="Exact site root, no ::" style="width:100%;margin-top:3px;box-sizing:border-box;">
             </label>
             <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Automático</label>
+                <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="auto" checked onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=false;if(m)m.hidden=true"> Auto</label>
                 <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-mode" value="manual" onchange="var a=document.getElementById('rt-map-loc-auto');var m=document.getElementById('rt-map-loc-manual');if(a)a.hidden=true;if(m)m.hidden=false"> Manual</label>
             </div>
             <div id="rt-map-loc-auto" style="margin-top:8px;">
-                <label style="display:block;">Resumen
-                    <textarea id="rt-map-loc-brief" placeholder="Qué es este lugar. El Arquitecto de Mapas completa el resto." style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                <label style="display:block;">Brief
+                    <textarea id="rt-map-loc-brief" placeholder="What this place is. Map Architect fills the rest." style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
                 </label>
-                <label style="display:block;margin-top:8px;">Revisión de historia
+                <label style="display:block;margin-top:8px;">Story lookback
                     <input id="rt-map-loc-lookback" type="number" min="0" max="100" value="${lookbackValue}" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 no utiliza mensajes recientes del chat — solo nombre y resumen.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">0 uses no recent chat — name and brief only.</p>
             </div>
             <div id="rt-map-loc-manual" hidden>
-                <label style="display:block;margin-top:8px;">Palabras clave adicionales
-                    <input id="rt-map-loc-keys" type="text" placeholder="Alias opcionales, separados por comas" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Extra keywords
+                    <input id="rt-map-loc-keys" type="text" placeholder="Optional aliases, comma-separated" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
-                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">El nombre de la ubicación se añade automáticamente. Máximo 6 en total.</p>
+                <p style="margin:4px 0 0;opacity:0.65;font-size:0.85em;">The location name is added automatically. Max 6 total.</p>
                 <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='MODERATE'"> Asentamiento</label>
-                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='HIGH'"> Mazmorra</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="SETTLEMENT" checked onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='MODERATE'"> Settlement</label>
+                    <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="DUNGEON" onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='HIGH'"> Dungeon</label>
                     <label style="display:flex;gap:6px;align-items:center;"><input type="radio" name="rt-map-loc-kind" value="INTERIOR" onchange="var t=document.getElementById('rt-map-loc-threat');if(t)t.value='LOW'"> Interior</label>
                 </div>
-                <label style="display:block;margin-top:8px;">Entrada
-                    <input id="rt-map-loc-entrance" type="text" value="Entrada" style="width:100%;margin-top:3px;box-sizing:border-box;">
+                <label style="display:block;margin-top:8px;">Entrance
+                    <input id="rt-map-loc-entrance" type="text" value="Entrance" style="width:100%;margin-top:3px;box-sizing:border-box;">
                 </label>
                 <div style="display:flex;gap:8px;margin-top:8px;">
-                    <label style="flex:1;">Escala
+                    <label style="flex:1;">Scale
                         <select id="rt-map-loc-scale" style="width:100%;margin-top:3px;">
-                            <option value="SMALL">SMALL (Pequeña)</option>
-                            <option value="MEDIUM" selected>MEDIUM (Mediana)</option>
-                            <option value="LARGE">LARGE (Grande)</option>
+                            <option value="SMALL">SMALL</option>
+                            <option value="MEDIUM" selected>MEDIUM</option>
+                            <option value="LARGE">LARGE</option>
                         </select>
                     </label>
-                    <label style="flex:1;">Amenaza
+                    <label style="flex:1;">Threat
                          <select id="rt-map-loc-threat" style="width:100%;margin-top:3px;">
-                             <option value="NONE">NONE (Ninguna)</option>
-                             <option value="LOW">LOW (Baja)</option>
-                            <option value="MODERATE" selected>MODERATE (Moderada)</option>
-                            <option value="HIGH">HIGH (Alta)</option>
-                            <option value="DEADLY">DEADLY (Mortal)</option>
+                             <option value="NONE">NONE</option>
+                             <option value="LOW">LOW</option>
+                            <option value="MODERATE" selected>MODERATE</option>
+                            <option value="HIGH">HIGH</option>
+                            <option value="DEADLY">DEADLY</option>
                         </select>
                     </label>
                 </div>
-                 <label style="display:block;margin-top:8px;">Premisa
-                    <textarea id="rt-map-loc-premise" placeholder="Hechos establecidos para el CORE y el mapa" style="width:100%;height:88px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                 <label style="display:block;margin-top:8px;">Map-generation prompt
+                    <textarea id="rt-map-loc-prompt" placeholder="Detailed private facts and creative guidance for Map Architect" style="width:100%;height:110px;margin-top:3px;box-sizing:border-box;resize:vertical;"></textarea>
+                 </label>
+                 <label style="display:block;margin-top:8px;">Brief description
+                    <input id="rt-map-loc-brief-description" placeholder="Brief current description for CORE and map gateways" style="width:100%;margin-top:3px;box-sizing:border-box;">
                  </label>
                  <details style="margin-top:8px;">
-                     <summary style="cursor:pointer;">Absorber pares mapeados existentes (solo ASENTAMIENTO)</summary>
+                     <summary style="cursor:pointer;">Absorb existing mapped peers (SETTLEMENT only)</summary>
                      <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">${includeOptions}</div>
                  </details>
             </div>
             <details style="margin-top:10px;">
-                <summary style="cursor:pointer;">Contexto de referencia opcional</summary>
-                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Las fuentes seleccionadas se envían al Arquitecto de Mapas incluso con revisión de historia en 0.</p>
-                <label style="display:block;font-weight:600;">Libros de Lore</label>
-                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Cargando libros de lore…</div>
-                <label style="display:block;font-weight:600;margin-top:8px;">Fichas de personaje</label>
+                <summary style="cursor:pointer;">Optional reference context</summary>
+                <p style="margin:6px 0;opacity:0.7;font-size:0.85em;">Selected sources are sent to Map Architect even with story lookback set to 0.</p>
+                <label style="display:block;font-weight:600;">Lorebooks</label>
+                <div data-map-context-lorebooks style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;">Loading lorebooks…</div>
+                <label style="display:block;font-weight:600;margin-top:8px;">Character cards</label>
                 <div data-map-context-character-cards style="max-height:120px;overflow-y:auto;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px;margin-top:3px;"></div>
             </details>
         </div>
     `;
 
     let form = null;
-    const choice = await Popup.show.confirm('Añadir ubicación mapeada', html, {
-        okButton: 'Crear ubicación y mapa',
-        cancelButton: 'Cancelar',
+    const choice = await Popup.show.confirm('Add mapped location', html, {
+        okButton: 'Create location and map',
+        cancelButton: 'Cancel',
         onClosing: (popup) => {
             if (popup.result) {
                 const root = popup.dlg;
@@ -427,10 +452,11 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
                         .filter(Boolean),
                     locationKeys: parseKeywordInput(popupValue(root, '#rt-map-loc-keys')),
                     kind,
-                    entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrada') || 'Entrada',
+                    entrance: popupValue(root, '#rt-map-loc-entrance', 'Entrance') || 'Entrance',
                     scale: popupValue(root, '#rt-map-loc-scale', 'MEDIUM').toUpperCase(),
                     threat: popupValue(root, '#rt-map-loc-threat', defaultMapSiteThreat(kind)).toUpperCase(),
-                    premise: popupValue(root, '#rt-map-loc-premise'),
+                    prompt: popupValue(root, '#rt-map-loc-prompt'),
+                    briefDescription: popupValue(root, '#rt-map-loc-brief-description'),
                     include: [...root.querySelectorAll('input[data-map-include-site]:checked')]
                         .map(input => String(input.dataset.mapIncludeSite || '').trim()).filter(Boolean),
                 };
@@ -440,27 +466,28 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
         onOpen: (popup) => { void populateMapCreationContextOptions(popup?.dlg, ctx); },
     });
     if (!choice) return { ok: false, cancelled: true };
-    if (!form) return { ok: false, error: 'No se pudo leer el formulario de la ubicación mapeada.' };
+    if (!form) return { ok: false, error: 'Could not read the mapped location form.' };
 
     const site = form.site;
-    if (!site) return { ok: false, error: 'El nombre de la ubicación es obligatorio.' };
-    if (site.includes('::')) return { ok: false, error: 'Usa un nombre de ubicación raíz, no una ruta anidada con ::.' };
+    if (!site) return { ok: false, error: 'Location name is required.' };
+    if (site.includes('::')) return { ok: false, error: 'Use a location root name, not a nested :: path.' };
 
     try {
         if (form.mode === 'manual') {
-            if (!form.premise) return { ok: false, error: 'La premisa es obligatoria. Se convierte en el CORE de la ubicación y en el resumen del mapa.' };
+            if (!form.prompt || !form.briefDescription) return { ok: false, error: 'Map-generation prompt and brief description are required.' };
             await runMapArchitect({
                 site,
                 entrance: form.entrance,
                 kind: form.kind,
                 scale: form.scale,
                 threat: form.threat,
-                premise: form.premise,
+                prompt: form.prompt,
+                brief_description: form.briefDescription,
                 include: form.include,
                 allowOffsite: true,
                 requireNew: true,
                 locationKeys: form.locationKeys,
-                locationCore: form.premise,
+                locationCore: form.briefDescription,
                 lorebookNames: form.lorebookNames,
                 characterCards: form.characterCards,
             });
@@ -468,9 +495,9 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
         }
 
         if (typeof inferMapArchitectArgs !== 'function') {
-            return { ok: false, error: 'El auto-rellenado del Arquitecto de Mapas no está disponible.' };
+            return { ok: false, error: 'Map Architect auto-fill is not available.' };
         }
-        try { globalThis.toastr?.info?.(`Completando resumen del mapa para ${site}…`, 'Arquitecto de Mapas', { timeOut: 4000 }); } catch (_) { /* best effort */ }
+        try { globalThis.toastr?.info?.(`Filling map brief for ${site}…`, 'Map Architect', { timeOut: 4000 }); } catch (_) { /* best effort */ }
         const inferred = await inferMapArchitectArgs({
             site,
             userBrief: form.userBrief,
@@ -485,7 +512,7 @@ async function promptAndCreateMappedLocation({ runMapArchitect, inferMapArchitec
             allowOffsite: true,
             requireNew: true,
             locationKeys: inferred.keywords,
-            locationCore: inferred.premise,
+            locationCore: inferred.brief_description,
             lorebookNames: form.lorebookNames,
             characterCards: form.characterCards,
         });
@@ -642,6 +669,7 @@ export function createPanel(dependencies) {
         navigateSnapshot,
         normalizeLocationPath,
         openNpcSectionEditor,
+        openPcSectionEditor,
         parseInWorldTime,
         reapplyRouterPass,
         refreshAgentManifestNow,
@@ -934,27 +962,23 @@ export function createPanel(dependencies) {
             });
         }
 
-        /** Applies/removes is-agent-disabled on the agent panel to match routerEnabled. */
+        /** Dims the agent panel when the framework power is off or LA preference is off. */
         function updateAgentPanelDisabled() {
             const s = getSettings();
-            if (s.routerEnabled) {
+            const agentLive = isLorebookAgentRuntimeActive(s);
+            if (agentLive) {
                 agentPanel.classList.remove('is-agent-disabled');
             } else {
                 agentPanel.classList.add('is-agent-disabled');
             }
-            // Keep settings sidebar toggle in sync
+            // Keep settings sidebar preference toggle in sync (does not clear on master power-off)
             const sidebarCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_router_enabled'));
             if (sidebarCheck) sidebarCheck.checked = !!s.routerEnabled;
-            // Keep header ⏻ button in sync
-            const agentEnableBtn = /** @type {HTMLElement|null} */ (queryAgentUi('#rt-agent-router-enable-btn'));
-            if (agentEnableBtn) {
-                agentEnableBtn.style.opacity = s.routerEnabled ? '' : '0.35';
-                agentEnableBtn.title = s.routerEnabled ? 'Disable Lorebook Agent' : 'Enable Lorebook Agent';
-            }
         }
 
         // Apply on open
         updateAgentPanelDisabled();
+        runtimeState.updateAgentPanelDisabledRef = updateAgentPanelDisabled;
         updateAgentMapEvolutionStatus();
         updateAgentWorldStatus();
 
@@ -1056,17 +1080,6 @@ export function createPanel(dependencies) {
         }
 
         // ── Agent World Progression Toggle ──
-        const agentEnableBtn = queryAgentUi('#rt-agent-router-enable-btn');
-        if (agentEnableBtn) {
-            agentEnableBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const s = getSettings();
-                s.routerEnabled = !s.routerEnabled;
-                saveSettings();
-                updateAgentPanelDisabled();
-            });
-        }
-
         const basicCheck = agentPanel.querySelector('#rt-agent-router-basic');
         if (basicCheck) {
             basicCheck.addEventListener('change', (e) => {
@@ -2147,7 +2160,7 @@ export function createPanel(dependencies) {
                             <span style="font-weight:bold; font-size:11px; flex:1; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(displayName)}</span>
                             <span style="font-size:9px; opacity:0.45; color:var(--rt-text-muted); flex-shrink:0;">${activeCount}/${items.length} (${totalTokens}t)</span>
                             ${isNpcBook ? '<button type="button" class="rt-npc-manager-btn" title="NPC/PC Manager — library, add to story, import/export"><i class="fa-solid fa-users-gear"></i> NPC/PC Manager</button>' : ''}
-                            ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
+                            ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC and PC Card Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                             ${isLocBook ? '<button type="button" class="rt-loc-maps-guide-btn" title="Learn how Persistent Maps work"><i class="fa-solid fa-circle-info"></i> Maps Guide</button>' : ''}
                             ${isLocBook && dungeonRealityEnabled ? '<button type="button" class="rt-loc-add-mapped-btn" title="Create a new location root and generate its private map"><i class="fa-solid fa-plus"></i> Add Mapped Location</button>' : ''}
                             ${isLocBook ? '<button class="rt-loc-settings-btn" title="Location Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
@@ -2182,7 +2195,7 @@ export function createPanel(dependencies) {
                                         const curS = getSettings();
 
                                         const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
-                                    <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ NPC Settings</div>
+                                    <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ NPC and PC Card Settings</div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show NPC Portraits</label>
@@ -2262,8 +2275,11 @@ export function createPanel(dependencies) {
                                     </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:10px;">Omits the &lt;CORE LENGTH TARGETS&gt; section from the NPC prompt.</div>
                                     
-                                    <button id="rt-btn-edit-npc-sections-inline" style="width:100%;background:rgba(180, 100, 255, 0.15);border:1px solid rgba(180, 100, 255, 0.4);color:white;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;transition:background 0.2s;">
+                                    <button id="rt-btn-edit-npc-sections-inline" style="width:100%;background:rgba(180, 100, 255, 0.15);border:1px solid rgba(180, 100, 255, 0.4);color:white;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px;transition:background 0.2s;">
                                         <i class="fa-solid fa-puzzle-piece"></i> Edit NPC Sections
+                                    </button>
+                                    <button id="rt-btn-edit-pc-sections-inline" style="width:100%;background:rgba(180, 100, 255, 0.15);border:1px solid rgba(180, 100, 255, 0.4);color:white;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;transition:background 0.2s;" title="Customize the persona sections for Player Characters (e.g. Appearance, Personality, Strengths).">
+                                        <i class="fa-solid fa-user"></i> Edit PC Sections
                                     </button>
                                 </div>`;
 
@@ -2344,6 +2360,12 @@ export function createPanel(dependencies) {
                                                     openNpcSectionEditor();
                                                 });
                                             }
+                                            const editPcBtn = document.getElementById('rt-btn-edit-pc-sections-inline');
+                                            if (editPcBtn) {
+                                                editPcBtn.addEventListener('click', () => {
+                                                    openPcSectionEditor();
+                                                });
+                                            }
                                         }, 0);
 
                                         const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
@@ -2384,7 +2406,7 @@ export function createPanel(dependencies) {
                                             }
 
                                             saveSettings();
-                                            toastr['success']('NPC settings saved.', 'NPC Settings');
+                                            toastr['success']('NPC and PC card settings saved.', 'NPC and PC Card Settings');
                                             if (typeof globalThis._rpgRenderAgentModules === 'function') {
                                                 globalThis._rpgRenderAgentModules();
                                             }
@@ -5679,78 +5701,6 @@ ${namingRule}`;
             });
         }
 
-        const agentPromptBtn = queryAgentUi('#rt-agent-prompt-btn');
-        if (agentPromptBtn) {
-            agentPromptBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const btn = /** @type {HTMLElement} */ (e.currentTarget);
-                const bar = /** @type {HTMLElement} */ (agentPanel.querySelector('#rt-agent-prompt-bar'));
-                const isVisible = bar.style.display !== 'none';
-                bar.style.display = isVisible ? 'none' : 'flex';
-                btn.classList.toggle('active', !isVisible);
-                if (!isVisible) {
-                    const input = /** @type {HTMLElement} */ (agentPanel.querySelector('#rt-agent-prompt-input'));
-                    if (input) input.focus();
-                }
-            });
-        }
-
-        const agentPromptSend = async () => {
-            const input = /** @type {HTMLTextAreaElement} */ (agentPanel.querySelector('#rt-agent-prompt-input'));
-            if (!input) return;
-            const msg = input.value.trim();
-            if (!msg) return;
-
-            const s = getSettings();
-            const dlInput = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-prompt-context-val'));
-            const lookback = dlInput ? (parseInt(dlInput.value) || 10) : (s.routerDirectLookback || 10);
-
-            input.value = '';
-            s.routerDirectPrompt = '';
-            saveSettings();
-
-            if (agentPromptBtn) agentPromptBtn.classList.remove('active');
-            const bar = /** @type {HTMLElement} */ (agentPanel.querySelector('#rt-agent-prompt-bar'));
-            if (bar) bar.style.display = 'none';
-
-            const { chat } = SillyTavern.getContext();
-            const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
-            toastr['info']("Running agent with specific command...");
-            await runRouterPass(combinedNarrative, msg, lookback, true);
-        };
-
-        const agentPromptSendBtn = agentPanel.querySelector('#rt-agent-prompt-send');
-        if (agentPromptSendBtn) {
-            agentPromptSendBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                await agentPromptSend();
-            });
-        }
-
-        const agentPromptInput = agentPanel.querySelector('#rt-agent-prompt-input');
-        if (agentPromptInput) {
-            agentPromptInput.addEventListener('input', (e) => {
-                const s = getSettings();
-                s.routerDirectPrompt = (/** @type {HTMLTextAreaElement} */ (e.target)).value;
-                saveSettings();
-            });
-            agentPromptInput.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    agentPromptSend();
-                }
-            });
-        }
-
-        const agentPromptContextVal = agentPanel.querySelector('#rt-agent-prompt-context-val');
-        if (agentPromptContextVal) {
-            agentPromptContextVal.addEventListener('change', (e) => {
-                const s = getSettings();
-                s.routerDirectLookback = parseInt((/** @type {HTMLInputElement} */ (e.target)).value) || 10;
-                saveSettings();
-            });
-        }
-
         const lookbackInp = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-router-lookback'));
         if (lookbackInp) {
             lookbackInp.addEventListener('input', (e) => {
@@ -6329,10 +6279,67 @@ ${namingRule}`;
     });
     const { syncAgentNav, syncLastRunDisplay, updateUndoLabel } = agentActivity;
 
-    let _routerSteps = [];
-    const terminal = agentPanel.querySelector('#rt-agent-router-terminal');
-    const terminalClear = agentPanel.querySelector('#rt-agent-router-terminal-clear');
+    let _terminalSteps = createEmptyTerminalBuffers();
+    const terminalPanes = Object.fromEntries(
+        AGENT_TERMINAL_TAB_IDS.map(id => {
+            const pane = agentPanel.querySelector(`#rt-agent-terminal-${id}`);
+            const feed = pane?.querySelector('.rt-agent-terminal-feed') || pane;
+            return [id, feed];
+        }),
+    );
+    const terminalClear = agentPanel.querySelector('#rt-agent-terminal-clear');
     const logClear = agentPanel.querySelector('#rt-agent-router-log-clear');
+    const logHistorySection = agentPanel.querySelector('#rt-agent-terminal-log-history');
+    const terminalTabButtons = agentPanel.querySelectorAll('.rt-agent-terminal-tab-btn');
+
+    const renderTerminalPaneForSource = (source) => {
+        const feed = terminalPanes[source];
+        if (!feed) return;
+        feed.innerHTML = renderTerminalPane(_terminalSteps[source], renderLorebookTerminal);
+        const pane = agentPanel.querySelector(`#rt-agent-terminal-${source}`);
+        if (pane?.classList.contains('rt-agent-terminal-pane-active')) {
+            feed.scrollTop = feed.scrollHeight;
+        }
+    };
+
+    const getActiveTerminalTab = () => {
+        const s = getSettings();
+        return isValidTerminalTab(s.agentTerminalTab) ? s.agentTerminalTab : 'lorebook_agent';
+    };
+
+    const applyTerminalTab = (tabId, { persist = true } = {}) => {
+        const nextTab = isValidTerminalTab(tabId) ? tabId : 'lorebook_agent';
+        if (persist) {
+            const s = getSettings();
+            s.agentTerminalTab = nextTab;
+            localStorage.setItem('rpg_tracker_agent_terminal_tab', nextTab);
+        }
+        terminalTabButtons.forEach(btn => {
+            const isActive = btn.getAttribute('data-terminal-tab') === nextTab;
+            btn.classList.toggle('rt-agent-view-mode-btn-active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        AGENT_TERMINAL_TAB_IDS.forEach(id => {
+            const pane = agentPanel.querySelector(`#rt-agent-terminal-${id}`);
+            if (pane) pane.classList.toggle('rt-agent-terminal-pane-active', id === nextTab);
+        });
+        if (logHistorySection) {
+            logHistorySection.style.display = nextTab === 'lorebook_agent' ? 'block' : 'none';
+        }
+        const activePane = terminalPanes[nextTab];
+        if (activePane) activePane.scrollTop = activePane.scrollHeight;
+    };
+
+    applyTerminalTab(getActiveTerminalTab(), { persist: false });
+
+    const terminalTabs = agentPanel.querySelector('#rt-agent-terminal-tabs');
+    if (terminalTabs) {
+        terminalTabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.rt-agent-terminal-tab-btn');
+            if (!btn || btn.classList.contains('rt-agent-view-mode-btn-active')) return;
+            applyTerminalTab(btn.getAttribute('data-terminal-tab'));
+        });
+    }
 
     document.addEventListener('rt_map_updater_status', () => {
         updateAgentStatusIndicator(isRouterRunning());
@@ -6343,31 +6350,33 @@ ${namingRule}`;
 
     document.addEventListener('rt_lore_agent_step', (e) => {
         const step = (/** @type {CustomEvent} */ (e)).detail;
-        console.log('[RPG Tracker] rt_lore_agent_step event received. Type:', step?.type, 'Content:', step?.content, 'Terminal exists:', !!terminal);
-        if (!terminal) {
-            console.warn('[RPG Tracker] rt_lore_agent_step event ignored because terminal element is null/missing.');
-            return;
-        }
+        const source = resolveTerminalSource(step?.metadata);
+        const hasAnyPane = AGENT_TERMINAL_TAB_IDS.some(id => terminalPanes[id]);
+        if (!hasAnyPane) return;
 
         if (step.type === 'start') {
-            _routerSteps = [];
-            runtimeState.loreRedoStack = [];
-            syncAgentNav();
-            updateAgentStatusIndicator(true);
+            _terminalSteps[source] = [];
+            if (source === 'lorebook_agent') {
+                runtimeState.loreRedoStack = [];
+                syncAgentNav();
+            }
+            if (AGENT_PANEL_RUNNING_SOURCES.has(source)) {
+                updateAgentStatusIndicator(true);
+            }
         }
-        _routerSteps.push(step);
-
-        terminal.innerHTML = renderLorebookTerminal(_routerSteps);
-        terminal.scrollTop = terminal.scrollHeight;
+        _terminalSteps[source].push(step);
+        renderTerminalPaneForSource(source);
 
         // Refresh Campaign Records after the pass fully completes — at this point
         // all applyAction writes and saveWorldInfo cache-busts are guaranteed done.
         if (step.type === 'finish' || step.type === 'error') {
-            console.log(`[RPG Tracker] Lorebook Agent step "${step.type}" matched. Refreshing manifest...`);
-            refreshManifest();
-            updateAgentStatusIndicator(false);
-            if (step.type === 'finish' && step.metadata?.source !== 'map_updater' && step.metadata?.source !== 'map_evolution') {
-                console.log('[RPG Tracker] Lorebook Agent pass finished. Invoking checkAndTriggerAutoGenerations...');
+            if (MANIFEST_REFRESH_SOURCES.has(source)) {
+                refreshManifest();
+            }
+            if (AGENT_PANEL_RUNNING_SOURCES.has(source)) {
+                updateAgentStatusIndicator(false);
+            }
+            if (step.type === 'finish' && source === 'lorebook_agent') {
                 checkAndTriggerAutoGenerations(refreshAll);
             }
         }
@@ -6375,8 +6384,9 @@ ${namingRule}`;
 
     if (terminalClear) {
         terminalClear.addEventListener('click', () => {
-            _routerSteps = [];
-            if (terminal) terminal.innerHTML = '<div style="opacity: 0.4; font-size: 0.769em; font-style: italic;">Waiting for agent activity...</div>';
+            const activeTab = getActiveTerminalTab();
+            _terminalSteps[activeTab] = [];
+            renderTerminalPaneForSource(activeTab);
         });
     }
 
@@ -6388,6 +6398,25 @@ ${namingRule}`;
             runtimeState.renderRouterUI();
         });
     }
+
+    wireAgentTerminalDirectPrompts({
+        agentPanel,
+        getSettings,
+        saveSettings,
+        agentsBusy: () => isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning(),
+        getNarrativeBlocks,
+        runRouterPass,
+        sendDirectPrompt,
+        runMapUpdaterPass,
+        runMapEvolutionPass,
+        listMappedEvolutionSites,
+        promptMappedEvolutionSites,
+        runMapArchitect,
+        inferMapArchitectArgs,
+        escapeHtml,
+        updateAgentStatusIndicator,
+        isRouterRunning,
+    });
 
 
 
@@ -6823,7 +6852,7 @@ ${namingRule}`;
             // Refresh dynamic labels
             const s = getSettings();
             const enableLabel = overflowMenu.querySelector('#rt-ov-enable-label');
-            if (enableLabel) enableLabel.textContent = s.enabled ? 'Disable Tracker' : 'Enable Tracker';
+            if (enableLabel) enableLabel.textContent = s.enabled ? 'Disable Framework' : 'Enable Framework';
             const pauseLabel = overflowMenu.querySelector('#rt-ov-pause-label');
             if (pauseLabel) pauseLabel.textContent = s.trackerPaused ? 'Resume Tracker' : 'Pause Tracker';
             overflowMenu.style.display = 'flex';

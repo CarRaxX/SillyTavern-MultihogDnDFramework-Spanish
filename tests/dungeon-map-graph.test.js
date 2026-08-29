@@ -7,7 +7,7 @@ import {
     renderDungeonMapReadableHtml,
     resolveDungeonGraphCurrentArea,
 } from '../dungeon-map-graph.js';
-import { collectAreaAssetIcons, MAP_ICON_SIZE, mapAssetIconMood, mapAssetIconToken, renderDungeonGraphAssetTipHtml } from '../dungeon-map-icons.js';
+import { collectAreaAssetIcons, MAP_ICON_MAX, MAP_ICON_SIZE, mapAssetIconMood, mapAssetIconToken, renderAreaAssetIconsSvg, renderDungeonGraphAssetTipHtml, renderDungeonGraphOverflowTipHtml } from '../dungeon-map-icons.js';
 import { getLocationLeaf, resolveCurrentMapPlacement, resolveDungeonMapForLocation } from '../dungeon-reality.js';
 
 const midExplorationMap = {
@@ -354,6 +354,16 @@ describe('dungeon map graph', () => {
         expect(mapAssetIconToken({ kind: 'CREATURE', state: 'DEAD' })).toBe('CREATURE_DEAD');
     });
 
+    it('does not place LEFT or FLEEING-vs-LEFT occupancy icons for departed records', () => {
+        const assets = [
+            { id: 'odran', kind: 'CREATURE', name: 'Odran', location: 'ossuary', state: 'LEFT', knowledge: 'KNOWN' },
+            { id: 'runner', kind: 'CREATURE', name: 'Runner', location: 'ossuary', state: 'FLEEING', knowledge: 'KNOWN' },
+        ];
+        const icons = collectAreaAssetIcons(assets, 'ossuary', { playerFacing: true });
+        expect(icons.map(icon => icon.name)).toEqual(['Runner']);
+        expect(icons.map(icon => icon.state)).toEqual(['FLEEING']);
+    });
+
     it('renders known asset icons under room labels and hides unrevealed ones', () => {
         const map = {
             version: 3,
@@ -446,7 +456,9 @@ describe('dungeon map graph', () => {
         expect(playerSvg).toContain('data-asset-state="ARMED"');
         expect(playerSvg).toContain('rt-dungeon-graph-icon-trap');
         expect(playerSvg).toContain('rt-dungeon-graph-icon-art');
-        expect(playerSvg).toContain('SVG/trap.svg');
+        expect(playerSvg).toContain('fill="currentColor"');
+        expect(playerSvg).not.toContain('mask-image:url(');
+        expect(playerSvg).not.toContain('style="');
         expect(playerSvg).not.toMatch(/rt-dungeon-graph-node[^>]*>\s*<title>/);
         expect(playerSvg).not.toMatch(/rt-dungeon-graph-icon[\s\S]*?<title>/);
         expect(playerSvg).not.toContain('data-icon="CREATURE_LIVE"');
@@ -463,7 +475,7 @@ describe('dungeon map graph', () => {
         const gmGraph = buildDungeonMapGraph(map, { playerFacing: false });
         const gmSvg = renderDungeonMapGraphSvg(gmGraph, { compact: false });
         expect(gmSvg).toContain('data-icon="CREATURE_LIVE"');
-        expect(gmSvg).toContain('SVG/creature.svg');
+        expect(gmSvg).toContain('rt-dungeon-graph-icon-creature');
         expect(gmSvg).toContain('rt-dungeon-graph-icon-unrevealed');
     });
 
@@ -484,6 +496,33 @@ describe('dungeon map graph', () => {
         expect(renderDungeonGraphAssetTipHtml({ name: 'Pack', kind: 'GROUP', count: 6 })).toContain('×6');
     });
 
+    it('caps visible node icons and embeds overflow assets for hover tips', () => {
+        const icons = Array.from({ length: 8 }, (_, index) => ({
+            token: 'CREATURE_LIVE',
+            kind: 'CREATURE',
+            mood: 'LIVE',
+            knowledge: 'KNOWN',
+            state: 'ACTIVE',
+            name: `Occupant ${index + 1}`,
+            detail: `Detail ${index + 1}`,
+            count: null,
+        }));
+        const svg = renderAreaAssetIconsSvg(icons, { cx: 70, y: 30, compact: true });
+        expect(MAP_ICON_MAX.compact).toBe(5);
+        expect(svg.match(/data-icon="/g)).toHaveLength(5);
+        expect(svg).toContain('rt-dungeon-graph-icon-overflow');
+        expect(svg).toContain('+3');
+        expect(svg).toContain('data-overflow-assets');
+        expect(svg).toContain('Occupant 6');
+        expect(svg).not.toContain('data-asset-name="Occupant 6"');
+
+        const overflowHtml = renderDungeonGraphOverflowTipHtml(icons.slice(MAP_ICON_MAX.compact));
+        expect(overflowHtml).toContain('Occupant 6');
+        expect(overflowHtml).toContain('Occupant 8');
+        expect(overflowHtml).toContain('rt-dungeon-graph-overflow-tip-item');
+        expect(overflowHtml.match(/rt-dungeon-graph-asset-tip-head/g)).toHaveLength(3);
+    });
+
     it('renders knowledge-filtered BUILDING contents beneath the container and on its district node', () => {
         const map = {
             version: 3, site: 'Ashford', kind: 'SETTLEMENT',
@@ -502,5 +541,26 @@ describe('dungeon map graph', () => {
         const graph = buildDungeonMapGraph(map, { playerFacing: true, currentLocation: 'Ashford, North Residential Streets, Residential House' });
         expect(graph.nodes[0].icons.map(icon => icon.kind)).toEqual(['CREATURE', 'BUILDING', 'LOOT']);
         expect(graph.currentInteriorName).toBe('Residential House');
+    });
+
+    it('does not recurse forever when asset containment loops', () => {
+        const map = {
+            version: 3, site: 'Loop Site', kind: 'DUNGEON',
+            areas: [{ id: 'hall', name: 'Hall', knowledge: 'VISITED', geometry: [], connections: [] }],
+            assets: [
+                { kind: 'OBJECT', name: 'Nameless A', location: 'hall', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP' },
+                { kind: 'OBJECT', name: 'Nameless B', location: 'hall', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP' },
+                { id: 'hall', kind: 'GROUP', name: 'Hall Pack', location: 'hall', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP' },
+                { id: 'alpha', kind: 'CREATURE', name: 'Alpha', location: 'hall', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP' },
+                { id: 'beta', kind: 'CREATURE', name: 'Beta', location: 'alpha', state: 'ACTIVE', knowledge: 'KNOWN', detail: '', origin: 'INITIAL_MAP' },
+            ],
+        };
+        const html = renderDungeonMapReadableHtml(map, { revealAll: true });
+        expect(html).toContain('Nameless A');
+        expect(html).toContain('Nameless B');
+        expect(html).toContain('Hall Pack');
+        expect(html).toContain('Alpha');
+        expect(html).toContain('Beta');
+        expect(html.indexOf('Beta')).toBeGreaterThan(html.indexOf('Alpha'));
     });
 });

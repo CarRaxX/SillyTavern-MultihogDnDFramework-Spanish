@@ -35,7 +35,8 @@ You step into a made-up throne room.`);
             kind: 'DUNGEON',
             scale: 'MEDIUM',
             threat: 'HIGH',
-            premise: 'Abandoned crypt. Ghouls. Do not contradict the cracked west stair.',
+            prompt: 'Abandoned crypt. Ghouls. Do not contradict the cracked west stair.',
+            brief_description: 'Abandoned crypt.',
         });
         expect(createAreaMapCommandIsComplete(parsed.args)).toBe(true);
 
@@ -54,7 +55,7 @@ You step into a made-up throne room.` : '');
         expect(stripped.command.args.site).toBe('Abbey Undercroft');
     });
 
-    it('accepts JSON inside the fence and multiline premises', () => {
+    it('accepts legacy JSON and multiline prompts', () => {
         const parsed = parseCreateAreaMapCommand(`[CREATE_AREA_MAP]
 {"site":"Riverford","entrance":"North Gate","kind":"SETTLEMENT","scale":"LARGE","premise":"River town."}
 [/CREATE_AREA_MAP]`);
@@ -70,7 +71,8 @@ kind: SETTLEMENT
 premise: Line one
 Line two
 [/CREATE_AREA_MAP]`);
-        expect(multi.args.premise).toBe('Line one\nLine two');
+        expect(multi.args.prompt).toBe('Line one\nLine two');
+        expect(multi.args.brief_description).toBe('Line one\nLine two');
         expect(stripCreateAreaMapCommand('[CREATE_AREA_MAP]\nsite: X\n[/CREATE_AREA_MAP]').text).toBe('\u200b');
     });
 
@@ -93,10 +95,28 @@ Level 6 | 08:00 AM, Day 1`);
             kind: 'DUNGEON',
             scale: 'MEDIUM',
             threat: 'HIGH',
-            premise: 'The Sunken Vault. Local rumor claims an untouched cache of lost technology and salvage lies below, but the hatch has been shunned for cycles due to unstable structure, toxic seepage, and rumors of automated defenses.',
+            prompt: 'The Sunken Vault. Local rumor claims an untouched cache of lost technology and salvage lies below, but the hatch has been shunned for cycles due to unstable structure, toxic seepage, and rumors of automated defenses.',
+            brief_description: 'The Sunken Vault.',
         });
         expect(createAreaMapCommandIsComplete(parsed.args)).toBe(true);
         expect(stripCreateAreaMapCommand(parsed.raw + '\n\nfooter').text).toBe('\u200b');
+    });
+
+    it('keeps the full generation prompt separate from the stored brief description', () => {
+        const parsed = parseCreateAreaMapCommand(`[CREATE_AREA_MAP]
+site: Ancestor Barrow
+entrance: Sealed Western Passage
+kind: DUNGEON
+scale: LARGE
+threat: DEADLY
+prompt: The detailed private design can be as long as needed.
+It includes history, inhabitants, hazards, routes, tone, and intended progression.
+brief_description: An ancient barrow built around a sealed evil.
+[/CREATE_AREA_MAP]`);
+
+        expect(parsed.args.prompt).toBe('The detailed private design can be as long as needed.\nIt includes history, inhabitants, hazards, routes, tone, and intended progression.');
+        expect(parsed.args.brief_description).toBe('An ancient barrow built around a sealed evil.');
+        expect(createAreaMapCommandIsComplete(parsed.args)).toBe(true);
     });
 
     it('treats tool as the default opener and keeps text-mode prompt rules distinct', () => {
@@ -107,13 +127,15 @@ Level 6 | 08:00 AM, Day 1`);
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('Scale is geographic size');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('Use these exact field names');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('SETTLEMENT is the city/town/village as a whole');
-        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('ordinary shops, inns, chapels, and houses remain BUILDING');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('soft map editor');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('attach_to_site');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('without moving the player or first creating a BUILDING');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('places between mapped sites are not mapped');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('[MAPPED_SITES — INTERNAL]');
-        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('A listed SETTLEMENT may still contain an unmapped SUB* asset');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('three mapped levels');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('CYOA Mode');
         expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain(MAP_ARCHITECT_TEXT_OPENER_CYOA_CAVEAT);
-        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('CreateAreaMap is the explicit promotion signal');
+        expect(MAP_ARCHITECT_TEXT_OPENER_RULES).toContain('runtime creates/promotes SUB*');
         expect(MAP_ARCHITECT_OPENER_RADIO_NAMES).toEqual([
             'rpg_map_architect_opener',
             'rpg_map_architect_opener_components',
@@ -147,6 +169,21 @@ premise: A significant peaceful guild complex.
 [/CREATE_AREA_MAP]`);
         expect(interior.args.kind).toBe('INTERIOR');
         expect(interior.args.threat).toBe('LOW');
+    });
+
+    it('parses an explicit offsite parent-map attachment', () => {
+        const parsed = parseCreateAreaMapCommand(`[CREATE_AREA_MAP]
+site: Cellar Crypt Dungeon
+entrance: Crypt Threshold
+kind: DUNGEON
+scale: SMALL
+threat: HIGH
+attach_to_site: Malarkey Monument
+attach_to_cell: Cellar Crypt
+premise: A funerary complex extends beyond the western seal.
+[/CREATE_AREA_MAP]`);
+        expect(parsed.args.attachTo).toEqual({ site: 'Malarkey Monument', cell: 'Cellar Crypt' });
+        expect(parsed.args.site).toBe('Cellar Crypt Dungeon');
     });
 
     it('parses a regenerate-turn fence with footer after the close tag', () => {
@@ -197,6 +234,7 @@ premise: Vast empty halls.
         const brief = buildMapArchitectContinueBrief({ entrance: 'Rusty Hatch Cover' });
         expect(brief).toContain('Rusty Hatch Cover');
         expect(brief).toContain('Do not write chain-of-thought');
+        expect(brief).toContain('copy the exact CreateAreaMap site name into the Location footer');
         const message = {
             extra: { reasoning: 'long hidden plan', reasoning_duration: 12, reasoning_type: 'model', reasoning_signature: 'sig' },
             swipe_id: 0,

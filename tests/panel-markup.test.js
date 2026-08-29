@@ -14,6 +14,9 @@ describe('panel markup', () => {
             },
         });
 
+        expect(markup).toContain('id="rpg-tracker-enable-btn"');
+        expect(markup).toContain('Disable Multihog Framework');
+        expect(markup).not.toContain('id="rt-agent-router-enable-btn"');
         expect(markup).toContain('id="rpg-tracker-memo"');
         expect(markup).toContain('id="rt-bottom-xp-bar"');
         expect(markup).toContain('Saved memo');
@@ -36,6 +39,20 @@ describe('panel markup', () => {
         expect(markup.indexOf('rt-agent-map-evo-header')).toBeLessThan(markup.indexOf('rt-agent-world-header'));
         expect(markup).toContain('Visuals/Map');
         expect(markup).not.toContain('>Visualization Mode<');
+        expect(markup).toContain('id="rt-agent-terminal-tabs"');
+        expect(markup).toContain('id="rt-agent-terminal-lorebook_agent"');
+        expect(markup).toContain('id="rt-agent-terminal-state_tracker"');
+        expect(markup).toContain('id="rt-agent-terminal-map_updater"');
+        expect(markup).toContain('id="rt-agent-terminal-map_evolution"');
+        expect(markup).toContain('id="rt-agent-terminal-map_architect"');
+        expect(markup).toContain('id="rt-agent-terminal-log-history"');
+        expect(markup).toContain('Terminal/Direct Prompt');
+        expect(markup).toContain('id="rt-terminal-direct-lorebook_agent"');
+        expect(markup).toContain('id="rt-terminal-direct-map_evolution"');
+        expect(markup).toContain('id="rt-terminal-direct-map_architect"');
+        expect(markup).not.toContain('Lorebook Terminal:');
+        expect(markup).not.toContain('id="rt-agent-prompt-btn"');
+        expect(markup).not.toContain('id="rt-agent-prompt-bar"');
     });
 
     it('renders Map Evolution and World Progression agent controls from settings', () => {
@@ -48,7 +65,8 @@ describe('panel markup', () => {
                 agentMapEvolutionOpen: true,
                 mapEvolutionEnabled: true,
                 mapEvolutionIntervalHours: 6,
-                mapEvolutionOnSiteIntervalHours: 2,
+                mapEvolutionOnSiteIntervalHours: 1,
+                mapEvolutionOnSiteIntervalMinutes: 30,
                 mapEvolutionTickScope: 'count',
                 mapEvolutionTickCount: 2,
                 mapEvolutionTickRandomize: false,
@@ -60,7 +78,8 @@ describe('panel markup', () => {
         });
 
         expect(markup).toContain('id="rt-agent-map-evo-interval" value="6"');
-        expect(markup).toContain('id="rt-agent-map-evo-onsite-interval" value="2"');
+        expect(markup).toContain('id="rt-agent-map-evo-onsite-interval" value="1"');
+        expect(markup).toContain('id="rt-agent-map-evo-onsite-minutes" value="30"');
         expect(markup).toContain('id="rt-agent-map-evo-tick-count" value="2"');
         expect(markup).toContain('option value="count" selected');
         expect(markup).toContain('id="rt-agent-map-evo-n-row" style="display:flex;');

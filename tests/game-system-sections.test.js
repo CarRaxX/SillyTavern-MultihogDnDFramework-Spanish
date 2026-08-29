@@ -1,8 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { isEffectiveSectionEnabled, isLocationMappingEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../src/state/section-enabled.js';
+import { findActiveUnlockedBaseOverride, isCyoaEnabled, isEffectiveSectionEnabled, isLocationMappingEnabled, setLocationMappingEnabled, LOCATION_MAPPING_SECTION_TAG } from '../src/state/section-enabled.js';
 
 describe('effective system-prompt section state', () => {
+    it('ignores an inactive override from another cartridge when resolving an unlocked base section', () => {
+        const inactiveZombieFooter = {
+            id: 'zombie-footer',
+            origin: 'unlocked_base',
+            baseTag: 'end_of_output_footer',
+            content: '<end_of_output_footer>Zombie footer</end_of_output_footer>',
+            enabled: false,
+            _chatSetupMember: false,
+        };
+        const activeFreshFooter = {
+            id: 'fresh-footer',
+            origin: 'unlocked_base',
+            baseTag: 'end_of_output_footer',
+            content: '<end_of_output_footer>Factory footer</end_of_output_footer>',
+            enabled: true,
+            _chatSetupMember: true,
+        };
+        const settings = {
+            customSyspromptLibrary: [inactiveZombieFooter, activeFreshFooter],
+        };
+
+        expect(findActiveUnlockedBaseOverride(settings.customSyspromptLibrary, 'end_of_output_footer'))
+            .toBe(activeFreshFooter);
+        expect(isEffectiveSectionEnabled('end_of_output_footer', settings)).toBe(true);
+    });
+
     it('keeps an enabled unlocked CYOA override active when the base toggle is off', () => {
         const settings = {
             syspromptModules: { CYOA_mode: false },
@@ -63,6 +89,38 @@ describe('effective system-prompt section state', () => {
         expect(isLocationMappingEnabled(settings)).toBe(true);
     });
 
+    it('requires the State Tracker master toggle for CYOA injection', () => {
+        const settings = {
+            enabled: true,
+            syspromptModules: { CYOA_mode: true },
+        };
+
+        expect(isEffectiveSectionEnabled('CYOA_mode', settings)).toBe(true);
+        expect(isCyoaEnabled(settings)).toBe(true);
+        expect(isCyoaEnabled({ ...settings, enabled: false })).toBe(false);
+        expect(isCyoaEnabled({
+            enabled: true,
+            syspromptModules: { CYOA_mode: false },
+        })).toBe(false);
+        expect(isCyoaEnabled({
+            enabled: false,
+            syspromptModules: { CYOA_mode: false },
+            customSyspromptLibrary: [{
+                origin: 'unlocked_base',
+                baseTag: 'CYOA_mode',
+                enabled: true,
+            }],
+        })).toBe(false);
+    });
+
+    it('gates interceptor CYOA on the master power toggle', () => {
+        const hooksSource = readFileSync(new URL('../narrative-hooks.js', import.meta.url), 'utf8');
+        expect(hooksSource).toContain('isCyoaEnabled');
+        expect(hooksSource).toContain('isLocationMappingEnabled');
+        expect(hooksSource).toContain('const cyoaActive = isCyoaEnabled(settings)');
+        expect(hooksSource).toContain('stripLeftoverCyoaAndPacingFromPrompt(chat)');
+        expect(hooksSource).not.toContain('CYOA / pacing tags can inject even when the State Tracker master toggle is off');
+    });
     it('keeps the Components Persistent Maps checkbox as a live kill switch', () => {
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         const gameSystemsSource = readFileSync(new URL('../game-systems.js', import.meta.url), 'utf8');

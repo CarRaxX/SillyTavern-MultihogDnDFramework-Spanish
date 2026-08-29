@@ -12,21 +12,22 @@
  * circular import. This will be cleaned up when index.js is split.
  */
 
-import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgressionTimer, persistRouterLastRunWatermark, getNpcRelationshipMax, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, applyRelTierBadgeElement, showRelationshipFloatFeedback, saveChatState, getActiveChatId, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, shouldProcessRegexRelationshipUpdates, stripCoreMarkersForNarrator } from './state-manager.js';
+import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistMapUpdaterLastRunTimestamp, persistMapUpdaterLastRunWatermark, persistMapUpdaterState, getNpcRelationshipMax, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, applyRelTierBadgeElement, showRelationshipFloatFeedback, saveChatState, getActiveChatId, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, shouldProcessRegexRelationshipUpdates, stripCoreMarkersForNarrator } from './state-manager.js';
 import { syncCombatProfile, isCombatActive } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext, stripPromptInjectionsFromUserText, stripCyoaAndPacingInjections } from './memo-processor.js';
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning, syncDungeonMapsToLocationLorebook } from './router.js';
-import { maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, shouldForceBuildingPopulationPass, stopMapUpdaterPass } from './map-updater.js';
+import { getActiveMapUpdaterSiteRoot, maybeRollbackMapUpdaterForSwipe, runMapUpdaterPass, shouldForceBuildingPopulationPass, stopMapUpdaterPass } from './map-updater.js';
 import { maybeRollbackMapEvolutionForSwipe, maybeRunMapEvolution, stopMapEvolutionPass } from './map-evolution.js';
 import { formatNarratorSiteActivity } from './map-evolution-lib.js';
 import { shiftMemoAndMapHistory } from './src/state/dungeon-map-history.js';
+import { canCommitPassForChat } from './src/state/pass-affinity.js';
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { isPercentFormula, resolveDiceCompare } from './src/state/dice-compare.js';
 import { buildCyoaModeBlock, STATE_MEMO_INJECT_PREAMBLE } from './constants.js';
-import { isEffectiveSectionEnabled, isLocationMappingEnabled } from './src/state/section-enabled.js';
+import { isCyoaEnabled, isLorebookAgentRuntimeActive, isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { buildNarrativeModeTags, hasInjectableNarrativePacing } from './src/state/narrative-pacing.js';
 import {
     buildDungeonRealityInjection,
@@ -35,6 +36,7 @@ import {
     getDungeonMessageText,
     getSiteRootFromLocation,
     looksLikeDungeonSite,
+    normalizeDungeonLabel,
     resolveActiveDungeonSite,
     resolveMentionedDungeonSites,
     stripCapturedDungeonMapsFromPrompt,
@@ -124,6 +126,24 @@ function prepareUserMessagesForContextInject(chat, currentUserIdx) {
             const cleaned = stripCyoaAndPacingInjections(raw);
             if (cleaned !== raw) setChatMessageText(m, cleaned);
         }
+    }
+}
+
+/**
+ * Remove leftover CYOA / narrative-pacing tags from the outgoing prompt copy
+ * when the State Tracker master toggle is off (do not mutate persisted chat).
+ * @param {object[]} chat
+ */
+function stripLeftoverCyoaAndPacingFromPrompt(chat) {
+    if (!Array.isArray(chat)) return;
+    for (const m of chat) {
+        if (!m) continue;
+        const role = String(m.role || '').toLowerCase();
+        const isUser = m.is_user || role === 'user' || role === 'human' || role === 'player';
+        if (!isUser) continue;
+        const raw = extractTextContent(m);
+        const cleaned = stripCyoaAndPacingInjections(raw);
+        if (cleaned !== raw) setChatMessageText(m, cleaned);
     }
 }
 
@@ -475,11 +495,11 @@ export async function doDiceRoll(customDiceFormula, quiet = false) {
             }
         }
     } else {
-        toastr['error']('Dice library (droll) not found.');
+        toastr['error']('Librería de dados (droll) no encontrada.');
     }
 
     // Failsafe: never return empty/zero — that would auto-fail any DC check.
-    toastr['warning'](`Invalid dice formula "${value}" — defaulting to ${defaultFormula}.`);
+    toastr['warning'](`Fórmula de dados inválida "${value}" — usando por defecto ${defaultFormula}.`);
     const fallbackRoll = rollDie(d100Mode ? 100 : 20);
     if (!quiet) {
         const context = SillyTavern.getContext();
@@ -544,27 +564,35 @@ export function registerMapArchitectTool() {
         registerFunctionTool({
             name: 'CreateAreaMap',
             displayName: 'Map Architect',
-            description: 'Creates and saves one private objective map. DUNGEON is a high-risk room graph, INTERIOR is a significant lower-risk multi-room site, and SETTLEMENT is a district graph. Inside a mapped settlement, call DUNGEON or INTERIOR for an exact BUILDING/SUB* name only when it deliberately warrants promotion to a peer map; the call atomically promotes/links it. Ordinary shops, inns, houses, and chapels remain BUILDING assets with no peer map. Never map OBJECT props, wilderness, roads, or districts. A listed mapped peer is reused; a listed SETTLEMENT may still contain an unmapped SUB* site. include[] is creation-only for a new SETTLEMENT and absorbs exact existing DUNGEON/INTERIOR peers. When exiting an initially standalone peer into a newly established settlement, immediately create that SETTLEMENT with the active peer in include[]. The runtime validates, persists, and returns compact private canon.',
+            description: 'Create and save one private objective map. You are also a soft map editor: a map may be created and attached from anywhere, without moving the player and without first creating a BUILDING. For a standalone map, omit attachTo. For a nested map, set attachTo.site to the exact existing parent map and attachTo.cell to the exact parent AREA that receives the gateway. site names the new child map; attachTo.cell names where it belongs, so similar names such as Cellar Crypt and Cellar Crypt Dungeon remain different. Example: site="Cellar Crypt Dungeon", attachTo={site:"Malarkey Monument", cell:"Cellar Crypt"}. Request only DUNGEON, INTERIOR, or SETTLEMENT; runtime creates/promotes the appropriate SUB* gateway, canonical path, host metadata, and inactive-parent edit. Explicit attachTo never changes the Location footer or implies entry. Nesting is limited to three mapped levels. If attachTo is omitted while a mapped site is active, runtime may use the active cell as shorthand. Never create placeholder structures, move the party merely to authorize creation, map OBJECT props/wilderness/roads/districts, or call again after success. include[] remains creation-only for a new SETTLEMENT that absorbs exact standalone DUNGEON/INTERIOR peers.',
             parameters: {
                 type: 'object',
                 properties: {
-                    site: { type: 'string', description: 'Copy the exact mapped-site name character-for-character. For a nested peer, use the exact BUILDING/SUB* name, not the settlement root or district. Never translate, transliterate, expand, or retitle.' },
-                    entrance: { type: 'string', description: 'Copy the named entrance exactly as printed: a settlement gate/square/docks, or the dungeon door. Never translate it. This becomes the first VISITED map area.' },
+                    site: { type: 'string', description: 'Name of the map being created. For a new dungeon/interior you are about to enter, invent this name now — it does not need to match the current Location footer. After the map is saved, copy this exact name into the footer. Never translate an already-mapped name.' },
+                    entrance: { type: 'string', description: 'Exact first area inside the new map: a gate, threshold, landing, door, square, or docks. Never translate it. Explicit offsite attachment leaves it UNREVEALED; active-location creation marks it VISITED.' },
                     kind: { type: 'string', enum: ['DUNGEON', 'SETTLEMENT', 'INTERIOR'], description: 'DUNGEON = high-risk room-scale site. INTERIOR = significant lower-risk multi-room site. SETTLEMENT = city/town/village district-scale graph.' },
                     scale: { type: 'string', enum: ['SMALL', 'MEDIUM', 'LARGE'], description: 'Geographic size, not danger. DUNGEON: SMALL 4-7 rooms, MEDIUM 7-12, LARGE 12-20. SETTLEMENT: SMALL 4-7 districts, MEDIUM 6-10, LARGE 8-14.' },
                     threat: { type: 'string', enum: ['NONE', 'LOW', 'MODERATE', 'HIGH', 'DEADLY'], description: 'Site danger for occupancy and trap density. NONE forbids invented active danger. Independent of party level and scale.' },
-                    premise: { type: 'string', description: 'Objective private site facts and creative constraints: purpose/history, expected inhabitants or danger, tone, and anything that must not be contradicted. Premise facts do not by themselves grant the player knowledge.' },
+                    prompt: { type: 'string', description: 'Complete private map-generation guidance: purpose/history, topology, expected inhabitants or danger, tone, and anything that must not be contradicted. This can be detailed. Prompt facts do not by themselves grant player knowledge.' },
+                    brief_description: { type: 'string', description: 'Brief current description of the site. This is stored as the parent SUBDUNGEON/SUBINTERIOR gateway detail and may be used for the Location CORE; do not copy the full prompt.' },
+                    attachTo: {
+                        type: 'object',
+                        additionalProperties: false,
+                        description: 'Optional structural address for a nested map. Use it from any player location. Omit it only for a standalone map or when deliberately using the active-cell shorthand.',
+                        properties: {
+                            site: { type: 'string', description: 'Exact canonical name/path of the existing parent map being edited.' },
+                            cell: { type: 'string', description: 'Exact existing AREA name on the parent map that receives the new map gateway. No BUILDING or asset is required.' },
+                        },
+                        required: ['site', 'cell'],
+                    },
                     include: { type: 'array', items: { type: 'string' }, description: 'Optional only for first creation of a SETTLEMENT. Exact existing mapped DUNGEON/INTERIOR names to absorb as SUBDUNGEON/SUBINTERIOR peers.' },
                 },
-                required: ['site', 'entrance', 'kind', 'scale', 'threat', 'premise'],
+                required: ['site', 'entrance', 'kind', 'scale', 'threat', 'prompt', 'brief_description'],
             },
             action: async args => runMapArchitect(args),
-            formatMessage: args => {
-                const site = String(args?.site || '').trim();
-                return site
-                    ? `Generating a location map for ${site}...`
-                    : 'Generating a location map...';
-            },
+            // Map Architect owns one persistent lifecycle toast. Returning no
+            // tool-call message prevents SillyTavern from showing a duplicate.
+            formatMessage: () => '',
         });
     } catch (error) {
         console.warn('[RPG Tracker] Could not register Map Architect tool:', error);
@@ -742,7 +770,7 @@ export function registerDiceSlashCommand() {
                 return 'Scene save requested.';
             }
 
-            if (!settings.routerEnabled) {
+            if (!isLorebookAgentRuntimeActive(settings)) {
                 return 'Lorebook Agent is disabled.';
             }
             if (isRouterRunning()) {
@@ -773,35 +801,35 @@ export function registerDiceSlashCommand() {
             const combinedNarrative = getNarrativeBlocks(chat, -1, !!settings.routerIncludeHidden);
             if (!quiet && typeof toastr !== 'undefined') {
                 toastr.info(
-                    manualPrompt ? 'Running Lorebook Agent with specific command...' : 'Starting Lorebook Agent pass...',
-                    'Lorebook Agent',
+                    manualPrompt ? 'Ejecutando Agente de Lorebook con comando específico...' : 'Iniciando pase del Agente de Lorebook...',
+                    'Agente de Lorebook',
                 );
             }
             await runRouterPass(combinedNarrative, manualPrompt, lookback, true);
-            return manualPrompt ? 'Lorebook Agent command started.' : 'Lorebook Agent pass started.';
+            return manualPrompt ? 'Comando del Agente de Lorebook iniciado.' : 'Pase del Agente de Lorebook iniciado.';
         },
-        helpString: 'Run the Lorebook Agent (useful after /sendas, which does not auto-trigger it). '
-            + 'Aliases: /la, /lbagent, /router. '
-            + 'Usage: /lorebookagent | /lorebookagent run | /lorebookagent save [hint] | /lorebookagent &lt;direct command&gt;',
-        returns: 'status message',
+        helpString: 'Ejecutar el Agente de Lorebook (útil tras /sendas, que no lo activa automáticamente). '
+            + 'Alias: /la, /lbagent, /router. '
+            + 'Uso: /lorebookagent | /lorebookagent run | /lorebookagent save [sugerencia] | /lorebookagent <comando directo>',
+        returns: 'mensaje de estado',
         namedArgumentList: [
             SlashCommandNamedArgument.fromProps({
                 name: 'quiet',
-                description: 'Suppress the toast notification',
+                description: 'Suprimir la notificación emergente',
                 isRequired: false,
                 typeList: [ARGUMENT_TYPE.BOOLEAN],
                 defaultValue: 'false',
             }),
             SlashCommandNamedArgument.fromProps({
                 name: 'lookback',
-                description: 'Override lookback to N user turns (omit to use Lorebook Agent lookback settings)',
+                description: 'Sobrescribir retroceso a N turnos de usuario',
                 isRequired: false,
                 typeList: [ARGUMENT_TYPE.NUMBER],
             }),
         ],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
-                description: 'run | research | save [hint] | direct command text (omit to run a normal pass)',
+                description: 'run | research | save [sugerencia] | texto de comando directo',
                 isRequired: false,
                 typeList: [ARGUMENT_TYPE.STRING],
             }),
@@ -818,13 +846,13 @@ export function registerDiceSlashCommand() {
             const lower = raw.toLowerCase();
 
             if (!settings.enabled) {
-                return 'State Tracker is disabled.';
+                return 'El Rastreador de Estado está desactivado.';
             }
             if (typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning()) {
-                return 'State Tracker is already running.';
+                return 'El Rastreador de Estado ya se está ejecutando.';
             }
             if (typeof globalThis._rpgRunStateModelPass !== 'function') {
-                return 'State Tracker is not ready yet.';
+                return 'El Rastreador de Estado aún no está listo.';
             }
 
             /** @type {boolean} */
@@ -847,11 +875,11 @@ export function registerDiceSlashCommand() {
             } else if (lower.startsWith('lookback')) {
                 const n = parseInt(lower.replace(/^lookback\s*/i, ''), 10);
                 if (!Number.isFinite(n) || n < 1) {
-                    return 'Usage: /statetracker lookback=N  or  /statetracker lookback N';
+                    return 'Uso: /statetracker lookback=N  o  /statetracker lookback N';
                 }
                 customLookbackN = n;
             } else {
-                return 'Usage: /statetracker | /statetracker run | /statetracker full | /statetracker lookback=N';
+                return 'Uso: /statetracker | /statetracker run | /statetracker full | /statetracker lookback=N';
             }
 
             const { chat } = SillyTavern.getContext();
@@ -865,17 +893,17 @@ export function registerDiceSlashCommand() {
             }
 
             if (!isFullAudit && !narrative) {
-                return 'No assistant message to parse.';
+                return 'No hay mensajes del asistente para analizar.';
             }
 
             if (!quiet && typeof toastr !== 'undefined') {
                 toastr.info(
-                    isFullAudit ? 'Triggering Full Context Audit...' : 'Triggering manual State Update...',
-                    'RPG Tracker',
+                    isFullAudit ? 'Iniciando Auditoría Completa de Contexto...' : 'Iniciando Actualización Manual de Estado...',
+                    'Rastreador de Estado',
                 );
             }
             await globalThis._rpgRunStateModelPass(narrative, isFullAudit, customLookbackN);
-            return isFullAudit ? 'State Tracker full audit started.' : 'State Tracker update started.';
+            return isFullAudit ? 'Auditoría completa del Rastreador de Estado iniciada.' : 'Actualización del Rastreador de Estado iniciada.';
         },
         helpString: 'Run the State Tracker update (useful after /sendas, which does not auto-trigger it). '
             + 'Alias: /st. '
@@ -1079,6 +1107,12 @@ export function installInterceptor() {
             stripDungeonRealityBlocksFromPrompt(chat);
         }
 
+        // Master power off: strip any leftover CYOA / pacing from the prompt
+        // copy so prior injections cannot keep firing while powered down.
+        if (!settings.enabled && Array.isArray(chat)) {
+            stripLeftoverCyoaAndPacingFromPrompt(chat);
+        }
+
         if (dungeonEnabled && dungeonChatId && Array.isArray(_rbChat)) {
             // A swipe/regeneration rejects the latest selected narrator message,
             // so read existing attachments but do not persist a map from it.
@@ -1150,9 +1184,9 @@ export function installInterceptor() {
             console.log("Chat Length:", Array.isArray(chat) ? chat.length : 'N/A');
         }
 
-        const routerActive = !!settings.routerEnabled;
-        const cyoaActive = isEffectiveSectionEnabled('CYOA_mode', settings);
-        const pacingInject = hasInjectableNarrativePacing(settings.narrativePacing);
+        const routerActive = isLorebookAgentRuntimeActive(settings);
+        const cyoaActive = isCyoaEnabled(settings);
+        const pacingInject = !!settings.enabled && hasInjectableNarrativePacing(settings.narrativePacing);
         if (!settings.enabled && !routerActive && !cyoaActive && !pacingInject && !dungeonEnabled) {
             if (settings.debugMode) console.groupEnd();
             return;
@@ -1250,7 +1284,7 @@ export function installInterceptor() {
         }
 
         // Core user-message injection every turn: PC / relations / pacing / CYOA / RNG / memo / quests.
-        // CYOA / pacing tags can inject even when the State Tracker master toggle is off.
+        // CYOA / pacing follow the State Tracker master toggle (same as Persistent Maps).
         if (!skipInjection && (settings.enabled || cyoaActive || pacingInject)) {
             if (settings.enabled) {
                 // [PLAYER_CHARACTER] — always injected at the top of the core block
@@ -1347,7 +1381,7 @@ export function installInterceptor() {
         // otherwise [NPC_RELATIONS] can list an NPC whose card never appears (ST
         // native WI only injects when the book is selected and keys match).
         let triggered = [];
-        if (settings.routerEnabled && !settings.routerNativeKeywordActivation && content) {
+        if (isLorebookAgentRuntimeActive(settings) && !settings.routerNativeKeywordActivation && content) {
             const t0 = performance.now().toFixed(1);
             console.group(`[RPG|INTERCEPT] rpgTrackerInterceptor keyword pre-scan @ ${t0}ms`);
             console.log('skipInjection (Path 1 active):', skipInjection);
@@ -1363,7 +1397,7 @@ export function installInterceptor() {
             console.groupEnd();
         }
 
-        if (settings.routerEnabled && !skipInjection) {
+        if (isLorebookAgentRuntimeActive(settings) && !skipInjection) {
             if (!settings.routerNativeKeywordActivation) {
                 if (triggered.length > 0) {
                     try {
@@ -2065,9 +2099,9 @@ export async function handleRelationshipSwipeChange() {
 
         const sign = m.delta > 0 ? '+' : '';
         const icon = m.field === 'friendship' ? '🤝' : '💗';
-        const label = m.field === 'friendship' ? 'Friendship' : 'Affection';
+        const label = m.field === 'friendship' ? 'Amistad' : 'Afecto';
         // @ts-ignore
-        if (typeof toastr !== 'undefined' && settings.npcRelationshipToast !== false) toastr.info(`${icon} ${m.name}: ${sign}${m.delta} ${label}`, 'Relationship', { timeOut: 3500, positionClass: 'toast-bottom-right' });
+        if (typeof toastr !== 'undefined' && settings.npcRelationshipToast !== false) toastr.info(`${icon} ${m.name}: ${sign}${m.delta} ${label}`, 'Relación', { timeOut: 3500, positionClass: 'toast-bottom-right' });
         
         console.log(`[RPG Tracker] Narrative rel applied: ${m.name} → ${resolvedId} | ${m.field} ${sign}${m.delta} → ${newVal} (Actual applied: ${actualAppliedDelta})`);
 
@@ -2154,19 +2188,29 @@ async function applyNarrativeRelationshipRegex(lastAiMsg, settings, ctx) {
  * Commands are not stored; only the existing relationship value rollback record is.
  * @param {Array<{type: string, npc: string, field: 'friendship'|'affection', delta: number}>} commands
  */
-export async function applyStateTrackerRelationshipCommands(commands) {
-    if (!Array.isArray(commands) || !commands.length) return;
+export async function applyStateTrackerRelationshipCommands(commands, options = {}) {
+    if (!Array.isArray(commands) || !commands.length) return { applied: false, status: 'empty' };
+
+    const passChatId = options.passChatId ?? runtimeState.currentChatId;
+    if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
+        return { applied: false, status: 'chat_changed' };
+    }
 
     const settings = getSettings();
-    if (!settings.npcRelationshipBars) return;
+    if (!settings.npcRelationshipBars) return { applied: false, status: 'disabled' };
     const ctx = SillyTavern.getContext();
     const lastAiMsg = [...(ctx.chat || [])].reverse().find(message => !message.is_user && !message.is_system);
-    if (!lastAiMsg) return;
+    if (!lastAiMsg) return { applied: false, status: 'no_message' };
 
     const swipeResult = applyRelationshipSwipeRollback(lastAiMsg, settings);
     if (swipeResult.bailEarly) {
-        if (swipeResult.anyChanged) persistRelationshipCommandChanges(ctx, settings);
-        return;
+        if (swipeResult.anyChanged) {
+            if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
+                return { applied: false, status: 'chat_changed' };
+            }
+            persistRelationshipCommandChanges(ctx, settings, passChatId);
+        }
+        return { applied: swipeResult.anyChanged, status: swipeResult.anyChanged ? 'ok' : 'bail' };
     }
 
     const swipeId = lastAiMsg.swipe_id ?? 0;
@@ -2174,7 +2218,15 @@ export async function applyStateTrackerRelationshipCommands(commands) {
     let anyChanged = swipeResult.anyChanged;
 
     for (const command of commands) {
+        if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
+            return { applied: false, status: 'chat_changed' };
+        }
         const resolvedId = command.npc.includes('::') ? command.npc : await fuzzyResolveNpcName(command.npc);
+        // fuzzyResolve awaits the lorebook manifest — a chat switch can project
+        // another partition into the shared settings object during that gap.
+        if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
+            return { applied: false, status: 'chat_changed' };
+        }
         if (!resolvedId) {
             console.warn(`[RPG Tracker] State Tracker relationship command could not resolve NPC "${command.npc}".`);
             continue;
@@ -2200,6 +2252,11 @@ export async function applyStateTrackerRelationshipCommands(commands) {
         });
         if (settings.npcRelationshipLog[resolvedId].length > 50) settings.npcRelationshipLog[resolvedId].length = 50;
 
+        lastAiMsg.extra = lastAiMsg.extra || {};
+        lastAiMsg.extra.rpgRollbackData = lastAiMsg.extra.rpgRollbackData || {};
+        if (!Array.isArray(lastAiMsg.extra.rpgRollbackData[swipeId])) {
+            lastAiMsg.extra.rpgRollbackData[swipeId] = [];
+        }
         lastAiMsg.extra.rpgRollbackData[swipeId].push({
             npcId: resolvedId,
             field: command.field,
@@ -2213,15 +2270,22 @@ export async function applyStateTrackerRelationshipCommands(commands) {
         anyChanged = true;
     }
 
-    if (anyChanged) persistRelationshipCommandChanges(ctx, settings);
+    if (anyChanged) {
+        if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
+            return { applied: false, status: 'chat_changed' };
+        }
+        persistRelationshipCommandChanges(ctx, settings, passChatId);
+    }
+    return { applied: anyChanged, status: anyChanged ? 'ok' : 'noop' };
 }
 
-function persistRelationshipCommandChanges(ctx, settings) {
+function persistRelationshipCommandChanges(ctx, settings, passChatId = null) {
     if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
     void saveSettings();
     refreshRelationshipBarsDOM(settings);
     if (settings.chatLinkEnabled) {
-        const chatId = getActiveChatId();
+        // Prefer the originating pass chat when provided — never the post-switch active id.
+        const chatId = passChatId || getActiveChatId();
         if (chatId) saveChatState(chatId);
     }
 }
@@ -2481,8 +2545,8 @@ async function maybeRunMapArchitectTextOpener({ chat, settings, currentType, sou
         if (!createAreaMapCommandIsComplete(args)) {
             logMapArchitectTextOpener('skip', { reason: 'incomplete_command', source, generationType: type, args });
             globalThis.toastr?.error?.(
-                'Map Architect text command is missing site, entrance, kind, or premise. Stay outside and try again next turn.',
-                'Map Architect',
+                'Al comando de texto del Arquitecto de Mapas le falta site, entrance, kind, prompt o brief_description. Permanece fuera e inténtalo de nuevo en el próximo turno.',
+                'Arquitecto de Mapas',
                 { timeOut: 10000 },
             );
             return true;
@@ -2492,6 +2556,12 @@ async function maybeRunMapArchitectTextOpener({ chat, settings, currentType, sou
         logMapArchitectTextOpener('running', { source, generationType: type, site: siteLabel });
         await runMapArchitect(args);
         clearAssistantReasoning(message);
+        if (args.attachTo) {
+            _pendingMapArchitectResult = null;
+            _mapArchitectNarrationContinue = false;
+            logMapArchitectTextOpener('completed_offsite_attachment', { source, generationType: type, site: siteLabel });
+            return true;
+        }
         applyAssistantMessageText(
             SillyTavern.getContext(),
             message,
@@ -2732,7 +2802,7 @@ export async function onGenerationEnded() {
     }
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
-    const routerActive = !!settings.routerEnabled;
+    const routerActive = isLorebookAgentRuntimeActive(settings);
     if ((!settings.enabled && !routerActive) || isStateRunning) {
         recordSchedulerEvent('generation_ended_aborted', {
             reason: (!settings.enabled && !routerActive) ? 'disabled' : 'state_running',
@@ -2833,7 +2903,7 @@ export async function onGenerationEnded() {
     // Must run before the state model pass and on EVERY generation, regardless of throttle,
     // so entries are never one turn behind the narrator even when the agent is skipped.
     // Skipped when routerNativeKeywordActivation is enabled (native ST system handles keywords).
-    if (settings.routerEnabled && !settings.routerNativeKeywordActivation) {
+    if (isLorebookAgentRuntimeActive(settings) && !settings.routerNativeKeywordActivation) {
         const thisGenTriggered = await scanAssistantOutputForKeywords(combinedNarrative);
         if (thisGenTriggered.length > 0) {
             // Accumulate across throttled turns — deduplicate so IDs are not repeated.
@@ -2898,17 +2968,68 @@ export async function onGenerationEnded() {
         });
         document.dispatchEvent(new CustomEvent('rt_generation_tick'));
     }
-    const forceBuildingPopulation = countsTowardRunEvery
+    const mapUpdaterAvailable = countsTowardRunEvery
         && settings.mapUpdaterEnabled !== false
-        && isLocationMappingEnabled(settings)
-        && await shouldForceBuildingPopulationPass();
-    const shouldTryMapUpdater = countsTowardRunEvery
-        && settings.mapUpdaterEnabled !== false
-        && isLocationMappingEnabled(settings)
+        && isLocationMappingEnabled(settings);
+    const forceBuildingPopulation = mapUpdaterAvailable && await shouldForceBuildingPopulationPass();
+    const shouldTryMapUpdater = mapUpdaterAvailable
         && (_mapUpdaterAutoTick >= mapEvery || forceBuildingPopulation);
-    if (shouldTryMapUpdater) {
-        const mapResult = await runMapUpdaterPass();
+
+    let exitResult = null;
+    let holdExitBookkeeping = false;
+    let currentRoot = '';
+    let exitDeferredWatermark = false;
+    if (mapUpdaterAvailable) {
+        currentRoot = await getActiveMapUpdaterSiteRoot();
+        const previousRoot = String(settings.mapUpdaterLastSiteRoot || '').trim();
+        let pendingExitRoot = String(settings.mapUpdaterPendingExitRoot || '').trim();
+        const rootsDiffer = normalizeDungeonLabel(previousRoot) !== normalizeDungeonLabel(currentRoot);
+        let bookkeepingChanged = false;
+
+        if (!pendingExitRoot && previousRoot && rootsDiffer) {
+            pendingExitRoot = previousRoot;
+            settings.mapUpdaterPendingExitRoot = previousRoot;
+            bookkeepingChanged = true;
+        }
+
+        if (pendingExitRoot) {
+            exitDeferredWatermark = shouldTryMapUpdater;
+            exitResult = await runMapUpdaterPass({
+                siteRoot: pendingExitRoot,
+                trigger: 'site_exit',
+                deferWatermark: exitDeferredWatermark,
+            });
+            holdExitBookkeeping = exitResult?.skipped === 'busy' || exitResult?.skipped === 'stopped';
+            if (!holdExitBookkeeping) {
+                settings.mapUpdaterPendingExitRoot = '';
+                settings.mapUpdaterLastSiteRoot = currentRoot;
+                bookkeepingChanged = true;
+            }
+            recordSchedulerEvent('map_updater_exit_pass', {
+                siteRoot: pendingExitRoot,
+                currentRoot: currentRoot || null,
+                skipped: exitResult?.skipped || null,
+                ok: exitResult?.ok === true,
+                noop: exitResult?.noop === true,
+                pending: holdExitBookkeeping,
+            });
+        } else if (normalizeDungeonLabel(previousRoot) !== normalizeDungeonLabel(currentRoot)) {
+            settings.mapUpdaterLastSiteRoot = currentRoot;
+            bookkeepingChanged = true;
+        }
+
+        if (bookkeepingChanged) persistMapUpdaterState();
+    }
+
+    let mapResult = null;
+    if (shouldTryMapUpdater && !holdExitBookkeeping) {
+        const exitStampedSwipe = exitResult?.ok === true && exitResult?.noop !== true;
+        mapResult = await runMapUpdaterPass({ stampSwipe: !exitStampedSwipe });
         const skipped = mapResult?.skipped;
+        if (exitDeferredWatermark && skipped) {
+            persistMapUpdaterLastRunWatermark(ctx.chat?.length || 0);
+            persistMapUpdaterLastRunTimestamp();
+        }
         if (!skipped || !['no_active_map', 'dungeon_reality_off', 'location_mapping_off', 'disabled', 'busy'].includes(skipped)) {
             setMapUpdaterAutoTick(0, 'map_updater_fire_threshold', { generationType: currentType ?? null, runEvery: mapEvery });
         }
@@ -2917,6 +3038,7 @@ export async function onGenerationEnded() {
             ok: mapResult?.ok === true,
             noop: mapResult?.noop === true,
             forcedBuildingPopulation: forceBuildingPopulation,
+            afterExit: !!exitResult,
         });
     }
 
@@ -3006,7 +3128,7 @@ export async function onGenerationEnded() {
  */
 async function maybeRunWorldProgression() {
     const settings = getSettings();
-    if (!settings.worldProgressionEnabled || !settings.routerEnabled) return;
+    if (!settings.worldProgressionEnabled || !isLorebookAgentRuntimeActive(settings)) return;
     if (!settings.currentMemo) return;
 
     // Extract time string from the [TIME] block

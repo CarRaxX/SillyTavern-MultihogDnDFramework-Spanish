@@ -4,7 +4,7 @@ import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent, parseJsonWithColorRepair } from './memo-processor.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
-import { isLocationMappingEnabled } from './src/state/section-enabled.js';
+import { isLorebookAgentRuntimeActive, isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { buildSkeletonLorebookSourceContext } from './src/features/world-progression/skeleton-lorebooks.js';
 import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 import {
@@ -21,13 +21,14 @@ import {
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
 import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
-import { findMostRecentNarratorMessage } from './src/state/present-now.js';
+import { findMostRecentNarratorMessage, stripCyoaChoiceBlocks } from './src/state/present-now.js';
 import {
     applyDungeonMapTransaction,
     attachDungeonMapToLocationEntry,
     detachDungeonMapFromLocationEntry,
     buildDungeonSitesFromLocationEntries,
     collectDungeonMapCandidates,
+    dungeonLabelIdentitiesMatch,
     dungeonLabelsMatch,
     dungeonSiteRootsMatch,
     normalizeDungeonLabel,
@@ -36,7 +37,6 @@ import {
     extractFooterLocation,
     findLatestDungeonLocation,
     locationContainsSiteRoot,
-    mapSiteFooterMismatchHint,
     getDungeonMapAttachment,
     listMappedSiteDocuments,
     migrateDungeonMapAttachmentToContent,
@@ -46,14 +46,13 @@ import {
     resolveActiveDungeonSite,
     resolveCurrentMapPlacement,
     serializeDungeonMapDocument,
-    settlementAbsorptionMatchesCurrentPeer,
     stripDungeonMapSection,
     collectDungeonMapHistorySnapshot,
     applyDungeonMapHistorySnapshotToBook,
     DUNGEON_MAP_OPERATION_IDS_KEY,
 } from './dungeon-reality.js';
 import { recordLiveDungeonMapSnapshot } from './src/state/dungeon-map-history.js';
-import { buildHostedPeerSitePath, ensureHostCoreMirror, reparentHostedLocationEntries, stampHostedPeerDocument } from './map-hosting.js';
+import { buildHostedPeerSitePath, ensureHostCoreMirror, MAX_HOSTED_MAP_DEPTH, reparentHostedLocationEntries, stampHostedPeerDocument } from './map-hosting.js';
 import { clearEvolutionHistoryForSite, setSiteEvolutionIntervalOverride } from './map-evolution-lib.js';
 import {
     buildWorldProgressionLocationDossiers,
@@ -286,7 +285,7 @@ function parseTextAction(text) {
  */
 function broadcastStep(type, content, metadata = {}) {
     document.dispatchEvent(new CustomEvent('rt_lore_agent_step', {
-        detail: { type, content, metadata, timestamp: Date.now() }
+        detail: { type, content, metadata: { source: 'lorebook_agent', ...metadata }, timestamp: Date.now() }
     }));
 }
 
@@ -625,18 +624,18 @@ function allocateHostedAssetId(document, name) {
     return `${base}-${suffix}`;
 }
 
-function promoteSettlementPeerAsset(hostDocument, site, expectedKind, areaId, premise) {
-    if (normalizeMapSiteKind(hostDocument.kind) !== 'SETTLEMENT') {
-        throw new Error(`Host "${hostDocument.site}" is not a SETTLEMENT map.`);
+function promoteHostedPeerAsset(hostDocument, site, expectedKind, areaId, briefDescription, { hidden = false } = {}) {
+    if (!['SETTLEMENT', 'DUNGEON', 'INTERIOR'].includes(normalizeMapSiteKind(hostDocument.kind))) {
+        throw new Error(`Host "${hostDocument.site}" is not a supported mapped site.`);
     }
     const area = (hostDocument.areas || []).find(item => item.id === areaId);
-    if (!area) throw new Error(`Could not resolve the host district for "${site}".`);
-    const matches = (hostDocument.assets || []).filter(asset => String(asset.name || '').trim() === site && asset.state !== 'REMOVED');
-    if (matches.length > 1) throw new Error(`Settlement contains more than one active asset named "${site}".`);
+    if (!area) throw new Error(`Could not resolve the host map cell for "${site}".`);
+    const matches = (hostDocument.assets || []).filter(asset => dungeonLabelIdentitiesMatch(asset.name, site) && asset.state !== 'REMOVED' && asset.state !== 'LEFT');
+    if (matches.length > 1) throw new Error(`Host map contains more than one active asset named "${site}".`);
     let asset = matches[0] || null;
     if (asset) {
         if (![expectedKind, 'BUILDING', 'OBJECT'].includes(asset.kind)) {
-            throw new Error(`Settlement asset "${site}" is ${asset.kind}; expected ${expectedKind}.`);
+            throw new Error(`Host-map asset "${site}" is ${asset.kind}; expected ${expectedKind}.`);
         }
         asset.kind = expectedKind;
         asset.location = area.id;
@@ -647,8 +646,8 @@ function promoteSettlementPeerAsset(hostDocument, site, expectedKind, areaId, pr
             name: site,
             location: area.id,
             state: 'ACTIVE',
-            knowledge: 'KNOWN',
-            detail: String(premise || '').trim(),
+            knowledge: hidden ? 'UNREVEALED' : 'KNOWN',
+            detail: String(briefDescription || '').trim(),
             origin: 'NARRATOR_ESTABLISHED',
         };
         hostDocument.assets.push(asset);
@@ -685,7 +684,6 @@ function findArchitectMapEntry(entries, canonicalSite, requestedSite, hostContex
  * Existing maps always win: concurrent/repeated tool calls never overwrite canon.
  */
 export async function persistArchitectDungeonMap(siteRoot, mapDocument, {
-    allowOffsite = false,
     requireNew = false,
     locationKeys = null,
     locationCore = '',
@@ -699,6 +697,9 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, {
     const site = String(hostContext?.peerSite || requestedSite).trim();
     if (!prefix) throw new Error('No campaign prefix is available for the Locations lorebook.');
     if (!requestedSite || !site) throw new Error('Map Architect requires an exact site root.');
+    if (hostContext && Number(hostContext.peerDepth) > MAX_HOSTED_MAP_DEPTH) {
+        throw new Error(`Nested maps are limited to ${MAX_HOSTED_MAP_DEPTH} mapped levels.`);
+    }
 
     const bookName = `${prefix}_Locations`;
     const bookKnown = await isWorldInfoBookKnown(bookName, ctx);
@@ -744,12 +745,6 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, {
         throw new Error(`A location named "${site}" already exists. Use + MAP on that root instead.`);
     }
 
-    const currentLocation = findLatestDungeonLocation(ctx.chat || []);
-    const absorbsCurrentPeer = settlementAbsorptionMatchesCurrentPeer(mapDocument.kind, currentLocation, includeManifest);
-    if (!rootEntry && currentLocation && !locationContainsSiteRoot(currentLocation, site) && !allowOffsite && !hostContext && !absorbsCurrentPeer) {
-        throw new Error(mapSiteFooterMismatchHint(site, currentLocation));
-    }
-
     if (!rootEntry) {
         const uids = Object.keys(bookData.entries || {}).map(Number).filter(Number.isFinite);
         const nextUid = uids.length ? Math.max(...uids) + 1 : 0;
@@ -793,15 +788,16 @@ export async function persistArchitectDungeonMap(siteRoot, mapDocument, {
         const hostEntry = bookData.entries?.[hostUid];
         const hostAttachment = getDungeonMapAttachment(hostEntry);
         if (!hostEntry || !hostAttachment || String(hostEntry.comment || '').trim() !== hostContext.hostSite) {
-            throw new Error(`Host settlement "${hostContext.hostSite}" changed before the peer could be saved.`);
+            throw new Error(`Host map "${hostContext.hostSite}" changed before the peer could be saved.`);
         }
         const hostDocument = parseDungeonMapDocument(hostAttachment.content, hostContext.hostSite).document;
-        const hostAsset = promoteSettlementPeerAsset(
+        const hostAsset = promoteHostedPeerAsset(
             hostDocument,
             requestedSite,
             hostContext.expectedAssetKind,
             hostContext.hostAreaId,
-            hostContext.premise,
+            hostContext.briefDescription,
+            { hidden: !!hostContext.explicit },
         );
         const livePeerSite = buildHostedPeerSitePath(hostDocument, hostAsset);
         if (livePeerSite !== site) {
@@ -1138,7 +1134,7 @@ export async function loadDungeonMapContextForSite(siteRoot) {
     const site = (loaded.sites || []).find(candidate => normalizeDungeonLabel(candidate.siteRoot) === wanted);
     if (!site) return null;
     const footer = loaded.currentLocation || '';
-    const isActiveSite = footer && normalizeDungeonLabel(footer).includes(wanted);
+    const isActiveSite = locationContainsSiteRoot(footer, site.siteRoot);
     return {
         prefix: loaded.prefix,
         books: loaded.books,
@@ -1408,7 +1404,7 @@ export async function applyActiveDungeonMapCommit(transaction, expectedContext, 
 export async function runRouterPass(narrativeOutput, manualPrompt = null, customLookback = null, isManual = false, newlyTriggeredIds = [], overrideChatLog = null) {
     const settings = getSettings();
     const dungeonRealityEnabled = isLocationMappingEnabled(settings);
-    if (!settings.routerEnabled || _routerRunning) return;
+    if (!isLorebookAgentRuntimeActive(settings) || _routerRunning) return;
     // routerPaused blocks auto-runs only; manual UI runs always go through
     if (settings.routerPaused && !isManual) return;
 
@@ -4167,7 +4163,7 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     if (!narrativeText) return [];
     const sweepEnabled = opts.sweepEnabled !== false; // default true
     const settings = getSettings();
-    if (!settings.routerEnabled) return [];
+    if (!isLorebookAgentRuntimeActive(settings)) return [];
 
     const ctx = SillyTavern.getContext();
     const prefix = getLivePrefix();
@@ -4397,7 +4393,9 @@ function getMostRecentNarrativeText(includeHidden = false) {
     const { chat } = SillyTavern.getContext();
     const msg = findMostRecentNarratorMessage(chat, { includeHidden });
     if (!msg) return '';
-    const mes = cleanMessageContent(msg);
+    const raw = String(msg.mes || msg.content || '');
+    const withoutChoices = stripCyoaChoiceBlocks(raw);
+    const mes = cleanMessageContent({ ...msg, mes: withoutChoices, content: withoutChoices });
     if (!mes) return '';
     if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) return '';
     return mes;
@@ -4406,6 +4404,8 @@ function getMostRecentNarrativeText(includeHidden = false) {
 /**
  * Present-Now name scanner — separate from the Lorebook Agent keyword scanner.
  * Scans ONLY the latest single narrator message for NPC names (entry comment/label).
+ * CYOA choice/button blocks are stripped first so hypothetical
+ * names in action options do not count as scene presence.
  * User messages are never scanned: a player turn without explicit NPC names must
  * not clear Present Now. First/last name tokens are enough for established NPCs;
  * NPCs the agent just recorded this pass require a full-name match so loose
@@ -4419,9 +4419,10 @@ function getMostRecentNarrativeText(includeHidden = false) {
  */
 export async function scanRecentOutputForPresentNpcs(narrativeText) {
     const settings = getSettings();
-    const text = (narrativeText != null && narrativeText !== '')
+    const rawText = (narrativeText != null && narrativeText !== '')
         ? String(narrativeText)
         : getMostRecentNarrativeText(!!settings.routerIncludeHidden);
+    const text = stripCyoaChoiceBlocks(rawText);
     if (!text.trim()) return [];
 
     const ctx = SillyTavern.getContext();
@@ -4524,7 +4525,7 @@ function narrativeMentionsNpcName(narrativeText, npcLabel, opts = {}) {
  */
 export async function disableManagedEntries() {
     const settings = getSettings();
-    if (!settings.routerEnabled) return;
+    if (!isLorebookAgentRuntimeActive(settings)) return;
     // In native keyword mode, entries are left enabled for ST's keyword scanner to manage.
     if (settings.routerNativeKeywordActivation) return;
     const ctx = SillyTavern.getContext();

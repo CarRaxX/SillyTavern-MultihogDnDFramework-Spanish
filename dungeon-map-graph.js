@@ -297,7 +297,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
             node.fog ? 'data-fog="1" aria-hidden="true"' : `data-area-id="${escapeXml(node.id)}" data-area-path="${escapeXml(path)}" role="button" tabindex="0"`,
         ];
         const here = node.current
-            ? (graph.currentInteriorName ? ` (en ${graph.currentInteriorName})` : ' (estás aquí)')
+            ? (graph.currentInteriorName ? ` (in ${graph.currentInteriorName})` : ' (you are here)')
             : '';
         if (!node.fog) attrs.push(`aria-label="${escapeXml(`${node.name}${here}`)}"`);
         const shape = node.fog
@@ -309,7 +309,7 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
             : renderAreaAssetIconsSvg(node.icons, { cx: node.cx, y: node.iconY, compact });
         return `<g ${attrs.join(' ')}>${shape}<text x="${node.cx}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}">${escapeXml(label)}</text>${icons}</g>`;
     }).join('');
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Mapa del lugar')}">${edges}${nodes}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="rt-dungeon-graph-svg" viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}" role="img" draggable="false" aria-label="${escapeXml(graph.site || 'Site map')}">${edges}${nodes}</svg>`;
 }
 
 /**
@@ -319,37 +319,37 @@ export function renderDungeonMapGraphSvg(graph, { compact = true, siteRoot = '' 
  */
 export function renderDungeonMapEmbedHtml(graph, { detached = false, siteRoot = '' } = {}) {
     if (!graph?.nodes?.length) return '';
-    const site = escapeXml(graph.site || 'Lugar mapeado');
+    const site = escapeXml(graph.site || 'Mapped site');
     if (detached) {
         return `<div class="rt-immersion-map rt-immersion-map-popped">
-            <div class="rt-immersion-section-label"><span>Mapa del lugar</span></div>
+            <div class="rt-immersion-section-label"><span>Site map</span></div>
             <div class="rt-immersion-map-popped-body">
-                <span>${site} está abierto en una ventana separada.</span>
+                <span>${site} is open in a separate window.</span>
                 <span class="rt-dungeon-map-label-actions">
-                    <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
-                    <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reacoplar mapa del lugar">Reacoplar</button>
+                    <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
+                    <button type="button" class="rt-dungeon-map-reattach rpg-tracker-icon-btn" title="Reattach site map">Reattach</button>
                 </span>
             </div>
         </div>`;
     }
     return `<div class="rt-immersion-map">
         <div class="rt-immersion-section-label">
-            <span>Mapa del lugar</span>
+            <span>Site map</span>
             <span class="rt-dungeon-map-label-actions">
-                <button type="button" class="rt-map-updater-direct-toggle rpg-tracker-icon-btn" title="Prompt directo para el Actualizador de Mapas" aria-expanded="false">💬</button>
-                <button type="button" class="rt-dungeon-map-details" title="Abrir detalles del mapa" aria-label="Abrir detalles del mapa">Detalles del Mapa</button>
-                <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Abrir mapa en una ventana separada" aria-label="Abrir mapa en una ventana separada">⧉</button>
+                <button type="button" class="rt-map-updater-direct-toggle rpg-tracker-icon-btn" title="Direct prompt for Map Updater" aria-expanded="false">💬</button>
+                <button type="button" class="rt-dungeon-map-details" title="Open map details" aria-label="Open map details">Map Details</button>
+                <button type="button" class="rt-dungeon-map-detach rpg-tracker-icon-btn" title="Open map in a separate window" aria-label="Open map in a separate window">⧉</button>
             </span>
         </div>
         <div class="rt-map-updater-direct-panel" hidden>
             <div class="rt-map-updater-direct-bar">
-                <textarea class="rt-map-updater-direct-input text_pole" rows="2" placeholder="Instruir al Actualizador de Mapas solo para esta ejecución… (Enter para ejecutar, Shift+Enter para nueva línea)"></textarea>
+                <textarea class="rt-map-updater-direct-input text_pole" rows="2" placeholder="Instruct Map Updater for this run only… (Enter to run, Shift+Enter for newline)"></textarea>
                 <div class="rt-map-updater-direct-actions">
-                    <label class="rt-map-updater-direct-lookback-label" title="Revisión de historia reciente para esta ejecución manual del Actualizador de Mapas">
-                        Ctx
-                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="rt-map-updater-direct-lookback" min="0" max="100" value="10">
+                    <label class="rt-lookback-field rt-map-updater-direct-lookback-label" title="Recent story lookback for this manual Map Updater run">
+                        <span class="rt-lookback-field-label">Lookback:</span>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="rt-lookback-field-input rt-map-updater-direct-lookback" min="0" max="100" value="10">
                     </label>
-                    <button type="button" class="rt-map-updater-direct-run menu_button interactable"><i class="fa-solid fa-play"></i> Ejecutar</button>
+                    <button type="button" class="rt-map-updater-direct-run menu_button interactable"><i class="fa-solid fa-play"></i> Run</button>
                 </div>
             </div>
             <span class="rt-map-updater-direct-status" role="status" aria-live="polite"></span>
@@ -371,7 +371,7 @@ function areaDisplayName(id, revealAll, visibleIds, areasById) {
     if (revealAll || visibleIds.has(id)) {
         return areasById.get(id)?.name || id;
     }
-    return 'Inexplorado';
+    return 'Unexplored';
 }
 
 /**
@@ -393,29 +393,39 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
         return visibleIds.has(resolveAssetEffectiveArea(map, asset)?.id);
     });
     const renderTag = (value, className = '') => `<span class="rt-dungeon-map-tag ${className}">${escapeHtml(value)}</span>`;
-    const renderAsset = (asset) => {
+    const renderAsset = (asset, ancestors = new Set()) => {
+        const id = String(asset?.id || '').trim();
+        if (id && ancestors.has(id)) return '';
+        const nested = new Set(ancestors);
+        if (id) nested.add(id);
         const metadata = [];
-        if (asset.behavior) metadata.push(`<b>Comportamiento:</b> ${escapeHtml(asset.behavior)}`);
+        if (asset.behavior) metadata.push(`<b>Behavior:</b> ${escapeHtml(asset.behavior)}`);
         if (asset.route?.length) {
-            metadata.push(`<b>Ruta:</b> ${asset.route.map(id => escapeHtml(areaDisplayName(id, revealAll, visibleIds, areasById))).join(' &rarr; ')}`);
+            metadata.push(`<b>Route:</b> ${asset.route.map(routeId => escapeHtml(areaDisplayName(routeId, revealAll, visibleIds, areasById))).join(' &rarr; ')}`);
         }
-        if (asset.faction) metadata.push(`<b>Facción:</b> ${escapeHtml(asset.faction)}`);
-        if (Number.isInteger(asset.count)) metadata.push(`<b>Cantidad:</b> ${escapeHtml(String(asset.count))}`);
-        if (asset.owner) metadata.push(`<b>Propietario:</b> ${escapeHtml(asset.owner)}`);
-        if (asset.duration) metadata.push(`<b>Duración:</b> ${escapeHtml(asset.duration)}`);
-        if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origen:</b> ${escapeHtml(asset.origin)}`);
+        if (asset.faction) metadata.push(`<b>Faction:</b> ${escapeHtml(asset.faction)}`);
+        if (Number.isInteger(asset.count)) metadata.push(`<b>Count:</b> ${escapeHtml(String(asset.count))}`);
+        if (asset.owner) metadata.push(`<b>Owner:</b> ${escapeHtml(asset.owner)}`);
+        if (asset.duration) metadata.push(`<b>Duration:</b> ${escapeHtml(asset.duration)}`);
+        if (asset.origin && asset.origin !== 'INITIAL_MAP') metadata.push(`<b>Origin:</b> ${escapeHtml(asset.origin)}`);
         if (asset.actor) metadata.push(`<b>Actor:</b> ${escapeHtml(asset.actor)}`);
-        if (asset.cause) metadata.push(`<b>Causa:</b> ${escapeHtml(asset.cause)}`);
-        if (asset.changed_at) metadata.push(`<b>Desde:</b> ${escapeHtml(asset.changed_at)}`);
+        if (asset.cause) metadata.push(`<b>Cause:</b> ${escapeHtml(asset.cause)}`);
+        if (asset.changed_at) metadata.push(`<b>Since:</b> ${escapeHtml(asset.changed_at)}`);
         if (asset.last_location) {
-            metadata.push(`<b>Última ubicación:</b> ${escapeHtml(areaDisplayName(asset.last_location, revealAll, visibleIds, areasById))}`);
+            metadata.push(`<b>Last location:</b> ${escapeHtml(areaDisplayName(asset.last_location, revealAll, visibleIds, areasById))}`);
         }
-        const children = visibleAssets.filter(candidate => candidate.location === asset.id);
+        const children = id
+            ? visibleAssets.filter((candidate) => {
+                const childId = String(candidate?.id || '').trim();
+                if (!childId || nested.has(childId)) return false;
+                return String(candidate.location || '').trim() === id;
+            })
+            : [];
         return `<div class="rt-dungeon-map-asset">
                     <div class="rt-dungeon-map-asset-head"><i class="fa-solid fa-diamond"></i><strong>${escapeHtml(asset.name)}</strong>${renderTag(asset.kind)}${renderTag(asset.state, 'rt-dungeon-map-state')}${renderTag(asset.knowledge, 'rt-dungeon-map-knowledge')}</div>
                     ${asset.detail ? `<div class="rt-dungeon-map-asset-detail">${escapeHtml(asset.detail)}</div>` : ''}
                     ${metadata.length ? `<div class="rt-dungeon-map-asset-meta">${metadata.join('<span class="rt-dungeon-map-meta-sep">&bull;</span>')}</div>` : ''}
-                    ${children.length ? `<div class="rt-dungeon-map-assets rt-dungeon-map-contained">${children.map(renderAsset).join('')}</div>` : ''}
+                    ${children.length ? `<div class="rt-dungeon-map-assets rt-dungeon-map-contained">${children.map(child => renderAsset(child, nested)).join('')}</div>` : ''}
                 </div>`;
     };
     const renderArea = (area) => {
@@ -423,9 +433,9 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
         const showGeometry = revealAll || area.knowledge === 'VISITED';
         const geometry = showGeometry && area.geometry?.length
             ? `<ul class="rt-dungeon-map-geometry">${area.geometry.map(fact => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>`
-            : `<div class="rt-dungeon-map-empty">${showGeometry ? 'Sin notas estructurales.' : 'Aún no se ha entrado.'}</div>`;
+            : `<div class="rt-dungeon-map-empty">${showGeometry ? 'No structural notes.' : 'Not yet entered.'}</div>`;
         const connections = (area.connections || []).length
-            ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Rutas</span>${area.connections.map(connection => {
+            ? `<div class="rt-dungeon-map-connections"><span class="rt-dungeon-map-section-label">Routes</span>${area.connections.map(connection => {
                 const name = areaDisplayName(connection.to, revealAll, visibleIds, areasById);
                 const detail = connection.detail || '';
                 return `<span class="rt-dungeon-map-route"><i class="fa-solid fa-arrow-right"></i>${escapeHtml(name)}${renderTag(connection.state)}${detail ? `<span class="rt-dungeon-map-route-detail">${escapeHtml(detail)}</span>` : ''}</span>`;
@@ -433,20 +443,26 @@ export function renderDungeonMapReadableHtml(mapDocument, { revealAll = true } =
             : '';
         return `<section class="rt-dungeon-map-area">
                     <div class="rt-dungeon-map-area-head"><i class="fa-solid fa-location-dot"></i><strong>${escapeHtml(area.name)}</strong>${renderTag(area.knowledge, 'rt-dungeon-map-knowledge')}</div>
-                    <div class="rt-dungeon-map-section-label">Geometría y prosa</div>
+                    <div class="rt-dungeon-map-section-label">Geometry &amp; prose</div>
                     ${geometry}
                     ${connections}
-                    ${areaAssets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Activos (${areaAssets.length})</span>${areaAssets.map(renderAsset).join('')}</div>` : ''}
+                    ${areaAssets.length ? `<div class="rt-dungeon-map-assets"><span class="rt-dungeon-map-section-label">Assets (${areaAssets.length})</span>${areaAssets.map(asset => renderAsset(asset)).join('')}</div>` : ''}
                 </section>`;
     };
-    const unplaced = visibleAssets.filter(asset => (!asset.location || (!areasById.has(asset.location) && !assets.some(parent => parent.id === asset.location))));
+    const unplaced = visibleAssets.filter((asset) => {
+        const loc = String(asset.location || '').trim();
+        const id = String(asset.id || '').trim();
+        if (!loc) return true;
+        if (areasById.has(loc)) return false;
+        return !assets.some(parent => String(parent.id || '').trim() === loc && String(parent.id || '').trim() !== id);
+    });
     if (!visibleAreas.length && !unplaced.length) {
-        return '<div class="rt-dungeon-map-empty">Aún no hay salas reveladas.</div>';
+        return '<div class="rt-dungeon-map-empty">No revealed rooms yet.</div>';
     }
     return `<div class="rt-dungeon-map-summary">
-                    <span>${renderTag(`${visibleAreas.length} áreas`)}</span>
-                    <span>${renderTag(`${visibleAssets.length} activos`)}</span>
+                    <span>${renderTag(`${visibleAreas.length} areas`)}</span>
+                    <span>${renderTag(`${visibleAssets.length} assets`)}</span>
                 </div>
                 <div class="rt-dungeon-map-area-list">${visibleAreas.map(renderArea).join('')}</div>
-                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Activos eliminados / sin ubicar</strong></div>${unplaced.map(renderAsset).join('')}</section>` : ''}`;
+                ${unplaced.length ? `<section class="rt-dungeon-map-area rt-dungeon-map-unplaced"><div class="rt-dungeon-map-area-head"><i class="fa-solid fa-box-archive"></i><strong>Removed / unplaced assets</strong></div>${unplaced.map(asset => renderAsset(asset)).join('')}</section>` : ''}`;
 }

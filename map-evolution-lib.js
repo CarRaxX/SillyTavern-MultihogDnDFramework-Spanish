@@ -2,8 +2,48 @@
  * Pure Map Evolution helpers: scheduled site selection, digest, player bubble, interval due.
  * Kept out of map-evolution.js so filters stay testable without the LLM pass / router.
  */
-import { normalizeDungeonLabel, resolveCurrentMapPlacement } from './dungeon-reality.js';
-import { parseInWorldTime } from './memo-processor.js';
+import { dungeonSiteRootsMatch, normalizeDungeonLabel, pickActiveSiteForLocation, resolveCurrentMapPlacement } from './dungeon-reality.js';
+import { findNthUserMessageStartIdx, formatAgentChatLogFromIndex, parseInWorldTime } from './memo-processor.js';
+
+export const DEFAULT_MAP_EVOLUTION_LOOKBACK = 20;
+
+/**
+ * Clamp Map Evolution story lookback to 0–100 user turns.
+ * 0 means skip recent story entirely (do not treat as "from the start of chat").
+ */
+export function normalizeMapEvolutionLookback(value, fallback = DEFAULT_MAP_EVOLUTION_LOOKBACK) {
+    if (value == null || value === '') return fallback;
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(100, n));
+}
+
+/** Per-run override wins; otherwise the settings Story Lookback. */
+export function resolveMapEvolutionLookback(settings, lookback = null) {
+    return normalizeMapEvolutionLookback(
+        lookback != null && lookback !== '' ? lookback : settings?.mapEvolutionLookback,
+        DEFAULT_MAP_EVOLUTION_LOOKBACK,
+    );
+}
+
+/**
+ * Recent chat supplied to Map Evolution. Empty when lookback is 0.
+ * Every due site receives the same window; the prompt filters to facts for THIS map.
+ * @param {any[]} chat
+ * @param {object} [settings]
+ * @param {number|null} [lookback] Per-run override (Direct Command).
+ */
+export function formatMapEvolutionRecentStory(chat, settings, lookback = null) {
+    const turns = resolveMapEvolutionLookback(settings, lookback);
+    const messages = Array.isArray(chat) ? chat : [];
+    if (!turns || !messages.length) return '';
+    return formatAgentChatLogFromIndex(
+        messages,
+        findNthUserMessageStartIdx(messages, turns),
+        !!settings?.routerIncludeHidden,
+        false,
+    );
+}
 
 export function isEvolutionNoop(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -89,14 +129,32 @@ export function resolvePlayerBubble(document, currentLocation, { combatActive = 
     };
 }
 
+/**
+ * Mark the unique current Evolution site from the footer site-root path.
+ * Placement on other maps (a trail BUILDING named after this site, a shared
+ * room name) must not also flag those maps current or steal the on-site timer.
+ */
+export function annotateEvolutionSitePresence(sites, currentLocation) {
+    const rows = Array.isArray(sites) ? sites : [];
+    const active = pickActiveSiteForLocation(rows, currentLocation);
+    const currentRoot = String(active?.siteRoot || '').trim();
+    return {
+        currentRoot,
+        sites: rows.map(site => ({
+            ...site,
+            current: dungeonSiteRootsMatch(site.siteRoot, currentRoot),
+        })),
+    };
+}
+
 export const MAP_EVOLUTION_INTERVAL_MAX_HOURS = 168;
 
 /**
  * Clamp an Evolution interval. 0 means "never auto-tick" when allowNever is set.
  * Invalid values fall back rather than becoming 0.
  */
-export function normalizeEvolutionIntervalHours(value, { allowNever = false, fallback = 8 } = {}) {
-    const fallbackHours = Math.max(1, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(Number(fallback) || 8)));
+export function normalizeEvolutionIntervalHours(value, { allowNever = false, fallback = 12 } = {}) {
+    const fallbackHours = Math.max(1, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(Number(fallback) || 12)));
     if (value == null || value === '') return fallbackHours;
     const hours = Math.floor(Number(value));
     if (!Number.isFinite(hours)) return fallbackHours;
@@ -150,17 +208,26 @@ export function setSiteEvolutionIntervalOverride(bySite, siteRoot, hours) {
  */
 export function resolveSiteEvolutionIntervalHours(siteRoot, {
     intervalHours = 12,
-    onSiteIntervalHours = null,
+    onSiteIntervalHours = 1,
+    onSiteIntervalMinutes = 0,
     intervalHoursBySite = {},
     currentRoot = '',
 } = {}) {
     const key = normalizeDungeonLabel(siteRoot);
     const overrides = normalizeEvolutionIntervalOverrides(intervalHoursBySite);
     if (key && Object.prototype.hasOwnProperty.call(overrides, key)) return overrides[key];
-    const offSite = normalizeEvolutionIntervalHours(intervalHours, { allowNever: false, fallback: 8 });
-    const onSite = (onSiteIntervalHours == null || onSiteIntervalHours === '')
-        ? offSite
-        : normalizeEvolutionIntervalHours(onSiteIntervalHours, { allowNever: true, fallback: offSite });
+    const offSite = normalizeEvolutionIntervalHours(intervalHours, { allowNever: false, fallback: 12 });
+    const rawOnSiteHours = Number(onSiteIntervalHours);
+    const currentHours = Number.isFinite(rawOnSiteHours)
+        ? Math.max(0, Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, Math.floor(rawOnSiteHours)))
+        : 1;
+    const rawOnSiteMinutes = Number(onSiteIntervalMinutes);
+    const currentMinutes = Number.isFinite(rawOnSiteMinutes)
+        ? Math.max(0, Math.min(59, Math.floor(rawOnSiteMinutes)))
+        : 0;
+    const onSite = currentHours === 0 && currentMinutes === 0
+        ? 0
+        : Math.min(MAP_EVOLUTION_INTERVAL_MAX_HOURS, currentHours + currentMinutes / 60);
     return key && key === normalizeDungeonLabel(currentRoot) ? onSite : offSite;
 }
 
@@ -168,6 +235,7 @@ export function evolutionIntervalHoursForSettings(settings, currentRoot = '') {
     return (siteRoot) => resolveSiteEvolutionIntervalHours(siteRoot, {
         intervalHours: settings?.mapEvolutionIntervalHours,
         onSiteIntervalHours: settings?.mapEvolutionOnSiteIntervalHours,
+        onSiteIntervalMinutes: settings?.mapEvolutionOnSiteIntervalMinutes,
         intervalHoursBySite: settings?.mapEvolutionIntervalHoursBySite,
         currentRoot,
     });
@@ -182,7 +250,7 @@ export function siteEvolutionDue(lastMinutes, currentMinutes, intervalHours) {
     if (!Number.isFinite(currentMinutes) || currentMinutes < 0) return { due: false, baseline: false };
     const hours = Number(intervalHours);
     if (hours === 0) return { due: false, baseline: false };
-    const interval = Math.max(1, Number.isFinite(hours) && hours > 0 ? hours : 4) * 60;
+    const interval = Math.max(1, (Number.isFinite(hours) && hours > 0 ? hours : 4) * 60);
     return { due: (currentMinutes - lastMinutes) >= interval, baseline: false };
 }
 

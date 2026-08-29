@@ -2,6 +2,241 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.71] - 2026-08-29
+
+### Cambiado
+- **Retroceso de historia en Evolución de Mapas**: Ahora se suministra el chat reciente a cada mapa pendiente (20 turnos de usuario por defecto; `0` lo omite). El prompt filtra los hechos relevantes para cada lugar para que los mapas en segundo plano puedan reconciliar ocupaciones desactualizadas cuando la historia menciona que alguien se marchó o se unió al grupo en otra parte. El Actualizador de Mapas sigue ejecutándose solo en el mapa actual.
+- **REMOVE_ASSET en Evolución de Mapas**: La evolución puede purgar registros ACTIVOS obsoletos contradichos por el juego reciente cuando no deba sobrevivir ningún hilo local; las salidas rastreables siguen prefiriendo `LEFT`.
+
+## [2026.8.70] - 2026-08-29
+
+### Cambiado
+- **Tiradas de eventos aleatorios**: `<random_events>` ya no agrupa llamadas a RollTheDice. Los viajes peligrosos aún pueden generar encuentros con enemigos fuera de la tirada de eventos aleatorios.
+
+## [2026.8.69] - 2026-08-29
+
+### Cambiado
+- **Retroceso de historia en Evolución de Mapas**: El chat reciente se suministra solo para el mapa actual y el lugar recién abandonado. Los mapas en segundo plano usan el mismo prompt con un bloque `RECENT STORY` vacío para evitar que se vuelvan centrados en el jugador.
+
+## [2026.8.68] - 2026-08-29
+
+### Añadido
+- **Conexión de Evolución de Mapas**: La Evolución de Mapas tiene su propia ranura de Configuración de Conexión en vez de compartir la del Actualizador de Mapas. Las instalaciones existentes copian la conexión del Actualizador una vez.
+- **Retroceso de historia en Evolución de Mapas**: Retroceso de historia configurable (10 turnos de usuario por defecto; 0 omite la historia reciente) para ciclos programados y manuales. El retroceso del Comando Directo ahora se transfiere correctamente al pase.
+
+### Corregido
+- **Lugar actual en Evolución de Mapas**: La coincidencia del pie de página ya no confunde el EDIFICIO de otro mapa cuyo nombre contenga el lugar actual como la ubicación del grupo.
+
+## [2026.8.67] - 2026-08-28
+
+### Añadido
+- **Marcadores ((SLOTS)) fraccionarios**: Los marcadores de casillas aceptan valores decimales como `1.5/4` y `.25/1`, dibujando una casilla parcial proporcional y mostrando el valor exacto al pasar el cursor.
+
+### Corregido
+- **Vista previa de recoloreado de casillas**: El arrastre de color en vivo ahora pinta `.rt-slot-fill` (incluyendo casillas parciales) en lugar del fondo de caja rellena anterior.
+
+## [2026.8.66] - 2026-08-28
+
+### Cambiado
+- **Árbol congelado 2026.8.60**: Re-publicado el código base de la versión 2026.8.60 bajo una versión superior para que el auto-actualizador de SillyTavern instale este congelado sobre las versiones 2026.8.61–2026.8.65.
+
+## [2026.8.60] - 2026-08-27
+
+### Cambiado
+- **Tour Anti-Museo**: Ajuste de textos de configuración — instrucciones más breves para Chat Completion y longitud de salida, redacción introductoria más suave y reducción del texto de límite de contexto conservando los consejos de resumidor y aciertos de caché.
+
+## [2026.8.59] - 2026-08-26
+
+### Corregido
+- **Tour Anti-Museo en móviles**: La lista de verificación ahora se ajusta a la pantalla y se desplaza dentro del panel en lugar de quedar fuera de pantalla.
+- **Iconos de ocupación de mapa**: Tocar o hacer clic en los iconos de recursos de una sala ya no abre la entrada de lore de ese nodo. Los iconos siguen mostrando el tooltip del recurso; el nodo de la sala en sí sigue siendo el disparador del lore.
+
+## [2026.8.58] - 2026-08-26
+
+### Añadido
+- **Tour Anti-Museo**: Lista de verificación inicial de la API de SillyTavern con marcas de estado en vivo para Chat Completion, llamadas a funciones, contexto ilimitado y longitud de salida de 100k. Se puede cerrar en cualquier momento y reabrir desde General y Visuales → Núcleo y Ramificación → Tour Anti-Museo.
+- **Creador de ficha de narrador**: Creación en un clic de una ficha de personaje narrador vacía con nombre personalizable (por defecto `Game Master`) desde el Tour Anti-Museo, la Guía de Configuración inicial y los ajustes de la extensión.
+
+### Cambiado
+- **Configuración inicial**: La Guía de Configuración ahora explica el rol estilo narrador de libro (no chat uno a uno de personaje) y añade el creador de ficha de narrador junto al paso de Game Master.
+
+## [2026.8.57] - 2026-08-26
+
+### Cambiado
+- **Nombres de lugar en CreateAreaMap**: Una nueva mazmorra o interior puede nombrarse antes de aparecer en el pie de página de Ubicación. Se eliminó la restricción anterior de coincidencia exacta del segmento del pie de página, permitiendo que el DM cree primero el mapa y luego copie el nombre exacto de `site` en el pie de página tras entrar.
+
+## [2026.8.56] - 2026-08-26
+
+### Cambiado
+- **Sistema de XP**: `<xp_system>` ahora usa directrices con viñetas, aclara que la XP debe sentirse significativa al nivel actual y añade ejemplos de recompensas de misiones (ej. misión principal de nivel 6: 5,000–10,000 XP).
+
+## [2026.8.55] - 2026-08-26
+
+### Cambiado
+- **Voz narrativa (Normal)**: La directiva de voz de `<narrative>` ahora permite expandir los diálogos/acciones de {{user}} de forma coherente con su personaje.
+- **Sistema de relaciones**: El valor predeterminado de fábrica ahora es desactivado (`npcRelationshipBars: false`). Las instalaciones existentes se migran a desactivado y reconstruyen las instrucciones del módulo de PNJs.
+
+## [2026.8.54] - 2026-08-26
+
+### Cambiado
+- **Salidas en Evolución de Mapas**: Los ocupantes vivos que abandonan un lugar ahora usan `LEFT` (se acepta `LEAVING` y se almacena como `LEFT`) en lugar de `FLEEING` o `REMOVE_ASSET`. El registro se conserva para que sobrevivan la causa, actor, detalle e hilos; ya no ocupan la sala.
+
+## [2026.8.53] - 2026-08-25
+
+### Cambiado
+- **Referencias al Discord de SillyTavern eliminadas**: La ayuda de inicio, el soporte del README y las directrices del Acompañante de Aventura ya no enlazan ni mencionan el Discord de SillyTavern.
+
+## [2026.8.52] - 2026-08-25
+
+### Corregido
+- **Bucles de contención en la prosa del narrador**: Las instantáneas del narrador, jugador y Actualizador de Mapas ya no generan recursión infinita cuando un ID de recurso colisiona con su sala o la contención entra en bucle.
+
+## [2026.8.51] - 2026-08-25
+
+### Corregido
+- **Desbordamiento de pila en Detalles de Mapa**: El anidamiento del inspector de recursos ya no entra en recursión infinita cuando la contención entra en bucle o ante IDs duplicados/vacíos.
+
+## [2026.8.50] - 2026-08-25
+
+### Cambiado
+- **Frecuencia de Evolución de Mapas**: Los mapas en segundo plano ahora tienen un intervalo predeterminado de 12 horas. El mapa actual tiene 1 hora por defecto, con minutos opcionales y un preajuste de detalle de Alto Dinamismo vs Estándar.
+
+### Corregido
+- **Lag al pasar el cursor en Detalles de Mapa**: Las tarjetas emergentes de recursos se mantienen en el cuerpo del documento como un popover en lugar de vivir dentro del modal.
+- **Barras de desplazamiento en tooltips y superposiciones de Detalles de Mapa**: Se restauró el fondo del inspector y se dimensionaron los tooltips popover para no cubrir el menú ni mostrar barras de desplazamiento.
+
+## [2026.8.49] - 2026-08-25
+
+### Corregido
+- **Presentes Ahora ignora opciones CYOA**: Los nombres que aparecen únicamente dentro de bloques no utilizados de opciones/botones CYOA ya no cuentan como presencia en escena.
+
+## [2026.8.48] - 2026-08-25
+
+### Cambiado
+- **Guía de resumidor en inicio**: La nota de Cómo Funciona indica que un resumidor es altamente recomendable (ej. Summaryception) para ocultar mensajes literales y que el narrador solo vea los turnos recientes.
+
+## [2026.8.47] - 2026-08-25
+
+### Cambiado
+- **Edición directa de imágenes en Visuales / Mapa**: Al hacer clic en el arte de la ubicación activa se abre directamente su ventana de generación y gestión de imágenes.
+- **Acceso directo a Temas de Mapas**: General y Visuales → Apariencia de la UI ahora enlaza directamente al cajón canónico de Temas de Mapas en Mapas Persistentes.
+
+## [2026.8.46] - 2026-08-25
+
+### Añadido
+- **Texturas de fondo opcionales para mapas**: Los Temas de Mapas permiten colocar una imagen subida o mediante URL HTTP(S) detrás de cada grafo de mapa persistente. Una superposición de color del lienzo en vivo controla la legibilidad, y los preajustes personalizados conservan tanto la textura como la opacidad de la superposición.
+
+## [2026.8.45] - 2026-08-25
+
+### Corregido
+- **Lag al pasar el cursor sobre recursos del mapa**: Se eliminó la sombra compuesta CSS por icono y se optimizó la reconstrucción de la tarjeta flotante al mover el puntero sobre los recursos del nodo.
+
+## [2026.8.44] - 2026-08-25
+
+### Cambiado
+- **Prompt de seguimiento de relaciones**: `<relationship_tracking>` del narrador guía la emisión/retención desde el perfil permanente inyectado del PNJ, permite puntos negativos y aclara que Afecto no se limita a acciones explícitamente románticas.
+
+## [2026.8.43] - 2026-08-25
+
+### Añadido
+- **Interruptor de retroceso de historia para retratos**: Los ajustes de Retratos e Imágenes de Ubicación ahora permiten generar retratos de personajes/PNJs únicamente a partir de la ficha. Desactivado por defecto; al activarse, se incluye el retroceso del chat (5 mensajes por defecto).
+
+### Cambiado
+- **Título del cajón de ajustes**: Renombrado Retratos a Retratos e Imágenes de Ubicación.
+
+### Corregido
+- **Desbordamiento de recursos en nodos de mapa**: Los nodos congestionados muestran un icono menos para que la insignia +N permanezca dentro del borde, y al pasar el cursor sobre +N se listan los recursos ocultos.
+
+## [2026.8.42] - 2026-08-25
+
+### Añadido
+- **Ajustes unificados de fichas de PNJ y PJ**: La ventana emergente de ajustes de ficha en Registros de Campaña y el cajón de ajustes ahora exponen editores de secciones tanto para PNJ como para Personaje Jugador.
+
+### Corregido
+- **Persistencia de selecciones de Evolución de Mapas**: El alcance de ciclos, conteo, aleatorización y lugares seleccionados se conservan en la partición del chat activo y sobreviven a recargas inmediatas.
+
+## [2026.8.41] - 2026-08-24
+
+### Añadido
+- **Tema de mapa Azul y Blanco**: Añadida la paleta Azul y Blanco como preajuste de fábrica.
+- **Color de cuadro de texto independiente**: Los cuadros de texto de recursos del mapa ahora tienen su propio color de tema en lugar de heredar el lienzo.
+
+## [2026.8.40] - 2026-08-24
+
+### Añadido
+- **Temas de Mapas Persistentes**: La parte inferior de Mapas Persistentes ahora proporciona controles de color en vivo para el lienzo, áreas, rutas y cada tipo de recurso. Incluye los temas de fábrica Ascua (Ember), Plano (Blueprint), Verdeante (Verdant) y Pergamino (Parchment), además de preajustes guardados del usuario.
+
+### Cambiado
+- **Botón maestro único de encendido**: Se eliminó el botón ⏻ del encabezado del Agente de Lorebook. El botón principal ⏻ del panel (y Habilitar Multihog Framework en ajustes) ahora apaga toda la extensión por completo — detiene el Rastreador de Estado, CYOA, ritmo, Agente de Lorebook e inyección de mapas, restaura el prompt Main respaldado y cancela ejecuciones activas.
+- **Título del encabezado del agente**: Renombrado a "Agente de Lorebook y Mapas".
+- **Estilos de imagen de retrato y ubicación**: Selector de estilos de arte ubicado arriba de las plantillas con explicación clara de guardado y carga.
+- **Aplicar Conexión a Todos**: Conexiones y Modelos incluye un cuadro para copiar la configuración de conexión de una función a todas las conexiones de agentes de Multihog.
+
+## [2026.8.37] - 2026-08-24
+
+### Corregido
+- **CYOA respeta el apagado del Rastreador de Estado**: Apagar el Rastreador de Estado (`settings.enabled`) detiene la inyección de `<CYOA_mode>` y la vinculación de botones de elección CYOA.
+
+## [2026.8.36] - 2026-08-24
+
+### Corregido
+- **Inicio de vinculación de chat a prueba de recargas**: La persistencia permanece cerrada hasta que tanto la configuración de SillyTavern como la proyección real del chat estén listas, previniendo sobreescrituras indebidas entre particiones de chat.
+
+## [2026.8.35] - 2026-08-24
+
+### Cambiado
+- **Campo CORE de Especie de PNJ**: La guía de fábrica de Especie incluye género (junto con raza/subtipo).
+
+## [2026.8.34] - 2026-08-24
+
+### Corregido
+- **Nivel de Acción Instantánea**: Ya no hereda el menú desplegable de nivel de Otras Formas de Empezar. Cada ejecución genera un nivel aleatorio del 1 al 10.
+
+## [2026.8.33] - 2026-08-24
+
+### Cambiado
+- **Arquitecto de Mapas en dos fases**: La generación inicial valida y bloquea una topología de solo áreas/conexiones antes de una solicitud separada de colocación de recursos.
+
+## [2026.8.32] - 2026-08-24
+
+### Corregido
+- **Prompt de mapa vs. descripción almacenada**: `CreateAreaMap` separa un `prompt` privado detallado de `brief_description` para evitar copiar prompts enteros en el JSON persistente.
+- **Notificación única de Arquitecto de Mapas**: `CreateAreaMap` utiliza únicamente la notificación de ciclo de vida del Arquitecto de Mapas.
+
+## [2026.8.31] - 2026-08-31
+
+### Añadido
+- **Preajustes de estilo artístico para prompts de retratos**: Plantillas de estilo de fábrica (Fantasía por Defecto, Anime, Fotorrealista, Pintura al Óleo, Cómic, Acuarela, Fantasía Oscura).
+
+## [2026.8.29] - 2026-08-29
+
+### Corregido
+- **Aislamiento de cartuchos en Sala de Control**: La edición o bloqueo de secciones se enfoca únicamente en el cartucho activo.
+
+### Cambiado
+- **`<narrative>` del Narrador**: Reglas de autonomía de PNJ en viñetas más claras, clarificando la no-omnisciencia.
+
+## [2026.8.27] - 2026-08-27
+
+### Añadido
+- **Consola del Agente por pestañas**: Cajón de consola con pestañas para Rastreador de Estado, Agente de Lorebook, Actualizador de Mapas, Evolución de Mapas y Arquitecto de Mapas.
+- **Terminal / Prompt Directo**: Campos de comando directo dedicados en cada pestaña del terminal.
+
+### Corregido
+- **Objetivo directo de sub-mapas en Arquitecto de Mapas**: Comandos explícitos `Create INTERIOR/DUNGEON/SETTLEMENT map for "Site Name"` bloquean el sitio nombrado y tipo solicitado.
+- **Anidamiento de mapas en tres niveles**: Mapas de ASENTAMIENTO, MAZMORRA e INTERIOR admiten sub-mapas hasta tres niveles de profundidad.
+
+## [2026.8.24.16] - 2026-08-23
+
+### Cambiado
+- **Prompt directo del Actualizador de Mapas**: Comandos directos usan un prompt de sistema/solicitud compacto dedicado.
+
+## [2026.8.24.15] - 2026-08-23
+
+### Corregido
+- **Salidas de mapas en Actualizador de Mapas**: Salir de un lugar fuerza un pase de ocupación final para limpiar PNJs que partieron con el jugador.
+- **Miembros del GRUPO en mapas**: Un CREATURE que se une a `[PARTY]` se elimina del mapa con `REMOVE_ASSET`.
+
 ## [2026.8.24.14] - 2026-08-23
 
 ### Added

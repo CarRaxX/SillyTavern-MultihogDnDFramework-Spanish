@@ -50,7 +50,7 @@ describe('onboarding Player Card and ST persona options', () => {
         );
     });
 
-    it('includes numbered onboarding help with embedded video, Discord, and CHAT links', () => {
+    it('includes numbered onboarding help with embedded video and CHAT links', () => {
         const html = renderMemoAsCards('', null, {});
 
         expect(html).toContain('Need help? Try these:');
@@ -58,9 +58,7 @@ describe('onboarding Player Card and ST persona options', () => {
         expect(html).toContain('href="https://www.youtube.com/watch?v=82Lt9pRYFS0"');
         expect(html).toContain('id="rt-onboarding-open-chat"');
         expect(html).toContain('Adventure Companion');
-        expect(html).toContain('href="https://discord.gg/sillytavern"');
-        expect(html).toContain('SillyTavern Discord');
-        expect(html).toContain('extensions subforum');
+        expect(html).not.toContain('SillyTavern Discord');
         expect(html).not.toContain('Hell, head there anyway!');
         expect(html).not.toContain('Need help? Open');
     });
@@ -85,17 +83,22 @@ describe('onboarding Player Card and ST persona options', () => {
         expect(html).toContain('Persistent Maps section of the settings');
         expect(html).toContain('Multihog D&amp;D Framework auto-applies its own system prompt.');
         expect(html).toContain('General &amp; Visuals -> Core -> Restore backup to Main.');
+        expect(html).toContain('A summarizer is <b>mandatory</b> for this extension to compress the context.');
+        expect(html).toContain('href="https://github.com/Lodactio/Extension-Summaryception"');
+        expect(html).toContain('hides verbatim messages');
     });
 
-    it('lists Function Calling first in the Setup Guide', () => {
+    it('lists Chat Completion API before Function Calling in the Setup Guide', () => {
         const html = renderMemoAsCards('', null, {});
         const setupIndex = html.indexOf('<span>Setup Guide</span>');
+        const apiIndex = html.indexOf('API must be Chat Completion');
         const functionIndex = html.indexOf('Function Calling');
         const narratorCardIndex = html.indexOf('Leave the card content empty');
         const instantIndex = html.indexOf('Instant Action to get started quicker');
 
         expect(setupIndex).toBeGreaterThanOrEqual(0);
-        expect(functionIndex).toBeGreaterThan(setupIndex);
+        expect(apiIndex).toBeGreaterThan(setupIndex);
+        expect(functionIndex).toBeGreaterThan(apiIndex);
         expect(narratorCardIndex).toBeGreaterThan(functionIndex);
         expect(instantIndex).toBeGreaterThan(narratorCardIndex);
         expect(html).toContain('Text command');
@@ -104,11 +107,33 @@ describe('onboarding Player Card and ST persona options', () => {
         expect(html).not.toContain('Leave the card fields empty');
     });
 
+    it('offers a named narrator card creator in the Setup Guide', () => {
+        const html = renderMemoAsCards('', null, {});
+
+        expect(html).toContain('id="rt-onboarding-create-gm"');
+        expect(html).toContain('id="rt-onboarding-gm-name"');
+        expect(html).toContain('value="Game Master"');
+        expect(html).toContain('Create narrator card');
+        expect(html).toContain('attributed to a narrator, not a single character');
+        expect(html).toContain('Leave the card content empty');
+    });
+
     it('links the startup welcome note to the GitHub releases page', () => {
         const html = renderMemoAsCards('', null, {});
 
         expect(html).toContain('Welcome to Multihog D&D Framework!');
         expect(html).toContain('href="https://github.com/MultihogAurelius/SillyTavern-MultihogDnDFramework/releases"');
         expect(html).toContain('Releases section of the GitHub page');
+    });
+
+    it('puts a Discord join badge at the top left of the startup menu', () => {
+        const html = renderMemoAsCards('', null, {});
+        const discordAt = html.indexOf('class="rt-discord-btn"');
+        const bmcAt = html.indexOf('class="rt-bmc-btn"');
+
+        expect(discordAt).toBeGreaterThan(-1);
+        expect(bmcAt).toBeGreaterThan(discordAt);
+        expect(html).toContain('href="https://discord.gg/bgjAeWEc2p"');
+        expect(html).toContain('img.shields.io/badge/Discord-Join%20Server-5865F2');
     });
 });

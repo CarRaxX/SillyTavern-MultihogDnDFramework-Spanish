@@ -68,21 +68,25 @@ export function wireAgentMapEvolution({
         const lastEl = agentPanel.querySelector('#rt-agent-map-evo-last-fired');
         const nextEl = agentPanel.querySelector('#rt-agent-map-evo-next-fire');
         const badge = agentPanel.querySelector('#rt-agent-map-evo-enabled-badge');
-        if (lastEl) lastEl.textContent = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Never';
+        if (lastEl) lastEl.textContent = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Nunca';
         if (nextEl) nextEl.textContent = schedule.nextMins >= 0 ? formatInWorldTime(schedule.nextMins) : '—';
         if (badge) {
             const on = s.mapEvolutionEnabled !== false;
-            badge.textContent = on ? 'ON' : 'OFF';
+            badge.textContent = on ? 'ACTIVADO' : 'DESACTIVADO';
             badge.style.cssText = on ? BADGE_ON : BADGE_OFF;
         }
 
         const intervalInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-interval'));
         if (intervalInp && document.activeElement !== intervalInp) {
-            intervalInp.value = String(s.mapEvolutionIntervalHours ?? 8);
+            intervalInp.value = String(s.mapEvolutionIntervalHours ?? 12);
         }
         const onSiteInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-onsite-interval'));
         if (onSiteInp && document.activeElement !== onSiteInp) {
-            onSiteInp.value = String(s.mapEvolutionOnSiteIntervalHours ?? 8);
+            onSiteInp.value = String(s.mapEvolutionOnSiteIntervalHours ?? 1);
+        }
+        const onSiteMinutesInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-onsite-minutes'));
+        if (onSiteMinutesInp && document.activeElement !== onSiteMinutesInp) {
+            onSiteMinutesInp.value = String(s.mapEvolutionOnSiteIntervalMinutes ?? 0);
         }
         const scopeSel = /** @type {HTMLSelectElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-tick-scope'));
         if (scopeSel && document.activeElement !== scopeSel) {
@@ -104,7 +108,7 @@ export function wireAgentMapEvolution({
     if (intervalInp) {
         intervalInp.addEventListener('change', () => {
             const s = getSettings();
-            s.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(intervalInp.value, 10) || 8));
+            s.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(intervalInp.value, 10) || 12));
             intervalInp.value = String(s.mapEvolutionIntervalHours);
             saveSettings();
             $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours);
@@ -121,12 +125,27 @@ export function wireAgentMapEvolution({
         onSiteInp.addEventListener('change', () => {
             const s = getSettings();
             const parsed = parseInt(onSiteInp.value, 10);
-            s.mapEvolutionOnSiteIntervalHours = parsed === 0
-                ? 0
-                : Math.max(1, Math.min(168, Number.isFinite(parsed) ? parsed : 12));
+            s.mapEvolutionOnSiteIntervalHours = Math.max(0, Math.min(168, Number.isFinite(parsed) ? parsed : 1));
             onSiteInp.value = String(s.mapEvolutionOnSiteIntervalHours);
             saveSettings();
             $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours);
+            if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
+                runtimeState.updateMapEvolutionScheduleDisplayRef();
+            } else {
+                updateAgentMapEvolutionStatus();
+            }
+        });
+    }
+
+    const onSiteMinutesInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-map-evo-onsite-minutes'));
+    if (onSiteMinutesInp) {
+        onSiteMinutesInp.addEventListener('change', () => {
+            const s = getSettings();
+            const parsed = parseInt(onSiteMinutesInp.value, 10);
+            s.mapEvolutionOnSiteIntervalMinutes = Math.max(0, Math.min(59, Number.isFinite(parsed) ? parsed : 0));
+            onSiteMinutesInp.value = String(s.mapEvolutionOnSiteIntervalMinutes);
+            saveSettings();
+            $('#rpg_map_evolution_onsite_interval_minutes').val(s.mapEvolutionOnSiteIntervalMinutes);
             if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
                 runtimeState.updateMapEvolutionScheduleDisplayRef();
             } else {
@@ -181,11 +200,11 @@ export function wireAgentMapEvolution({
             const { isMapUpdaterRunning } = await import('../../../map-updater.js');
             const { isRouterRunning } = await import('../../../router.js');
             if (isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning()) {
-                toastr.warning('An agent is already running.', 'Map Evolution');
+                toastr.warning('Ya hay un agente en ejecución.', 'Evolución de Mapas');
                 return;
             }
             /** @type {HTMLButtonElement} */ (fireNowBtn).disabled = true;
-            fireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Evolving…';
+            fireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Evolucionando…';
             try {
                 const result = typeof runtimeState.runMapEvolutionPassRef === 'function'
                     ? await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true })
@@ -196,29 +215,29 @@ export function wireAgentMapEvolution({
                 }
                 const skipped = result?.skipped;
                 if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
-                    toastr.warning('Persistent Maps is off.', 'Map Evolution');
+                    toastr.warning('Mapas Persistentes está desactivado.', 'Evolución de Mapas');
                 } else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites' || skipped === 'no_selection') {
-                    toastr.warning('No mapped site to evolve.', 'Map Evolution');
+                    toastr.warning('No hay ningún lugar mapeado para evolucionar.', 'Evolución de Mapas');
                 } else if (skipped === 'disabled') {
-                    toastr.warning('Map Evolution is disabled.', 'Map Evolution');
+                    toastr.warning('La Evolución de Mapas está desactivada.', 'Evolución de Mapas');
                 } else if (skipped === 'busy') {
-                    toastr.warning('An agent is already running.', 'Map Evolution');
+                    toastr.warning('Ya hay un agente en ejecución.', 'Evolución de Mapas');
                 } else if (skipped === 'stopped') {
-                    toastr['info']('Stopped.', 'Map Evolution');
+                    toastr['info']('Detenido.', 'Evolución de Mapas');
                 } else if (result?.baseline) {
-                    toastr['info']('Interval baseline stamped. Evolution will fire after the interval elapses.', 'Map Evolution');
+                    toastr['info']('Línea base de intervalo registrada. La evolución se activará tras transcurrir el intervalo.', 'Evolución de Mapas');
                 } else if (result?.ok && result?.applied === 0) {
-                    toastr['info']('Nothing durable changed.', 'Map Evolution');
+                    toastr['info']('No hubo cambios duraderos.', 'Evolución de Mapas');
                 } else if (result?.ok) {
-                    toastr['success']('Map Evolution applied.', 'Map Evolution');
+                    toastr['success']('Evolución de Mapas aplicada.', 'Evolución de Mapas');
                 } else {
-                    toastr.error('Could not apply a valid evolution update.', 'Map Evolution');
+                    toastr.error('No se pudo aplicar una actualización de evolución válida.', 'Evolución de Mapas');
                 }
             } catch (e) {
-                toastr.error(`Map Evolution error: ${e.message}`, 'Map Evolution');
+                toastr.error(`Error en la Evolución de Mapas: ${e.message}`, 'Evolución de Mapas');
             } finally {
                 /** @type {HTMLButtonElement} */ (fireNowBtn).disabled = false;
-                fireNowBtn.innerHTML = '<i class="fa-solid fa-map-location-dot"></i> Evolve Now';
+                fireNowBtn.innerHTML = '<i class="fa-solid fa-map-location-dot"></i> Evolucionar Ahora';
             }
         });
     }
@@ -234,7 +253,7 @@ export function wireAgentMapEvolution({
             if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
                 runtimeState.updateMapEvolutionScheduleDisplayRef();
             }
-            toastr['info']('Map Evolution timeline reset. Next interval starts from the current time.', 'Map Evolution');
+            toastr['info']('Cronología de Evolución de Mapas restablecida. El próximo intervalo comenzará desde la hora actual.', 'Evolución de Mapas');
         });
     }
 

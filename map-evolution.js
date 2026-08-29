@@ -1,8 +1,8 @@
 /**
  * Map Evolution — off-screen site simulation with lazy World Report pressure.
  *
- * Separate module from Map Updater occupancy: own prompt, own cadence, same
- * transaction API. Never mixed into the occupancy request.
+ * Separate module from Map Updater occupancy: own prompt, own cadence, own
+ * connection, same transaction API. Never mixed into the occupancy request.
  */
 import { getEffectiveRouterCampaignPrefix, getSettings, hydrateWorldProgressionFromChatState, persistMapEvolutionState } from './state-manager.js';
 import { runtimeState } from './src/app/runtime-state.js';
@@ -10,19 +10,22 @@ import { sendStateRequest, isCombatActive } from './llm-client.js';
 import { extractCurrentTimeStr } from './memo-processor.js';
 import {
     applyDungeonMapTransaction,
+    dungeonSiteRootsMatch,
     formatDungeonMapForEvolution,
     normalizeDungeonLabel,
     normalizeMapSiteKind,
-    resolveCurrentMapPlacement,
+    pickActiveSiteForLocation,
 } from './dungeon-reality.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
+import { selectMapEvolutionSystemPrompt } from './map-evolution-direct-prompt.js';
 import {
     appendEvolutionBacklogEntry,
     appendEvolutionThreads,
     applyCompressedThreadDigests,
+    annotateEvolutionSitePresence,
     buildReportOutcomeStamps,
     describeEvolutionBacklog,
     describeEvolutionThreads,
@@ -33,6 +36,7 @@ import {
     formatClosedThreadsForCompression,
     formatEvolutionElapsedMinutes,
     formatEvolutionThreadLine,
+    formatMapEvolutionRecentStory,
     isEvolutionNoop,
     normalizeEvolutionTickScope,
     normalizeMapEvolutionCompressThreshold,
@@ -101,14 +105,14 @@ function broadcastStep(type, content, metadata = {}) {
 
 function requestSettings(settings) {
     return {
-        connectionSource: settings.mapRuntimeConnectionSource || 'default',
-        connectionProfileId: settings.mapRuntimeConnectionProfileId || '',
-        completionPresetId: settings.mapRuntimeCompletionPresetId || '',
-        ollamaUrl: settings.mapRuntimeOllamaUrl || 'http://localhost:11434',
-        ollamaModel: settings.mapRuntimeOllamaModel || '',
-        openaiUrl: settings.mapRuntimeOpenaiUrl || '',
-        openaiKey: settings.mapRuntimeOpenaiKey || '',
-        openaiModel: settings.mapRuntimeOpenaiModel || '',
+        connectionSource: settings.mapEvolutionConnectionSource || 'default',
+        connectionProfileId: settings.mapEvolutionConnectionProfileId || '',
+        completionPresetId: settings.mapEvolutionCompletionPresetId || '',
+        ollamaUrl: settings.mapEvolutionOllamaUrl || 'http://localhost:11434',
+        ollamaModel: settings.mapEvolutionOllamaModel || '',
+        openaiUrl: settings.mapEvolutionOpenaiUrl || '',
+        openaiKey: settings.mapEvolutionOpenaiKey || '',
+        openaiModel: settings.mapEvolutionOpenaiModel || '',
         maxTokens: Math.max(1000, Number(settings.mapEvolutionMaxTokens) || 25000),
         debugMode: !!settings.debugMode,
     };
@@ -351,13 +355,54 @@ function triggerHeadline(trigger) {
     return 'INTERVAL RESTLESSNESS';
 }
 
-function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads }) {
+function formatDirectInstructionBlock(directInstruction) {
+    const text = String(directInstruction || '').trim();
+    if (!text) return '';
+    return `\n## DIRECT INSTRUCTION (THIS PASS ONLY)\nFollow this user instruction for this evolution pass. It does not override JSON output rules or the durable-only contract.\n${text}\n`;
+}
+
+function evolutionDetailPolicy(partyIsHere, onSitePreset) {
+    if (!partyIsHere || onSitePreset === 'standard') return '';
+    return `## LEVEL OF DETAIL — CURRENT MAP (TACTICAL AND FELT)
+The party is inside this map. Outside the frozen player area, make this site feel actively alive at close range. Prefer one or two meaningful, causal developments the party could discover soon: patrol or creature movement, a spreading alarm, pursuit, reinforcement, faction reaction, a newly guarded or breached route, a worsening or subsiding hazard, relocation, or another short-term project. Be bolder and more encounter-rich than an off-site pass while scaling everything to the actual elapsed time.
+
+Do not manufacture arbitrary catastrophe, mutate the frozen area, narrate events the party directly witnessed, or contradict the immediate scene. Map Updater owns observed/current-area events. Your job is durable state just beyond the player bubble whose consequences can become noticeable during continued exploration. Noop remains valid when nothing has a plausible cause, but do not default to quiet merely because the party is nearby.`;
+}
+
+function formatRecentStoryBlock(recentStory) {
+    return `## RECENT STORY
+${recentStory || '(None — lookback is 0 or chat is empty.)'}
+This block may be empty. When present, it is global recent play — not pre-filtered to this site. Apply only facts that belong to THIS map: occupants who left, went elsewhere, joined the party away from here, died off-map, or other contradictions with CURRENT MAP. Ignore unrelated events on other maps. Map Updater runs only on the party's current map; Map Evolution runs on every due map and must reconcile stale ACTIVE occupancy when play says someone is gone. Do not restage events in the frozen bubble. When empty, evolve from the map, time window, backlog, threads, and World Reports only.`;
+}
+
+function initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, onSitePreset = 'dynamic', timeWindow, backlog, threads, directInstruction = '', recentStory = '' }) {
     const kind = normalizeMapSiteKind(site.document?.kind);
     const bubbleLine = bubble.area
         ? `${bubble.area.id} (${bubble.area.name})${bubble.combatActive ? ' — combat is active' : ''}`
         : '(Party is not inside this site. No freeze.)';
     const reportBlock = formatWorldReportPressures(worldReports);
     const digestBlock = String(digest || '').trim() || '(None yet this period.)';
+    const instruction = String(directInstruction || '').trim();
+    const detailPolicy = evolutionDetailPolicy(partyIsHere, onSitePreset);
+    if (instruction) {
+        return `${triggerHeadline(trigger)}
+Exact site root: ${site.siteRoot}
+Kind: ${kind}
+
+## PLAYER BUBBLE (FROZEN)
+${partyIsHere ? bubbleLine : '(Party is not inside this site. No freeze.)'}
+Do not MOVE, ADD, SET, or REMOVE assets in the frozen area. Do not SET_CONNECTION or SET_AREA on it.
+
+## CURRENT LOCATION
+${currentLocation || 'Unknown'}
+
+## CURRENT MAP
+${formatDungeonMapForEvolution(site.document, partyIsHere ? currentLocation : '')}
+
+${formatRecentStoryBlock(recentStory)}
+${formatDirectInstructionBlock(instruction)}
+Output only the required JSON object. Apply only the direct instruction. Prefer {"noop":true} when the instruction cannot be applied safely.`;
+    }
     return `${triggerHeadline(trigger)}
 Exact site root: ${site.siteRoot}
 Kind: ${kind}
@@ -368,8 +413,7 @@ Last Evolved for this site: ${timeWindow.lastEvolved}
 Current in-world time: ${timeWindow.currentTime}
 Elapsed since Last Evolved: ${timeWindow.elapsed}
 Scale both the amount and the breadth of change to this elapsed duration. Minutes: one local reaction can be enough. Hours with several living CREATURE/GROUP assets: several operations in this one transaction when several occupants would plausibly stir; staying put is valid. Do not use a single asset's patrol commute as the entire result. A manual or site-exit trigger does not imply that a full interval has passed. If elapsed time is unknown, do not invent a long unattended period.
-
-## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
+${detailPolicy ? `\n${detailPolicy}\n` : '\n'}## ACCUMULATED EVOLUTION BACKLOG (THIS SITE)
 ${formatEvolutionBacklog(backlog, site.siteRoot)}
 
 Judge the latest interval together with this trajectory. A short latest interval limits what happened during that interval, but it does not erase accumulated quiet time or prior developments. Do not choose noop solely because the latest interval is short. Let repeated quiet checkpoints build enough opportunity for a meaningful change, and let prior commits continue, complicate, culminate, resolve, or reverse rather than mechanically repeating them.
@@ -389,6 +433,8 @@ ${currentLocation || 'Unknown'}
 ## CURRENT MAP
 ${formatDungeonMapForEvolution(site.document, partyIsHere ? currentLocation : '')}
 
+${formatRecentStoryBlock(recentStory)}
+
 ## WORLD REPORT PRESSURES
 ${reportBlock}
 
@@ -400,7 +446,7 @@ ${digestBlock}
 Output only the required JSON object. Include report_outcomes when World Report pressures are supplied: [{"report_id":"exact supplied id","status":"materialized|already_realized_by_play|considered"}]. Prefer durable change when in-world time has passed, but only if it makes logical and narrative sense for this site. Hours plus several living occupants may yield several operations when several would stir; idle occupants may stay. Use {"noop":true} only when this site would not plausibly stir.`;
 }
 
-function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads, priorOutput, errors, attempt }) {
+function correctionPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, onSitePreset = 'dynamic', timeWindow, backlog, threads, priorOutput, errors, attempt, directInstruction = '', recentStory = '' }) {
     return `CORRECTION PASS ${attempt}
 Your previous map evolution was rejected. Return a complete corrected JSON object, not a patch. Reuse the same operation_id unless the error says to mint a new one.
 
@@ -414,7 +460,7 @@ Field reminder: Every operation needs cause. DEAD/DESTROYED also needs actor ("p
 PREVIOUS OUTPUT
 ${priorOutput}
 
-${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads })}`;
+${initialUserPrompt({ site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, onSitePreset, timeWindow, backlog, threads, directInstruction, recentStory })}`;
 }
 
 function swipeSnapshotKey(ctx, message, swipeId = message?.swipe_id ?? 0) {
@@ -456,15 +502,7 @@ export async function maybeRollbackMapEvolutionForSwipe(msg) {
 }
 
 function activeSiteFrom(loaded, currentLocation) {
-    if (!loaded?.sites?.length) return null;
-    const here = loaded.sites.find(site =>
-        site.siteRoot && currentLocation && normalizeDungeonLabel(currentLocation).includes(normalizeDungeonLabel(site.siteRoot)),
-    );
-    if (here) return here;
-    return loaded.sites.find(site => {
-        const placement = resolveCurrentMapPlacement(site.document, currentLocation);
-        return !!placement.area;
-    }) || null;
+    return pickActiveSiteForLocation(loaded?.sites || [], currentLocation);
 }
 
 async function evolveOneSite({
@@ -474,16 +512,16 @@ async function evolveOneSite({
     worldReports,
     digest,
     currentLocation,
+    currentRoot = '',
     currentTime,
     settings,
     signal,
     snapshot,
     ctx,
+    directInstruction = '',
+    recentStory = '',
 }) {
-    const partyIsHere = !!(currentLocation && (
-        normalizeDungeonLabel(currentLocation).includes(normalizeDungeonLabel(site.siteRoot))
-        || resolveCurrentMapPlacement(site.document, currentLocation).area
-    ));
+    const partyIsHere = dungeonSiteRootsMatch(site.siteRoot, currentRoot);
     const combatActive = partyIsHere && isCombatActive(settings.currentMemo);
     const bubble = partyIsHere
         ? resolvePlayerBubble(site.document, currentLocation, { combatActive })
@@ -503,7 +541,11 @@ async function evolveOneSite({
         settings.mapEvolutionThreadsBySite,
         site.siteRoot,
     );
-    const systemPrompt = `${String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim()}
+    const instruction = String(directInstruction || '').trim();
+    const basePrompt = String(settings.mapEvolutionSystemPrompt || DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT).trim();
+    const systemPrompt = instruction
+        ? selectMapEvolutionSystemPrompt(instruction, basePrompt)
+        : `${basePrompt}
 
 AUTHORITATIVE TIME-SCALE CONTRACT
 - The supplied Last Evolved timestamp is the scheduler watermark for this exact site.
@@ -526,9 +568,17 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
 - Open threads are unfinished plots you may continue. Return to baseline (customary patrol, settled vigil, going back to forage after the disturbance ends) is thread_status resolved, not a new open thread.
 - Omitted thread_status defaults to open — set resolved or transformed explicitly when the plot ends or changes shape.
 - Do not invent a killer when actor is unknown.
-- Third-party killing is allowed when it makes logical and narrative sense.`;
+- Third-party killing is allowed when it makes logical and narrative sense.
+
+AUTHORITATIVE RECENT STORY CONTRACT
+- RECENT STORY may be present or empty. The contract is the same either way.
+- When present, read it as global recent play and apply only facts that affect THIS site.
+- Map Updater does not run on background maps. Reconcile contradictions here: if a CREATURE/GROUP is still ACTIVE on this map but recent play establishes they left, went elsewhere, or joined the party elsewhere, use SET_ASSET LEFT when the identity should stay traceable, or REMOVE_ASSET when play clearly treats them as gone without needing a local record.
+- Do not import unrelated player-centric events from other maps. When empty, do not invent party actions.`;
     let prompt = initialUserPrompt({
-        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
+        site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+        onSitePreset: settings.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic',
+        timeWindow, backlog, threads, directInstruction: instruction, recentStory,
     });
     let lastIssues = [];
     let lastOutput = '';
@@ -552,8 +602,10 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
             lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
-                    priorOutput: output, errors: lastIssues, attempt: attempt + 1,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    onSitePreset: settings.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic',
+                    timeWindow, backlog, threads,
+                    priorOutput: output, errors: lastIssues, attempt: attempt + 1, directInstruction: instruction, recentStory,
                 });
                 continue;
             }
@@ -581,8 +633,10 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
             lastIssues = validation.errors || [];
             if (attempt < MAX_CORRECTION_ATTEMPTS) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
-                    priorOutput: output, errors: lastIssues, attempt: attempt + 1,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    onSitePreset: settings.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic',
+                    timeWindow, backlog, threads,
+                    priorOutput: output, errors: lastIssues, attempt: attempt + 1, directInstruction: instruction, recentStory,
                 });
                 continue;
             }
@@ -599,8 +653,10 @@ AUTHORITATIVE CAUSAL THREAD CONTRACT
             lastIssues = mapResult.errors || [{ code: mapResult.code || 'MAP_COMMIT_FAILED', path: 'map', hint: 'Persistence rejected the transaction.' }];
             if (attempt < MAX_CORRECTION_ATTEMPTS && mapResult.retryable !== false) {
                 prompt = correctionPrompt({
-                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere, timeWindow, backlog, threads,
-                    priorOutput: output, errors: lastIssues, attempt: attempt + 1,
+                    site, trigger, worldReports, digest, bubble, currentLocation, partyIsHere,
+                    onSitePreset: settings.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic',
+                    timeWindow, backlog, threads,
+                    priorOutput: output, errors: lastIssues, attempt: attempt + 1, directInstruction: instruction, recentStory,
                 });
                 continue;
             }
@@ -680,6 +736,8 @@ function dungeonRootsEqual(left, right) {
  *   periodLabel?: string,
  *   isManual?: boolean,
  *   siteRoots?: string[],
+ *   directInstruction?: string,
+ *   lookback?: number|null,
  * }} [options]
  */
 export async function runMapEvolutionPass({
@@ -687,9 +745,12 @@ export async function runMapEvolutionPass({
     periodLabel = '',
     isManual = false,
     siteRoots = null,
+    directInstruction = '',
+    lookback = null,
 } = {}) {
     hydrateWorldProgressionFromChatState();
     const settings = getSettings();
+    const instruction = String(directInstruction || '').trim();
     if (settings.mapEvolutionEnabled === false && !isManual) return { skipped: 'disabled' };
     if (!isLocationMappingEnabled(settings)) return { skipped: 'location_mapping_off' };
     if (_mapEvolutionRunning || _mapEvolutionStarting || isRouterRunning()) {
@@ -703,6 +764,7 @@ export async function runMapEvolutionPass({
         if (!loaded?.sites?.length) return { skipped: 'no_maps' };
 
         const currentLocation = loaded.currentLocation || '';
+        const currentRoot = activeSiteFrom(loaded, currentLocation)?.siteRoot || '';
         const currentTime = periodLabel || currentTimeFrom(settings);
         const currentMinutes = parseInWorldMinutes(currentTime);
         const selected = resolveSitesForPass(loaded, {
@@ -736,6 +798,7 @@ export async function runMapEvolutionPass({
         const results = [];
         const books = loaded.books;
         const recentWorldReports = await loadRecentWorldReports(settings, ctx);
+        const recentStory = formatMapEvolutionRecentStory(ctx.chat, settings, lookback);
 
         for (const site of [...baselineOnly, ...toEvolve]) {
             if (site.stampBaselineOnly) {
@@ -746,14 +809,17 @@ export async function runMapEvolutionPass({
                 site,
                 books,
                 trigger,
-                worldReports: pendingWorldReportsForSite(recentWorldReports, site.siteRoot, settings),
+                worldReports: instruction ? [] : pendingWorldReportsForSite(recentWorldReports, site.siteRoot, settings),
                 digest: digestLines.join('\n'),
                 currentLocation,
+                currentRoot,
                 currentTime,
                 settings,
                 signal,
                 snapshot,
                 ctx,
+                directInstruction: instruction,
+                recentStory,
             });
             results.push(siteResult);
             if (siteResult?.digestLine) digestLines.push(siteResult.digestLine);
@@ -867,19 +933,13 @@ export async function maybeRunMapEvolution() {
 export async function listMappedEvolutionSites() {
     if (!isLocationMappingEnabled(getSettings())) return [];
     const loaded = await loadAllMappedSiteContexts();
-    const currentLocation = loaded?.currentLocation || '';
-    return (loaded?.sites || []).map(site => {
-        const here = !!(currentLocation && (
-            normalizeDungeonLabel(currentLocation).includes(normalizeDungeonLabel(site.siteRoot))
-            || resolveCurrentMapPlacement(site.document, currentLocation).area
-        ));
-        return {
-            siteRoot: site.siteRoot,
-            kind: normalizeMapSiteKind(site.document?.kind),
-            hostSite: String(site.document?.hostSite || '').trim(),
-            current: here,
-        };
-    });
+    const annotated = annotateEvolutionSitePresence(loaded?.sites || [], loaded?.currentLocation || '');
+    return annotated.sites.map(site => ({
+        siteRoot: site.siteRoot,
+        kind: normalizeMapSiteKind(site.document?.kind),
+        hostSite: String(site.document?.hostSite || '').trim(),
+        current: !!site.current,
+    }));
 }
 
 /** Reload one mapped site after an on-demand Evolution pass. */
