@@ -178,7 +178,7 @@ export function buildDefaultSettings() {
 
         panelLayoutMode: 'stack',   // 'stack' = classic vertical stack | 'tabs' = compact tab mode (Character/Combat pinned, rest behind tabs)
 
-        // BETA: global, display-only virtual hosts for related tracker modules.
+        // Global, display-only virtual hosts for related tracker modules.
         // Off by default so existing rendering is byte-for-byte unchanged until opted in.
         displayGroupsEnabled: false,
         displayGroupsShowGaps: false,
@@ -275,6 +275,29 @@ export function buildDefaultSettings() {
 
         pollinationsModel: "zimage",
 
+        /** Optional — anonymous key "0000000000" is used when blank (lower priority/slower queue). */
+        hordeApiKey: "",
+
+        /** Blank = let the AI Horde pick any available model. */
+        hordeModel: "",
+
+        /** er_sde is the AI Horde's standard turbo/distilled-safe sampler name — the server injects its own incompatible 'k_euler_a' default when this is omitted, so always send an explicit value. */
+        hordeSampler: "er_sde",
+
+        /** Anima is a turbo/distilled baseline — its official test fixture uses only 8 steps. */
+        hordeSteps: 8,
+
+        /** Anima's official test fixture uses cfg_scale 1.0 (typical of turbo/distilled models); regular SD1.5/SDXL models want ~7.5. */
+        hordeCfgScale: 1,
+
+        /** Matches Anima's native_resolution (1024) per the AI Horde baseline catalog. */
+        hordeWidth: 1024,
+
+        hordeHeight: 1024,
+
+        /** AI Horde's central validation rejected 'normal' with SchedulerMismatch; Anima shares Qwen-Image's pipeline family, whose published requirements restrict schedulers to 'simple'. */
+        hordeScheduler: "simple",
+
         inventoryWorthMode: "hover",   // 'hover' = worth shown as tooltip only | 'display' = coin badge shown inline
 
         npcCoreSections: [],
@@ -355,6 +378,9 @@ export function buildDefaultSettings() {
 
         /** Instant Action: when true, auto-send "Begin the adventure" after the character is ready. On by default; uncheck to type your own first action. */
         onboardingSendStarterMessage: true,
+
+        /** Instant Action: when true, roll a starting level from 1–10. Off by default so new characters start at Level 1 with 0 XP. */
+        onboardingInstantActionRandomLevel: false,
 
         /** Last Character Creator form values, saved when Generate Character is pressed. */
 
@@ -1391,7 +1417,7 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 
         mapEvolutionEnabled: true,
 
-        mapEvolutionIntervalHours: 12,
+        mapEvolutionIntervalHours: 8,
 
         mapEvolutionOnSiteIntervalHours: 1,
 
@@ -1415,7 +1441,7 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 
         mapEvolutionTickScope: "all",
 
-        mapEvolutionTickCount: 1,
+        mapEvolutionTickCount: 2,
 
         mapEvolutionTickRandomize: true,
 
@@ -1569,7 +1595,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
 /** Latest settings migration version — factory reset skips legacy upgrade paths at or below this. */
 
-export const FACTORY_SETTINGS_VERSION = '2026.8.71';
+export const FACTORY_SETTINGS_VERSION = '2026.8.82';
 
 
 /** Remove extension UI keys from localStorage so a factory reset does not rehydrate stale panel state. */

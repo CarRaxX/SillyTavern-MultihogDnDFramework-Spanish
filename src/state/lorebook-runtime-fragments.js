@@ -48,18 +48,24 @@ export const LOREBOOK_AGENT_FRAGMENT_KEYS = Object.freeze([
 const COMBAT_SCOPE_RULE = `- CRÍTICO — UN COMBATIENTE POR PERFIL: un Perfil de Combate es ÚNICAMENTE el bloque de estadísticas propio de ese combatiente individual (desde su línea "Nombre: PV" hasta su línea "Estado:", nada más). NUNCA copies el encabezado "RONDA DE COMBATE N", los encabezados "ENEMIGOS:/ALIADOS NO DEL GRUPO" ni el bloque de *otro* combatiente en él. Si estás actualizando a Schwarzenegev, el contenido del Perfil de Combate contiene únicamente el bloque de Schwarzenegev; las estadísticas de otros combatientes NO pertenecen a él, aunque aparezcan en la misma sección [COMBAT].`;
 
 export const DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC = `
-## PERFIL DE COMBATE (ESTADO DE COMBATE ACTIVO proporcionado este turno)
-- **PNJs existentes** (en MEMORIA ACTIVA o ARCHIVO): emite \`[[UPDATE_CORE: Nombre PNJ | Combat Profile | estadísticas verídicas de [COMBAT]]]\` — NO un registro completo \`[[NPC:...]]\`.
-- **Combatientes totalmente nuevos** sin entrada existente: incluye \`Combat Profile:\` dentro de \`[CORE]\` en un nuevo registro \`[[NPC:...]]\`.
-- Copia las estadísticas textualmente solo desde ## ESTADO DE COMBATE ACTIVO — nunca infieras de la prosa del DM.
+## PERFIL DE COMBATE (estadísticas mecánicas proporcionadas este turno)
+- Fuentes canónicas, en orden de prioridad:
+  1. ## ESTADO DE COMBATE ACTIVO — para combatientes listados en [COMBAT], copia el bloque propio de ese combatiente textualmente.
+  2. ## ESTADO MECÁNICO DEL GRUPO — para miembros de [PARTY] que YA tengan un Perfil de Combate en MEMORIA ACTIVA, actualiza las estadísticas duraderas (PV máx., BAB/APR, ataque total, CA, salvaciones, atributos, DG, nuevos rasgos de clase/habilidades) para que coincidan con la hoja de [PARTY]. Disparador típico: PARTY LEVEL SYNC / subida de nivel. Mantén el formato del bloque existente; no lo reemplaces por la hoja completa de [PARTY]. NO crees un Perfil de Combate desde [PARTY] si no existía uno previamente. NO reescribas un perfil solo porque cambiaron los PV actuales, PV temporales, estado o ranuras de conjuros.
+- **PNJs existentes** (en MEMORIA ACTIVA o ARCHIVO): emite \`[[UPDATE_CORE: Nombre PNJ | Combat Profile | estadísticas actualizadas]]\` — NO un registro completo \`[[NPC:...]]\`.
+- **Combatientes totalmente nuevos** sin entrada existente: incluye \`Combat Profile:\` dentro de \`[CORE]\` en un nuevo registro \`[[NPC:...]]\`, y solo desde ESTADO DE COMBATE ACTIVO — nunca desde [PARTY].
+- Nunca inventes números de la prosa del DM. PARTY LEVEL SYNC en la narrativa es una señal para leer ## ESTADO MECÁNICO DEL GRUPO.
 ${COMBAT_SCOPE_RULE}
 - Ejemplo: \`[[UPDATE_CORE: Marcus Thorne | Combat Profile | Marcus Thorne: 12/12 HP\\nAtt/def: Longsword (1 attack, +5 / 1d8+2 Slashing) | Chainmail (AC: 15)\\nSaves: Fort +4, Ref +2, Will +1\\nAbilities: Ninguna declarada\\nStatus: Saludable]]\``;
 
 export const DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT = `
-## PERFIL DE COMBATE (ESTADO DE COMBATE ACTIVO proporcionado este turno)
-- **PNJs existentes** (listados en MEMORIA ACTIVA con un ID): usa \`commit({"core": [{"id": "Libro::UID o Nombre PNJ", "field": "Combat Profile", "content": "estadísticas verídicas de [COMBAT]"}]})\`. NO vuelvas a registrar todo el PNJ mediante \`record\` ni incrustes un nuevo bloque \`[CORE]\` en \`update\`.
-- **Combatientes totalmente nuevos** sin entrada aún en el libro de lore: incluye \`Combat Profile:\` dentro de \`[CORE]\` en un elemento \`record\`.
-- Copia las estadísticas textualmente solo desde ## ESTADO DE COMBATE ACTIVO — nunca infieras de la prosa del DM.
+## PERFIL DE COMBATE (estadísticas mecánicas proporcionadas este turno)
+- Fuentes canónicas, en orden de prioridad:
+  1. ## ACTIVE COMBAT STATE — para combatientes listados en [COMBAT], copia el bloque propio de ese combatiente textualmente.
+  2. ## PARTY MECHANICAL STATE — para miembros de [PARTY] con nombre que YA tengan un Perfil de Combate en ACTIVE MEMORY, actualiza las estadísticas duraderas (PV máx., BAB/APR, ataques totales, CA, salvaciones, atributos, DG, nuevos rasgos de clase/habilidades) para que coincidan con la hoja de [PARTY]. Disparador típico: PARTY LEVEL SYNC / subida de nivel. Mantén el formato del bloque existente; no lo reemplaces por la hoja completa de [PARTY]. NO crees un Perfil de Combate desde [PARTY] si no existía uno previamente. NO reescribas un perfil únicamente porque cambiaron los PV actuales, PV temporales, estado o ranuras de conjuros.
+- **PNJs existentes** (listados en ACTIVE MEMORY con un ID): usa \`commit({"core": [{"id": "Libro::UID o Nombre PNJ", "field": "Combat Profile", "content": "estadísticas actualizadas"}]})\`. NO vuelvas a registrar todo el PNJ mediante \`record\` ni incrustes un nuevo bloque \`[CORE]\` en \`update\`.
+- **Combatientes totalmente nuevos** sin entrada aún en el libro de lore: incluye \`Combat Profile:\` dentro de \`[CORE]\` en un elemento \`record\`, y solo desde ACTIVE COMBAT STATE — nunca desde [PARTY].
+- Nunca inventes números de la prosa del DM. PARTY LEVEL SYNC en la narrativa es la señal para leer ## PARTY MECHANICAL STATE.
 ${COMBAT_SCOPE_RULE}
 - Ejemplo (actualizando solo a "Schwarzenegev", ignorando cualquier otro combatiente adyacente): \`commit({"core": [{"id": "Schwarzenegev", "field": "Combat Profile", "content": "Schwarzenegev: 40/45 HP\\nAtt/def: Argument Ender (1 attack, +8 / 2d10+4 Piercing) | Armor (AC: 16)\\nSaves: Fort unknown, Ref unknown, Will unknown\\nAbilities: Ninguna declarada\\nOther: Combatiente aliado temporal\\nStatus: (-) Herido (hasta curarse), Activo (este combate)"}]})\``;
 
@@ -117,12 +123,12 @@ export function expandRelationshipPctPlaceholders(template, max) {
 
 /**
  * @param {Record<string, any>} settings
- * @param {boolean} hasCombat
+ * @param {boolean} hasMechanicalStats — true when [COMBAT] and/or [PARTY] is available this pass
  * @param {'basic'|'agent'} [mode]
  * @returns {string}
  */
-export function resolveCombatProfileGuidance(settings, hasCombat, mode = 'basic') {
-    if (!hasCombat) return '';
+export function resolveCombatProfileGuidance(settings, hasMechanicalStats, mode = 'basic') {
+    if (!hasMechanicalStats) return '';
     const key = mode === 'agent'
         ? 'routerCombatProfileGuidanceAgentTemplate'
         : 'routerCombatProfileGuidanceBasicTemplate';

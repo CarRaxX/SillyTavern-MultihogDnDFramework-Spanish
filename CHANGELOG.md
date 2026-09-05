@@ -2,6 +2,68 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.82] - 2026-09-01
+
+### Corregido
+- **Migración de cola en Evolución de Mapas**: La actualización desde versiones anteriores a 2026.8.80 dejaba `mapEvolutionTickCount` atascado en el valor de fábrica no utilizado `1` bajo el ámbito `all`, debido a que la migración se ejecutaba después de que `settingsVersion` ya se hubiera estampado con la versión de fábrica. Los ciclos de intervalo evolucionaban únicamente un mapa pendiente (y mientras el mapa actual estuviera pendiente, solo ese mapa). La migración de una sola pasada ahora actualiza instalaciones intactas con `all`/`1` a `2`.
+- **Generación de imágenes con AI Horde**: Integrado soporte para AI Horde como motor de generación de imágenes y retratos, incluyendo selección de muestreador, planificador, pasos y dimensiones. Se solucionó el problema por el cual escrituras automáticas de retratos podían guardarse en el chat incorrecto tras cambiar de conversación.
+
+## [2026.8.81] - 2026-08-31
+
+### Cambiado
+- **Etiquetas Alpha / Beta**: Mapas Persistentes, Grupos de Visualización y el Sistema de Relaciones ya no muestran insignias de Alpha o Beta.
+- **Evolución de Mapas**: Se eliminó la recomendación de Gemini Flash / "preferible un modelo rápido" de la configuración y textos de Evolución de Mapas.
+
+## [2026.8.80] - 2026-08-31
+
+### Cambiado
+- **Cola de Evolución de Mapas**: Los ciclos de intervalo ya no evolucionan todos los mapas pendientes en un solo turno. El conjunto de mapas pendientes se recopila por completo, pero solo se procesan N mapas (por defecto 2); los restantes esperan en cola para turnos posteriores. Si el mapa actual está pendiente, siempre toma un espacio prioritario. El valor `0` sigue significando "todos los mapas pendientes este turno".
+- **Descripción General de sitios mapeados**: El parámetro `brief_description` de CreateAreaMap ahora se escribe en el CORE de Ubicación (campo General) en lugar del texto estándar del mapa privado. Una descripción existente redactada manualmente se conserva intacta.
+- **Modo Compacto de GRUPO (PARTY)**: La cabecera del módulo GRUPO incluye un interruptor de Modo Compacto. Cuando está activado, cada miembro muestra únicamente retrato, nombre y PV (ocultando filas de trucos y hechizos por nivel).
+
+## [2026.8.79] - 2026-08-30
+
+### Cambiado
+- **Ritmo / Longitud de Salida**: El valor predeterminado de fábrica vuelve a ser Normal. Los límites de longitud de Salidas Más Cortas causaban omisiones en secuencias de subida de nivel y turnos de combate.
+
+## [2026.8.78] - 2026-08-30
+
+### Cambiado
+- **RNG en Tiempo Estimado de Reserva (ETA)**: La resolución de tareas antes del regreso se adapta a la mecánica RNG activa. Híbrido (Pre-generado + Llamadas a Funciones) utiliza `RollTheDice` fuera de combate; la Cola de RNG es solo para combate en ese modo. Solo Pre-generado sigue extrayendo un d20 de la cola. La sección ensamblada `<bench_ETA_system>` se reescribe para adaptarse, incluso si el combate inicia en el turno de regreso.
+
+## [2026.8.77] - 2026-08-30
+
+### Cambiado
+- **Mecánicas de reserva del grupo**: `<leaving_vs_benching>` ahora detalla claramente la separación temporal frente a la permanente, e instruye no redeclarar estadísticas al reunirse con el grupo.
+
+## [2026.8.76] - 2026-08-30
+
+### Cambiado
+- **Perfil de Combate del Agente de Lorebook**: Los Perfiles de Combate existentes de los miembros del grupo ahora se pueden actualizar desde `[PARTY]` tras subir de nivel. El Agente de Lorebook ya permitía actualizaciones de Perfiles de Combate en pases automáticos, pero solo desde `[COMBAT]` — los compañeros nunca aparecen allí, por lo que la sincronización de nivel del grupo dejaba estadísticas desactualizadas en el libro de lore. La ficha `[PARTY]` ahora se inyecta como `## PARTY MECHANICAL STATE`; las estadísticas duraderas (PV máx, BAB, CA, salvaciones, DG, rasgos de clase) se sincronizan, mientras que las variaciones de PV actual/condición no crean ni reescriben un perfil.
+
+## [2026.8.75] - 2026-08-29
+
+### Cambiado
+- **Rol**: La iniciativa de combate ahora especifica que el grupo tira primero y luego los enemigos.
+- **Protocolo de subida de nivel**: La sincronización de nivel del grupo es una línea directa `PARTY LEVEL SYNC` en la misma salida de subida de nivel (reemplaza a `<party_sync>` anidado).
+
+## [2026.8.74] - 2026-08-29
+
+### Cambiado
+- **Protocolo de subida de nivel**: `<party_sync>` anidado reemplaza la línea antigua PARTY SYNC. Los compañeros siguen creciendo a la par que {{user}}, pero bajo lógica abierta de clase (PV, habilidades, BAB, atributos, DG) en lugar de un DG garantizado a cada uno. Se elimina el énfasis markdown de la tarjeta de pausa.
+
+## [2026.8.73] - 2026-08-29
+
+### Cambiado
+- **Nivel en Acción Instantánea**: Comienza en Nivel 1 con 0 XP. Una casilla de verificación **¿Nivel Aleatorio?** (desactivada por defecto) restaura la tirada clásica de 1–10. La Configuración Inicial prevalece si especifica un nivel; N/A — Sin Niveles permanece sin niveles.
+- **Ritmo / Longitud de Salida**: El valor predeterminado de fábrica se establece temporalmente en Salidas Más Cortas.
+
+## [2026.8.72] - 2026-08-29
+
+### Cambiado
+- **Tiradas de eventos aleatorios**: El umbral de ocurrencia en `<random_events>` ahora es ≥10 (antes ≥14).
+- **Cadencia de Evolución de Mapas**: El intervalo predeterminado para otros mapas es de 8 horas (antes 12). El mapa actual se mantiene en 1 hora. Las instalaciones intactas con 12h/1h migran; las cadencias personalizadas se conservan.
+
 ## [2026.8.71] - 2026-08-29
 
 ### Cambiado

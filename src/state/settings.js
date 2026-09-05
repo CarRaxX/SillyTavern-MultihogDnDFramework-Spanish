@@ -1116,6 +1116,16 @@ function getSettingsInternal(extensionSettings) {
         s.settingsVersion = '2026.8.71';
     }
 
+    // Other-maps Evolution default 12h → 8h. One-shot so settingsVersion can stay put.
+    if (!s.mapEvolutionOtherMapsInterval8Applied) {
+        if (Number(s.mapEvolutionIntervalHours) === 12
+            && Number(s.mapEvolutionOnSiteIntervalHours) === 1
+            && Number(s.mapEvolutionOnSiteIntervalMinutes || 0) === 0) {
+            s.mapEvolutionIntervalHours = 8;
+        }
+        s.mapEvolutionOtherMapsInterval8Applied = true;
+    }
+
     // Stamp factory version even when a release has no field rewrites
     // (8.28.0 mapped-site index is prompt/injection only).
     if (isOlderThan(s.settingsVersion, FACTORY_SETTINGS_VERSION)) {
@@ -1221,12 +1231,22 @@ function getSettingsInternal(extensionSettings) {
     const tickScope = String(s.mapEvolutionTickScope || '').trim().toLowerCase();
     s.mapEvolutionTickScope = ['active', 'count', 'all', 'selected'].includes(tickScope) ? tickScope : 'all';
     const tickCount = Number(s.mapEvolutionTickCount);
-    s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 1;
+    s.mapEvolutionTickCount = Number.isFinite(tickCount) ? Math.max(0, Math.min(50, Math.floor(tickCount))) : 2;
+    // `all` previously ignored tickCount (the How many row was hidden; factory 1
+    // was unused). Interval ticks now queue N due maps per turn.
+    // One-shot flag: settingsVersion is stamped to FACTORY_SETTINGS_VERSION above,
+    // so an isOlderThan(..., '2026.8.80') check here can never fire.
+    if (!s.mapEvolutionAllScopeQueueCountApplied) {
+        if (s.mapEvolutionTickScope === 'all' && s.mapEvolutionTickCount === 1) {
+            s.mapEvolutionTickCount = 2;
+        }
+        s.mapEvolutionAllScopeQueueCountApplied = true;
+    }
     s.mapEvolutionTickRandomize = s.mapEvolutionTickRandomize !== false;
     if (!Array.isArray(s.mapEvolutionSelectedRoots)) s.mapEvolutionSelectedRoots = [];
     s.mapEvolutionIntervalHours = (() => {
         const hours = Math.floor(Number(s.mapEvolutionIntervalHours));
-        return Number.isFinite(hours) ? Math.max(1, Math.min(168, hours)) : 12;
+        return Number.isFinite(hours) ? Math.max(1, Math.min(168, hours)) : 8;
     })();
     s.mapEvolutionOnSiteIntervalHours = (() => {
         const hours = Math.floor(Number(s.mapEvolutionOnSiteIntervalHours));

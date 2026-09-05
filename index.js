@@ -16,7 +16,7 @@ import { isMapUpdaterRunning, onMapUpdaterUserMessage, runMapUpdaterPass, stopMa
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration } from './portraits.js';
+import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resetRealtimeLocationGenerationFailure, stopRealtimeLocationGeneration, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast, triggerBackgroundPortraitGeneration, fetchHordeModels } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
 import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, lookupCustomPortraitSrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER, snapshotPortraitMapsForChat, loadPortraitMapsForChat, migrateLegacyPortraitMapsToChat } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide, resolveViewportClampedGeometry, clampFloatingPanelToViewport } from './ui-geometry.js';
@@ -6220,8 +6220,8 @@ function organizeConnectionSettingsUI() {
                 runtimeState.updateAgentMapEvolutionStatusRef();
             }
         });
-        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 12).on('change', function () {
-            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 12));
+        $('#rpg_map_evolution_interval_hours').val(settings.mapEvolutionIntervalHours ?? 8).on('change', function () {
+            settings.mapEvolutionIntervalHours = Math.max(1, Math.min(168, parseInt(String($(this).val()), 10) || 8));
             $(this).val(settings.mapEvolutionIntervalHours);
             saveSettings();
             updateMapEvolutionScheduleDisplay();
@@ -6291,9 +6291,9 @@ function organizeConnectionSettingsUI() {
                 runtimeState.updateAgentMapEvolutionStatusRef();
             }
         });
-        $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 1).on('change', function () {
+        $('#rpg_map_evolution_tick_count').val(settings.mapEvolutionTickCount ?? 2).on('change', function () {
             const parsed = parseInt(String($(this).val()), 10);
-            settings.mapEvolutionTickCount = Math.max(0, Math.min(50, Number.isFinite(parsed) ? parsed : 1));
+            settings.mapEvolutionTickCount = Math.max(0, Math.min(50, Number.isFinite(parsed) ? parsed : 2));
             $(this).val(settings.mapEvolutionTickCount);
             saveSettings();
             $('#rt-agent-map-evo-tick-count').val(settings.mapEvolutionTickCount);
@@ -6356,7 +6356,7 @@ function organizeConnectionSettingsUI() {
                 currentMinutes: currentMemoMinutes(),
                 intervalHoursFor: hoursFor,
             });
-            const fallbackHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 12);
+            const fallbackHours = Math.max(1, Number(s.mapEvolutionIntervalHours) || 8);
             const currentNextMins = schedule.nextMins >= 0
                 ? schedule.nextMins
                 : currentMemoMinutes() >= 0 ? currentMemoMinutes() + fallbackHours * 60 : fallbackHours * 60;
@@ -7331,8 +7331,10 @@ function organizeConnectionSettingsUI() {
             settings.portraitGeneratorSource = String($(this).val());
             saveSettings();
             $('#rpg_tracker_pollinations_group').toggle(settings.portraitGeneratorSource === 'pollinations');
+            $('#rpg_tracker_horde_group').toggle(settings.portraitGeneratorSource === 'horde');
         });
         $('#rpg_tracker_pollinations_group').toggle((settings.portraitGeneratorSource || 'native') === 'pollinations');
+        $('#rpg_tracker_horde_group').toggle((settings.portraitGeneratorSource || 'native') === 'horde');
 
         $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!settings.portraitSkipPromptDialog).on('change', function () {
             settings.portraitSkipPromptDialog = !!$(this).prop('checked');
@@ -7434,6 +7436,52 @@ function organizeConnectionSettingsUI() {
 
         $('#rpg_tracker_pollinations_key').val(settings.pollinationsApiKey || '').on('change', function () {
             settings.pollinationsApiKey = String($(this).val()).trim();
+            saveSettings();
+        });
+
+        $('#rpg_tracker_horde_key').val(settings.hordeApiKey || '').on('change', function () {
+            settings.hordeApiKey = String($(this).val()).trim();
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_model').val(settings.hordeModel || '').on('change', function () {
+            settings.hordeModel = String($(this).val()).trim();
+            saveSettings();
+        });
+        async function populateHordeModelDatalist() {
+            const list = document.getElementById('rpg_tracker_horde_model_list');
+            if (!list) return;
+            try {
+                const models = await fetchHordeModels();
+                list.innerHTML = models.map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
+            } catch { /* datalist stays empty — free text entry still works */ }
+        }
+        populateHordeModelDatalist();
+        $('#rpg_tracker_horde_sampler').val(settings.hordeSampler || 'er_sde').on('change', function () {
+            settings.hordeSampler = String($(this).val());
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_scheduler').val(settings.hordeScheduler ?? 'simple').on('change', function () {
+            settings.hordeScheduler = String($(this).val());
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_steps').val(settings.hordeSteps ?? 8).on('change', function () {
+            settings.hordeSteps = Math.max(1, Math.min(150, Math.round(Number($(this).val())) || 8));
+            $(this).val(settings.hordeSteps);
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_cfg').val(settings.hordeCfgScale ?? 1).on('change', function () {
+            settings.hordeCfgScale = Math.max(0, Math.min(30, Number($(this).val())) || 1);
+            $(this).val(settings.hordeCfgScale);
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_width').val(settings.hordeWidth ?? 1024).on('change', function () {
+            settings.hordeWidth = Math.max(64, Math.min(3072, Math.round(Number($(this).val()) / 64) * 64 || 1024));
+            $(this).val(settings.hordeWidth);
+            saveSettings();
+        });
+        $('#rpg_tracker_horde_height').val(settings.hordeHeight ?? 1024).on('change', function () {
+            settings.hordeHeight = Math.max(64, Math.min(3072, Math.round(Number($(this).val()) / 64) * 64 || 1024));
+            $(this).val(settings.hordeHeight);
             saveSettings();
         });
 
@@ -12308,6 +12356,7 @@ RULES:
             $('#rpg_tracker_enable_portraits').prop('checked', s.enablePortraits !== false);
             $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
             $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
+            $('#rpg_tracker_horde_group').toggle((s.portraitGeneratorSource || 'native') === 'horde');
             $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
     $('#rpg_tracker_hide_image_gen_toasts').prop('checked', !!s.hideImageGenToasts);
             $('#rpg_tracker_portrait_use_story_lookback').prop('checked', !!s.portraitUseStoryLookback);
@@ -12326,6 +12375,14 @@ RULES:
             syncLocationImageDependentUi(s);
             syncNpcPortraitDependentUi(s);
             $('#rpg_tracker_pollinations_key').val(s.pollinationsApiKey || '');
+            $('#rpg_tracker_horde_key').val(s.hordeApiKey || '');
+            $('#rpg_tracker_horde_model').val(s.hordeModel || '');
+            $('#rpg_tracker_horde_sampler').val(s.hordeSampler || 'er_sde');
+            $('#rpg_tracker_horde_scheduler').val(s.hordeScheduler ?? 'simple');
+            $('#rpg_tracker_horde_steps').val(s.hordeSteps ?? 8);
+            $('#rpg_tracker_horde_cfg').val(s.hordeCfgScale ?? 1);
+            $('#rpg_tracker_horde_width').val(s.hordeWidth ?? 1024);
+            $('#rpg_tracker_horde_height').val(s.hordeHeight ?? 1024);
 
             $('#rpg_portrait_connection_source').val(s.portraitConnectionSource || 'default');
             $('#rpg_portrait_connection_profile').val(s.portraitConnectionProfileId || '');
@@ -12367,7 +12424,7 @@ RULES:
             $('#rpg_map_updater_max_tokens').val(s.mapUpdaterMaxTokens ?? 25000);
             $('#rpg_map_updater_system_prompt').val(s.mapUpdaterSystemPrompt || DEFAULT_MAP_UPDATER_SYSTEM_PROMPT);
             $('#rpg_map_evolution_enabled').prop('checked', s.mapEvolutionEnabled !== false);
-            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 12);
+            $('#rpg_map_evolution_interval_hours').val(s.mapEvolutionIntervalHours ?? 8);
             $('#rpg_map_evolution_onsite_interval_hours').val(s.mapEvolutionOnSiteIntervalHours ?? 1);
             $('#rpg_map_evolution_onsite_interval_minutes').val(s.mapEvolutionOnSiteIntervalMinutes ?? 0);
             $('#rpg_map_evolution_onsite_preset').val(s.mapEvolutionOnSitePreset === 'standard' ? 'standard' : 'dynamic');

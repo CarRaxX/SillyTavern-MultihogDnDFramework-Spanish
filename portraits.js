@@ -16,6 +16,7 @@ import {
     normalizeEntityName,
     lookupCustomPortraitSrc,
     snapshotPortraitMapsForChat,
+    portraitWriteMode,
 } from './portrait-storage.js';
 import { buildPortraitStoryContext, portraitStoryLookbackCount } from './src/state/portrait-story-lookback.js';
 
@@ -58,11 +59,47 @@ export function scaleImageTo512Square(dataUrl) {
 // Re-export portrait key helpers (single source of truth in portrait-storage.js)
 export { normalizeEntityName, lookupCustomPortraitSrc } from './portrait-storage.js';
 
-export async function applyPortraitData(entityName, src) {
+/**
+ * Store a portrait for an entity.
+ * @param {string} entityName
+ * @param {string} src
+ * @param {{ chatId?: string|null }} [opts] Chat that owned the generation. When the
+ *   live chat has switched (common during multi-minute AI Horde waits), write into
+ *   that chat's partition only — never the arriving chat's live portrait map.
+ */
+export async function applyPortraitData(entityName, src, opts = {}) {
     const s = getSettings();
-    if (!s.customPortraits) s.customPortraits = {};
     const normName = normalizeEntityName(entityName);
-    const chatId = getActiveChatId();
+    const liveChatId = getActiveChatId();
+    const targetChatId = opts.chatId != null && String(opts.chatId).length > 0
+        ? String(opts.chatId)
+        : liveChatId;
+    const writeLive = portraitWriteMode(liveChatId, opts.chatId) === 'live';
+
+    if (!writeLive) {
+        if (!s.chatStates || typeof s.chatStates !== 'object') s.chatStates = {};
+        const partition = s.chatStates[targetChatId] || {};
+        if (!partition.customPortraits || typeof partition.customPortraits !== 'object') {
+            partition.customPortraits = {};
+        }
+        const previous = partition.customPortraits[normName];
+        if (!src) {
+            delete partition.customPortraits[normName];
+        } else {
+            const stored = await persistPortraitSrc(src, targetChatId, normName);
+            partition.customPortraits[normName] = stored;
+        }
+        s.chatStates[targetChatId] = partition;
+        if (previous && previous !== partition.customPortraits[normName]
+            && isManagedPortraitPath(previous) && countPortraitPathRefs(s, previous) === 0) {
+            await deletePortraitFile(previous);
+        }
+        await saveSettings(true);
+        return;
+    }
+
+    if (!s.customPortraits) s.customPortraits = {};
+    const chatId = targetChatId || liveChatId;
     const previous = s.customPortraits[normName];
 
     if (!src) {
@@ -374,6 +411,181 @@ export const POLLINATIONS_IMAGE_MODELS = [
     { id: 'grok-imagine-pro',      label: 'Grok Imagine Pro',           tier: 'Premium' },
 ];
 
+// ── AI Horde (aihorde.net) ──
+const HORDE_API_BASE = 'https://aihorde.net/api/v2';
+const HORDE_CLIENT_AGENT = 'SillyTavern-MultihogDnDFramework:1.0:https://github.com/Multihog-DnD-Framework';
+const HORDE_ANONYMOUS_KEY = '0000000000';
+
+let _hordeModelsCache = null;
+let _hordeModelsCacheAt = 0;
+
+/**
+ * Fetches the list of currently active AI Horde image model names (cached for 5 minutes).
+ * @returns {Promise<string[]>}
+ */
+export async function fetchHordeModels() {
+    if (_hordeModelsCache && (Date.now() - _hordeModelsCacheAt) < 5 * 60 * 1000) {
+        return _hordeModelsCache;
+    }
+    const resp = await fetch(`${HORDE_API_BASE}/status/models?type=image`, {
+        headers: { 'Client-Agent': HORDE_CLIENT_AGENT },
+    });
+    if (!resp.ok) throw new Error(`AI Horde model list ${resp.status}`);
+    const models = await resp.json();
+    const names = Array.isArray(models)
+        ? models.map(m => m?.name).filter(Boolean).sort((a, b) => a.localeCompare(b))
+        : [];
+    _hordeModelsCache = names;
+    _hordeModelsCacheAt = Date.now();
+    return names;
+}
+
+/**
+ * Submits an image generation request to the AI Horde, polls until complete, and returns a data URL.
+ * @param {string} prompt
+ * @param {{ signal?: AbortSignal }} [opts]
+ * @returns {Promise<string>} data URL
+ */
+export async function generateWithHordeAsync(prompt, opts = {}) {
+    const s = getSettings();
+    const externalSignal = opts.signal;
+    const apiKey = s.hordeApiKey || HORDE_ANONYMOUS_KEY;
+
+    const throwIfAborted = () => {
+        if (externalSignal?.aborted) {
+            const err = new Error('Image generation was stopped');
+            err.name = 'AbortError';
+            throw err;
+        }
+    };
+
+    const params = {
+        sampler_name: s.hordeSampler || 'er_sde',
+        cfg_scale: Number(s.hordeCfgScale) || 1,
+        height: Number(s.hordeHeight) || 1024,
+        width: Number(s.hordeWidth) || 1024,
+        steps: Number(s.hordeSteps) || 8,
+        n: 1,
+    };
+    if (s.hordeScheduler) params.scheduler = s.hordeScheduler;
+
+    const payload = { prompt, params, r2: false };
+    if (s.hordeModel) payload.models = [s.hordeModel];
+
+    console.log('[RPG Tracker] AI Horde: submitting generation request', { params, models: payload.models || '(any)' });
+
+    const submitResp = await fetch(`${HORDE_API_BASE}/generate/async`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': apiKey,
+            'Client-Agent': HORDE_CLIENT_AGENT,
+        },
+        body: JSON.stringify(payload),
+        signal: externalSignal,
+    });
+    if (!submitResp.ok) {
+        const errBody = await submitResp.json().catch(() => null);
+        console.error('[RPG Tracker] AI Horde: submit failed', submitResp.status, errBody);
+        throw new Error(`AI Horde ${submitResp.status}: ${errBody?.message || 'Failed to submit generation request'}`);
+    }
+    const submitData = await submitResp.json();
+    const requestId = submitData?.id;
+    if (!requestId) throw new Error('AI Horde did not return a request ID');
+    console.log(`[RPG Tracker] AI Horde: request ${requestId} queued (est. ${submitData.kudos ?? '?'} kudos)`);
+    if (Array.isArray(submitData.warnings) && submitData.warnings.length) {
+        console.warn('[RPG Tracker] AI Horde: submit warnings (job may never find a worker) —', submitData.warnings);
+        // These codes mean the request itself conflicts with the model's constraints — no amount
+        // of waiting fixes them, so fail fast instead of polling for up to 9 minutes.
+        const fatalCodes = ['SamplerMismatch', 'SchedulerMismatch', 'CfgScaleMismatch', 'CfgScaleTooSmall', 'CfgScaleTooLarge', 'CfgPPScaleTooLarge', 'StepsTooFew', 'StepsTooMany'];
+        const fatal = submitData.warnings.filter(w => fatalCodes.includes(w.code));
+        if (fatal.length) {
+            throw new Error(`AI Horde: ${fatal.map(w => w.message || w.code).join(' | ')}`);
+        }
+    }
+
+    // Poll /generate/check/ until done. Requests expire after 10 minutes on the horde side.
+    const deadline = Date.now() + 9 * 60 * 1000;
+    let waitMs = 4000;
+    while (Date.now() < deadline) {
+        throwIfAborted();
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        throwIfAborted();
+        waitMs = Math.min(waitMs + 1000, 8000);
+
+        const checkResp = await fetch(`${HORDE_API_BASE}/generate/check/${requestId}`, {
+            headers: { 'Client-Agent': HORDE_CLIENT_AGENT },
+            signal: externalSignal,
+        });
+        if (!checkResp.ok) {
+            console.warn(`[RPG Tracker] AI Horde: check request failed with ${checkResp.status}, retrying...`);
+            continue;
+        }
+        const checkData = await checkResp.json();
+        console.log(`[RPG Tracker] AI Horde: waiting=${checkData.waiting} processing=${checkData.processing} finished=${checkData.finished} queue_position=${checkData.queue_position} wait_time=${checkData.wait_time}s is_possible=${checkData.is_possible}`);
+        if (checkData.is_possible === false) {
+            console.warn('[RPG Tracker] AI Horde: no eligible workers currently available for this request (is_possible=false) — will keep waiting until timeout.');
+        }
+        if (checkData.faulted) {
+            console.error('[RPG Tracker] AI Horde: generation faulted', checkData);
+            throw new Error('AI Horde generation faulted (the worker reported an internal error)');
+        }
+        if (checkData.done) {
+            console.log(`[RPG Tracker] AI Horde: request ${requestId} done, fetching result...`);
+            break;
+        }
+    }
+
+    const statusResp = await fetch(`${HORDE_API_BASE}/generate/status/${requestId}`, {
+        headers: { 'Client-Agent': HORDE_CLIENT_AGENT },
+        signal: externalSignal,
+    });
+    if (!statusResp.ok) throw new Error(`AI Horde ${statusResp.status}: Failed to retrieve generation result`);
+    const statusData = await statusResp.json();
+    const generation = statusData.generations?.[0];
+    if (!generation?.img) {
+        console.error('[RPG Tracker] AI Horde: no image in status response after polling', statusData);
+        throw new Error('AI Horde did not return an image (request may have timed out — try again or check your worker availability at aihorde.net)');
+    }
+    console.log(`[RPG Tracker] AI Horde: image received from worker "${generation.worker_name || generation.worker_id}", decoding...`);
+    if (generation.censored) {
+        throw new Error('AI Horde image was censored by the worker\'s safety filter');
+    }
+
+    // r2:false (SillyTavern's path) returns base64 WebP in the JSON body from
+    // aihorde.net — no second browser fetch to Cloudflare R2. Still accept an
+    // http(s) URL if a worker/proxy ever returns one.
+    return await hordeImageToDataUrl(generation.img, externalSignal);
+}
+
+/**
+ * Convert an AI Horde generation.img payload into a data URL.
+ * @param {string} img Base64 WebP/PNG or an http(s) download URL
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<string>}
+ */
+async function hordeImageToDataUrl(img, signal) {
+    const value = String(img || '').trim();
+    if (!value) throw new Error('AI Horde returned an empty image payload');
+    if (/^https?:\/\//i.test(value)) {
+        const imgResp = await fetch(value, { signal });
+        if (!imgResp.ok) throw new Error(`Failed to download generated image (${imgResp.status})`);
+        const blob = await imgResp.blob();
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (typeof reader.result === 'string') resolve(reader.result);
+                else reject(new Error('Failed to read image as Base64 string'));
+            };
+            reader.onerror = () => reject(new Error('FileReader error while converting image blob'));
+            reader.readAsDataURL(blob);
+        });
+    }
+    if (value.startsWith('data:image/')) return value;
+    // Bare base64 from r2:false — Horde delivers WebP.
+    return `data:image/webp;base64,${value}`;
+}
+
 /** Connection overlay for portrait / location image prompt LLM calls. */
 export function getPortraitConnectionSettings(baseSettings) {
     const s = baseSettings || getSettings();
@@ -591,9 +803,12 @@ export async function showPortraitPromptPopup(prompt, entityName, localApply, re
     if (!ctx.callGenericPopup) return;
 
     const isNative = s.portraitGeneratorSource === 'native';
+    const isHorde = s.portraitGeneratorSource === 'horde';
     const subText = isNative
         ? 'Edit the prompt below, then copy it or generate directly with the ST Image Generation extension'
-        : 'Edit the prompt below, then copy it or generate directly with Pollinations.ai';
+        : isHorde
+            ? 'Edit the prompt below, then copy it or generate directly with the AI Horde'
+            : 'Edit the prompt below, then copy it or generate directly with Pollinations.ai';
 
     const textareaId = `rt-ai-prompt-${Date.now()}`;
     const skipCheckboxId = `rt-skip-prompt-${Date.now()}`;
@@ -608,7 +823,7 @@ export async function showPortraitPromptPopup(prompt, entityName, localApply, re
     </div>`;
 
     const popupOpts = {
-        okButton: isNative ? '🎨 Generate with ST Image Gen' : '🎨 Generate with Pollinations',
+        okButton: isNative ? '🎨 Generate with ST Image Gen' : isHorde ? '🎨 Generate with AI Horde' : '🎨 Generate with Pollinations',
         cancelButton: 'Cancel',
         wide: false,
         customButtons: [
@@ -649,6 +864,8 @@ export async function showPortraitPromptPopup(prompt, entityName, localApply, re
         }
         if (isNative) {
             await generateWithNativeExtension(finalPrompt, entityName, localApply, refresh);
+        } else if (isHorde) {
+            await generateWithHorde(finalPrompt, entityName, localApply, refresh);
         } else {
             // Generate with Pollinations
             await generateWithPollinations(finalPrompt, entityName, localApply, refresh);
@@ -666,8 +883,13 @@ export async function showPortraitPromptPopup(prompt, entityName, localApply, re
 export async function generatePortraitDirect(prompt, entityName, opts = {}) {
     const s = getSettings();
     const isNative = s.portraitGeneratorSource === 'native';
+    const isHorde = s.portraitGeneratorSource === 'horde';
     const externalSignal = opts.signal;
     const allowFallback = opts.allowFallback !== false;
+
+    if (isHorde) {
+        return await generateWithHordeAsync(prompt, { signal: externalSignal });
+    }
 
     if (isNative) {
         const { SlashCommandParser } = SillyTavern.getContext();
@@ -703,6 +925,7 @@ export async function generatePortraitDirect(prompt, entityName, opts = {}) {
         }
         return imageUrl;
     } else {
+        // Pollinations.ai
         const apiKey = await ensurePollinationsKey();
         if (!apiKey) throw new Error('Pollinations API key is required');
 
@@ -1033,6 +1256,109 @@ export async function generateWithNativeExtension(prompt, entityName, localApply
 }
 
 /**
+ * Generates an image via the AI Horde and shows a preview/approve popup.
+ * @param {string} prompt
+ * @param {string} entityName
+ * @param {function} localApply
+ * @param {function} refresh
+ */
+export async function generateWithHorde(prompt, entityName, localApply, refresh) {
+    const ctx = SillyTavern.getContext();
+    if (!ctx.callGenericPopup) return;
+
+    // AI Horde waits can exceed several minutes — pin so Apply cannot write into
+    // a chat the user switched to while the popup was open.
+    const passChatId = getActiveChatId();
+    const pinnedApply = async (url) => {
+        const liveId = getActiveChatId();
+        if (passChatId && liveId && String(passChatId) !== String(liveId)) {
+            await applyPortraitData(entityName, url, { chatId: passChatId });
+            return;
+        }
+        await localApply(url);
+    };
+
+    const showPreview = async (preGeneratedUrl = null) => {
+        const imgId = `rt-horde-img-${Date.now()}`;
+        const spinnerId = `rt-horde-spinner-${Date.now()}`;
+        const errorId = `rt-horde-error-${Date.now()}`;
+
+        // Fire generation immediately or use pre-generated/cropped URL
+        const genPromise = preGeneratedUrl ? Promise.resolve(preGeneratedUrl) : generatePortraitDirect(prompt, entityName);
+        genPromise.then(dataUrl => {
+            const img = document.getElementById(imgId);
+            const spinner = document.getElementById(spinnerId);
+            if (img) { img.src = dataUrl; img.style.display = 'block'; }
+            if (spinner) spinner.style.display = 'none';
+        }).catch(err => {
+            console.error('[RPG Tracker] AI Horde: generation failed', err);
+            const spinner = document.getElementById(spinnerId);
+            const errEl = document.getElementById(errorId);
+            if (spinner) spinner.style.display = 'none';
+            if (errEl) { errEl.textContent = `⚠ ${err.message}`; errEl.style.display = 'block'; }
+        });
+
+        const popupContent = `<div style="padding:10px;min-width:320px;max-width:460px;">
+            <b style="display:block;margin-bottom:8px;">🖼️ Generated Portrait — ${escapeHtml(entityName)}</b>
+            <div style="position:relative;text-align:center;margin-bottom:10px;min-height:200px;">
+                <div id="${spinnerId}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:0.9em;opacity:0.6;">
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Generating image with AI Horde (this can take a minute)…
+                </div>
+                <img id="${imgId}" style="max-width:100%;max-height:400px;border-radius:8px;display:none;margin:0 auto;" />
+                <div id="${errorId}" style="display:none;color:#ff6b6b;font-size:0.9em;margin-top:10px;"></div>
+            </div>
+            <div style="font-size:0.72em;opacity:0.45;margin-top:2px;">Prompt: ${escapeHtml(prompt.substring(0, 100))}${prompt.length > 100 ? '…' : ''}</div>
+        </div>`;
+
+        const popupOpts = {
+            okButton: '✅ Apply Portrait', cancelButton: 'Cancel', wide: false,
+            customButtons: [
+                { text: '🔄 Regenerate', result: 3, classes: ['menu_button'] },
+                { text: '✂️ Crop', result: 4, classes: ['menu_button'] }
+            ],
+        };
+
+        const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', popupOpts);
+
+        if (result === 3) {
+            await showPreview(); // Regenerate
+        } else if (result === 4) {
+            // Crop button clicked
+            try {
+                const dataUrl = await genPromise;
+                const cropped = await ctx.callGenericPopup(
+                    'Set the crop position of the portrait',
+                    ctx.POPUP_TYPE?.CROP ?? 4,
+                    '',
+                    { cropImage: dataUrl, cropAspect: 1 }
+                );
+                if (cropped) {
+                    await showPreview(cropped);
+                } else {
+                    await showPreview(dataUrl);
+                }
+            } catch (err) {
+                toastr['error']('Cannot crop — generation failed: ' + err.message, 'RPG Tracker');
+                await showPreview();
+            }
+        } else if (result) {
+            // Wait for generation to finish, then scale and apply directly
+            try {
+                const dataUrl = await genPromise;
+                const finalUrl = dataUrl.startsWith('data:') ? await scaleImageTo512Square(dataUrl) : dataUrl;
+                await pinnedApply(finalUrl);
+                if (typeof refresh === 'function') refresh();
+                imageGenToast('success', `Portrait applied for ${entityName}!`, 'RPG Tracker');
+            } catch (err) {
+                toastr['error']('Cannot apply — generation failed: ' + err.message, 'RPG Tracker');
+            }
+        }
+    };
+
+    await showPreview();
+}
+
+/**
  * Scans the current [CHARACTER] block in state memo for character names.
  * Uses the same HP-line and plain-name parsing as party/enemy scanners.
  * @param {object} [settings]
@@ -1193,6 +1519,9 @@ export async function autoGeneratePartyPortraits(refresh) {
 
     imageGenToast('info', `Starting auto-generation for ${toGenerate.length} party members...`, 'RPG Tracker');
     let successCount = 0;
+    // AI Horde can take minutes; pin so a mid-flight chat switch cannot land
+    // these portraits in the arriving chat's map.
+    const passChatId = getActiveChatId();
 
     for (const name of toGenerate) {
         imageGenToast('info', `Generating for ${name}...`, 'RPG Tracker');
@@ -1200,7 +1529,7 @@ export async function autoGeneratePartyPortraits(refresh) {
             const prompt = await generatePortraitPrompt(name);
             const dataUrl = await generatePortraitDirect(prompt, name);
             const scaled = await scaleImageTo512Square(dataUrl);
-            await applyPortraitData(name, scaled);
+            await applyPortraitData(name, scaled, { chatId: passChatId });
             successCount++;
             if (typeof refresh === 'function') refresh();
         } catch (err) {
@@ -1234,6 +1563,7 @@ export async function autoGenerateEnemyPortraits(refresh) {
 
     imageGenToast('info', `Starting auto-generation for ${toGenerate.length} enemies...`, 'RPG Tracker');
     let successCount = 0;
+    const passChatId = getActiveChatId();
 
     for (const name of toGenerate) {
         imageGenToast('info', `Generating for enemy ${name}...`, 'RPG Tracker');
@@ -1241,7 +1571,7 @@ export async function autoGenerateEnemyPortraits(refresh) {
             const prompt = await generatePortraitPrompt(name);
             const dataUrl = await generatePortraitDirect(prompt, name);
             const scaled = await scaleImageTo512Square(dataUrl);
-            await applyPortraitData(name, scaled);
+            await applyPortraitData(name, scaled, { chatId: passChatId });
             successCount++;
             if (typeof refresh === 'function') refresh();
         } catch (err) {
@@ -1375,6 +1705,9 @@ export function triggerBackgroundPortraitGeneration(name, refresh, npcContent = 
         imageGenToast('info', `Queued portrait for ${name} (${queuePos} ahead)...`, 'RPG Tracker');
     }
 
+    // Pin before the shared queue / AI Horde wait so a chat switch cannot redirect the write.
+    const passChatId = getActiveChatId();
+
     enqueueImageGen(async () => {
         try {
             console.log(`[RPG Tracker] Generating prompt for "${name}" (NPC content provided: ${!!npcContent})`);
@@ -1391,7 +1724,7 @@ export function triggerBackgroundPortraitGeneration(name, refresh, npcContent = 
             console.log(`[RPG Tracker] Successfully received portrait dataUrl for "${name}". Scaling...`);
             const scaled = await scaleImageTo512Square(dataUrl);
             console.log(`[RPG Tracker] Applying portrait data for "${name}"...`);
-            await applyPortraitData(name, scaled);
+            await applyPortraitData(name, scaled, { chatId: passChatId });
             imageGenToast('success', `Portrait auto-generated and applied for ${name}!`, 'RPG Tracker');
             if (typeof refresh === 'function') {
                 console.log(`[RPG Tracker] Triggering UI refresh callback...`);
@@ -1691,13 +2024,48 @@ export function hasLocationImage(path) {
  * @param {string} locationPath Full hierarchical path
  * @param {string|null} src Image URL, data URL, managed path, or null to clear
  */
-export async function applyLocationImageData(locationPath, src) {
+/**
+ * Store a location image.
+ * @param {string} locationPath
+ * @param {string} src
+ * @param {{ chatId?: string|null }} [opts] Chat that owned the generation. When the
+ *   live chat has switched, write into that chat's partition only.
+ */
+export async function applyLocationImageData(locationPath, src, opts = {}) {
     const s = getSettings();
-    if (!s.customLocationImages) s.customLocationImages = {};
     const normPath = normalizeLocationPath(locationPath);
-    const chatId = getActiveChatId();
-    const previous = s.customLocationImages[normPath];
     const storageKey = `loc__${normPath}`;
+    const liveChatId = getActiveChatId();
+    const targetChatId = opts.chatId != null && String(opts.chatId).length > 0
+        ? String(opts.chatId)
+        : liveChatId;
+    const writeLive = portraitWriteMode(liveChatId, opts.chatId) === 'live';
+
+    if (!writeLive) {
+        if (!s.chatStates || typeof s.chatStates !== 'object') s.chatStates = {};
+        const partition = s.chatStates[targetChatId] || {};
+        if (!partition.customLocationImages || typeof partition.customLocationImages !== 'object') {
+            partition.customLocationImages = {};
+        }
+        const previous = partition.customLocationImages[normPath];
+        if (!src) {
+            delete partition.customLocationImages[normPath];
+        } else {
+            const stored = await persistPortraitSrc(src, targetChatId, storageKey);
+            partition.customLocationImages[normPath] = stored;
+        }
+        s.chatStates[targetChatId] = partition;
+        if (previous && previous !== partition.customLocationImages[normPath]
+            && isManagedPortraitPath(previous) && countPortraitPathRefs(s, previous) === 0) {
+            await deletePortraitFile(previous);
+        }
+        await saveSettings(true);
+        return;
+    }
+
+    if (!s.customLocationImages) s.customLocationImages = {};
+    const chatId = targetChatId || liveChatId;
+    const previous = s.customLocationImages[normPath];
 
     if (!src) {
         delete s.customLocationImages[normPath];
@@ -2004,6 +2372,8 @@ export function triggerBackgroundLocationGeneration(locationPath, refresh, locCo
 
     activeLocationGenerations.add(normPath);
     const leaf = normPath.split(' :: ').pop() || normPath;
+    // Pin before queue / Horde wait — late apply must not hit the arriving chat.
+    const passChatId = getActiveChatId();
     if (!isRealtimeArrival) {
         const queuePos = _imageGenQueue.length + (_imageGenQueueRunning ? 1 : 0);
         if (queuePos <= 0) {
@@ -2039,7 +2409,7 @@ export function triggerBackgroundLocationGeneration(locationPath, refresh, locCo
                 allowFallback: !isRealtimeArrival,
             });
             const scaled = await scaleImageToLandscape(dataUrl);
-            await applyLocationImageData(normPath, scaled);
+            await applyLocationImageData(normPath, scaled, { chatId: passChatId });
             if (!isRealtimeArrival) {
                 imageGenToast('success', `${forceReplace ? 'Location image regenerated' : 'Location image auto-generated'} for ${leaf}!`, 'RPG Tracker');
             }

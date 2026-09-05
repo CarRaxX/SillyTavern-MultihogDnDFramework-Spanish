@@ -250,6 +250,7 @@
                                 <select id="rpg_portrait_generator_source" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
                                     <option value="native">Extensión Nativa de Generación de Imágenes ST</option>
                                     <option value="pollinations">Pollinations.ai</option>
+                                    <option value="horde">AI Horde</option>
                                 </select>
                             </div>
 
@@ -261,6 +262,77 @@
                                 <input id="rpg_tracker_pollinations_key" type="password" class="text_pole" placeholder="sk_… o pk_…" style="font-size: 0.85em;" />
                                 <div style="font-size: 0.72em; opacity: 0.5; margin-top: 2px;">
                                     Obtén tu clave en <a href="https://enter.pollinations.ai/#keys" target="_blank" style="color: #7ec8e3;">enter.pollinations.ai</a>. Requiere cuenta de GitHub.
+                                </div>
+                            </div>
+
+                            <div id="rpg_tracker_horde_group" style="display: none; margin-bottom: 6px; padding-left: 4px;">
+                                <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Clave API de AI Horde (opcional)
+                                    <i class="fa-solid fa-circle-question interactable"
+                                        title="AI Horde es una red comunitaria y gratuita de generación de imágenes (aihorde.net). Deja en blanco para usar la clave anónima compartida (prioridad de cola más lenta). Regístrate en aihorde.net para obtener tu propia clave con resultados más rápidos y más kudos."></i>
+                                </label>
+                                <input id="rpg_tracker_horde_key" type="password" class="text_pole" placeholder="Dejar en blanco para anónimo" style="font-size: 0.85em;" />
+                                <div style="font-size: 0.72em; opacity: 0.5; margin-top: 2px; margin-bottom: 6px;">
+                                    Obtén una clave gratuita en <a href="https://aihorde.net/register" target="_blank" style="color: #7ec8e3;">aihorde.net/register</a>.
+                                </div>
+                                <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Modelo
+                                    <i class="fa-solid fa-circle-question interactable" title="Nombre exacto del modelo en AI Horde (ej. stable_diffusion_xl, AlbedoBase XL (SDXL), Anything Diffusion). Deja en blanco para que la horda elija cualquier modelo disponible."></i>
+                                </label>
+                                <input id="rpg_tracker_horde_model" list="rpg_tracker_horde_model_list" type="text" class="text_pole" placeholder="En blanco = cualquier modelo" style="font-size: 0.85em; margin-bottom: 6px;" />
+                                <datalist id="rpg_tracker_horde_model_list"></datalist>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px;">
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Muestreador (Sampler)
+                                            <i class="fa-solid fa-circle-question interactable" title="er_sde es la opción más segura para modelos turbo/destilados/personalizados (ej. Anima, Flux-Schnell, Z-Image-Turbo, Qwen-Image) — el servidor de AI Horde rechaza muestreadores incompatibles con una advertencia SamplerMismatch y el trabajo nunca encuentra un trabajador. Solo elige otro si sabes que tu modelo objetivo lo admite."></i>
+                                        </label>
+                                        <select id="rpg_tracker_horde_sampler" class="text_pole" style="font-size: 0.85em; width: 100%;">
+                                            <option value="er_sde">er_sde (recomendado, seguro para turbo/destilados)</option>
+                                            <option value="k_euler">k_euler</option>
+                                            <option value="k_euler_a">k_euler_a</option>
+                                            <option value="k_dpmpp_2m">k_dpmpp_2m</option>
+                                            <option value="k_dpmpp_2s_a">k_dpmpp_2s_a</option>
+                                            <option value="k_dpmpp_sde">k_dpmpp_sde</option>
+                                            <option value="k_dpm_2">k_dpm_2</option>
+                                            <option value="k_dpm_2_a">k_dpm_2_a</option>
+                                            <option value="k_dpm_fast">k_dpm_fast</option>
+                                            <option value="k_dpm_adaptive">k_dpm_adaptive</option>
+                                            <option value="k_lms">k_lms</option>
+                                            <option value="k_heun">k_heun</option>
+                                            <option value="DDIM">DDIM</option>
+                                            <option value="lcm">lcm</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Planificador (Scheduler)
+                                            <i class="fa-solid fa-circle-question interactable" title="La validación del servidor de AI Horde rechaza 'normal' para modelos Anima/Qwen con una advertencia SchedulerMismatch. 'simple' coincide con los requisitos publicados de Qwen-Image. 'karras' es la opción estándar para modelos regulares SD1.5/SDXL."></i>
+                                        </label>
+                                        <select id="rpg_tracker_horde_scheduler" class="text_pole" style="font-size: 0.85em; width: 100%;">
+                                            <option value="simple">simple (recomendado, seguro para Anima/familia Qwen)</option>
+                                            <option value="normal">normal</option>
+                                            <option value="karras">karras</option>
+                                            <option value="exponential">exponential</option>
+                                            <option value="sgm_uniform">sgm_uniform</option>
+                                            <option value="ddim_uniform">ddim_uniform</option>
+                                            <option value="beta">beta</option>
+                                            <option value="linear_quadratic">linear_quadratic</option>
+                                            <option value="kl_optimal">kl_optimal</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Pasos (Steps)</label>
+                                        <input id="rpg_tracker_horde_steps" type="number" min="1" max="150" class="text_pole" style="font-size: 0.85em; width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Escala CFG</label>
+                                        <input id="rpg_tracker_horde_cfg" type="number" min="0" max="30" step="0.5" class="text_pole" style="font-size: 0.85em; width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Ancho (Width)</label>
+                                        <input id="rpg_tracker_horde_width" type="number" min="64" max="3072" step="64" class="text_pole" style="font-size: 0.85em; width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Alto (Height)</label>
+                                        <input id="rpg_tracker_horde_height" type="number" min="64" max="3072" step="64" class="text_pole" style="font-size: 0.85em; width: 100%;" />
+                                    </div>
                                 </div>
                             </div>
 
@@ -708,7 +780,7 @@
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_random_events" /><span>🌍 Eventos Aleatorios</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_resting" /><span>💤 Restricciones de Descanso (≥9h entre descansos)</span></label>
                                 <label class="checkbox_label"><input type="checkbox" id="rpg_sysprompt_mod_party_bench" /><span>⛺ Grupo en Reserva (Benched Party)</span></label>
-                                <label class="checkbox_label" title="Alpha: construye asentamientos a escala de distritos y mazmorras o interiores significativos a escala de habitaciones. Los edificios de asentamiento siguen siendo activos a menos que CreateAreaMap los promocione explícitamente."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes (Alpha)</span></label>
+                                <label class="checkbox_label" title="Construye asentamientos a escala de distritos y mazmorras o interiores significativos a escala de habitaciones. Los edificios de asentamiento siguen siendo activos a menos que CreateAreaMap los promocione explícitamente."><input type="checkbox" id="rpg_sysprompt_mod_dungeon_reality_and_hidden_mapping" /><span>🗺️ Mapas Persistentes</span></label>
                                 <div id="rpg_map_architect_opener_components" class="flex-container flexFlowColumn gap-1" style="padding-left: 20px; display: none;">
                                     <small style="display:block; font-weight:bold; opacity:0.65; text-transform:uppercase; font-size:0.7em; letter-spacing:0.4px;">Abridor del Arquitecto de Mapas</small>
                                     <label class="checkbox_label" title="Por defecto. El narrador llama a CreateAreaMap; SillyTavern pausa el turno hasta que el mapa esté listo.">
@@ -964,7 +1036,7 @@
                         </button>
                         <button id="rpg_tracker_manage_display_groups" class="menu_button interactable rt-tag-library-button" aria-label="Abrir gestor de Grupos de Visualización" title="Configura grupos de módulos globales de solo visualización." style="flex: 1;">
                             <span class="rt-tag-library-icon" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span>
-                            <span class="rt-tag-library-copy"><span>Grupos de Visualización <small style="color:#ffc45c;">BETA</small></span><small>Agrupación visual</small></span>
+                            <span class="rt-tag-library-copy"><span>Grupos de Visualización</span><small>Agrupación visual</small></span>
                             <span class="rt-tag-library-sparkle" aria-hidden="true">✦</span>
                         </button>
                     </div>
@@ -1601,67 +1673,70 @@
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
                                         <label style="flex:1; min-width:140px;">Otros mapas (horas en el mundo)
-                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" value="12" class="text_pole" title="Frecuencia con la que los lugares mapeados donde no está el grupo pueden evolucionar. Las horas por mapa en la lista de abajo anulan este valor." />
+                                            <input id="rpg_map_evolution_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="168" value="8" class="text_pole" title="Frecuencia con la que los lugares mapeados donde no está el grupo pueden evolucionar. Las horas por mapa en la lista de abajo anulan este valor. El trabajo de la evolución no cambia — solo el temporizador." />
                                         </label>
                                         <label style="flex:1; min-width:180px;">Intervalo del mapa actual
                                             <span style="display:flex; align-items:center; gap:5px;">
-                                                <input id="rpg_map_evolution_onsite_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="168" value="1" class="text_pole" aria-label="Horas de intervalo del mapa actual" title="Horas de intervalo del mapa actual. Usa 0 horas con minutos mayores a cero para intervalos menores a una hora." />
-                                                <span style="font-size:0.78em; opacity:0.65;">h</span>
-                                                <input id="rpg_map_evolution_onsite_interval_minutes" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="59" value="0" class="text_pole" aria-label="Minutos de intervalo del mapa actual" title="Minutos adicionales de intervalo del mapa actual (0–59). 0h 0m omite ciclos automáticos en el mapa actual." />
-                                                <span style="font-size:0.78em; opacity:0.65;">m</span>
+                                                 <input id="rpg_map_evolution_onsite_interval_hours" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="168" value="1" class="text_pole" aria-label="Horas de intervalo del mapa actual" title="Horas de intervalo del mapa actual. Usa 0 horas con minutos mayores a cero para intervalos menores a una hora." />
+                                                 <span style="font-size:0.78em; opacity:0.65;">h</span>
+                                                 <input id="rpg_map_evolution_onsite_interval_minutes" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="59" value="0" class="text_pole" aria-label="Minutos de intervalo del mapa actual" title="Minutos adicionales de intervalo del mapa actual (0–59). 0h 0m omite ciclos automáticos en el mapa actual." />
+                                                 <span style="font-size:0.78em; opacity:0.65;">m</span>
                                             </span>
                                         </label>
                                     </div>
                                     <div class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
-                                        <label style="flex:1; min-width:140px;">Retroceso de Historia
-                                            <input id="rpg_map_evolution_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" value="20" class="text_pole" title="Turnos recientes del usuario suministrados a cada mapa pendiente. El prompt solo aplica hechos relevantes para cada lugar (por ejemplo ocupantes que se marcharon a otra parte). 0 omite la historia reciente por completo." />
-                                        </label>
-                                        <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
-                                            <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Longitud máxima de generación para un pase de Evolución de Mapas." />
-                                        </label>
-                                    </div>
-                                    <label>Estilo de evolución del mapa actual
-                                        <select id="rpg_map_evolution_onsite_preset" class="text_pole" title="Cambia únicamente el prompt utilizado mientras el grupo se encuentra dentro de un lugar mapeado. Los lugares en segundo plano siempre usan el comportamiento Estándar original.">
-                                            <option value="dynamic" selected>Alto Dinamismo — táctico y pronto descubrible</option>
-                                            <option value="standard">Estándar — mismo comportamiento que los mapas en segundo plano</option>
-                                        </select>
-                                    </label>
-                                    <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
-                                        <b>Alto Dinamismo</b> fomenta uno o dos desarrollos causales justo fuera del área protegida del jugador. <b>Estándar</b> usa el prompt intacto de mapa en segundo plano. El área actual en sí permanece congelada para el Actualizador de Mapas y el juego activo.
-                                    </div>
-                                    <label class="checkbox_label">
-                                        <input id="rpg_map_evolution_compress_enabled" type="checkbox" checked />
-                                        <span>Comprimir historial de hilos cerrados cuando supere el umbral de tokens</span>
-                                    </label>
-                                    <label>Umbral de tokens para historial
-                                        <input id="rpg_map_evolution_compress_threshold" type="text" inputmode="numeric" pattern="[0-9]*" min="500" max="100000" value="10000" class="text_pole" title="Tras cada pase de Evolución, si el historial de hilos cerrados supera esta cantidad de tokens (~4 caracteres c/u), se comprime. Los hilos abiertos se conservan intactos. Por defecto 10000." />
-                                    </label>
-                                    <label>Límite de memoria de commits para el DM (tokens)
-                                        <input id="rpg_map_evolution_narrator_commit_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="200" max="20000" value="2000" class="text_pole" title="Cuánta memoria de Evolución de Mapas (commits de material recientes) se transfiere al narrador mientras el grupo esté dentro. Por defecto 2000." />
-                                    </label>
-                                    <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
-                                        Limita cuánta <b>memoria de Evolución de Mapas</b> se transfiere al <b>narrador</b> en el informe de actividad reciente del lugar. No limita el archivo ni la compresión propia de Evolución.
-                                    </div>
-                                    <label style="font-size:0.85em;">Revisión de Informes del Mundo (Lookback)
-                                        <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="Cuántos informes recientes y últimos informes dirigidos a esta ubicación verifica cada mapa." />
-                                    </label>
-                                    <label>Mapas por ciclo de intervalo
-                                        <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Qué lugares mapeados puede evolucionar el intervalo automático.">
-                                            <option value="active">Solo mapa actual</option>
-                                            <option value="count">N mapas de todos los sitios mapeados</option>
-                                            <option value="all" selected>Todos los sitios mapeados pendientes</option>
-                                            <option value="selected">Mapas seleccionados</option>
-                                        </select>
-                                    </label>
-                                    <div id="rpg_map_evolution_n_row" class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
-                                        <label style="flex:1; min-width:140px;">Cuántos
-                                            <input id="rpg_map_evolution_tick_count" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="50" class="text_pole" title="Cuántos mapas pendientes evolucionar por ciclo. 0 = todos los mapas pendientes del conjunto." />
-                                        </label>
-                                        <label class="checkbox_label" style="flex:1; min-width:180px; padding-bottom:4px;">
-                                            <input id="rpg_map_evolution_tick_randomize" type="checkbox" checked />
-                                            <span>Aleatorizar qué mapas pendientes se eligen</span>
-                                        </label>
-                                    </div>
+                                         <label style="flex:1; min-width:140px;">Retroceso de Historia
+                                             <input id="rpg_map_evolution_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="100" value="20" class="text_pole" title="Turnos recientes del usuario suministrados a cada mapa pendiente. El prompt solo aplica hechos relevantes para cada lugar (por ejemplo ocupantes que se marcharon a otra parte). 0 omite la historia reciente por completo." />
+                                         </label>
+                                         <label style="flex:1; min-width:140px;">Tokens Máximos de Salida
+                                             <input id="rpg_map_evolution_max_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="1000" max="32000" value="25000" class="text_pole" title="Longitud máxima de generación para un pase de Evolución de Mapas." />
+                                         </label>
+                                     </div>
+                                     <label>Estilo de evolución del mapa actual
+                                         <select id="rpg_map_evolution_onsite_preset" class="text_pole" title="Cambia únicamente el prompt utilizado mientras el grupo se encuentra dentro de un lugar mapeado. Los lugares en segundo plano siempre usan el comportamiento Estándar original.">
+                                             <option value="dynamic" selected>Alto Dinamismo — táctico y pronto descubrible</option>
+                                             <option value="standard">Estándar — mismo comportamiento que los mapas en segundo plano</option>
+                                         </select>
+                                     </label>
+                                     <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
+                                         <b>Alto Dinamismo</b> fomenta uno o dos desarrollos causales justo fuera del área protegida del jugador. <b>Estándar</b> usa el prompt intacto de mapa en segundo plano. El área actual en sí permanece congelada para el Actualizador de Mapas y el juego activo.
+                                     </div>
+                                     <label class="checkbox_label">
+                                         <input id="rpg_map_evolution_compress_enabled" type="checkbox" checked />
+                                         <span>Comprimir historial de hilos cerrados cuando supere el umbral de tokens</span>
+                                     </label>
+                                     <label>Umbral de tokens para historial
+                                         <input id="rpg_map_evolution_compress_threshold" type="text" inputmode="numeric" pattern="[0-9]*" min="500" max="100000" value="10000" class="text_pole" title="Tras cada pase de Evolución, si el historial de hilos cerrados supera esta cantidad de tokens (~4 caracteres c/u), se comprime. Los hilos abiertos se conservan intactos. Por defecto 10000." />
+                                     </label>
+                                     <label>Límite de memoria de commits para el DM (tokens)
+                                         <input id="rpg_map_evolution_narrator_commit_tokens" type="text" inputmode="numeric" pattern="[0-9]*" min="200" max="20000" value="2000" class="text_pole" title="Cuánta memoria de Evolución de Mapas (commits de material recientes) se transfiere al narrador mientras el grupo esté dentro. Por defecto 2000." />
+                                     </label>
+                                     <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
+                                         Limita cuánta <b>memoria de Evolución de Mapas</b> se transfiere al <b>narrador</b> en el informe de actividad reciente del lugar. No limita el archivo ni la compresión propia de Evolución.
+                                     </div>
+                                     <label style="font-size:0.85em;">Revisión de Informes del Mundo (Lookback)
+                                         <input id="rpg_map_evolution_world_report_lookback" type="text" inputmode="numeric" pattern="[0-9]*" min="1" max="20" class="text_pole" value="5" title="Cuántos informes recientes y últimos informes dirigidos a esta ubicación verifica cada mapa." />
+                                     </label>
+                                     <label>Mapas por ciclo de intervalo
+                                         <select id="rpg_map_evolution_tick_scope" class="text_pole" title="Qué lugares mapeados puede evolucionar el intervalo automático. Solo los mapas seleccionados por el pase normal pueden consumir informes pendientes.">
+                                             <option value="active">Solo mapa actual</option>
+                                             <option value="count">N mapas de todos los sitios mapeados</option>
+                                             <option value="all" selected>Todos los sitios mapeados (N por turno)</option>
+                                             <option value="selected">Mapas seleccionados</option>
+                                         </select>
+                                     </label>
+                                     <div id="rpg_map_evolution_n_row" class="flex-container gap-1" style="align-items:end; flex-wrap:wrap;">
+                                         <label style="flex:1; min-width:140px;">Cuántos
+                                             <input id="rpg_map_evolution_tick_count" type="text" inputmode="numeric" pattern="[0-9]*" min="0" max="50" class="text_pole" title="Cuántos mapas pendientes evolucionar por ciclo. Los mapas pendientes restantes esperan turnos posteriores. El mapa actual siempre consume un espacio cuando está pendiente. 0 = todos los mapas pendientes este turno. Las primeras visitas estampan una base de referencia y no consumen espacio." />
+                                         </label>
+                                         <label class="checkbox_label" style="flex:1; min-width:180px; padding-bottom:4px;">
+                                             <input id="rpg_map_evolution_tick_randomize" type="checkbox" checked />
+                                             <span>Aleatorizar qué mapas pendientes se eligen</span>
+                                         </label>
+                                     </div>
+                                     <div style="font-size:0.78em; opacity:0.65; line-height:1.35; margin-top:-4px;">
+                                         Los mapas pendientes restantes permanecen en cola para turnos posteriores. El mapa actual siempre ocupa un espacio cuando está pendiente.
+                                     </div>
                                     <div id="rpg_map_evolution_interval_selected_hint" style="display:none; font-size:0.78em; opacity:0.65; line-height:1.35;">
                                         Los ciclos de intervalo usan los mapas marcados abajo en Ejecutar ahora.
                                     </div>

@@ -1263,6 +1263,21 @@ export function renderDayNightBadge(str) {
         localStorage.setItem(DETACHED_KEY, JSON.stringify([...set]));
     }
 
+    const PARTY_COMPACT_KEY = 'rpg_tracker_party_compact';
+    export function loadPartyCompact() {
+        try { return localStorage.getItem(PARTY_COMPACT_KEY) === 'true'; }
+        catch { return false; }
+    }
+    export function savePartyCompact(on) {
+        try { localStorage.setItem(PARTY_COMPACT_KEY, String(!!on)); }
+        catch { /* ignore */ }
+    }
+    function renderPartyCompactButton(isOn) {
+        const active = isOn ? ' active' : '';
+        const title = isOn ? 'Mostrar detalles completos del grupo' : 'Modo compacto: solo retrato, nombre y PV';
+        return `<button type="button" class="rt-party-compact-btn${active}" data-tag="PARTY" aria-pressed="${isOn ? 'true' : 'false'}" title="${title}">Modo Compacto</button>`;
+    }
+
     const ACTIVE_TAB_KEY = 'rpg_tracker_active_tab';
 
     /** Returns the last-selected tab in Tab Mode, or '' if none set yet. */
@@ -2005,7 +2020,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
                 <div class="rt-quickstart" id="rt-quickstart">
                     <div class="rt-quickstart-title">⚡ Acción Instantánea</div>
-                    <div class="rt-quickstart-sub">Elige un género, opcionalmente introduce un nombre o Configuración Inicial, y comienza. Deja el nombre en blanco para que la IA lo elija. La extensión utiliza tu Configuración del Narrador, genera un nivel aleatorio (1–10), clase y otros detalles no especificados, y crea una Ficha de Jugador en el Agente de Lorebook junto con una persona de ST solo con nombre. Desmarca Enviar Mensaje Inicial si deseas escribir tu propia primera acción.</div>
+                    <div class="rt-quickstart-sub">Elige un género, opcionalmente introduce un nombre o Configuración Inicial, y comienza. Deja el nombre en blanco para que la IA lo elija. La extensión utiliza tu Configuración del Narrador, comienza en Nivel 1 con 0 XP a menos que Nivel Aleatorio esté activado, genera una clase y otros detalles no especificados, y crea una Ficha de Jugador en el Agente de Lorebook junto con una persona de ST solo con nombre. Desmarca Enviar Mensaje Inicial si deseas escribir tu propia primera acción en lugar de permitir que la IA abra la campaña.</div>
                     <div class="rt-quickstart-genres" role="group" aria-label="Género de Acción Instantánea">
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="fantasy" aria-pressed="false">⚔️ Fantasía</button>
                         <button type="button" class="rt-quickstart-genre-btn" data-genre="realistic" aria-pressed="false">🏙️ Moderno</button>
@@ -2033,7 +2048,14 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             </select>
                             <input id="rt-quickstart-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'block' : 'none'}" placeholder="50–5000" min="50" max="5000" aria-label="Recuento personalizado de palabras en Acción Instantánea" />
                         </div>
-                        <div class="rt-quickstart-starter-message">
+                        <div class="rt-quickstart-flag">
+                            <label for="rt-quickstart-random-level" title="Cuando está desactivado, Acción Instantánea inicia en Nivel 1 con 0 XP. Cuando está activado, se genera un nivel del 1 al 10 al azar. La Configuración Inicial prevalece si especifica un nivel.">
+                                <span>¿Nivel Aleatorio?</span>
+                                <input type="checkbox" id="rt-quickstart-random-level" ${obSettings.onboardingInstantActionRandomLevel === true ? 'checked' : ''} aria-label="Nivel Aleatorio" />
+                            </label>
+                            <span class="rt-cr-help-icon" title="Cuando está desactivado, Acción Instantánea inicia en Nivel 1 con 0 XP. Cuando está activado, se genera un nivel del 1 al 10 al azar. La Configuración Inicial prevalece si especifica un nivel.">?</span>
+                        </div>
+                        <div class="rt-quickstart-flag">
                             <label for="rt-quickstart-send-starter" title="Si está marcado, la IA inicia automáticamente la campaña tan pronto como el personaje generado esté listo.">
                                 <span>¿Enviar Mensaje Inicial?</span>
                                 <input type="checkbox" id="rt-quickstart-send-starter" ${obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''} aria-label="Enviar Mensaje Inicial" />
@@ -2502,9 +2524,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <span>⛺ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
                         <div>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Alpha: builds a hidden location map before exploring a dungeon, ruin, town, or city. New maps need CreateAreaMap (function calling) or the text-command opener below.">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Construye un mapa de ubicación oculto antes de explorar una mazmorra, ruina, pueblo o ciudad. Los mapas nuevos necesitan CreateAreaMap (llamada a funciones) o el activador de comando de texto a continuación.">
                             <input type="checkbox" id="rt_onboarding_mod_dungeon_reality_and_hidden_mapping" />
-                            <span>🗺️ Persistent Maps (Alpha)</span>
+                            <span>🗺️ Mapas Persistentes</span>
                         </label>
                         <div id="rt_onboarding_map_architect_opener_wrap" style="padding-left: 20px; display: none; flex-direction: column; gap: 4px;">
                             <span style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold; margin-top: 2px;">Map Architect opener</span>
@@ -2664,6 +2686,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             </button>
         ` : '';
 
+        const isPartyCompact = tag === 'PARTY' && loadPartyCompact();
+        const partyCompactBtn = tag === 'PARTY' ? renderPartyCompactButton(isPartyCompact) : '';
+
         const fullViewBtn = NO_PAGINATE.has(renderType) ? '' : `
             <button class="rt-fullview-btn${isFullView ? ' active' : ''}" data-tag="${tag}" title="${isFullView ? 'Cambiar a Vista Paginada' : 'Cambiar a Lista Completa'}">
                 ${isFullView ? '📜' : '📑'}
@@ -2689,17 +2714,19 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             benchedPanelHtml = renderBenchedPartyPanel(blocks['BENCHED PARTY'], collapsed.has('BENCHED PARTY'), loadBenchedExpanded());
         }
 
+        const compactClass = isPartyCompact ? ' rt-party-compact' : '';
         const bodyHtml = `<div class="${bodyClass}"${catStyleAttr}>${pageItems.join('')}${pagination}${benchedPanelHtml}</div>`;
         if (uiOptions.bodyOnly) {
-            return `<div class="rt-display-group-member" data-member-tag="${tag}">${bodyHtml}</div>`;
+            return `<div class="rt-display-group-member${compactClass}" data-member-tag="${tag}">${bodyHtml}</div>`;
         }
 
-        return `<div class="rt-section-card${isCollapsed ? ' rt-collapsed' : ''}" data-tag="${tag}">
+        return `<div class="rt-section-card${isCollapsed ? ' rt-collapsed' : ''}${compactClass}" data-tag="${tag}">
             <div class="rt-section-header" data-tag="${tag}">
                 <span>${icon} ${displayName}</span>
                 <div class="rt-section-header-right">
                     ${totalValueBadge}
                     ${personaFromCharBtn}
+                    ${partyCompactBtn}
                     ${detachBtn}
                     ${fullViewBtn}
                     ${uiOptions.showCategorySettings === false ? '' : `<button class="rt-category-settings-btn" data-tag="${tag}" title="Opciones de Renderizado de Categoría">
@@ -2728,10 +2755,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
         )).join('');
         if (!memberBodies) return '';
 
+        const partyCompactBtn = tags.includes('PARTY') ? renderPartyCompactButton(loadPartyCompact()) : '';
+
         return `<div class="rt-section-card rt-display-group-card${isCollapsed ? ' rt-collapsed' : ''}" data-tag="${key}" data-display-group-id="${escapeHtml(group.id)}">
             <div class="rt-section-header" data-tag="${key}">
                 <span>${escapeHtml(group.icon)} ${escapeHtml(group.name)}</span>
                 <div class="rt-section-header-right">
+                    ${partyCompactBtn}
                     <span class="rt-item-count">${tags.length} ${tags.length === 1 ? 'módulo' : 'módulos'}</span>
                     <span class="rt-collapse-icon">${isCollapsed ? '&#9656;' : '&#9662;'}</span>
                 </div>
