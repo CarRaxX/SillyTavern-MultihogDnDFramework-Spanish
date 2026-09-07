@@ -5,7 +5,7 @@
     "description": "Framework y motor de juego D&D / RPG para SillyTavern con rastreador de estado reactivo, gestión de inventario, tiradas de dados, misiones, relaciones de PNJs y agente de Lorebook.",
     "js": "index.js",
     "css": "style.css",
-    "loading_order": 20,
+    "loading_order": 150,
     "generate_interceptor": "rpgTrackerInterceptor",
     "homePage": "https://github.com/MultihogAurelius/SillyTavern-MultihogDnDFramework",
     "auto_update": true
