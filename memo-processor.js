@@ -408,23 +408,25 @@ export function deduplicateMemo(memo) {
     if (!memo) return "";
     const settings = getSettings();
 
-    const tagRegex = /\[([A-Z_]+)\]/gi;
+    // Match any opening tag that has a corresponding closing tag or valid tag format (allows spaces and numbers, e.g. [SPECIAL STATUS], [BENCHED PARTY])
+    const tagRegex = /\[([A-Z0-9_ ]+)\]/gi;
     const tags = new Set();
     let match;
     while ((match = tagRegex.exec(memo)) !== null) {
-        tags.add(match[1].toUpperCase());
+        const tagName = match[1].trim().toUpperCase();
+        if (tagName) tags.add(tagName);
     }
 
     let cleanedMemo = memo;
     for (const tag of tags) {
         const escapedTag = escapeRegex(tag);
         const pattern = new RegExp(`\\[${escapedTag}\\][\\s\\S]*?\\[\\/${escapedTag}\\]`, 'gi');
-        const blocks = [...memo.matchAll(pattern)];
+        const blocks = [...cleanedMemo.matchAll(pattern)];
 
         if (blocks.length > 1) {
             if (settings.debugMode) console.warn(`[RPG Tracker] Deduplication: Found ${blocks.length} instances of [${tag}]. Keeping the last one.`);
-            cleanedMemo = cleanedMemo.replace(pattern, "---DEDUP_MARKER---");
             const lastBlock = blocks[blocks.length - 1][0];
+            cleanedMemo = cleanedMemo.replace(pattern, "---DEDUP_MARKER---");
             const split = cleanedMemo.split("---DEDUP_MARKER---");
             cleanedMemo = split.join("").trim() + "\n\n" + lastBlock;
         }
