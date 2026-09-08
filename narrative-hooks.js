@@ -577,7 +577,6 @@ export function registerMapArchitectTool() {
                     brief_description: { type: 'string', description: 'Brief current description of the site. This is stored as the parent SUBDUNGEON/SUBINTERIOR gateway detail and may be used for the Location CORE; do not copy the full prompt.' },
                     attachTo: {
                         type: 'object',
-                        additionalProperties: false,
                         description: 'Optional structural address for a nested map. Use it from any player location. Omit it only for a standalone map or when deliberately using the active-cell shorthand.',
                         properties: {
                             site: { type: 'string', description: 'Exact canonical name/path of the existing parent map being edited.' },
