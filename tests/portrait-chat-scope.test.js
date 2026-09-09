@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
     loadPortraitMapsForChat,
     migrateLegacyPortraitMapsToChat,
+    portraitWriteMode,
     snapshotPortraitMapsForChat,
 } from '../src/state/portrait-chat-scope.js';
 
@@ -55,6 +56,158 @@ describe('per-chat portrait ownership', () => {
         expect(settings.chatStates['current-chat'].customPortraits.Legacy).toBe('legacy.png');
     });
 
+    it('routes late Horde/auto-gen writes to the pinned chat partition after a switch', () => {
+        expect(portraitWriteMode('chat-a', 'chat-a')).toBe('live');
+        expect(portraitWriteMode('chat-b', 'chat-a')).toBe('partition');
+        expect(portraitWriteMode(null, 'chat-a')).toBe('partition');
+        expect(portraitWriteMode('chat-b', null)).toBe('live');
+        expect(portraitWriteMode('chat-b', '')).toBe('live');
+    });
+
+    it('pins interactive portrait/location Apply to the opening chat, without Horde bypassing into portraits', () => {
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+        const portraitsSource = readFileSync(new URL('../portraits.js', import.meta.url), 'utf8');
+        const cardEventsSource = readFileSync(new URL('../src/ui/panel/card-events.js', import.meta.url), 'utf8');
+
+        // Default chat portrait/location writers pin passChatId into apply*Data.
+        expect(indexSource).toContain('applyPortraitData(entityName, src, { chatId: passChatId })');
+        expect(indexSource).toContain('applyLocationImageData(normPath, finalSrc, { chatId: passChatId })');
+        expect(cardEventsSource).toContain('applyPortraitData(entityName, src, { chatId: passChatId })');
+
+        // Lorebook Agent panel drops / library imports pin before file/network awaits.
+        const panelBuilderSource = readFileSync(new URL('../src/ui/panel/panel-builder.js', import.meta.url), 'utf8');
+        expect(panelBuilderSource).toContain("import { getActiveChatId } from '../../state/chat-persistence.js'");
+        expect(panelBuilderSource).toContain('await applyPortraitData(item.label, scaled, { chatId: passChatId })');
+        expect(panelBuilderSource).toContain('await applyLocationImageData(locFullPath, scaled, { chatId: passChatId })');
+        expect(panelBuilderSource).toContain('await applyPortraitData(name, src, { chatId: passChatId })');
+        expect(panelBuilderSource).toContain('await applyPortraitData(name, avatarUrl, { chatId: passChatId })');
+        // Unpinned apply*Data calls must not remain in panel-builder (except the
+        // function dependency destructure / type references).
+        const applyCalls = panelBuilderSource.match(/await apply(?:Portrait|LocationImage)Data\([^)]*\)/g) || [];
+        expect(applyCalls.length).toBeGreaterThan(0);
+        for (const call of applyCalls) {
+            expect(call).toContain('chatId: passChatId');
+        }
+
+        // generateWithHorde must call the supplied localApply — never applyPortraitData —
+        // so location-image and NPC-library Apply cannot land in customPortraits after a switch.
+        const hordeFn = portraitsSource.slice(
+            portraitsSource.indexOf('export async function generateWithHorde(prompt'),
+            portraitsSource.indexOf('export function getCharacterBlockNames'),
+        );
+        expect(hordeFn).toContain('await localApply(finalUrl)');
+        expect(hordeFn).not.toContain('applyPortraitData(');
+        expect(hordeFn).not.toContain('pinnedApply');
+    });
+
+    it('re-checks live vs partition after persist await so a mid-upload chat switch cannot poison live maps', () => {
+        const portraitsSource = readFileSync(new URL('../portraits.js', import.meta.url), 'utf8');
+
+        for (const [startMarker, endMarker] of [
+            ['export async function applyPortraitData', 'function migratePortraitMapKey'],
+            ['export async function applyLocationImageData', 'export function scaleImageToLandscape'],
+        ]) {
+            const fn = portraitsSource.slice(
+                portraitsSource.indexOf(startMarker),
+                portraitsSource.indexOf(endMarker),
+            );
+            const persistAt = fn.indexOf('await persistPortraitSrc');
+            const writeModeAt = fn.indexOf('portraitWriteMode(');
+            expect(persistAt).toBeGreaterThan(-1);
+            expect(writeModeAt).toBeGreaterThan(persistAt);
+            // Destination must be pinned from call-time chat, not re-read opts.chatId alone
+            // after the await (empty opts.chatId must still treat liveAtStart as the owner).
+            expect(fn).toContain('const liveAtStart = getActiveChatId()');
+            expect(fn).toContain('portraitWriteMode(liveNow, targetChatId)');
+        }
+    });
+
+    it('syncs the current location image to the chat background only when opted in', () => {
+        const immersionSource = readFileSync(new URL('../immersion.js', import.meta.url), 'utf8');
+        const portraitsSource = readFileSync(new URL('../portraits.js', import.meta.url), 'utf8');
+        expect(immersionSource).toContain('syncCurrentLocationBackground({ locationImage });');
+        expect(immersionSource).toContain('portraitAutoApplyLocationBackground');
+        expect(portraitsSource).toContain('_rpgSyncCurrentLocationBackground?.(normPath)');
+        expect(portraitsSource).toContain('applyLocationImageToChatBackground');
+    });
+
+    it('aborts Real-Time scene-art checks after a mid-await chat switch', () => {
+        const immersionSource = readFileSync(new URL('../immersion.js', import.meta.url), 'utf8');
+        const fn = immersionSource.slice(
+            immersionSource.indexOf('export async function runRealtimeSceneArtCheck'),
+            immersionSource.indexOf('export function maybeAutoGenerateImmersionSceneArt'),
+        );
+        expect(immersionSource).toContain("import { canCommitPassForChat } from './src/state/pass-affinity.js'");
+        expect(fn).toContain('const passChatId = getActiveChatId()');
+        expect(fn.indexOf('await buildImmersionSceneState')).toBeGreaterThan(fn.indexOf('const passChatId'));
+        expect(fn.indexOf('canCommitPassForChat(passChatId, getActiveChatId())')).toBeGreaterThan(
+            fn.indexOf('await buildImmersionSceneState'),
+        );
+        expect(fn.indexOf('maybeAutoGenerateImmersionSceneArt')).toBeGreaterThan(
+            fn.indexOf('canCommitPassForChat(passChatId, getActiveChatId())'),
+        );
+    });
+
+    it('pins auto-gen kickoffs before lorebook awaits and aborts when affinity is lost', () => {
+        const portraitsSource = readFileSync(new URL('../portraits.js', import.meta.url), 'utf8');
+        const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+
+        expect(portraitsSource).toContain("import { canCommitPassForChat } from './src/state/pass-affinity.js'");
+
+        const forceFn = portraitsSource.slice(
+            portraitsSource.indexOf('export async function forceCheckAutoGenerations'),
+            portraitsSource.indexOf('export async function checkAndTriggerAutoGenerations'),
+        );
+        expect(forceFn.indexOf('const passChatId = getActiveChatId()')).toBeGreaterThan(-1);
+        const forceLoadAt = forceFn.indexOf('await ctx.loadWorldInfo');
+        expect(forceLoadAt).toBeGreaterThan(forceFn.indexOf('const passChatId'));
+        expect(forceFn.indexOf('canCommitPassForChat(passChatId, getActiveChatId())', forceLoadAt))
+            .toBeGreaterThan(forceLoadAt);
+        expect(forceFn).toContain('triggerBackgroundPortraitGeneration(name, refresh, entry.content || \'\', pinnedOpts)');
+        expect(forceFn).toContain('triggerBackgroundLocationGeneration(path, refresh, entry.content, pinnedOpts)');
+
+        const checkFn = portraitsSource.slice(
+            portraitsSource.indexOf('export async function checkAndTriggerAutoGenerations'),
+            portraitsSource.indexOf('// ── Location images (hierarchical lore paths)'),
+        );
+        expect(checkFn.indexOf('const passChatId = getActiveChatId()')).toBeGreaterThan(-1);
+        const checkLoadAt = checkFn.indexOf('await ctx.loadWorldInfo');
+        expect(checkLoadAt).toBeGreaterThan(checkFn.indexOf('const passChatId'));
+        expect(checkFn.indexOf('canCommitPassForChat(passChatId, getActiveChatId())', checkLoadAt))
+            .toBeGreaterThan(checkLoadAt);
+        expect(checkFn).toContain('chatId: passChatId');
+
+        const locFn = portraitsSource.slice(
+            portraitsSource.indexOf('export async function checkAndTriggerLocationAutoGenerations'),
+            portraitsSource.indexOf('export async function checkAndTriggerLocationAutoGenerations') + 1200,
+        );
+        const locLoadAt = locFn.indexOf('await loadLocationLorebookEntries()');
+        expect(locLoadAt).toBeGreaterThan(locFn.indexOf('passChatId'));
+        expect(locFn.indexOf('canCommitPassForChat(passChatId, getActiveChatId())', locLoadAt))
+            .toBeGreaterThan(locLoadAt);
+
+        const portraitTrigger = portraitsSource.slice(
+            portraitsSource.indexOf('export function triggerBackgroundPortraitGeneration'),
+            portraitsSource.indexOf('export function resetAutoGenerationTracking'),
+        );
+        expect(portraitTrigger).toContain('opts.chatId');
+        expect(portraitTrigger).toContain('await applyPortraitData(name, scaled, { chatId: passChatId })');
+
+        const locationTrigger = portraitsSource.slice(
+            portraitsSource.indexOf('export function triggerBackgroundLocationGeneration'),
+            portraitsSource.indexOf('async function loadLocationLorebookEntries'),
+        );
+        expect(locationTrigger).toContain('opts.chatId');
+        expect(locationTrigger).toContain('await applyLocationImageData(normPath, scaled, { chatId: passChatId })');
+
+        // Chat-link-off switches must also clear the session-known auto-gen set.
+        const offBranch = indexSource.slice(
+            indexSource.indexOf('if (!s.chatLinkEnabled) {'),
+            indexSource.indexOf('// saveChatState(oldChatId) already called above'),
+        );
+        expect(offBranch).toContain('resetAutoGenerationTracking()');
+    });
+
     it('wires chat switching, persistence, and renames to the active portrait partition only', () => {
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
         const portraitsSource = readFileSync(new URL('../portraits.js', import.meta.url), 'utf8');
@@ -62,7 +215,11 @@ describe('per-chat portrait ownership', () => {
         expect(indexSource).toContain('snapshotPortraitMapsForChat(s, oldChatId)');
         expect(indexSource).toContain('loadPortraitMapsForChat(s, resolvedId)');
         expect(indexSource).toContain('migrateLegacyPortraitMapsToChat(settings, bootChatId)');
+        expect(indexSource).toContain('stopRealtimeLocationGeneration()');
         expect(portraitsSource).toContain('snapshotPortraitMapsForChat(s, getActiveChatId())');
+        expect(portraitsSource).toContain('portraitWriteMode(');
+        expect(portraitsSource).toContain('{ chatId: passChatId }');
+        expect(portraitsSource).toContain('r2: false');
         expect(portraitsSource).not.toContain('part.customPortraits[newKey] = part.customPortraits[oldKey]');
     });
 });

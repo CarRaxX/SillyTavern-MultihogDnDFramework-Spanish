@@ -35,6 +35,7 @@ export default {
         resetDefaults: 'Restablecer Valores Predeterminados',
         exportProfile: 'Exportar Perfil',
         importProfile: 'Importar Perfil',
+        useLocationImagesAsChatBackground: 'Usar imágenes de ubicación como fondo del chat',
     },
     hud: {
         partyMembers: 'MIEMBROS DEL GRUPO',

@@ -1523,6 +1523,7 @@ export function syncLocationImageDependentUi(settings) {
 
     // Auto-gen locations requires Show Location Images; RT mode is always toggleable (enables location images when turned on).
     syncCheckbox('rpg_tracker_portrait_auto_locations', lorebookAutoOn, !imagesEnabled || realTimeOn);
+    syncCheckbox('rpg_tracker_portrait_auto_apply_location_background', !!settings.portraitAutoApplyLocationBackground, !imagesEnabled);
     syncCheckbox('rpg_tracker_portrait_auto_scene_view', realTimeOn, false);
     // Keep this available as an emergency kill switch. Turning location images
     // off also stops and disables any active Real-Time generation.
@@ -2600,6 +2601,10 @@ function onChatChanged(newChatId) {
     if (!s.chatLinkEnabled) {
         loadPortraitMapsForChat(s, resolvedId);
         if (migratedPortraitScope) void saveSettings(true);
+        // Portrait auto-gen knownEntities is session-global; clear it so Chat B
+        // does not inherit Chat A's "already seen" set (and so an in-flight
+        // checkAndTrigger from Chat A cannot keep enqueueing against Chat B).
+        resetAutoGenerationTracking();
         // World Progression "last fired" is operational per-chat state and must never bleed
         // between scenarios regardless of chatLinkEnabled. Reset it unconditionally on actual switch.
         s.worldProgressionLastFiredAtMinutes = -1;
@@ -3532,6 +3537,7 @@ function loadProfile(name) {
     s.portraitAutoGenerateEnemies = p.portraitAutoGenerateEnemies ?? false;
     s.portraitAutoGenerateNpcs = p.portraitAutoGenerateNpcs ?? false;
     s.portraitAutoGenerateLocations = p.portraitAutoGenerateLocations ?? false;
+    s.portraitAutoApplyLocationBackground = p.portraitAutoApplyLocationBackground ?? false;
     s.portraitAutoGenerateSceneView = p.portraitAutoGenerateSceneView ?? false;
     s.portraitRealtimeTriggerMode = ['location_enter', 'location_change', 'every_n_outputs'].includes(p.portraitRealtimeTriggerMode)
         ? p.portraitRealtimeTriggerMode
@@ -3690,6 +3696,7 @@ function loadProfile(name) {
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
     $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
+    $('#rpg_tracker_portrait_auto_apply_location_background').prop('checked', !!s.portraitAutoApplyLocationBackground);
     $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
     $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
     syncNpcPortraitDependentUi(s);
@@ -4228,9 +4235,12 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
         popupOpts.customButtons.push({ text: '🗑 Clear Portrait', result: 2, classes: ['menu_button'] });
     }
 
+    // Pin before AI Horde / native / Pollinations waits (and before the Apply
+    // popup can outlive a chat switch). Custom NPC-library writers stay unpinned.
+    const passChatId = getActiveChatId();
     const persistPortrait = typeof options.applyPortrait === 'function'
         ? options.applyPortrait
-        : (src) => applyPortraitData(entityName, src);
+        : (src) => applyPortraitData(entityName, src, { chatId: passChatId });
     const localApply = async (src) => {
         await persistPortrait(src);
         refresh();
@@ -4655,12 +4665,14 @@ async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent
         popupOpts.customButtons.push({ text: '🗑 Clear Image', result: 2, classes: ['menu_button'] });
     }
 
+    // Pin before long image waits / Apply after a mid-popup chat switch.
+    const passChatId = getActiveChatId();
     const localApply = async (src) => {
         let finalSrc = src;
         if (src && typeof src === 'string' && src.startsWith('data:image/')) {
             finalSrc = await scaleImageToLandscape(src);
         }
-        await applyLocationImageData(normPath, finalSrc);
+        await applyLocationImageData(normPath, finalSrc, { chatId: passChatId });
         refresh();
         void runtimeState.refreshNpcManifest().catch(() => { });
     };
@@ -7404,6 +7416,15 @@ function organizeConnectionSettingsUI() {
             saveSettings();
             if (settings.portraitAutoGenerateLocations) {
                 forceCheckAutoGenerations(refreshAll);
+            }
+        });
+
+        $('#rpg_tracker_portrait_auto_apply_location_background').prop('checked', !!settings.portraitAutoApplyLocationBackground).on('change', function () {
+            if (!settings.locationImages) return;
+            settings.portraitAutoApplyLocationBackground = !!$(this).prop('checked');
+            saveSettings();
+            if (settings.portraitAutoApplyLocationBackground) {
+                void refreshLorebookAgentViewsNow();
             }
         });
 

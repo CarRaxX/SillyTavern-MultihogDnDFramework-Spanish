@@ -1,4 +1,5 @@
 import { runtimeState } from '../../app/runtime-state.js';
+import { canCommitPassForChat } from '../../state/pass-affinity.js';
 import { isLocationMappingEnabled } from '../../state/section-enabled.js';
 import {
     bindDungeonMapEmbedEvents,
@@ -51,12 +52,11 @@ export function createSceneViewController({
                     const raw = hero.getAttribute('data-loc-raw');
                     if (path) {
                         const item = await loadLocationEntryByPath(path);
-                        const opener = globalThis._rpgAgentOpenLocationDetail;
-                        if (item && typeof opener === 'function') {
-                            await opener(item, path);
-                        } else {
-                            await showLocationImageSettingsMenu(path, () => runtimeState.refreshImmersionView(), item?.content || '');
-                        }
+                        await showLocationImageSettingsMenu(
+                            path,
+                            () => runtimeState.refreshImmersionView(),
+                            item?.content || '',
+                        );
                     } else if (raw) {
                         toastr.info(`No lore match for "${raw}". Add a Locations entry or check the name.`, 'Visuals/Map');
                     }
@@ -135,8 +135,13 @@ export function createSceneViewController({
 
         const performImmersionRefresh = async () => {
             const s = getSettings();
+            // Pin before lorebook await — a mid-refresh chat switch must not
+            // render the departing chat's scene or queue Real-Time gen into the
+            // arriving chat (runRealtimeSceneArtCheck has the same guard).
+            const passChatId = runtimeState.currentChatId;
             try {
                 const scene = await buildImmersionSceneState(s.currentMemo, s);
+                if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) return;
                 runtimeState.hasActiveDungeonMap = !!scene.dungeonMap;
                 maybeAutoGenerateImmersionSceneArt(scene, () => { void runtimeState.refreshImmersionView(); });
                 syncAgentImmersionUi();
@@ -161,6 +166,7 @@ export function createSceneViewController({
                 restoreDungeonMapViewport(container, mapViewport);
                 bindImmersionViewEvents(scene);
             } catch (err) {
+                if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) return;
                 console.error('[RPG Tracker] runtimeState.refreshImmersionView failed:', err);
                 runtimeState.hasActiveDungeonMap = false;
                 syncAgentImmersionUi();

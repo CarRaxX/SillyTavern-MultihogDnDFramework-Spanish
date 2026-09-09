@@ -35,6 +35,7 @@ export default {
         resetDefaults: 'Reset to Defaults',
         exportProfile: 'Export Profile',
         importProfile: 'Import Profile',
+        useLocationImagesAsChatBackground: 'Use Location Images as Chat Background',
     },
     hud: {
         partyMembers: 'PARTY MEMBERS',

@@ -2,6 +2,22 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.84] - 2026-09-08
+
+### Corregido
+- Las comprobaciones de autogeneración de retratos y ubicaciones mantienen la pertenencia al chat a través de las cargas de lorebooks y dejan de encolar tras cambiar de chat.
+- Los trabajos de imagen en cola se detienen antes de usar el contexto de prompt de otro chat; fallos tardíos en Tiempo Real ya no desactivan el modo del chat recién abierto.
+- Cambiar de chat con Enlace de Chat desactivado reinicia el rastreo de entidades autogeneradas.
+
+### Añadido
+- Nueva opción para aplicar automáticamente la imagen de la ubicación actual como fondo de chat en SillyTavern (`portraitAutoApplyLocationBackground`).
+
+## [2026.8.83] - 2026-09-08
+
+### Corregido
+- La importación y arrastre de retratos e imágenes de ubicación en el panel del Agente de Lorebook retienen su chat original mientras los archivos son leídos, descargados y subidos.
+- Las actualizaciones tardías de escena, activación de PNJs, generación de retratos de respaldo y actualizaciones de la Ficha de Personaje ya no modifican otro chat tras cambiar de conversación.
+
 ## [2026.8.82] - 2026-09-01
 
 ### Corregido

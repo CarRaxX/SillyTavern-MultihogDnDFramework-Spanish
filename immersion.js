@@ -1,14 +1,32 @@
 import { getSettings, getEffectiveRouterCampaignPrefix, saveChatState } from './state-manager.js';
 import { escapeHtml } from './memo-processor.js';
-import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
+import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating, resolvePortraitSrcForPlayerCharacter, applyLocationImageToChatBackground } from './portraits.js';
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
 import { isWorldInfoBookKnown, scanRecentOutputForPresentNpcs } from './router.js';
+import { canCommitPassForChat } from './src/state/pass-affinity.js';
 import { resolveDungeonMapForLocation, resolveDungeonMapFromHistorySnapshot, stripDungeonMapSection } from './dungeon-reality.js';
 import { buildDungeonMapGraph, renderDungeonMapEmbedHtml } from './dungeon-map-graph.js';
 import { isDungeonMapDetached, isDungeonMapRevealAll } from './src/ui/panel/dungeon-map-panel.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { runtimeState } from './src/app/runtime-state.js';
+
+/** Apply the current location image when the user opted into chat-background syncing. */
+export function syncCurrentLocationBackground(scene) {
+    const s = getSettings();
+    if (!s.portraitAutoApplyLocationBackground || !s.locationImages) return;
+    if (scene?.locationImage) applyLocationImageToChatBackground(scene.locationImage);
+}
+
+globalThis._rpgSyncCurrentLocationBackground = async () => {
+    const s = getSettings();
+    if (!s.portraitAutoApplyLocationBackground || !s.locationImages) return;
+    // The builder applies the current image before loading NPCs. Reapplying its
+    // result here could overwrite a newer scene that finished while NPCs loaded.
+    await buildImmersionSceneState(s.currentMemo, s);
+};
+
+let latestBackgroundSceneRequest = 0;
 
 /**
  * Parse current location from recent chat status footer, then memo [TIME] block.
@@ -188,8 +206,10 @@ export async function loadNpcEntryByKey(entryId, settings) {
  * @returns {Promise<object>}
  */
 export async function buildImmersionSceneState(memo, settings) {
+    const backgroundRequest = ++latestBackgroundSceneRequest;
     const s = settings || getSettings();
     const ctx = SillyTavern.getContext();
+    const backgroundChatId = ctx.chatId;
 
     const rawLocationText = getCurrentLocationText(memo ?? s.currentMemo, ctx);
     const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
@@ -228,6 +248,12 @@ export async function buildImmersionSceneState(memo, settings) {
     }
 
     const locationImage = storagePath ? resolveLocationImageWithMeta(storagePath).src : '';
+    const liveCtx = SillyTavern.getContext();
+    if (backgroundRequest === latestBackgroundSceneRequest
+        && backgroundChatId === liveCtx.chatId
+        && rawLocationText === getCurrentLocationText(getSettings().currentMemo, liveCtx)) {
+        syncCurrentLocationBackground({ locationImage });
+    }
     const locationBreadcrumb = resolvedPath ? formatLocationBreadcrumb(resolvedPath) : '';
     const locationLeaf = resolvedPath ? resolvedPath.split(' :: ').pop() : rawLocationText;
 
@@ -500,8 +526,12 @@ export async function runRealtimeSceneArtCheck() {
     const s = getSettings();
     if (!s.portraitAutoGenerateSceneView) return;
     if (!s.locationImages || s.enablePortraits === false) return;
+    // Pin before lorebook await — a mid-check chat switch must not stamp visit
+    // tracking or queue Real-Time location gen into the arriving chat.
+    const passChatId = getActiveChatId();
     try {
         const scene = await buildImmersionSceneState(s.currentMemo, s);
+        if (!canCommitPassForChat(passChatId, getActiveChatId())) return;
         maybeAutoGenerateImmersionSceneArt(scene, () => {
             if (typeof globalThis._rpgRefreshImmersionView === 'function') {
                 void globalThis._rpgRefreshImmersionView();
