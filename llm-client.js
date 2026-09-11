@@ -1162,7 +1162,21 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             // Do NOT pass tools to the profile service — ConnectionManagerRequestService
             // does not reliably forward them to all API backends, causing MALFORMED_FUNCTION_CALL
             // errors. The router uses a text-format fallback for profile connections.
-            const raw = await sendViaConnectionProfile(context, settings, messages, { signal });
+            // Stream the request so long reasoning jobs keep the socket alive and avoid AbortError timeouts.
+            const raw = await sendViaConnectionProfile(context, settings, messages, { signal, stream: true });
+            let text = await collectCompletionText(raw);
+            if (text) {
+                try {
+                    const parsed = JSON.parse(text);
+                    text = parsed.content ?? parsed.message?.content ?? parsed.choices?.[0]?.message?.content ?? text;
+                } catch (_) { /* keep streamed / raw text */ }
+                let _reasoning = null;
+                const thinkMatch = text.match(/<think\b[^>]*>([\s\S]*?)(?:<\/think>|$)/i);
+                if (thinkMatch) {
+                    _reasoning = thinkMatch[1].trim();
+                }
+                return { content: text, reasoning: _reasoning, toolCall: null };
+            }
             if (typeof raw === 'string') return { content: raw, toolCall: null };
             const r = /** @type {any} */ (raw);
             // Check for native tool_calls first
@@ -1172,20 +1186,20 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
                 const { args, argumentError } = parseToolCallArguments(rawArguments);
                 return { content: r?.choices?.[0]?.message?.content || '', toolCall: { name: tc.function.name, args, id: tc.id || `call_${Date.now()}`, argumentError, rawArguments } };
             }
-            let text = r?.content
+            let textFallback = r?.content
                 ?? r?.message?.content
                 ?? r?.choices?.[0]?.message?.content
                 ?? r?.choices?.[0]?.text
                 ?? null;
 
-            if (text === null || text === undefined || text === '') {
-                text = r?.reasoning
+            if (textFallback === null || textFallback === undefined || textFallback === '') {
+                textFallback = r?.reasoning
                     ?? r?.message?.reasoning
                     ?? r?.choices?.[0]?.message?.reasoning
-                    ?? text;
+                    ?? textFallback;
             }
 
-            if (typeof text === 'string') return { content: text, toolCall: null };
+            if (typeof textFallback === 'string') return { content: textFallback, toolCall: null };
             throw new Error(`[RPG Tracker] Profile agent turn returned unexpected type: ${JSON.stringify(raw).substring(0, 200)}`);
         }
     }

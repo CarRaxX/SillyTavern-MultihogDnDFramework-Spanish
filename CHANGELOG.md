@@ -2,6 +2,18 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.86] - 2026-09-10
+
+### Corregido
+- Las actualizaciones de relaciones por regex del narrador retienen la pertenencia al chat a través de la resolución de PNJs en el lorebook y dejan de escribir deltas de amistad/afecto en otro chat tras un cambio de conversación.
+- Las tareas tardías de reversión (rollback) de regex y agentes se detienen antes de iniciar otra reversión o actualizar el planificador del chat recién abierto.
+
+## [2026.8.85] - 2026-09-09
+
+### Corregido
+- Los refrescos de Vista de Escena y arte de ubicación en Tiempo Real se abortan cuando `onChatChanged` cambia el ID del chat antes de que `loadChatState` reemplace el memo activo, evitando que una generación de inmersión a mitad de cambio encole la imagen de la ubicación del chat saliente en el nuevo chat.
+- El renderizado de escenas y las actualizaciones de fondo ahora verifican el propietario del chat del memo activo, incluso cuando ambos chats tienen un texto de memo idéntico.
+
 ## [2026.8.84] - 2026-09-08
 
 ### Corregido

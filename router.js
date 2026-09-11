@@ -1847,7 +1847,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             if (settings.routerBasicMode) {
                 const cleanupUserPrompt = cleanupContext;
                 broadcastStep('thought', 'Thinking...');
-                const basicResp = await sendStateRequest(routerSettings, cleanupSystemPrompt, cleanupUserPrompt, _routerSignal);
+                const basicResp = await sendStateRequest(routerSettings, cleanupSystemPrompt, cleanupUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
                 const thoughtMatchC = basicResp.match(/(?:Thought|Reasoning):\s*([\s\S]*?)(?=\[\[|$)/i);
                 if (thoughtMatchC) broadcastStep('thought', thoughtMatchC[1].trim().substring(0, 300));
                 broadcastStep('thought', 'Parsing cleanup tags...');
@@ -2149,7 +2149,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}${partyMechanicalSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
-            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal);
+            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
 
             const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
             if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
@@ -3934,7 +3934,7 @@ Output a JSON object:
             maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
         };
 
-        const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+        const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'Lorebook Archivist' });
         const match = result.match(/\{[\s\S]*\}/);
         if (match) {
             const data = JSON.parse(match[0]);
@@ -5456,7 +5456,7 @@ Only output factions, locations, and conflicts explicitly mentioned in the suppl
 
     let rawOutput;
     try {
-        rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+        rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'Campaign Skeleton' });
     } catch (e) {
         broadcastStep('error', `World Skeleton generation failed: ${e.message}`);
         throw e;
@@ -5783,7 +5783,7 @@ Generate the Skeleton Source:`;
         routerSettings.openaiModel = settings.openaiModel;
     }
 
-    const rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+    const rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'Map Architect' });
     if (!rawOutput?.trim()) throw new Error('LLM returned an empty response.');
 
     // Clean up surrounding quotes/newlines
