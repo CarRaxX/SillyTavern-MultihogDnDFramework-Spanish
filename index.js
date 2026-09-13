@@ -11,7 +11,7 @@ import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } 
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { inferMapArchitectArgs, runMapArchitect } from './map-architect.js';
-import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, deleteDungeonMapFromLocationEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
+import { runRouterPass, rollbackRouterPass, reapplyRouterPass, captureRouterLoreState, captureActiveDungeonMapHistory, restoreActiveDungeonMapHistory, getLorebookManifest, deleteLorebookEntry, deleteDungeonMapFromLocationEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, stopWorldProgressionPass, purgeWorldHistoryForChat, setLorebookEntryPinned, rememberCampaignBook, updateWorldInfoCache } from './router.js';
 import { isMapUpdaterRunning, onMapUpdaterUserMessage, runMapUpdaterPass, stopMapUpdaterPass } from './map-updater.js';
 import { isMapEvolutionRunning, listMappedEvolutionSites, loadMappedEvolutionSite, runMapEvolutionPass, stopMapEvolutionPass } from './map-evolution.js';
 import { summarizeMapEvolutionSchedule, stampEvolutionLastFired, evolutionIntervalHoursForSettings, setSiteEvolutionIntervalOverride, getSiteEvolutionIntervalOverride, normalizeMapEvolutionNarratorCommitTokens } from './map-evolution-lib.js';
@@ -2460,6 +2460,21 @@ function onChatChanged(newChatId) {
     // would write into the arriving chat's projected settings / chatStates partition.
     if (runtimeState.stateController) {
         try { runtimeState.stateController.abort(); } catch (_) { /* ignore */ }
+    }
+    // Lorebook Agent and World Progression both commit via live prefix / active
+    // chat id after long awaits; abort before flipping so late applyAction and
+    // timer/watermark persists cannot target the arriving chat.
+    try { stopRouterPass(); } catch (_) { /* ignore */ }
+    try { stopWorldProgressionPass(); } catch (_) { /* ignore */ }
+    // Real-Time location art uses the shared image queue and can wait minutes on
+    // AI Horde; abort before flipping chat id so a late apply cannot target the
+    // arriving chat (background portrait jobs pin chatId separately).
+    try { stopRealtimeLocationGeneration(); } catch (_) { /* ignore */ }
+
+    // Drop in-flight Adventure Companion LLM/tool work for the departing chat.
+    // A late act_for_user or agent command would mutate the arriving chat.
+    if (typeof globalThis._rpgAbortAdventureCompanionInFlight === 'function') {
+        try { globalThis._rpgAbortAdventureCompanionInFlight(); } catch (_) { /* ignore */ }
     }
 
     // Flush Adventure Companion under the departing chat BEFORE flipping currentChatId /

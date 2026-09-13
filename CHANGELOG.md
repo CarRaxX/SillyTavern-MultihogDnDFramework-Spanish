@@ -2,6 +2,18 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.87] - 2026-09-13
+
+### Corregido
+- World Progression retiene la pertenencia al chat a través de cargas de lorebooks, guardados, activaciones y esperas de LLM, y deja de escribir reportes o avanzar temporizadores en otro chat tras un cambio de conversación.
+- Los cambios de chat abortan de inmediato el trabajo de LLM en vuelo de World Progression y del Agente de Lorebook antes de que cambie la partición activa.
+- Adventure Companion aborta las tareas en vuelo de LLM y herramientas al cambiar de chat y rechaza acciones tardías cuando el chat de origen ya no está activo.
+- Las solicitudes canceladas de Companion retienen su señal de aborto y no pueden ejecutar herramientas tardías ni limpiar los controles de una solicitud más reciente.
+- Los comandos de memo de estado se detienen antes de modificar misiones, historial o datos del memo si el chat o el estado cambian mientras se captura una instantánea de mapa.
+
+### Añadido
+- **Comandos de barra `/get-state-memo` y `/set-state-memo`**: Permiten leer el memo de estado completo o un `[BLOQUE]` individual sin ejecutar un pase de LLM. `/get-state-memo block=TIME` devuelve solo el contenido (`Day 2`); `/get-state-memo TIME` (posicional) devuelve el bloque envuelto (`[TIME]\nDay 2\n[/TIME]`). `/set-state-memo block=TIME Day 2` establece el contenido de un bloque (fusionándolo en el memo existente), o `/set-state-memo <memo completo>` reemplaza todo. El identificador de bloque usa el argumento nombrado `block=` para evitar fallos con comillas o saltos de línea. `/set-state-memo` registra la misma entrada de versión/delta en el historial *Linear Stone* que una actualización narrativa o por Direct Prompt, de modo que la navegación `[ LIVE ]` y el panel de deltas reflejan el cambio de inmediato.
+
 ## [2026.8.86] - 2026-09-10
 
 ### Corregido
