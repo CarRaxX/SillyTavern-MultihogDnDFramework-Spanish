@@ -1340,7 +1340,22 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         }
     }
 
-    // ── Default (generateRaw fallback) ───────────────────────────────────────
+    // ── Default mode: stream via ChatCompletionService if available, else generateRaw ──
+    if (context.mainApi === 'openai' && typeof context.ChatCompletionService?.processRequest === 'function') {
+        const raw = await sendViaLiveChatCompletion(context, settings, messages, { signal });
+        let text = await collectCompletionText(raw);
+        if (text) {
+            try {
+                const parsed = JSON.parse(text);
+                text = parsed.content ?? parsed.message?.content ?? parsed.choices?.[0]?.message?.content ?? text;
+            } catch (_) { /* keep streamed text */ }
+            let _reasoning = null;
+            const thinkMatch = text.match(/<think\b[^>]*>([\s\S]*?)(?:<\/think>|$)/i);
+            if (thinkMatch) _reasoning = thinkMatch[1].trim();
+            return { content: text, reasoning: _reasoning, toolCall: null };
+        }
+    }
+
     const { generateRaw } = context;
     if (!generateRaw) throw new Error('[RPG Tracker] generateRaw is not available.');
 
@@ -1359,7 +1374,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             originalPreset2 = await getCurrentCompletionPreset();
             await setCompletionPreset(settings.completionPresetId);
         }
-        const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal };
+        const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal, streaming: true };
         options.responseLength = resolveMaxTokens(settings);
         const result = await generateRaw(options);
         const text = typeof result === 'string' ? result : (/** @type {any} */ (result))?.choices?.[0]?.message?.content ?? '';
