@@ -262,6 +262,109 @@ export async function collectCompletionText(raw) {
     return typeof text === 'string' ? text : '';
 }
 
+/**
+ * Reads an SSE stream (text/event-stream) from an OpenAI-compatible endpoint.
+ * Accumulates content, reasoning, and fragmented tool_calls while keeping
+ * the socket actively reading byte-by-byte to prevent idle timeouts.
+ *
+ * @param {Response} resp
+ * @returns {Promise<{content: string, reasoning: string|null, tool_calls: Array<{id: string, function: {name: string, arguments: string}}>}>}
+ */
+export async function readOpenAISSEStream(resp) {
+    if (!resp.body) {
+        throw new Error('Response body is null, cannot stream SSE.');
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let content = '';
+    let reasoning = '';
+    /** @type {Map<number, {id: string, name: string, arguments: string}>} */
+    const toolsByIndex = new Map();
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            // Keep the last partial line in buffer
+            buffer = lines.pop() ?? '';
+
+            for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line || line.startsWith(':')) continue; // SSE comment or empty line
+                if (line === 'data: [DONE]') continue;
+                if (!line.startsWith('data:')) continue;
+
+                const jsonStr = line.slice(5).trim();
+                if (!jsonStr) continue;
+
+                try {
+                    const parsed = JSON.parse(jsonStr);
+                    const choice = parsed.choices?.[0];
+                    if (!choice) continue;
+
+                    const delta = choice.delta;
+                    if (!delta) continue;
+
+                    // Content text
+                    if (typeof delta.content === 'string') {
+                        content += delta.content;
+                    }
+
+                    // Reasoning / thinking (standardized or vendor-specific)
+                    const deltaReasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thought ?? null;
+                    if (typeof deltaReasoning === 'string') {
+                        reasoning += deltaReasoning;
+                    }
+
+                    // Tool calls (streamed incrementally by index)
+                    if (Array.isArray(delta.tool_calls)) {
+                        for (const tc of delta.tool_calls) {
+                            const idx = tc.index ?? 0;
+                            if (!toolsByIndex.has(idx)) {
+                                toolsByIndex.set(idx, {
+                                    id: typeof tc.id === 'string' ? tc.id : '',
+                                    name: tc.function?.name || '',
+                                    arguments: tc.function?.arguments || '',
+                                });
+                            } else {
+                                const existing = toolsByIndex.get(idx);
+                                if (tc.id && typeof tc.id === 'string') existing.id = tc.id;
+                                if (tc.function?.name) existing.name += tc.function.name;
+                                if (tc.function?.arguments) existing.arguments += tc.function.arguments;
+                            }
+                        }
+                    }
+                } catch (_) {
+                    // Ignore unparseable SSE line chunks
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    const sortedToolCalls = Array.from(toolsByIndex.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([_, tc]) => ({
+            id: tc.id,
+            function: {
+                name: tc.name,
+                arguments: tc.arguments,
+            },
+        }));
+
+    return {
+        content,
+        reasoning: reasoning.trim() || null,
+        tool_calls: sortedToolCalls,
+    };
+}
+
 async function sendViaLiveChatCompletion(context, settings, messages, { signal = null } = {}) {
     const service = context.ChatCompletionService;
     const live = context.chatCompletionSettings || {};
@@ -1082,7 +1185,7 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             messages,
             temperature: presetSettings.temperature ?? presetSettings.temp ?? presetSettings.temp_openai ?? 0.1,
             top_p: presetSettings.top_p ?? presetSettings.top_p_openai ?? 1.0,
-            stream: false,
+            stream: true,
             reasoning_format: 'auto',
         };
         if (tools?.length) body.tools = tools;
@@ -1102,6 +1205,39 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             try { _body = await resp.text(); } catch (_) {}
             throw new Error(`OpenAI request failed (${resp.status}): ${_body.slice(0, 600)}`);
         }
+
+        const contentType = resp.headers?.get('content-type') || '';
+        if (contentType.includes('text/event-stream') || resp.body) {
+            try {
+                const streamResult = await readOpenAISSEStream(resp);
+                if (streamResult.tool_calls?.length) {
+                    const tc = streamResult.tool_calls[0];
+                    const rawArguments = tc.function.arguments;
+                    const { args, argumentError } = parseToolCallArguments(rawArguments);
+                    return {
+                        content: streamResult.content || '',
+                        reasoning: streamResult.reasoning,
+                        toolCall: {
+                            name: tc.function.name,
+                            args,
+                            id: tc.id || `call_${Date.now()}`,
+                            argumentError,
+                            rawArguments,
+                        },
+                    };
+                }
+                return {
+                    content: streamResult.content || '',
+                    reasoning: streamResult.reasoning,
+                    toolCall: null,
+                };
+            } catch (err) {
+                // If streaming reader fails mid-way, propagate error
+                throw err;
+            }
+        }
+
+        // Fallback for non-streamed responses
         const data = await resp.json();
         const msg = data.choices?.[0]?.message;
         const _reasoning = msg?.reasoning_content ?? msg?.reasoning ?? null;
