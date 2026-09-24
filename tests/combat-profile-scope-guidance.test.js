@@ -11,14 +11,14 @@ const routerSource = readFileSync(new URL('../router.js', import.meta.url), 'utf
 
 describe('Combat Profile router guidance scopes to a single combatant', () => {
     it('explicitly forbids copying the COMBAT ROUND header, side headers, or other combatants into a Combat Profile', () => {
-        expect(fragmentSource).toContain('CRITICAL — ONE COMBATANT PER PROFILE');
-        expect(fragmentSource).toContain('NEVER copy the "COMBAT ROUND N" header, the ENEMIES:/NON-PARTY ALLIES: section headers, or any *other* combatant\'s block into it');
+        expect(fragmentSource).toMatch(/(?:CRITICAL — ONE COMBATANT PER PROFILE|CRÍTICO — UN COMBATIENTE POR PERFIL)/);
+        expect(fragmentSource).toMatch(/(?:NEVER copy the "COMBAT ROUND N" header|NUNCA copies el encabezado "RONDA DE COMBATE N")/);
     });
 
     it('applies the same scope rule to both the agent (tool-call) and basic (text-format) guidance variants', () => {
-        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC).toContain('CRITICAL — ONE COMBATANT PER PROFILE');
-        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toContain('CRITICAL — ONE COMBATANT PER PROFILE');
-        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toContain('Example (updating only "Schwarzenegev"');
+        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC).toMatch(/(?:CRITICAL — ONE COMBATANT PER PROFILE|CRÍTICO — UN COMBATIENTE POR PERFIL)/);
+        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toMatch(/(?:CRITICAL — ONE COMBATANT PER PROFILE|CRÍTICO — UN COMBATIENTE POR PERFIL)/);
+        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toMatch(/(?:Example \(updating only "Schwarzenegev"|Ejemplo \(actualizando solo a? "Schwarzenegev")/);
         expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC).toContain('[[UPDATE_CORE: Marcus Thorne');
         expect(routerSource).toContain('resolveCombatProfileGuidance(settings, !!(activeCombatBlock || partyMechanicalBlock), \'basic\')');
         expect(routerSource).toContain('resolveCombatProfileGuidance(settings, !!(activeCombatBlock || partyMechanicalBlock), \'agent\')');
@@ -32,8 +32,8 @@ describe('Combat Profile router guidance scopes to a single combatant', () => {
 
     it('injects Combat Profile guidance when combat or party mechanical stats are available', () => {
         expect(resolveCombatProfileGuidance({}, false, 'basic')).toBe('');
-        expect(resolveCombatProfileGuidance({}, true, 'basic')).toContain('COMBAT PROFILE');
-        expect(resolveCombatProfileGuidance({}, true, 'basic')).toContain('PARTY MECHANICAL STATE');
+        expect(resolveCombatProfileGuidance({}, true, 'basic')).toMatch(/(?:COMBAT PROFILE|PERFIL DE COMBATE)/);
+        expect(resolveCombatProfileGuidance({}, true, 'basic')).toMatch(/(?:PARTY MECHANICAL STATE|ESTADO MECÁNICO DEL GRUPO)/);
         expect(resolveCombatProfileGuidance({
             routerCombatProfileGuidanceBasicTemplate: 'CUSTOM BASIC COMBAT',
         }, true, 'basic')).toBe('CUSTOM BASIC COMBAT');
@@ -41,8 +41,8 @@ describe('Combat Profile router guidance scopes to a single combatant', () => {
 
     it('tells the agent to patch existing party Combat Profiles after level-up without inventing new ones', () => {
         expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_BASIC).toContain('PARTY LEVEL SYNC');
-        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toContain('Do NOT create a Combat Profile from [PARTY] if none exists');
-        expect(routerSource).toContain('## PARTY MECHANICAL STATE');
+        expect(DEFAULT_ROUTER_COMBAT_PROFILE_GUIDANCE_AGENT).toMatch(/(?:Do NOT create a Combat Profile from \[PARTY\] if none exists|NO crees un Perfil de Combate desde \[PARTY\] si no existía)/);
+        expect(routerSource).toMatch(/(?:## PARTY MECHANICAL STATE|## ESTADO MECÁNICO DEL GRUPO)/);
         expect(routerSource).toContain('extractPartyBlock(settings.currentMemo)');
         expect(routerSource).toContain('${pcCharacterSeedSection}${activeCombatSection}${partyMechanicalSection}## NARRATIVE');
     });

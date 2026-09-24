@@ -1,3 +1,6 @@
+import { getActiveChatId } from '../../state/chat-persistence.js';
+import { createChatCommitGuard } from '../../state/pass-affinity.js';
+
 const RECOVERY_STORAGE_KEY = 'rpg_tracker_memo_recovery_v1';
 const RECOVERY_BROWSER_ID_KEY = 'rpg_tracker_recovery_browser_id_v1';
 const MAX_RECOVERY_CHATS = 8;
@@ -88,10 +91,11 @@ export function createMemoRecoveryManager({
     }
 
     async function checkLocalMemoRecovery(chatId) {
+        const ownsChat = createChatCommitGuard(chatId, getActiveChatId);
         let prompted = false;
         let restored = false;
         try {
-            if (!chatId) {
+            if (!ownsChat()) {
                 console.warn('[RPG Tracker] Memo recovery skipped: no chatId yet');
                 return;
             }
@@ -129,25 +133,25 @@ export function createMemoRecoveryManager({
             recoveryPromptActive = true;
             const localWhen = formatRecoveryTimestamp(entry.ts);
             const diskWhen = formatRecoveryTimestamp(diskStamp);
-            const diskLabel = diskStamp > 0 ? 'Disk version (this chat)' : 'Disk version (this chat; no saved timestamp)';
+            const diskLabel = diskStamp > 0 ? 'Versión en disco (este chat)' : 'Versión en disco (este chat; sin marca de tiempo)';
             const content = `<div style="text-align:left; line-height:1.45;">
-                <p><b>Possible unsaved tracker data found.</b></p>
-                <p>This browser has a local copy of the STATE MEMO for this chat that differs from what's currently on disk. This can happen after a cancelled save or when another browser wrote a newer copy. Choose which version to keep.</p>
+                <p><b>Posibles datos no guardados del rastreador encontrados.</b></p>
+                <p>Este navegador tiene una copia local del MEMO DE ESTADO para este chat que difiere de la que está actualmente en disco. Esto puede ocurrir tras un guardado cancelado o cuando otro navegador escribió una copia más reciente. Elige qué versión conservar.</p>
                 <p style="margin:10px 0; padding:8px 10px; background:rgba(255,255,255,0.05); border-radius:6px; font-size:0.95em;">
-                    <b>Local backup</b> (this browser)<br>
-                    ${entry.currentMemo.length.toLocaleString()} chars · ${escapeHtml(localWhen)}<br><br>
+                    <b>Copia local</b> (este navegador)<br>
+                    ${entry.currentMemo.length.toLocaleString()} caracteres · ${escapeHtml(localWhen)}<br><br>
                     <b>${diskLabel}</b><br>
-                    ${diskMemo.length.toLocaleString()} chars · ${escapeHtml(diskWhen)}
+                    ${diskMemo.length.toLocaleString()} caracteres · ${escapeHtml(diskWhen)}
                 </p>
-                <p style="margin-top:10px; padding:8px 10px; border-left:3px solid #f0ad4e; background:rgba(240,173,78,0.12); border-radius:4px;"><b>Look behind this dialog</b> (background is left unblurred on purpose). If the tracker / chat UI looks outdated or stale compared to what you just had — click <b>Restore</b>.</p>
-                <p>Restore the local backup?</p>
+                <p style="margin-top:10px; padding:8px 10px; border-left:3px solid #f0ad4e; background:rgba(240,173,78,0.12); border-radius:4px;"><b>Mira detrás de este diálogo</b> (el fondo se deja sin desenfocar a propósito). Si la interfaz del rastreador / chat parece desactualizada respecto a lo que acababas de tener — pulsa <b>Restaurar</b>.</p>
+                <p>¿Restaurar la copia local?</p>
             </div>`;
             const { Popup, POPUP_TYPE } = ctx;
             let result = false;
             if (typeof Popup === 'function') {
                 const popup = new Popup(content, POPUP_TYPE?.CONFIRM ?? 1, '', {
-                    okButton: 'Restore',
-                    cancelButton: 'Keep disk version (keep what\'s visible right now)',
+                    okButton: 'Restaurar',
+                    cancelButton: 'Mantener versión de disco (conservar lo visible ahora)',
                     leftAlign: true,
                     animation: 'none',
                 });
@@ -155,12 +159,13 @@ export function createMemoRecoveryManager({
                 result = await popup.show();
             } else {
                 result = await ctx.callGenericPopup(content, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
-                    okButton: 'Restore',
-                    cancelButton: 'Keep disk version (keep what\'s visible right now)',
+                    okButton: 'Restaurar',
+                    cancelButton: 'Mantener versión de disco (conservar lo visible ahora)',
                     leftAlign: true,
                     animation: 'none',
                 });
             }
+            if (!ownsChat()) return;
             if (result) {
                 settings.currentMemo = entry.currentMemo;
                 settings.lastDelta = entry.lastDelta || settings.lastDelta;
@@ -169,7 +174,7 @@ export function createMemoRecoveryManager({
                 if (typeof updateUIMemo === 'function') updateUIMemo(settings.currentMemo);
                 if (typeof refreshRenderedView === 'function') refreshRenderedView();
                 if (typeof syncMemoView === 'function') syncMemoView();
-                toastr.success('Local backup restored.', 'RPG Tracker');
+                toastr.success('Copia local restaurada.', 'RPG Tracker');
                 restored = true;
             }
         } catch (err) {
@@ -178,7 +183,7 @@ export function createMemoRecoveryManager({
             recoveryPromptActive = false;
             if (chatId) {
                 bootCheckDone = true;
-                if (prompted) snapshotMemoToLocalStorage(chatId, { force: true, allowDowngrade: !restored });
+                if (prompted && ownsChat()) snapshotMemoToLocalStorage(chatId, { force: true, allowDowngrade: !restored });
             }
         }
     }

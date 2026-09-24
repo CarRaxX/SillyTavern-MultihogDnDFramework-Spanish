@@ -388,7 +388,7 @@ describe('Map Updater', () => {
         expect(DEFAULT_MAP_UPDATER_SYSTEM_PROMPT).not.toContain('Map Evolution');
         expect(settingsMarkup).toContain('id="rpg_map_updater_run_every"');
         expect(settingsMarkup).toContain('id="rpg_map_updater_enabled"');
-        expect(settingsMarkup).toContain('<b>Map Updater</b>');
+        expect(settingsMarkup).toMatch(/<b>(?:Map Updater|Actualizador de Mapas)<\/b>/);
     });
 
     it('summarizes occupancy ops compactly for the Lorebook Terminal', () => {

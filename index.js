@@ -5188,13 +5188,15 @@ function navigateSnapshot(direction) {
 }
 
 async function applyDungeonMapForHistoryView() {
+    const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
     const s = getSettings();
     if (runtimeState.historyViewIndex === -1) {
         runtimeState.dungeonMapHistoryOverlay = null;
         const liveMap = runtimeState.liveDungeonMapBackup;
         runtimeState.liveDungeonMapBackup = null;
         if (liveMap) {
-            try { await restoreActiveDungeonMapHistory(liveMap); } catch (error) {
+            try { chatCommitResult(ownsChat, await restoreActiveDungeonMapHistory(liveMap)); } catch (error) {
+                if (!ownsChat()) return;
                 console.warn('[RPG Tracker] Could not restore live dungeon map occupancy:', error);
             }
         }
@@ -5202,15 +5204,17 @@ async function applyDungeonMapForHistoryView() {
     }
     if (!runtimeState.liveDungeonMapBackup) {
         try {
-            runtimeState.liveDungeonMapBackup = await captureActiveDungeonMapHistory();
+            runtimeState.liveDungeonMapBackup = chatCommitResult(ownsChat, await captureActiveDungeonMapHistory());
         } catch (error) {
+            if (!ownsChat()) return;
             console.warn('[RPG Tracker] Could not snapshot live dungeon map occupancy:', error);
         }
     }
     const overlay = getDungeonMapHistoryEntry(s, runtimeState.historyViewIndex);
     runtimeState.dungeonMapHistoryOverlay = overlay;
     if (overlay) {
-        try { await restoreActiveDungeonMapHistory(overlay); } catch (error) {
+        try { chatCommitResult(ownsChat, await restoreActiveDungeonMapHistory(overlay)); } catch (error) {
+            if (!ownsChat()) return;
             console.warn('[RPG Tracker] Could not roll dungeon map occupancy back to this snapshot:', error);
         }
     }
@@ -5895,7 +5899,7 @@ const CONNECTION_SETTINGS_UI = [
     { key: 'game_system_wizard', control: '#rpg_gs_wizard_connection_source', slot: '#rpg_connection_slot_game_system_wizard', label: 'Game System Wizard', recommendation: 'I recommend using a somewhat better model here such as Sonnet 5 or above for more robust and complex systems. Your mileage varies a lot here. Experiment.' },
     { key: 'map_architect', control: '#rpg_map_architect_connection_source', slot: '#rpg_connection_slot_map_architect', label: 'Map Architect', recommendation: 'A capable reasoning model is recommended for coherent topology, hidden information, and entity placement. Map Architect builds the foundation map; give it a stronger model than occupancy and evolution.' },
     { key: 'map_runtime', control: '#rpg_map_runtime_connection_source', slot: '#rpg_connection_slot_map_runtime', label: 'Map Updater', recommendation: 'Occupancy can use a cheaper model than Map Architect. JSON discipline still helps.' },
-    { key: 'map_evolution', control: '#rpg_map_evolution_connection_source', slot: '#rpg_connection_slot_map_evolution', label: 'Map Evolution', recommendation: 'Prefer a fast model above all — Gemini Flash is a good fit because it is really fast. Evolution can tick several sites in one turn, and a slow model makes that take a long time.' },
+    { key: 'map_evolution', control: '#rpg_map_evolution_connection_source', slot: '#rpg_connection_slot_map_evolution', label: 'Map Evolution' },
     { key: 'world_progression', control: '#rpg_world_connection_source', slot: '#rpg_connection_slot_world_progression', label: 'World Progression' },
     { key: 'portraits', control: '#rpg_portrait_connection_source', slot: '#rpg_connection_slot_portraits', label: 'Portrait Generation', recommendation: 'A lightweight model should do fine.' },
 ];
@@ -10966,7 +10970,8 @@ RULES:
             }
         });
 
-        $('#rt-agent-router-full-audit, #rt-agent-router-full-audit-panel').on('click', async function () {
+        $('#rt-agent-router-full-audit, #rt-agent-router-full-audit-panel').on('click', ignoreChatCancellation(async function () {
+            const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
             const { Popup } = SillyTavern.getContext();
             const confirmHtml = `
                     <div style="text-align: left; font-size: 0.9em; line-height: 1.5;">
@@ -10975,10 +10980,10 @@ RULES:
                         <p style="margin-top: 8px; color: #ffa500;">⚠️ <b>Do not send messages to the AI while the audit is running.</b></p>
                     </div>
                 `;
-            const confirmed = await Popup.show.confirm('📚 Lorebook Agent Full Audit', confirmHtml, {
+            const confirmed = chatCommitResult(ownsChat, await Popup.show.confirm('📚 Lorebook Agent Full Audit', confirmHtml, {
                 okButton: 'Start Full Audit',
                 cancelButton: 'Cancel'
-            });
+            }));
             if (!confirmed) return;
 
             const btn = $(this);
@@ -11041,21 +11046,22 @@ RULES:
                     }
 
                     const overrideChatLog = chunks[i].join('\n\n');
-                    const chunkResult = await runRouterPass(null, LOREBOOK_FULL_AUDIT_INSTRUCTION, null, true, [], overrideChatLog);
+                    const chunkResult = chatCommitResult(ownsChat, await runRouterPass(null, LOREBOOK_FULL_AUDIT_INSTRUCTION, null, true, [], overrideChatLog));
                     console.log(`[RPG Tracker] Agent Full Audit: Chunk ${i + 1}/${chunks.length} finished. Result: ${chunkResult}`);
 
                     // Yield to the event loop so the UI can repaint with the agent panel updates
-                    await new Promise(r => setTimeout(r, 100));
+                    chatCommitResult(ownsChat, await new Promise(r => setTimeout(r, 100)));
                 }
 
                 toastr.success(`Agent Full Audit complete (${chunks.length} chunk${chunks.length > 1 ? 's' : ''}).`, "Lorebook Agent");
             } catch (e) {
+                if (!ownsChat()) return;
                 console.error("[RPG Tracker] Agent Full Audit failed:", e);
                 toastr.error("Agent Full Audit failed.");
             } finally {
                 $('#rt-agent-router-full-audit, #rt-agent-router-full-audit-panel').prop('disabled', false);
             }
-        });
+        }));
 
         $('#rpg_tracker_lore_debug_capture').on('click', async function () {
             const btn = $(this);

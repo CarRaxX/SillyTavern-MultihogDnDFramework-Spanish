@@ -83,7 +83,7 @@ describe('Instant Action instructions', () => {
         expect(quickStartSource).toContain('onboardingInstantActionRandomLevel === true');
         expect(quickStartSource).not.toMatch(/onboardingLevel \|\| 1\)/);
         expect(rendererSource).toContain('id="rt-quickstart-random-level"');
-        expect(rendererSource).toContain('Random Level?');
+        expect(rendererSource).toMatch(/(?:Random Level\?|¿Nivel Aleatorio\?)/);
         expect(rendererSource).toContain("obSettings.onboardingInstantActionRandomLevel === true ? 'checked' : ''");
         expect(quickStartSource).toMatch(/randomLevelCheckbox\?\.addEventListener\('change', persistQuickStartOptions\)/);
     });
@@ -97,8 +97,8 @@ describe('Instant Action instructions', () => {
     it('makes the Instant Action starter message optional and on by default', () => {
         expect(buildDefaultSettings().onboardingSendStarterMessage).toBe(true);
         expect(rendererSource).toContain('id="rt-quickstart-send-starter"');
-        expect(rendererSource).toContain('Send Starter Message?');
-        expect(rendererSource).toContain('If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready.');
+        expect(rendererSource).toMatch(/(?:Send Starter Message\?|¿Enviar Mensaje Inicial\?)/);
+        expect(rendererSource).toMatch(/(?:If this is checked, the AI automatically starts the campaign as soon as the rolled character is ready\.|Si está marcado, la IA inicia automáticamente la campaña tan pronto como el personaje generado esté listo\.)/);
         expect(rendererSource).toContain("obSettings.onboardingSendStarterMessage !== false ? 'checked' : ''");
         expect(quickStartSource).toMatch(/if \(s\.onboardingSendStarterMessage !== false\)/);
         expect(quickStartSource).toMatch(/sendStarterCheckbox\?\.addEventListener\('change', persistQuickStartOptions\)/);

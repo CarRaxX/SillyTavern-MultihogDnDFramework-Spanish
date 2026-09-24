@@ -24,7 +24,7 @@ describe('connection setup apply-to-all', () => {
             'portraits',
         ]);
         expect(keys).not.toContain('combat_override');
-        expect(findAgentConnectionSetup('state_tracker')?.label).toBe('State Tracker');
+        expect(findAgentConnectionSetup('state_tracker')?.label).toMatch(/(?:State Tracker|Rastreador de Estado)/);
     });
 
     it('copies one setup onto every other agent without clearing the source', () => {
@@ -116,7 +116,7 @@ describe('connection setup apply-to-all', () => {
 
         const result = applyConnectionSetupToAll(settings, 'state_tracker');
         expect(result?.appliedCount).toBe(AGENT_CONNECTION_SETUPS.length - 1);
-        expect(result?.sourceLabel).toBe('State Tracker');
+        expect(result?.sourceLabel).toMatch(/(?:State Tracker|Rastreador de Estado)/);
         expect(settings.connectionSource).toBe('profile');
         expect(settings.connectionProfileId).toBe('profile-abc');
         expect(settings.routerConnectionSource).toBe('profile');
@@ -165,7 +165,7 @@ describe('connection setup apply-to-all', () => {
         expect(connectionsMarkup).toContain('id="rpg_connection_apply_all_box"');
         expect(connectionsMarkup).toContain('id="rpg_connection_apply_all_source"');
         expect(connectionsMarkup).toContain('id="rpg_connection_apply_all_btn"');
-        expect(connectionsMarkup).toContain('Apply Connection Setup to All');
+        expect(connectionsMarkup).toMatch(/(?:Apply Connection Setup to All|Aplicar Configuración de Conexión a Todos)/);
         expect(connectionsMarkup.indexOf('rpg_connection_slot_portraits'))
             .toBeLessThan(connectionsMarkup.indexOf('rpg_connection_apply_all_box'));
         expect(indexSource).toContain('bindConnectionApplyAllControls()');

@@ -11,15 +11,20 @@ function divDepthAt(marker) {
 
 describe('General & Visuals settings', () => {
     it('keeps every primary section inside the framework drawer', () => {
+        const findHeaderPos = (pattern) => {
+            const m = settingsMarkup.match(pattern);
+            if (!m) throw new Error(`Header not found for pattern ${pattern}`);
+            return m[0];
+        };
         const primaryHeaders = [
-            '<b>General & Visuals</b>',
-            '<b>Connections &amp; Models</b>',
-            '<b>Game Systems & Customization</b>',
-            '<b>State Tracker & Modules</b>',
-            '<b>Lorebook Agent</b>',
-            '<b>Persistent Maps</b>',
-            '<b>World Progression</b>',
-            '<b>Adventure Companion</b>',
+            findHeaderPos(/<b>(?:General & Visuals|Ajustes General(?:es)? y Visuales)<\/b>/),
+            findHeaderPos(/<b>(?:Connections &amp; Models|Conexiones y Modelos)<\/b>/),
+            findHeaderPos(/<b>(?:Game Systems & Customization|Sistemas de Juego y Libros de Reglas)<\/b>/),
+            findHeaderPos(/<b>(?:State Tracker & Modules|Rastreador de Estado y Configuración de Ficha)<\/b>/),
+            findHeaderPos(/<b>(?:Lorebook Agent|Agente de Lorebook(?: y Asistente IA)?)<\/b>/),
+            findHeaderPos(/<b>(?:Persistent Maps|Mapas Persistentes)<\/b>/),
+            findHeaderPos(/<b>(?:World Progression|Progresión del Mundo)<\/b>/),
+            findHeaderPos(/<b>(?:Adventure Companion|Acompañante de Aventura)<\/b>/),
         ];
         const expectedDepth = divDepthAt(primaryHeaders[0]);
 
@@ -29,17 +34,17 @@ describe('General & Visuals settings', () => {
     });
 
     it('organizes settings into Core & Branching, UI Appearance, and Portraits and Location Images drawers', () => {
-        expect(settingsMarkup).toContain('<b>Core &amp; Branching</b>');
-        expect(settingsMarkup).toContain('<b>UI Appearance</b>');
-        expect(settingsMarkup).toContain('<b>Portraits and Location Images</b>');
+        expect(settingsMarkup).toMatch(/(?:<b>Core &amp; Branching<\/b>|<b>Núcleo y Ramificación \(Branching\)<\/b>)/);
+        expect(settingsMarkup).toMatch(/(?:<b>UI Appearance<\/b>|<b>Apariencia de la Interfaz<\/b>)/);
+        expect(settingsMarkup).toMatch(/(?:<b>Portraits and Location Images<\/b>|<b>Retratos e Imágenes de Ubicación<\/b>)/);
     });
 
     it('can reopen the API setup checklist from Core & Branching Help', () => {
-        const generalStart = settingsMarkup.indexOf('<b>General & Visuals</b>');
-        const connectionsStart = settingsMarkup.indexOf('<b>Connections &amp; Models</b>');
+        const generalStart = settingsMarkup.search(/<b>(?:General & Visuals|Ajustes General(?:es)? y Visuales)<\/b>/);
+        const connectionsStart = settingsMarkup.search(/<b>(?:Connections &amp; Models|Conexiones y Modelos)<\/b>/);
         const generalMarkup = settingsMarkup.slice(generalStart, connectionsStart);
         expect(generalMarkup).toContain('id="rpg_tracker_api_setup_checklist"');
-        expect(generalMarkup).toContain('Anti-Museum Tour');
+        expect(generalMarkup).toMatch(/(?:Anti-Museum Tour|Tour Anti-Museo)/);
         expect(generalMarkup).toContain('id="rpg_tracker_game_master_name"');
         expect(generalMarkup).toContain('id="rpg_tracker_create_game_master_card"');
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
@@ -50,18 +55,18 @@ describe('General & Visuals settings', () => {
     });
 
     it('links General & Visuals to the canonical Map Themes controls', () => {
-        const generalStart = settingsMarkup.indexOf('<b>General & Visuals</b>');
-        const connectionsStart = settingsMarkup.indexOf('<b>Connections &amp; Models</b>');
+        const generalStart = settingsMarkup.search(/<b>(?:General & Visuals|Ajustes General(?:es)? y Visuales)<\/b>/);
+        const connectionsStart = settingsMarkup.search(/<b>(?:Connections &amp; Models|Conexiones y Modelos)<\/b>/);
         const generalMarkup = settingsMarkup.slice(generalStart, connectionsStart);
-        expect(generalMarkup).toContain('<b>Map Appearance</b>');
+        expect(generalMarkup).toMatch(/(?:<b>Map Appearance<\/b>|<b>Apariencia de Mapas<\/b>)/);
         expect(generalMarkup).toContain('id="rpg_open_map_themes"');
-        expect(generalMarkup).toContain('managed under Persistent Maps');
+        expect(generalMarkup).toMatch(/(?:managed under Persistent Maps|se gestionan en Mapas Persistentes)/);
     });
 
     it('places Connections & Models immediately after General & Visuals', () => {
-        const general = settingsMarkup.indexOf('<b>General & Visuals</b>');
-        const connections = settingsMarkup.indexOf('<b>Connections &amp; Models</b>');
-        const gameSystems = settingsMarkup.indexOf('<b>Game Systems & Customization</b>');
+        const general = settingsMarkup.search(/<b>(?:General & Visuals|Ajustes General(?:es)? y Visuales)<\/b>/);
+        const connections = settingsMarkup.search(/<b>(?:Connections &amp; Models|Conexiones y Modelos)<\/b>/);
+        const gameSystems = settingsMarkup.search(/<b>(?:Game Systems & Customization|Sistemas de Juego y Libros de Reglas)<\/b>/);
 
         expect(general).toBeGreaterThanOrEqual(0);
         expect(connections).toBeGreaterThan(general);
@@ -96,14 +101,14 @@ describe('General & Visuals settings', () => {
         expect(indexSource).toContain("control: '#rpg_map_evolution_connection_source'");
         expect(indexSource).toContain("control: '#rpg_world_connection_source'");
         expect(indexSource).toContain("control: '#rpg_portrait_connection_source'");
-        expect(indexSource).toContain('I recommend a cheap mid-tier model such as GPT-5.6 Luna, Gemini Flash/Flash-Lite series, or Deepseek V4 Flash latest.');
-        expect(indexSource).toContain('Same models work fine here as with the State Tracker.');
-        expect(indexSource).toContain('I recommend using a somewhat better model here such as Sonnet 5 or above for more robust and complex systems. Your mileage varies a lot here. Experiment.');
-        expect(indexSource).toContain('A lightweight model should do fine.');
+        expect(indexSource).toMatch(/(?:I recommend a cheap mid-tier model such as GPT-5.6 Luna|Recomiendo un modelo económico de nivel medio)/);
+        expect(indexSource).toMatch(/(?:Same models work fine here as with the State Tracker\.|Los mismos modelos funcionan bien aquí)/);
+        expect(indexSource).toMatch(/(?:I recommend using a somewhat better model here such as Sonnet 5|Recomiendo usar un modelo algo mejor aquí, como Sonnet 5)/);
+        expect(indexSource).toMatch(/(?:A lightweight model should do fine\.|Un modelo ligero debería funcionar bien\.)/);
         expect(indexSource).not.toContain('Prefer a fast model above all');
         expect(indexSource).toContain("chevron.className = 'inline-drawer-icon fa-solid fa-circle-chevron-down rt-central-connection-chevron'");
         expect(settingsMarkup).toContain('id="rpg_connection_apply_all_box"');
-        expect(settingsMarkup).toContain('Apply Connection Setup to All');
+        expect(settingsMarkup).toMatch(/(?:Apply Connection Setup to All|Aplicar Configuración de Conexión a Todos)/);
 
         const style = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
         expect(style).toContain('.rpg-tracker-settings .rt-central-connection-header');
@@ -115,9 +120,9 @@ describe('General & Visuals settings', () => {
     });
 
     it('centers the State Tracker utility drawer labels without moving their arrows', () => {
-        expect(settingsMarkup).toContain('<b>Connection Settings</b>');
-        expect(settingsMarkup).toContain('<b>Combat API Override</b>');
-        expect(settingsMarkup).toContain('<b>Core Prompt</b>');
+        expect(settingsMarkup).toMatch(/(?:<b>Connection Settings<\/b>|<b>Configuración de Conexión<\/b>)/);
+        expect(settingsMarkup).toMatch(/(?:<b>Combat API Override<\/b>|<b>Sustitución de API en Combate<\/b>)/);
+        expect(settingsMarkup).toMatch(/(?:<b>Core Prompt<\/b>|<b>Prompt Principal del Sistema<\/b>)/);
         const style = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
         expect(style).toContain('.rpg-tracker-settings .rt-centered-drawer-header');
         expect(style).toContain('justify-content: center;');
@@ -125,32 +130,32 @@ describe('General & Visuals settings', () => {
     });
 
     it('keeps portrait-specific drawers and the emergency purge within Portraits and Location Images', () => {
-        const portraitsStart = settingsMarkup.indexOf('<b>Portraits and Location Images</b>');
-        const developerStart = settingsMarkup.indexOf('Developer &amp; Reset');
+        const portraitsStart = settingsMarkup.search(/<b>(?:Portraits and Location Images|Retratos e Imágenes de Ubicación)<\/b>/);
+        const developerStart = settingsMarkup.search(/(?:Developer &amp; Reset|Desarrollador y Restablecimiento)/);
         const portraitsMarkup = settingsMarkup.slice(portraitsStart, developerStart);
 
-        expect(portraitsMarkup).toContain('<b>Portraits LLM Connection</b>');
-        expect(portraitsMarkup).toContain('<b>Portrait and Location Image Styles</b>');
-        expect(portraitsMarkup).toContain('<b>Portrait Prompt Templates</b>');
+        expect(portraitsMarkup).toMatch(/(?:<b>Portraits LLM Connection<\/b>|<b>Conexión LLM para Retratos<\/b>)/);
+        expect(portraitsMarkup).toMatch(/(?:<b>Portrait and Location Image Styles<\/b>|<b>Estilos de Retratos e Imágenes de Ubicación<\/b>)/);
+        expect(portraitsMarkup).toMatch(/(?:<b>Portrait Prompt Templates<\/b>|<b>Plantillas de Prompt para Retratos<\/b>)/);
         expect(portraitsMarkup).toContain('id="rpg_portrait_prompt_presets_container"');
         expect(portraitsMarkup).toContain('id="rpg_portrait_prompt_preset_save_btn"');
         expect(portraitsMarkup).toContain('id="rpg_tracker_purge_all_portraits"');
         expect(portraitsMarkup).toContain('id="rpg_tracker_portrait_use_story_lookback"');
         expect(portraitsMarkup).toContain('id="rpg_tracker_portrait_story_lookback"');
-        expect(portraitsMarkup.indexOf('Portrait and Location Image Styles'))
-            .toBeLessThan(portraitsMarkup.indexOf('<b>Portrait Prompt Templates</b>'));
+        expect(portraitsMarkup.search(/(?:Portrait and Location Image Styles|Estilos de Retratos e Imágenes de Ubicación)/))
+            .toBeLessThan(portraitsMarkup.search(/<b>(?:Portrait Prompt Templates|Plantillas de Prompt para Retratos)<\/b>/));
         expect(portraitsMarkup).not.toContain('<b>Portrait Prompt Presets</b>');
-        expect(portraitsMarkup).toContain('load it into the <b>Portrait Prompt Templates</b> below');
-        expect(portraitsMarkup).toContain('Save Setup to Library');
+        expect(portraitsMarkup).toMatch(/(?:load it into the <b>Portrait Prompt Templates<\/b> below|cárgalo en las <b>Plantillas de Prompt para Retratos<\/b> a continuación)/);
+        expect(portraitsMarkup).toMatch(/(?:Save Setup to Library|Guardar Configuración en Biblioteca)/);
     });
 
     it('mirrors every Adventure Companion option and gives it a dedicated connection', () => {
-        const companionStart = settingsMarkup.indexOf('<b>Adventure Companion</b>');
+        const companionStart = settingsMarkup.search(/<b>(?:Adventure Companion|Acompañante de Aventura)<\/b>/);
         const companionMarkup = settingsMarkup.slice(companionStart);
 
-        expect(companionMarkup).toContain('Open Adventure Companion with the <b>CHAT</b> button at the top of the State Tracker. It can help with your adventure when <b>TUTORIAL MODE</b> is enabled, getting you to grips with the extension.');
-        expect(companionMarkup).toContain('Otherwise, it\'s there if you just feel like chatting about your adventure or brainstorm, etc.');
-        expect(companionMarkup).toContain('You can also ask it to make changes in the State Tracker, Lorebook Agent, or Map Updater, and it can take actions for you if you ask it to (by typing messages or making CYOA mode choices for you.)');
+        expect(companionMarkup).toMatch(/(?:Open Adventure Companion with the <b>CHAT<\/b> button|Abre el Acompañante de Aventura con el botón <b>CHAT<\/b>)/);
+        expect(companionMarkup).toMatch(/(?:Otherwise, it's there if you just feel like chatting|De lo contrario, está ahí si simplemente te apetece charlar)/);
+        expect(companionMarkup).toMatch(/(?:You can also ask it to make changes in the State Tracker|También puedes pedirle que haga cambios en el Rastreador de Estado)/);
 
         [
             'rpg_adventure_companion_tutorial_mode',
@@ -172,22 +177,24 @@ describe('General & Visuals settings', () => {
     });
 
     it('places Persistent Maps directly below Lorebook Agent', () => {
-        const agentStart = settingsMarkup.indexOf('<b>Lorebook Agent</b>');
-        const mapStart = settingsMarkup.indexOf('<b>Persistent Maps</b>');
-        const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
+        const agentStart = settingsMarkup.search(/<b>(?:Lorebook Agent|Agente de Lorebook(?: y Asistente IA)?)<\/b>/);
+        const mapStart = settingsMarkup.search(/<b>(?:Persistent Maps|Mapas Persistentes)<\/b>/);
+        const worldStart = settingsMarkup.search(/<b>(?:World Progression|Progresión del Mundo)<\/b>/);
 
         expect(agentStart).toBeGreaterThanOrEqual(0);
         expect(mapStart).toBeGreaterThan(agentStart);
         expect(worldStart).toBeGreaterThan(mapStart);
-        expect(settingsMarkup.indexOf('<b>Map Architect</b>')).toBeGreaterThan(mapStart);
+        expect(settingsMarkup.search(/<b>(?:Map Architect|Arquitecto de Mapas)<\/b>/)).toBeGreaterThan(mapStart);
         expect(settingsMarkup.indexOf('<b>Architect Prompt</b>')).toBeLessThan(0);
     });
 
     it('places editable map themes at the bottom of Persistent Maps', () => {
-        const mapStart = settingsMarkup.indexOf('<b>Persistent Maps</b>');
-        const evolutionStart = settingsMarkup.indexOf('<b>Map Evolution</b>', mapStart);
-        const themesStart = settingsMarkup.indexOf('<b>Map Themes</b>', mapStart);
-        const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
+        const mapStart = settingsMarkup.search(/<b>(?:Persistent Maps|Mapas Persistentes)<\/b>/);
+        const evolutionMatch = settingsMarkup.match(/<b>(?:Map Evolution|Evolución de Mapas)<\/b>/);
+        const evolutionStart = settingsMarkup.indexOf(evolutionMatch ? evolutionMatch[0] : '', mapStart);
+        const themesMatch = settingsMarkup.match(/<b>(?:Map Themes|Temas de Mapas)<\/b>/);
+        const themesStart = settingsMarkup.indexOf(themesMatch ? themesMatch[0] : '', mapStart);
+        const worldStart = settingsMarkup.search(/<b>(?:World Progression|Progresión del Mundo)<\/b>/);
         const mapMarkup = settingsMarkup.slice(mapStart, worldStart);
 
         expect(themesStart).toBeGreaterThan(evolutionStart);
@@ -204,12 +211,12 @@ describe('General & Visuals settings', () => {
     });
 
     it('places Adventure Companion directly below World Progression', () => {
-        const worldStart = settingsMarkup.indexOf('<b>World Progression</b>');
-        const companionStart = settingsMarkup.indexOf('<b>Adventure Companion</b>');
+        const worldStart = settingsMarkup.search(/<b>(?:World Progression|Progresión del Mundo)<\/b>/);
+        const companionStart = settingsMarkup.search(/<b>(?:Adventure Companion|Acompañante de Aventura)<\/b>/);
 
         expect(worldStart).toBeGreaterThanOrEqual(0);
         expect(companionStart).toBeGreaterThan(worldStart);
-        expect(settingsMarkup.indexOf('<b>Lorebook Agent</b>')).toBeLessThan(worldStart);
+        expect(settingsMarkup.search(/<b>(?:Lorebook Agent|Agente de Lorebook(?: y Asistente IA)?)<\/b>/)).toBeLessThan(worldStart);
     });
 
     it('places the global custom-bar animation toggle beside the Rendering Tags Library', () => {
@@ -220,7 +227,7 @@ describe('General & Visuals settings', () => {
         expect(library).toBeGreaterThanOrEqual(0);
         expect(animation).toBeLessThan(library);
         expect(animation).toBeLessThan(moduleExport);
-        expect(settingsMarkup.slice(animation, library)).toContain('Animate all custom bar changes in State Tracker');
+        expect(settingsMarkup.slice(animation, library)).toMatch(/(?:Animate all custom bar changes in State Tracker|Animar todos los cambios de barras personalizadas)/);
         expect(settingsMarkup).not.toContain('âˆ’value');
     });
 });

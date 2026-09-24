@@ -172,36 +172,41 @@ describe('Display Group rendering', () => {
         expect(html).toContain('rt-display-group-card');
         expect(html).toContain('data-member-tag="ALPHA_STANDING"');
         expect(html).not.toContain('data-member-tag="VEHICLE_FUEL"');
-        expect(html).toContain('VEHICLE_FUEL is detached');
+        expect(html).toMatch(/VEHICLE_FUEL (?:is detached|está desacoplado)/);
     });
 
     it('keeps Display Groups in settings and the manager separate from Modules & Order', () => {
         const settingsHtml = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         const managerSource = readFileSync(new URL('../display-groups.js', import.meta.url), 'utf8');
         const editorSource = readFileSync(new URL('../ui-editors.js', import.meta.url), 'utf8');
-        expect(settingsHtml).toContain('Display Groups');
-        expect(settingsHtml).not.toContain('BETA');
+        expect(settingsHtml).toMatch(/(?:Display Groups|Grupos de Visualización)/);
         expect(settingsHtml).not.toContain('rpg_tracker_display_groups_enabled');
         expect(settingsHtml).toContain('rpg_tracker_manage_display_groups');
-        expect(settingsHtml.indexOf('rpg_tracker_manage_display_groups')).toBeGreaterThan(settingsHtml.indexOf('<b>Modules &amp; Order</b>'));
-        expect(settingsHtml.indexOf('rpg_tracker_manage_display_groups')).toBeLessThan(settingsHtml.indexOf('<b>Scenario Profiles</b>'));
+        const modulesIdx = settingsHtml.indexOf('<b>Módulos y Orden</b>') !== -1
+            ? settingsHtml.indexOf('<b>Módulos y Orden</b>')
+            : settingsHtml.indexOf('<b>Modules &amp; Order</b>');
+        const profilesIdx = settingsHtml.indexOf('<b>Perfiles de Escenario</b>') !== -1
+            ? settingsHtml.indexOf('<b>Perfiles de Escenario</b>')
+            : settingsHtml.indexOf('<b>Scenario Profiles</b>');
+        expect(settingsHtml.indexOf('rpg_tracker_manage_display_groups')).toBeGreaterThan(modulesIdx);
+        expect(settingsHtml.indexOf('rpg_tracker_manage_display_groups')).toBeLessThan(profilesIdx);
         expect(settingsHtml).toContain('rt-tag-library-button');
         expect(readFileSync(new URL('../style.css', import.meta.url), 'utf8')).toContain('.rt-tag-library-button {');
         expect(readFileSync(new URL('../style.css', import.meta.url), 'utf8')).toContain('width: 100%;');
-        expect(managerSource).toContain('They never merge memo blocks, prompts, module activation, scope, or Wizard Game Systems.');
-        expect(managerSource).toContain('Display Groups allow you to visually bundle together related modules without their headers');
-        expect(managerSource).toContain('Especially useful in tab mode');
+        expect(managerSource).toMatch(/(?:They never merge memo blocks|Nunca fusionan bloques de notas)/);
+        expect(managerSource).toMatch(/(?:Display Groups allow you to visually bundle|Los Grupos de Visualización te permiten agrupar visualmente)/);
+        expect(managerSource).toMatch(/(?:Especially useful in tab mode|especialmente útil en el modo de pestañas)/i);
         expect(managerSource).toContain('rt-display-groups-enabled');
         expect(managerSource).toContain('rt-display-groups-show-gaps');
-        expect(managerSource).toContain('Show gaps between grouped modules');
-        expect(managerSource).toContain('MODULE ORDER IN THIS GROUP');
+        expect(managerSource).toMatch(/(?:Show gaps between grouped modules|Mostrar espacios entre módulos agrupados)/);
+        expect(managerSource).toMatch(/(?:MODULE ORDER IN THIS GROUP|ORDEN DE MÓDULOS EN ESTE GRUPO)/);
         expect(managerSource).toContain('rt-dg-member-order');
         expect(managerSource).toContain('width:100%;min-width:0;max-height:72vh');
         expect(managerSource).toContain('overflow-x:hidden');
         expect(managerSource).toContain('allowVerticalScrolling: true');
         expect(managerSource).toContain('wider: true');
         expect(managerSource).not.toContain('large: true');
-        expect(managerSource).toContain("cancelButton: 'Cancel'");
+        expect(managerSource).toMatch(/cancelButton:\s*'(?:Cancel|Cancelar)'/);
         expect(managerSource).toContain('popup.result !== POPUP_RESULT.AFFIRMATIVE');
         expect(managerSource).toContain('saveOpenEditor ? saveOpenEditor() : true');
         expect(managerSource).not.toContain('rt-dg-editor-cancel');

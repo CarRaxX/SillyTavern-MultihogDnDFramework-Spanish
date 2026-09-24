@@ -12,7 +12,7 @@ describe('Character Creator fields', () => {
         const orientIdx = rendererSource.indexOf('id="rt-cr-orientation"');
         expect(ageIdx).toBeGreaterThan(-1);
         expect(orientIdx).toBeGreaterThan(ageIdx);
-        expect(rendererSource).toContain('Needed for the relationship system and CYOA romantic options');
+        expect(rendererSource).toMatch(/(?:Needed for the relationship system and CYOA romantic options|Necesario para el sistema de relaciones y opciones románticas de CYOA)/);
         expect(creatorSource).toContain('orientationVal');
         expect(creatorSource).toContain('Sexual Orientation:');
         expect(creatorSource).toContain("setVal('#rt-cr-orientation'");
@@ -31,7 +31,7 @@ describe('Character Creator fields', () => {
 
     it('labels the CHARACTER header control Create PC Card', () => {
         expect(rendererSource).toContain('class="rt-char-to-persona-btn"');
-        expect(rendererSource).toContain('Create PC Card');
+        expect(rendererSource).toMatch(/(?:Create PC Card|Crear Ficha PJ)/);
         const btnBlock = rendererSource.slice(
             rendererSource.indexOf('class="rt-char-to-persona-btn"'),
             rendererSource.indexOf('class="rt-char-to-persona-btn"') + 500,

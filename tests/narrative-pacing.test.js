@@ -15,8 +15,8 @@ describe('Narrator Configuration pacing', () => {
             expect(normalAt).toBeGreaterThan(-1);
             expect(shorterAt).toBeGreaterThan(normalAt);
             expect(highAgencyAt).toBeGreaterThan(shorterAt);
-            expect(source).toContain('Normal (no length instructions)');
-            expect(source).toContain('Shorter Outputs');
+            expect(source).toMatch(/(?:Normal \(no length instructions\)|Normal \(sin instrucciones de longitud\))/);
+            expect(source).toMatch(/(?:Shorter Outputs|Respuestas Más Cortas)/);
         }
 
         const indexSource = readFileSync(new URL('../index.js', import.meta.url), 'utf8');

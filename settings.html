@@ -202,10 +202,10 @@
                                 <b style="font-size: 0.85em; opacity: 0.8;">Biblioteca</b>
                                 <div id="rpg_tracker_saved_themes_list" class="flex-container flexFlowColumn gap-1"></div>
                             </div>
-                            <label class="checkbox_label" style="margin-top: 10px;" title="Anima ganancias y pérdidas en cada marcador de BARRA y BARRIL personalizado. Las configuraciones de animación individuales aún funcionan cuando esto está apagado.">
+                            <label class="checkbox_label" style="margin-top: 10px;" title="Anima ganancias y pérdidas en cada marcador ((BAR)) y ((BARREL)) personalizado. Las configuraciones de animación individuales aún funcionan cuando esto está apagado.">
                                 <input id="rpg_tracker_animate_all_custom_bars" type="checkbox" />
-                                <span>Animar todos los cambios de BARRAS y BARRILES personalizados</span>
-                                <i class="fa-solid fa-circle-question interactable" title="Muestra valor verde positivo o rojo negativo al cambiar barras personalizadas."></i>
+                                <span>Animar todos los cambios de barras personalizadas en el Rastreador de Estado</span>
+                                <i class="fa-solid fa-circle-question interactable" title="Muestra un valor verde positivo o rojo negativo y resalta el segmento modificado para todos los marcadores ((BAR)) y ((BARREL)) personalizados. No modifica la animación de PX ni de relaciones nativas."></i>
                             </label>
                         </div>
                         <div class="rt-connection-shortcut rt-map-theme-shortcut" style="margin-top:8px;">
@@ -222,7 +222,7 @@
                     <div class="inline-drawer">
                         <div class="inline-drawer-toggle inline-drawer-header">
                             <i class="fa-solid fa-image" style="margin-right: 6px; opacity: 0.65;"></i>
-                            <b>Retratos</b>
+                            <b>Retratos e Imágenes de Ubicación</b>
                             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
                         </div>
                         <div class="inline-drawer-content">
@@ -497,6 +497,17 @@
                                 </div>
                             </div>
 
+                            <div id="rpg_portrait_prompt_presets_container" style="margin-top: 8px; margin-bottom: 8px; padding: 8px 6px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.12);">
+                                <b style="font-size: 0.85em;">Estilos de Retratos e Imágenes de Ubicación</b>
+                                <div style="font-size: 0.72em; opacity: 0.6; line-height: 1.4; margin: 4px 0 8px;">
+                                    Haz clic en un estilo; cárgalo en las <b>Plantillas de Prompt para Retratos</b> a continuación (PNJ/PJ, Personaje/Grupo/Combate y Escena de Ubicación). Puedes editar esas plantillas después y luego usar <b>Guardar Configuración en Biblioteca</b> para conservar tu propio preajuste.
+                                </div>
+                                <div id="rpg_portrait_prompt_presets_list" class="flex-container flexFlowColumn gap-1" style="max-height: 220px; overflow-y: auto; padding-right: 4px;"></div>
+                                <div class="flex-container gap-1" style="margin-top: 8px;">
+                                    <button id="rpg_portrait_prompt_preset_save_btn" class="menu_button interactable" style="flex: 1; font-size: 11px;"><i class="fa-solid fa-bookmark"></i> Guardar Configuración en Biblioteca</button>
+                                </div>
+                            </div>
+
                             <div class="inline-drawer" style="margin-top: 4px; margin-bottom: 2px;">
                                 <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.82em; padding: 3px 6px;">
                                     <b>Plantillas de Prompt para Retratos</b>
@@ -505,7 +516,8 @@
                                 <div class="inline-drawer-content" style="padding: 6px 4px 0 4px;">
                                     <div class="flex-container flexFlowColumn gap-1">
                                         <div style="font-size: 0.72em; opacity: 0.55; line-height: 1.35; margin-bottom: 2px;">
-                                            Prompts del sistema enviados al LLM para escribir los prompts de generación de imágenes. Variables: <code>{{name}}</code> se reemplaza por el nombre de la entidad, <code>{{wordtarget}}</code> se reemplaza por el número de palabras objetivo.
+                                            Estos son los prompts del sistema enviados al LLM para redactar un prompt de generación de imágenes. El prompt de PNJ/PJ recibe la entrada completa del libro de lore literalmente — incluyendo cualquier campo <code>[CORE]</code> personalizado que hayas añadido (por ejemplo, una sección de "Etiquetas de Imagen" a través del Editor de Secciones de PNJ), para que puedas indicarle que priorice ese campo por su nombre. Variables: <code>{{name}}</code> se sustituye por el nombre de la entidad, <code>{{wordtarget}}</code> se sustituye por el objetivo de palabras configurado abajo.
+                                            <br>Usa <b>Estilos de Retratos e Imágenes de Ubicación</b> arriba para alternar la guía de estilo artístico entre los tres prompts. Edita las plantillas aquí, luego guarda tu propio preajuste desde esa sección de estilos. <b>Fantasía (Predeterminado)</b> coincide con los prompts históricos de Multihog y es lo que Restablecer recupera.
                                         </div>
 
                                         <div style="display:flex; align-items:center; gap:8px; margin-bottom: 4px;">
@@ -536,14 +548,6 @@
                                             </button>
                                         </div>
                                         <textarea id="rpg_portrait_location_system_prompt" class="text_pole" rows="8" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; background:rgba(0,0,0,0.3); color:var(--SmartThemeBodyColor); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:6px; box-sizing:border-box;" placeholder="Prompt del sistema para generación de imágenes de escenas de ubicación…"></textarea>
-
-                                        <div class="flex-container gap-1" style="margin-top: 6px;">
-                                            <button id="rpg_portrait_prompt_preset_save_btn" class="menu_button interactable" style="flex: 1; font-size: 11px;"><i class="fa-solid fa-bookmark"></i> Guardar Configuración en Biblioteca</button>
-                                        </div>
-                                        <div id="rpg_portrait_prompt_presets_container" style="display:none; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                                            <b style="font-size: 0.85em; opacity: 0.8;">Configuraciones Guardadas</b>
-                                            <div id="rpg_portrait_prompt_presets_list" class="flex-container flexFlowColumn gap-1"></div>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -921,34 +925,8 @@
                         El Modo de Revisión Completa está activo — el Prompt Central y el Sufijo del Usuario muestran las versiones integradas de Revisión Completa. Tus versiones personalizadas se restaurarán al desactivar este modo.
                     </div>
 
-                    <div class="inline-drawer" style="margin-bottom: 8px;">
-                        <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
-                            <i class="fa-solid fa-sack-dollar" style="margin-right: 6px; opacity: 0.6;"></i>
-                            <b>Inventario</b>
-                            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
-                        </div>
-                        <div class="inline-drawer-content">
-                            <div id="rpg_inventory_config_block" class="flex-container flexFlowColumn gap-1">
-                                <label class="checkbox_label">
-                                    <input id="rpg_tracker_show_total_value" type="checkbox" />
-                                    <span>Mostrar Valor Total del Inventario</span>
-                                    <i class="fa-solid fa-circle-question interactable" title="Cuando está activado, muestra el valor total calculado de todos los objetos en la barra superior del inventario."></i>
-                                </label>
-                                <div style="display: flex; align-items: center; gap: 8px; padding-left: 4px;">
-                                    <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Valor del Objeto
-                                        <i class="fa-solid fa-circle-question interactable" title="Controla cómo se muestran los valores de los objetos en el inventario. Al pasar el cursor: descripción flotante. Mostrar: insignia integrada."></i>
-                                    </label>
-                                    <select id="rpg_tracker_inventory_worth_mode" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
-                                        <option value="hover">Al pasar el cursor (solo descripción flotante)</option>
-                                        <option value="display">Mostrar (insignia integrada)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="inline-drawer">
-                        <div class="inline-drawer-toggle inline-drawer-header">
+                        <div class="inline-drawer-toggle inline-drawer-header rt-centered-drawer-header">
                             <b>Configuración de Conexión</b>
                             <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
                         </div>
@@ -982,7 +960,32 @@
                                 </div>
                                 <label>Preajuste</label>
                                 <select id="rpg_tracker_completion_preset" class="text_pole"></select>
+                            </div>
+                        </div>
+                    </div>
 
+                    <div class="inline-drawer" style="margin-bottom: 8px; margin-top: 8px;">
+                        <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
+                            <i class="fa-solid fa-sack-dollar" style="margin-right: 6px; opacity: 0.6;"></i>
+                            <b>Inventario</b>
+                            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                        </div>
+                        <div class="inline-drawer-content">
+                            <div id="rpg_inventory_config_block" class="flex-container flexFlowColumn gap-1">
+                                <label class="checkbox_label">
+                                    <input id="rpg_tracker_show_total_value" type="checkbox" />
+                                    <span>Mostrar Valor Total del Inventario</span>
+                                    <i class="fa-solid fa-circle-question interactable" title="Cuando está activado, muestra el valor total calculado de todos los objetos en la barra superior del inventario."></i>
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 8px; padding-left: 4px;">
+                                    <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Valor del Objeto
+                                        <i class="fa-solid fa-circle-question interactable" title="Controla cómo se muestran los valores de los objetos en el inventario. Al pasar el cursor: descripción flotante. Mostrar: insignia integrada."></i>
+                                    </label>
+                                    <select id="rpg_tracker_inventory_worth_mode" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
+                                        <option value="hover">Al pasar el cursor (solo descripción flotante)</option>
+                                        <option value="display">Mostrar (insignia integrada)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1448,7 +1451,7 @@
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
                         <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4; margin-bottom: 8px;">
-                            Mapas persistentes para mazmorras e interiores significativos (a escala de habitaciones) y asentamientos (a escala de distritos). Los edificios ordinarios de asentamiento permanecen en su distrito hasta que <b>CreateAreaMap</b> promocione uno explícitamente. El <b>Arquitecto de Mapas</b> crea el primer mapa con su propia conexión; el <b>Actualizador de Mapas</b> y la <b>Evolución de Mapas</b> comparten una segunda conexión para la ocupación y cambios fuera de pantalla.
+                            Mapas persistentes para mazmorras e interiores significativos (a escala de habitaciones) y asentamientos (a escala de distritos). Los edificios ordinarios de asentamiento permanecen en su distrito hasta que <b>CreateAreaMap</b> promocione uno explícitamente. El <b>Arquitecto de Mapas</b>, el <b>Actualizador de Mapas</b> y la <b>Evolución de Mapas</b> tienen cada uno su propia conexión.
                         </div>
 
                         <div class="inline-drawer">
@@ -1492,7 +1495,7 @@
 
                         <div class="inline-drawer">
                             <div class="inline-drawer-toggle inline-drawer-header">
-                                <b>Ajustes de Conexión (Actualizador y Evolución)</b>
+                                <b>Configuración de Conexión (Actualizador de Mapas)</b>
                                 <div class="inline-drawer-icon fa-solid fa-circle-down down"></div>
                             </div>
                             <div class="inline-drawer-content">
@@ -1646,7 +1649,7 @@
                             <div class="inline-drawer-content">
                                 <div class="flex-container flexFlowColumn gap-1">
                                     <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">
-                                        Independiente de la ocupación. Hace avanzar las ubicaciones mapeadas fuera de pantalla según el tiempo transcurrido en el mundo. Durante un intervalo normal, salida del lugar o pase manual, cada mapa también interpreta cualquier prosa relevante no consumida de los Informes del Mundo. Utiliza la conexión de Actualizador y Evolución de Mapas.
+                                        Independiente de la ocupación. Hace avanzar las ubicaciones mapeadas fuera de pantalla según el tiempo transcurrido en el mundo. Durante un intervalo normal, salida del lugar o pase manual, cada mapa también interpreta cualquier prosa relevante no consumida de los Informes del Mundo. Los informes nunca activan una dispersión inmediata del mapa. Utiliza la conexión de Evolución de Mapas.
                                     </div>
                                     <label class="checkbox_label">
                                         <input id="rpg_map_evolution_enabled" type="checkbox" checked />
@@ -1744,7 +1747,7 @@
                                          Los mapas pendientes restantes permanecen en cola para turnos posteriores. El mapa actual siempre ocupa un espacio cuando está pendiente.
                                      </div>
                                     <div id="rpg_map_evolution_interval_selected_hint" style="display:none; font-size:0.78em; opacity:0.65; line-height:1.35;">
-                                        Los ciclos de intervalo usan los mapas marcados abajo en Ejecutar ahora.
+                                        Los ciclos de intervalo usan los mapas marcados abajo en Ejecutar ahora. Esa casilla no activa ni desactiva un temporizador por mapa.
                                     </div>
                                     <div id="rpg_map_evolution_selected_row" class="flex-container flexFlowColumn gap-1" style="margin-top:4px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
                                         <div class="flex-container gap-1" style="align-items:center; flex-wrap:wrap;">
@@ -2220,6 +2223,7 @@
                 </div>
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
+                        <div style="font-size: 0.8em; opacity: 0.72; line-height: 1.4;">Abre el Acompañante de Aventura con el botón <b>CHAT</b> en la parte superior del Rastreador de Estado. Puede ayudarte con tu aventura cuando el <b>MODO TUTORIAL</b> está activado, facilitándote el aprendizaje de la extensión. En este modo, tiene acceso a una documentación completa.<br><br>De lo contrario, está ahí si simplemente te apetece charlar sobre tu aventura o hacer una lluvia de ideas, etc. También puedes pedirle que haga cambios en el Rastreador de Estado, en el Agente de Lorebook o en el Actualizador de Mapas, e incluso puede realizar acciones por ti si se lo pides (escribiendo mensajes o tomando decisiones en modo Elige Tu Propia Aventura).</div>
                         <label class="checkbox_label" title="Adjunta la guía de documentación de Multihog a cada solicitud del Acompañante de Aventura.">
                             <input id="rpg_adventure_companion_tutorial_mode" type="checkbox" />
                             <span>MODO TUTORIAL</span>
@@ -2248,9 +2252,9 @@
                                         <input id="rpg_adventure_companion_inject_memo" type="checkbox" />
                                         <span>Inyectar Rastreador de Estado</span>
                                     </label>
-                                    <label class="checkbox_label" title="Attach the player-facing current dungeon/town map (same knowledge as Visuals/Map) so the Companion can discuss exploration.">
+                                    <label class="checkbox_label" title="Adjunta el mapa de la mazmorra/ciudad actual visible para el jugador (el mismo conocimiento que en Visuales/Mapa) para que el Acompañante pueda comentar la exploración.">
                                         <input id="rpg_adventure_companion_inject_map" type="checkbox" />
-                                        <span>Inject current site map</span>
+                                        <span>Inyectar mapa del lugar actual</span>
                                     </label>
                                 </div>
                             </div>

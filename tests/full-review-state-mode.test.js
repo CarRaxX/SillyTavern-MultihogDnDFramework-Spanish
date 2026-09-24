@@ -59,14 +59,16 @@ describe('Full Review State Mode', () => {
         const fullReviewAt = settingsHtml.indexOf('id="rpg_tracker_full_review_mode"');
         const connectionAt = settingsHtml.indexOf('id="rpg_tracker_connection_source"');
         const inventoryAt = settingsHtml.indexOf('id="rpg_inventory_config_block"');
-        const corePromptAt = settingsHtml.indexOf('<b>Core Prompt</b>');
+        const corePromptAt = settingsHtml.indexOf('<b>Prompt Principal del Sistema</b>') !== -1
+            ? settingsHtml.indexOf('<b>Prompt Principal del Sistema</b>')
+            : settingsHtml.indexOf('<b>Core Prompt</b>');
 
         expect(enableAt).toBeGreaterThanOrEqual(0);
         expect(fullReviewAt).toBeGreaterThan(enableAt);
         expect(connectionAt).toBeGreaterThan(fullReviewAt);
         expect(inventoryAt).toBeGreaterThan(connectionAt);
         expect(corePromptAt).toBeGreaterThan(inventoryAt);
-        expect(settingsHtml).toContain('(recommended for weaker/local models)');
+        expect(settingsHtml).toMatch(/(?:\(recommended for weaker\/local models\)|\(Recomendado para modelos locales\))/);
         expect(settingsHtml).toContain('id="rpg_tracker_full_review_note"');
         // Full Review toggle must not live inside the Core Prompt drawer anymore.
         expect(settingsHtml.slice(corePromptAt, corePromptAt + 800)).not.toContain('id="rpg_tracker_full_review_mode"');
@@ -78,7 +80,7 @@ describe('Full Review State Mode', () => {
         expect(indexSource).toContain('suffixPromptTextarea.prop(\'disabled\', enabled)');
         expect(indexSource).toContain('suffixPromptTextarea.val(FULL_REVIEW_USER_PROMPT_SUFFIX)');
         expect(indexSource).toContain('corePromptTextarea.val(FULL_REVIEW_STATE_SYSTEM_PROMPT)');
-        expect(settingsHtml).toContain('Core Prompt and User Prompt Suffix boxes (further below)');
+        expect(settingsHtml).toMatch(/(?:Core Prompt and User Prompt Suffix boxes \(further below\)|el Prompt Central y el Sufijo del Usuario muestran las versiones integradas)/);
     });
 
     it('Adventure Companion doc documents Full Review Mode and recommends it for local models', () => {

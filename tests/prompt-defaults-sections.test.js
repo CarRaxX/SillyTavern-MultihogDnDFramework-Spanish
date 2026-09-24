@@ -16,12 +16,12 @@ describe('prompt-defaults Character Sheets category', () => {
 
     it('ships Species/Body/Worn Equipment in the bundled sections snapshot', () => {
         const snap = buildBundledPromptsSnapshot();
-        expect(snap.sections?.pcCoreSections).toContain('name: Species');
-        expect(snap.sections?.pcCoreSections).toContain('name: Body');
-        expect(snap.sections?.pcCoreSections).toContain('name: Worn Equipment');
-        expect(snap.sections?.npcCoreSections).toContain('name: Species');
-        expect(snap.sections?.npcCoreSections).toContain('name: Body');
-        expect(snap.sections?.npcCoreSections).toContain('name: Worn Equipment');
+        expect(snap.sections?.pcCoreSections).toMatch(/name:\s*(?:Species|Especie)/);
+        expect(snap.sections?.pcCoreSections).toMatch(/name:\s*(?:Body|Cuerpo)/);
+        expect(snap.sections?.pcCoreSections).toMatch(/name:\s*(?:Worn Equipment|Equipo Equipado)/);
+        expect(snap.sections?.npcCoreSections).toMatch(/name:\s*(?:Species|Especie)/);
+        expect(snap.sections?.npcCoreSections).toMatch(/name:\s*(?:Body|Cuerpo)/);
+        expect(snap.sections?.npcCoreSections).toMatch(/name:\s*(?:Worn Equipment|Equipo Equipado)/);
         expect(snap.sections?.pcCoreSections).not.toContain('name: Appearance/Species');
         expect(snap.sections?.npcCoreSections).not.toContain('name: Appearance/Species');
     });
@@ -56,7 +56,7 @@ describe('prompt-defaults Character Sheets category', () => {
     it('formatCoreSectionsSnapshot is stable and includes descriptions', () => {
         const text = formatCoreSectionsSnapshot(DEFAULT_PC_SECTIONS);
         expect(text).toContain('id: sec_body');
-        expect(text).toContain('Do NOT describe clothing, armor, or worn gear here');
+        expect(text).toMatch(/(?:Do NOT describe clothing, armor, or worn gear here|NO describas ropa, armadura o equipo llevado aquí)/);
         expect(text.split('---').length).toBeGreaterThan(1);
     });
 });

@@ -153,8 +153,8 @@ describe('Map Architect component', () => {
         expect(index).toContain('Math.min(32000, parseInt(String($(this).val()), 10) || 25000)');
         expect(profiles).toContain('mapArchitectMaxTokens: s.mapArchitectMaxTokens ?? 25000');
         expect(settingsMarkup).toMatch(/id="rpg_map_architect_max_tokens"[^>]*max="32000"/);
-        expect(settingsMarkup).toContain('<b>Persistent Maps</b>');
-        expect(settingsMarkup).toContain('<b>Map Architect</b>');
+        expect(settingsMarkup).toMatch(/<b>(?:Persistent Maps|Mapas Persistentes)<\/b>/);
+        expect(settingsMarkup).toMatch(/<b>(?:Map Architect|Arquitecto de Mapas)<\/b>/);
         expect(settingsMarkup).not.toContain('<b>Architect Prompt</b>');
         expect(defaults).not.toContain('mapArchitectMaxTokens: 6000');
         expect(index).not.toContain('mapArchitectMaxTokens ?? 6000');

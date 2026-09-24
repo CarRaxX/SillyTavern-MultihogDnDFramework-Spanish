@@ -22,15 +22,19 @@ describe('portrait story lookback', () => {
 
     it('exposes portrait story lookback controls in the Portraits drawer', () => {
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
-        const portraitsStart = settingsMarkup.indexOf('<b>Portraits and Location Images</b>');
-        const developerStart = settingsMarkup.indexOf('Developer &amp; Reset');
+        const portraitsStart = settingsMarkup.indexOf('<b>Retratos e Imágenes de Ubicación</b>') !== -1
+            ? settingsMarkup.indexOf('<b>Retratos e Imágenes de Ubicación</b>')
+            : settingsMarkup.indexOf('<b>Portraits and Location Images</b>');
+        const developerStart = settingsMarkup.indexOf('Desarrollador y Restablecimiento') !== -1
+            ? settingsMarkup.indexOf('Desarrollador y Restablecimiento')
+            : settingsMarkup.indexOf('Developer &amp; Reset');
         const portraitsMarkup = settingsMarkup.slice(portraitsStart, developerStart);
 
         expect(portraitsMarkup).toContain('id="rpg_tracker_portrait_use_story_lookback"');
-        expect(portraitsMarkup).toContain('Use Story Lookback When Generating Portraits');
+        expect(portraitsMarkup).toMatch(/(?:Use Story Lookback When Generating Portraits|Usar retroceso de historia al generar retratos)/);
         expect(portraitsMarkup).toContain('id="rpg_tracker_portrait_story_lookback"');
         expect(portraitsMarkup).toContain('id="rpg_tracker_portrait_story_lookback_row"');
-        expect(portraitsMarkup).toContain('Location images always include recent story context');
+        expect(portraitsMarkup).toMatch(/(?:Location images always include recent story context|Las imágenes de ubicación siempre incluyen contexto reciente de la historia)/);
     });
 
     it('keeps location image prompts on story lookback regardless of the portrait toggle', () => {

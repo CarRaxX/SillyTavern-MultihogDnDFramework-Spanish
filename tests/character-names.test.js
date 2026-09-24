@@ -50,7 +50,7 @@ describe('genre character-name pools', () => {
         const creatorSource = readFileSync(new URL('../character-creator.js', import.meta.url), 'utf8');
         const rendererSource = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
 
-        expect(rendererSource).toContain('id="rt-quickstart-name" placeholder="Optional — enter, roll, or let AI choose"');
+        expect(rendererSource).toMatch(/id="rt-quickstart-name"\s+placeholder="(?:Optional — enter, roll, or let AI choose|Opcional — escribe, tira o deja que la IA elija)"/);
         expect(rendererSource).toContain('id="rt-quickstart-roll-name"');
         expect(rendererSource).toContain('id="rt-quickstart-begin"');
         expect(quickStartSource).toMatch(/selectedName = pickGenreCharacterName\(selectedGenre\)/);

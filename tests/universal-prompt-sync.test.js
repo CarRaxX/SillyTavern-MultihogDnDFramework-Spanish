@@ -176,8 +176,8 @@ describe('Lorebook prompt templates', () => {
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{fieldInstructions}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{campaignRoot}}');
         expect(defaults.routerAgentSharedContextTemplate).toContain('{{relSection}}');
-        expect(defaults.routerCombatProfileGuidanceBasicTemplate).toContain('COMBAT PROFILE');
-        expect(defaults.routerAutoPassRestrictionTemplate).toContain('AUTOMATIC PASS RESTRICTION');
+        expect(defaults.routerCombatProfileGuidanceBasicTemplate).toMatch(/(?:COMBAT PROFILE|PERFIL DE COMBATE)/);
+        expect(defaults.routerAutoPassRestrictionTemplate).toMatch(/(?:AUTOMATIC PASS RESTRICTION|RESTRICCIÓN DE PASE AUTOMÁTICO)/);
         expect(defaults.routerRelSectionBasicTemplate).toContain('{{max}}');
     });
 

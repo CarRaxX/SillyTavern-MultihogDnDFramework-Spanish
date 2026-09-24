@@ -33,10 +33,10 @@ describe('PARTY compact mode', () => {
     it('puts a Compact Mode toggle on the PARTY module header', () => {
         const html = renderMemoAsCards(PARTY_MEMO, null, {});
         expect(html).toContain('class="rt-party-compact-btn"');
-        expect(html).toContain('Compact Mode</button>');
+        expect(html).toMatch(/(?:Compact Mode|Modo Compacto)<\/button>/);
         expect(html).toContain('data-tag="PARTY"');
         expect(html).toContain('aria-pressed="false"');
-        expect(html).toContain('Compact mode: portrait, name, and HP only');
+        expect(html).toMatch(/(?:Compact mode: portrait, name, and HP only|Modo compacto: solo retrato, nombre y PV)/);
         expect(html).not.toContain('rt-section-card rt-party-compact');
         expect(html).toContain('rt-entity-name');
         expect(html).toContain('rt-hp-bar');
@@ -52,7 +52,7 @@ describe('PARTY compact mode', () => {
         expect(html).toContain('rt-section-card rt-party-compact');
         expect(html).toContain('class="rt-party-compact-btn active"');
         expect(html).toContain('aria-pressed="true"');
-        expect(html).toContain('Show full party details');
+        expect(html).toMatch(/(?:Show full party details|Mostrar detalles completos del grupo)/);
         expect(html).toContain('Elara (Ranger)');
         expect(html).toContain('Kael');
         expect(html).toContain('rt-hp-bar');

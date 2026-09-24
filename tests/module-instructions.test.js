@@ -365,8 +365,8 @@ describe('5.5.17 lorebook prompt / word-target migration', () => {
         expect(s.routerBasicSystemPromptTemplate).not.toContain('{{example}}');
         expect(s.npcMajorWords).toBe(25 * 9);
         expect(s.npcMinorWords).toBe(15 * 9);
-        expect(s.routerCombatProfileGuidanceBasicTemplate).toContain('COMBAT PROFILE');
-        expect(s.routerAutoPassRestrictionTemplate).toContain('AUTOMATIC PASS RESTRICTION');
+        expect(s.routerCombatProfileGuidanceBasicTemplate).toMatch(/(?:COMBAT PROFILE|PERFIL DE COMBATE)/);
+        expect(s.routerAutoPassRestrictionTemplate).toMatch(/(?:AUTOMATIC PASS RESTRICTION|RESTRICCIÓN DE PASE AUTOMÁTICO)/);
         expect(s.routerModules.npc.instruction).toContain('total exactly 225 words');
         expect(s.npcWordTargetRescaleNotice).toEqual({
             fromMajor: 25,
@@ -379,8 +379,8 @@ describe('5.5.17 lorebook prompt / word-target migration', () => {
 
     it('includes runtime fragments in the lorebook fingerprint snapshot', () => {
         const snap = buildBundledPromptsSnapshot();
-        expect(snap.lorebook.routerCombatProfileGuidanceBasicTemplate).toContain('COMBAT PROFILE');
+        expect(snap.lorebook.routerCombatProfileGuidanceBasicTemplate).toMatch(/(?:COMBAT PROFILE|PERFIL DE COMBATE)/);
         expect(snap.lorebook.routerRelSectionAgentTemplate).toContain('{{max}}');
-        expect(snap.lorebook.routerExistingNpcNudgeTemplate).toContain('existing-NPC');
+        expect(snap.lorebook.routerExistingNpcNudgeTemplate).toMatch(/(?:existing-NPC|PNJ existente)/);
     });
 });

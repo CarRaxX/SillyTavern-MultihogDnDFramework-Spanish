@@ -11,7 +11,7 @@ const defaultsSource = readFileSync(new URL('../src/state/defaults.js', import.m
 describe('settings overlay', () => {
     it('adds an opt-in location image chat background setting', () => {
         expect(settingsMarkup).toContain('id="rpg_tracker_portrait_auto_apply_location_background"');
-        expect(settingsMarkup).toContain('Use Location Images as Chat Background');
+        expect(settingsMarkup).toMatch(/(?:Use Location Images as Chat Background|Usar Imágenes de Ubicación como Fondo de Chat)/i);
         expect(defaultsSource).toContain('portraitAutoApplyLocationBackground: false');
         expect(indexSource).toContain('portraitAutoApplyLocationBackground');
     });
@@ -19,7 +19,7 @@ describe('settings overlay', () => {
     it('ships a stub entry point for the extensions drawer', () => {
         expect(stubMarkup).toContain('class="rpg-tracker-settings-stub"');
         expect(stubMarkup).toContain('id="rpg_tracker_open_settings"');
-        expect(stubMarkup).toContain('Open Settings');
+        expect(stubMarkup).toMatch(/(?:Open Settings|Abrir Ajustes)/);
     });
 
     it('implements a floating external window rather than a fullscreen takeover', () => {
