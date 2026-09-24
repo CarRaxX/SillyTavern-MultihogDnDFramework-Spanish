@@ -508,6 +508,8 @@ export function saveChatState(chatId, opts = {}) {
         keywordActivatedKeys: JSON.parse(JSON.stringify(s.keywordActivatedKeys || [])),
         routerLog:    JSON.parse(JSON.stringify(s.routerLog || [])),
         routerCampaignPrefix: s.routerCampaignPrefix || '',
+        // Only rename migration writes this pin; never copy it from the live chat.
+        renamedCampaignPrefix: existing.renamedCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
         routerLastRunAt: s.routerLastRunAt ?? 0,
@@ -522,7 +524,7 @@ export function saveChatState(chatId, opts = {}) {
         mapEvolutionLastSiteRoot: s.mapEvolutionLastSiteRoot || '',
         mapEvolutionPendingExitRoot: s.mapEvolutionPendingExitRoot || '',
         mapEvolutionTickScope: s.mapEvolutionTickScope || 'all',
-        mapEvolutionTickCount: s.mapEvolutionTickCount ?? 1,
+        mapEvolutionTickCount: s.mapEvolutionTickCount ?? 2,
         mapEvolutionTickRandomize: s.mapEvolutionTickRandomize !== false,
         mapEvolutionSelectedRoots: JSON.parse(JSON.stringify(s.mapEvolutionSelectedRoots || [])),
         mapEvolutionIntervalHoursBySite: JSON.parse(JSON.stringify(s.mapEvolutionIntervalHoursBySite || {})),
