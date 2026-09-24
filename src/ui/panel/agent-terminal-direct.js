@@ -1,3 +1,5 @@
+import { getActiveChatId } from '../../../state-manager.js';
+import { createChatCommitGuard, chatCommitResult, ignoreChatCancellation } from '../../state/pass-affinity.js';
 /** Wire per-tab Terminal/Direct Prompt send bars in the Lorebook Agent panel. */
 
 import { AGENT_TERMINAL_TAB_IDS } from './agent-terminal.js';
@@ -104,40 +106,44 @@ export function wireAgentTerminalDirectPrompts({
     const summarizeMapUpdater = (result) => {
         const skipped = result?.skipped;
         if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
-            return { kind: 'warning', message: 'Mapas Persistentes está desactivado.' };
+            return { kind: 'warning', message: 'Persistent Maps is off.' };
         }
-        if (skipped === 'no_active_map') return { kind: 'warning', message: 'No hay un mapa de mazmorra o asentamiento activo.' };
-        if (skipped === 'no_such_map') return { kind: 'warning', message: 'No se pudo cargar ese lugar mapeado.' };
-        if (skipped === 'disabled') return { kind: 'warning', message: 'El Actualizador de Mapas está desactivado.' };
-        if (skipped === 'busy') return { kind: 'warning', message: 'Otro agente ya se está ejecutando.' };
-        if (skipped === 'stopped') return { kind: 'info', message: 'Detenido.' };
-        if (result?.ok && result?.noop) return { kind: 'info', message: 'No hubo cambios duraderos.' };
-        if (result?.ok) return { kind: 'success', message: 'Actualización de ocupación aplicada.' };
-        return { kind: 'error', message: 'No se pudo aplicar una actualización válida de ocupación.' };
+        if (skipped === 'no_active_map') return { kind: 'warning', message: 'No active dungeon or settlement map.' };
+        if (skipped === 'no_such_map') return { kind: 'warning', message: 'That mapped site could not be loaded.' };
+        if (skipped === 'disabled') return { kind: 'warning', message: 'Map Updater is disabled.' };
+        if (skipped === 'busy') return { kind: 'warning', message: 'Another agent is already running.' };
+        if (skipped === 'stopped') return { kind: 'info', message: 'Stopped.' };
+        if (result?.ok && result?.noop) return { kind: 'info', message: 'Nothing durable changed.' };
+        if (result?.ok) return { kind: 'success', message: 'Occupancy update applied.' };
+        return { kind: 'error', message: 'Could not apply a valid occupancy update.' };
     };
 
     const summarizeMapEvolution = (result) => {
         const skipped = result?.skipped;
-        if (skipped === 'location_mapping_off') return { kind: 'warning', message: 'Mapas Persistentes está desactivado.' };
-        if (skipped === 'no_maps' || skipped === 'no_matching_sites') return { kind: 'warning', message: 'No hay lugares mapeados para evolucionar.' };
-        if (skipped === 'disabled') return { kind: 'warning', message: 'La Evolución de Mapas está desactivada.' };
-        if (skipped === 'busy') return { kind: 'warning', message: 'Otro agente ya se está ejecutando.' };
-        if (result?.ok && result?.baseline) return { kind: 'info', message: 'Sellado de línea base únicamente — nada que evolucionar aún.' };
-        if (result?.ok) return { kind: 'success', message: 'Pase de Evolución de Mapas completado.' };
-        return { kind: 'error', message: 'La Evolución de Mapas no pudo completarse.' };
+        if (skipped === 'location_mapping_off') return { kind: 'warning', message: 'Persistent Maps is off.' };
+        if (skipped === 'no_maps' || skipped === 'no_matching_sites') return { kind: 'warning', message: 'No mapped site to evolve.' };
+        if (skipped === 'disabled') return { kind: 'warning', message: 'Map Evolution is disabled.' };
+        if (skipped === 'busy') return { kind: 'warning', message: 'Another agent is already running.' };
+        if (result?.ok && result?.baseline) return { kind: 'info', message: 'Baseline stamps only — nothing to evolve yet.' };
+        if (result?.ok) return { kind: 'success', message: 'Map Evolution pass complete.' };
+        return { kind: 'error', message: 'Map Evolution could not complete.' };
     };
 
-    const resolveCurrentSiteRoot = async () => {
+    const resolveCurrentSiteRoot = ignoreChatCancellation(async () => {
+        const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
+
         const sites = typeof listMappedEvolutionSites === 'function'
-            ? await listMappedEvolutionSites().catch(() => [])
+            ? chatCommitResult(ownsChat, await listMappedEvolutionSites().catch(() => []))
             : [];
         const current = sites.find(site => site.current);
         if (current?.siteRoot) return current.siteRoot;
         if (sites.length === 1) return sites[0].siteRoot;
         return '';
-    };
+    });
 
-    const runForTab = async (tabId) => {
+    const runForTab = ignoreChatCancellation(async (tabId) => {
+        const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
+
         const input = /** @type {HTMLTextAreaElement|null} */ (agentPanel.querySelector(`#rt-terminal-direct-${tabId}`));
         if (!input) return;
         const msg = String(input.value || '').trim();
@@ -151,7 +157,7 @@ export function wireAgentTerminalDirectPrompts({
         }
 
         if (tabId !== 'state_tracker' && typeof agentsBusy === 'function' && agentsBusy()) {
-            toastr.warning('Otro agente ya se está ejecutando.', 'Terminal/Prompt Directo');
+            toastr.warning('An agent is already running.', 'Terminal/Direct Prompt');
             return;
         }
 
@@ -161,8 +167,8 @@ export function wireAgentTerminalDirectPrompts({
             const s = getSettings();
             s.directPromptContext = lookback;
             saveSettings();
-            toastr['info']('Ejecutando Rastreador de Estado con comando específico...', 'Rastreador de Estado');
-            await sendDirectPrompt(msg);
+            toastr['info']('Running State Tracker with specific command...');
+            chatCommitResult(ownsChat, await sendDirectPrompt(msg));
             return;
         }
 
@@ -170,95 +176,97 @@ export function wireAgentTerminalDirectPrompts({
             const s = getSettings();
             const { chat } = SillyTavern.getContext();
             const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
-            toastr['info']('Ejecutando Agente de Lorebook con comando específico...', 'Agente de Lorebook');
-            await runRouterPass(combinedNarrative, msg, lookback, true);
+            toastr['info']('Running Lorebook Agent with specific command...');
+            chatCommitResult(ownsChat, await runRouterPass(combinedNarrative, msg, lookback, true));
             return;
         }
 
         if (tabId === 'map_updater') {
-            toastr['info']('Ejecutando Actualizador de Mapas con comando específico...', 'Actualizador de Mapas');
+            toastr['info']('Running Map Updater with specific command...');
             if (typeof updateAgentStatusIndicator === 'function' && typeof isRouterRunning === 'function') {
                 updateAgentStatusIndicator(isRouterRunning());
             }
-            const result = await runMapUpdaterPass({
+            const result = chatCommitResult(ownsChat, await runMapUpdaterPass({
                 isManual: true,
                 lookback,
                 directInstruction: msg,
-            });
+            }));
             if (typeof updateAgentStatusIndicator === 'function' && typeof isRouterRunning === 'function') {
                 updateAgentStatusIndicator(isRouterRunning());
             }
             const summary = summarizeMapUpdater(result);
             toastr[summary.kind === 'success' ? 'success' : summary.kind === 'warning' ? 'warning' : summary.kind === 'error' ? 'error' : 'info'](
                 summary.message,
-                'Actualizador de Mapas',
+                'Map Updater',
             );
             return;
         }
 
         if (tabId === 'map_evolution') {
             const sites = typeof listMappedEvolutionSites === 'function'
-                ? await listMappedEvolutionSites()
+                ? chatCommitResult(ownsChat, await listMappedEvolutionSites())
                 : [];
             if (!sites.length) {
-                toastr.warning('No hay lugares mapeados para evolucionar.', 'Evolución de Mapas');
+                toastr.warning('No mapped site to evolve.', 'Map Evolution');
                 return;
             }
             let siteRoots = sites.filter(site => site.current).map(site => site.siteRoot);
             if (!siteRoots.length) {
-                siteRoots = await promptMappedEvolutionSites(sites, escapeHtml);
+                siteRoots = chatCommitResult(ownsChat, await promptMappedEvolutionSites(sites, escapeHtml));
                 if (!siteRoots) return;
                 if (!siteRoots.length) {
-                    toastr.warning('Selecciona al menos un lugar mapeado.', 'Evolución de Mapas');
+                    toastr.warning('Check at least one mapped site.', 'Map Evolution');
                     return;
                 }
             }
-            toastr['info']('Ejecutando Evolución de Mapas con comando específico...', 'Evolución de Mapas');
+            toastr['info']('Running Map Evolution with specific command...');
             if (typeof updateAgentStatusIndicator === 'function' && typeof isRouterRunning === 'function') {
                 updateAgentStatusIndicator(isRouterRunning());
             }
-            const result = await runMapEvolutionPass({
+            const result = chatCommitResult(ownsChat, await runMapEvolutionPass({
                 trigger: 'manual',
                 isManual: true,
                 siteRoots,
                 directInstruction: msg,
                 lookback,
-            });
+            }));
             if (typeof updateAgentStatusIndicator === 'function' && typeof isRouterRunning === 'function') {
                 updateAgentStatusIndicator(isRouterRunning());
             }
             const summary = summarizeMapEvolution(result);
             toastr[summary.kind === 'success' ? 'success' : summary.kind === 'warning' ? 'warning' : summary.kind === 'error' ? 'error' : 'info'](
                 summary.message,
-                'Evolución de Mapas',
+                'Map Evolution',
             );
             return;
         }
 
         if (tabId === 'map_architect') {
             const directive = parseMapArchitectCreateDirective(msg);
-            const activeSiteRoot = await resolveCurrentSiteRoot();
+            const activeSiteRoot = chatCommitResult(ownsChat, await resolveCurrentSiteRoot());
             const siteRoot = directive?.site || activeSiteRoot;
             if (!siteRoot) {
-                toastr.warning('Indica un lugar con "Crear mapa de INTERIOR/MAZMORRA/ASENTAMIENTO para \\"Nombre\\"", o abre una ubicación mapeada primero.', 'Arquitecto de Mapas');
+                toastr.warning('Name a site with “Create INTERIOR/DUNGEON/SETTLEMENT map for \"Site Name\"”, or open a mapped location first.', 'Map Architect');
                 return;
             }
-            toastr['info'](`Ejecutando Arquitecto de Mapas para ${siteRoot}...`, 'Arquitecto de Mapas');
+            toastr['info'](`Running Map Architect for ${siteRoot}...`);
             try {
-                const args = await inferMapArchitectArgs({
+                const args = chatCommitResult(ownsChat, await inferMapArchitectArgs({
                     site: siteRoot,
                     userBrief: msg,
                     lookback,
-                });
+                }));
                 if (directive) args.kind = directive.kind;
-                await runMapArchitect(args);
-                toastr['success'](`Arquitecto de Mapas finalizado para ${siteRoot}.`, 'Arquitecto de Mapas');
+                chatCommitResult(ownsChat, await runMapArchitect(args));
+                toastr['success'](`Map Architect finished for ${siteRoot}.`, 'Map Architect');
             } catch (error) {
-                console.error('[RPG Tracker] Error en el prompt directo del Arquitecto de Mapas:', error);
-                toastr.error(String(error?.message || error), 'Arquitecto de Mapas');
+                if (!ownsChat()) return;
+
+                console.error('[RPG Tracker] Map Architect direct prompt failed:', error);
+                toastr.error(String(error?.message || error), 'Map Architect');
             }
         }
-    };
+    });
 
     AGENT_TERMINAL_TAB_IDS.forEach(tabId => {
         const input = agentPanel.querySelector(`#rt-terminal-direct-${tabId}`);
@@ -277,10 +285,12 @@ export function wireAgentTerminalDirectPrompts({
             };
             grow();
             input.addEventListener('input', () => {
+
                 grow();
                 persistDraft(tabId, /** @type {HTMLTextAreaElement} */ (input).value);
             });
             input.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     void runForTab(tabId);
@@ -289,6 +299,7 @@ export function wireAgentTerminalDirectPrompts({
         }
         if (lookbackInput) {
             lookbackInput.addEventListener('change', () => {
+
                 const value = parseLookback(/** @type {HTMLInputElement} */ (lookbackInput).value, 10);
                 /** @type {HTMLInputElement} */ (lookbackInput).value = String(value);
                 persistLookback(tabId, value);
@@ -296,6 +307,7 @@ export function wireAgentTerminalDirectPrompts({
         }
         if (runBtn) {
             runBtn.addEventListener('click', (e) => {
+
                 e.stopPropagation();
                 void runForTab(tabId);
             });

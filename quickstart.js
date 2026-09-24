@@ -1,4 +1,4 @@
-import { getSettings } from './state-manager.js';
+import { getSettings, getActiveChatId } from './state-manager.js';
 import {
     getArchetypesForGenre,
     generateQuickStartCharacter,
@@ -14,8 +14,9 @@ import {
     extractInstantActionLevel,
     normalizeInstantActionInstructions,
     resolveInstantActionPlayerCardWords,
-    rollInstantActionLevel,
+    resolveInstantActionStartingLevel,
 } from './src/state/instant-action-instructions.js';
+import { createChatCommitGuard } from './src/state/pass-affinity.js';
 
 /** @type {boolean} */
 let _quickStartRunning = false;
@@ -75,9 +76,10 @@ function setQuickStartBusy(rootEl, disabled) {
 /**
  * Apply the player's current Narrator Configuration before Instant Action begins.
  */
-async function applyQuickStartConfiguration() {
+async function applyQuickStartConfiguration(canCommit) {
     saveSettings();
-    await autoApplySysprompt(true);
+    await autoApplySysprompt(true, { canCommit });
+    if (!canCommit()) return;
 
     if (typeof globalThis._rpgRenderAgentModules === 'function') {
         globalThis._rpgRenderAgentModules();
@@ -116,13 +118,16 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
     const root = rootEl || /** @type {HTMLElement|null} */ (document.querySelector('.rt-empty'));
     const nameVal = String(selectedName || '').trim();
     const instantActionInstructions = normalizeInstantActionInstructions(instructionText);
+    const passChatId = getActiveChatId();
+    const ownsChat = createChatCommitGuard(passChatId, getActiveChatId);
 
     _quickStartRunning = true;
     setQuickStartBusy(root, true);
 
     try {
         setQuickStartStatus(root, 'Enabling systems…');
-        await applyQuickStartConfiguration();
+        await applyQuickStartConfiguration(ownsChat);
+        if (!ownsChat()) throw new Error('Quick Start stopped because the active chat changed.');
 
         const s = getSettings();
         s.onboardingGenre = validGenre;
@@ -131,7 +136,12 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
         const archetypes = getArchetypesForGenre(validGenre);
         const className = pickRandomArchetype(archetypes);
         const noLevel = s.onboardingLevel === 'none';
-        const level = noLevel ? null : rollInstantActionLevel(secureRandom);
+        const randomLevel = s.onboardingInstantActionRandomLevel === true;
+        const level = resolveInstantActionStartingLevel({
+            noLevel,
+            randomLevel,
+            random: secureRandom,
+        });
         const gearTier = s.onboardingGearTier || 'auto';
         const wordCount = resolveInstantActionPlayerCardWords(
             s.onboardingPersonaWords || '150',
@@ -151,6 +161,7 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
 
         setQuickStartStatus(root, `Creating character (${creationDetails})…`);
         const { charName } = await generateQuickStartCharacter({
+            chatId: passChatId, canCommit: ownsChat,
             genre: validGenre,
             className,
             level,
@@ -158,6 +169,9 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
             nameVal,
             instantActionInstructions,
         });
+        if (!ownsChat()) {
+            throw new Error('Quick Start stopped because the active chat changed.');
+        }
 
         setQuickStartStatus(root, 'Creating Lorebook Agent Player Card…');
         const bio = await generatePersonaBio(
@@ -165,17 +179,30 @@ export async function runQuickStart(genre, rootEl = null, selectedName = '', ins
             wordCount,
             buildInstantActionPromptSection(instantActionInstructions),
         );
+        if (!ownsChat()) {
+            throw new Error('Quick Start stopped because the active chat changed.');
+        }
         if (!bio) {
             throw new Error('Persona generation returned empty.');
         }
-        const ok = await addPlayerCardToLorebookAgent(charName, bio, wordCount);
+        const ok = await addPlayerCardToLorebookAgent(charName, bio, wordCount, { chatId: passChatId, canCommit: ownsChat });
         if (!ok) {
-            throw new Error('Could not add Player Card — no active chat.');
+            throw new Error(
+                ownsChat()
+                    ? 'Could not add Player Card — no active chat.'
+                    : 'Quick Start stopped because the active chat changed.',
+            );
         }
 
+        if (!ownsChat()) {
+            throw new Error('Quick Start stopped because the active chat changed.');
+        }
         setQuickStartStatus(root, 'Creating name-only chat persona…');
-        await activateSillyTavernPersona(charName);
+        await activateSillyTavernPersona(charName, { chatId: passChatId, canCommit: ownsChat });
 
+        if (!ownsChat()) {
+            throw new Error('Quick Start stopped because the active chat changed.');
+        }
         const readyDetail = instantActionInstructions ? 'custom instructions' : className;
         if (s.onboardingSendStarterMessage !== false) {
             setQuickStartStatus(root, 'Starting adventure…');
@@ -214,6 +241,7 @@ export function bindQuickStartEvents(rootEl) {
     const wordCountSelect = /** @type {HTMLSelectElement|null} */ (section.querySelector('#rt-quickstart-persona-words'));
     const wordCountCustom = /** @type {HTMLInputElement|null} */ (section.querySelector('#rt-quickstart-persona-words-custom'));
     const sendStarterCheckbox = /** @type {HTMLInputElement|null} */ (section.querySelector('#rt-quickstart-send-starter'));
+    const randomLevelCheckbox = /** @type {HTMLInputElement|null} */ (section.querySelector('#rt-quickstart-random-level'));
     let selectedGenre = '';
     let selectedName = '';
 
@@ -223,6 +251,7 @@ export function bindQuickStartEvents(rootEl) {
         if (wordCountCustom) s.onboardingPersonaWordsCustom = wordCountCustom.value;
         if (wordCountCustom) wordCountCustom.style.display = wordCountSelect?.value === 'other' ? 'block' : 'none';
         if (sendStarterCheckbox) s.onboardingSendStarterMessage = !!sendStarterCheckbox.checked;
+        if (randomLevelCheckbox) s.onboardingInstantActionRandomLevel = !!randomLevelCheckbox.checked;
         saveSettings();
     };
 
@@ -264,6 +293,7 @@ export function bindQuickStartEvents(rootEl) {
     wordCountSelect?.addEventListener('change', persistQuickStartOptions);
     wordCountCustom?.addEventListener('input', persistQuickStartOptions);
     sendStarterCheckbox?.addEventListener('change', persistQuickStartOptions);
+    randomLevelCheckbox?.addEventListener('change', persistQuickStartOptions);
 
     startButton?.addEventListener('click', (e) => {
         e.preventDefault();

@@ -15,7 +15,7 @@ describe('panel markup', () => {
         });
 
         expect(markup).toContain('id="rpg-tracker-enable-btn"');
-        expect(markup).toContain('Disable Multihog Framework');
+        expect(markup).toMatch(/Disable Multihog Framework|Desactivar Multihog Framework/);
         expect(markup).not.toContain('id="rt-agent-router-enable-btn"');
         expect(markup).toContain('id="rpg-tracker-memo"');
         expect(markup).toContain('id="rt-bottom-xp-bar"');
@@ -29,15 +29,15 @@ describe('panel markup', () => {
         expect(markup).toContain('id="rt-research-lorebook"');
         expect(markup).toContain('id="rt-research-map-updater"');
         expect(markup).toContain('id="rt-research-map-evolution"');
-        expect(markup).toContain('<b>Map Updater</b>');
-        expect(markup).toContain('<b>Map Evolution</b>');
+        expect(markup).toMatch(/<b>Map Updater<\/b>|<b>Actualizador de Mapas<\/b>/);
+        expect(markup).toMatch(/<b>Map Evolution<\/b>|<b>Evolución de Mapas<\/b>/);
         expect(markup).toContain('id="rt-agent-map-evo-header"');
         expect(markup).toContain('id="rt-agent-map-evo-testing-ground"');
         expect(markup).toContain('id="rt-agent-map-evo-drawer"');
         expect(markup).toContain('id="rt-agent-map-evo-tick-scope"');
         expect(markup).toContain('id="rt-agent-world-locations"');
         expect(markup.indexOf('rt-agent-map-evo-header')).toBeLessThan(markup.indexOf('rt-agent-world-header'));
-        expect(markup).toContain('Visuals/Map');
+        expect(markup).toMatch(/Visuals\/Map|Visual\s*\/\s*Mapa/i);
         expect(markup).not.toContain('>Visualization Mode<');
         expect(markup).toContain('id="rt-agent-terminal-tabs"');
         expect(markup).toContain('id="rt-agent-terminal-lorebook_agent"');
@@ -46,7 +46,7 @@ describe('panel markup', () => {
         expect(markup).toContain('id="rt-agent-terminal-map_evolution"');
         expect(markup).toContain('id="rt-agent-terminal-map_architect"');
         expect(markup).toContain('id="rt-agent-terminal-log-history"');
-        expect(markup).toContain('Terminal/Direct Prompt');
+        expect(markup).toMatch(/Terminal\/Direct Prompt|Terminal\/Prompt Directo/);
         expect(markup).toContain('id="rt-terminal-direct-lorebook_agent"');
         expect(markup).toContain('id="rt-terminal-direct-map_evolution"');
         expect(markup).toContain('id="rt-terminal-direct-map_architect"');

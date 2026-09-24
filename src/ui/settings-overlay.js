@@ -22,14 +22,14 @@ import {
 
 /** @type {{ id: string, icon: string, label: string, match: RegExp }[]} */
 const TAB_DEFS = [
-    { id: 'general', icon: 'fa-gears', label: 'General y Visuales', match: /(?:General|Núcleo|Preferencias|General\s*&\s*Visuals)/i },
-    { id: 'connections', icon: 'fa-plug', label: 'Conexiones y Modelos', match: /(?:Connections|Conexiones)/i },
-    { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Sistemas de Juego', match: /(?:Game Systems|Sistemas de Juego)/i },
-    { id: 'statetracker', icon: 'fa-brain', label: 'Rastreador de Estado', match: /(?:State Tracker|Rastreador de Estado|Configuración de Ficha)/i },
-    { id: 'agent', icon: 'fa-route', label: 'Agente de Lorebook', match: /(?:Lorebook Agent|Agente de Lorebook)/i },
-    { id: 'maparchitect', icon: 'fa-map', label: 'Mapas Persistentes', match: /(?:Persistent Maps|Mapas Persistentes|Arquitecto de Mapas|Map Architect)/i },
-    { id: 'worldprog', icon: 'fa-globe', label: 'Progresión del Mundo', match: /(?:World Progression|Progresión del Mundo)/i },
-    { id: 'companion', icon: 'fa-comments', label: 'Acompañante de Aventura', match: /(?:Adventure Companion|Acompañante de Aventura)/i },
+    { id: 'general', icon: 'fa-gears', label: 'General & Visuals', match: /General\s*&\s*Visuals/i },
+    { id: 'connections', icon: 'fa-plug', label: 'Connections', match: /Connections/i },
+    { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Game Systems', match: /Game Systems/i },
+    { id: 'statetracker', icon: 'fa-brain', label: 'State Tracker', match: /State Tracker/i },
+    { id: 'agent', icon: 'fa-route', label: 'Lorebook Agent', match: /Lorebook Agent/i },
+    { id: 'maparchitect', icon: 'fa-map', label: 'Persistent Maps', match: /Persistent Maps/i },
+    { id: 'worldprog', icon: 'fa-globe', label: 'World Progression', match: /World Progression/i },
+    { id: 'companion', icon: 'fa-comments', label: 'Adventure Companion', match: /Adventure Companion/i },
 ];
 
 let _lastTab = 'general';
@@ -71,7 +71,7 @@ export function setSettingsOverlayAppearance(mode) {
 }
 
 /**
- * Appearance toggle pinned to the top of the General tab.
+ * Appearance toggle pinned to the top of the General & Visuals tab.
  * @param {HTMLElement} tabsHost
  */
 function installAppearanceToggle(tabsHost) {
@@ -83,12 +83,12 @@ function installAppearanceToggle(tabsHost) {
     bar.className = 'rt-so-appearance-bar';
     bar.innerHTML = `
         <div class="rt-so-appearance-label">
-            <span>Apariencia de la ventana de ajustes</span>
-            <i class="fa-solid fa-circle-question" title="Apariencia Oscura/Clara fija solo para esta ventana de ajustes. Evita que los colores del tema de SillyTavern o del rastreador hagan que el menú sea ilegible."></i>
+            <span>Settings window appearance</span>
+            <i class="fa-solid fa-circle-question" title="Locked Dark / Light chrome for this settings window only. Prevents SillyTavern / tracker theme colors from making the menu unreadable."></i>
         </div>
-        <div class="rt-so-appearance-seg" role="group" aria-label="Apariencia de la ventana de ajustes">
-            <button type="button" class="rt-so-appearance-btn" data-mode="dark"><i class="fa-solid fa-moon"></i> Oscuro</button>
-            <button type="button" class="rt-so-appearance-btn" data-mode="light"><i class="fa-solid fa-sun"></i> Claro</button>
+        <div class="rt-so-appearance-seg" role="group" aria-label="Settings window appearance">
+            <button type="button" class="rt-so-appearance-btn" data-mode="dark"><i class="fa-solid fa-moon"></i> Dark</button>
+            <button type="button" class="rt-so-appearance-btn" data-mode="light"><i class="fa-solid fa-sun"></i> Light</button>
         </div>`;
     general.insertBefore(bar, general.firstChild);
 
@@ -220,19 +220,19 @@ export function initSettingsOverlay(settingsHtml, opts = {}) {
     overlay.setAttribute('aria-hidden', 'true');
     overlay.innerHTML = `
         <div class="rt-so-dim" data-rt-so-close="1"></div>
-        <div class="rt-so-panel" role="dialog" aria-modal="true" aria-label="Multihog D&D Framework Ajustes">
+        <div class="rt-so-panel" role="dialog" aria-modal="true" aria-label="Multihog D&D Framework Settings">
             <div class="rt-so-bg">${backgroundSvg()}</div>
             <div class="rt-so-header">
-                <div class="rt-so-title"><i class="fa-solid fa-dungeon"></i> Multihog D&amp;D Framework — Ajustes</div>
+                <div class="rt-so-title"><i class="fa-solid fa-dungeon"></i> Multihog D&amp;D Framework — Settings</div>
                 <div class="rt-so-search">
                     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input type="search" id="rt-so-search-input" placeholder="Buscar en ajustes…" autocomplete="off" spellcheck="false" aria-label="Buscar en ajustes" />
-                    <button type="button" id="rt-so-search-clear" class="rt-so-search-clear" hidden title="Borrar búsqueda" aria-label="Borrar búsqueda">&times;</button>
+                    <input type="search" id="rt-so-search-input" placeholder="Search settings…" autocomplete="off" spellcheck="false" aria-label="Search settings" />
+                    <button type="button" id="rt-so-search-clear" class="rt-so-search-clear" hidden title="Clear search" aria-label="Clear search">&times;</button>
                 </div>
-                <button type="button" id="rt-so-close" class="menu_button interactable" title="Cerrar (Esc)">✕</button>
+                <button type="button" id="rt-so-close" class="menu_button interactable" title="Close (Esc)">✕</button>
             </div>
             <div class="rt-so-body">
-                <nav class="rt-so-tabs" aria-label="Secciones de ajustes"></nav>
+                <nav class="rt-so-tabs" aria-label="Settings sections"></nav>
                 <div class="rt-so-content">
                     <div class="rt-so-search-empty" hidden role="status" aria-live="polite"></div>
                 </div>

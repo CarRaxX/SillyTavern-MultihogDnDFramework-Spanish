@@ -13,7 +13,7 @@ export const RECOMMENDED_OUTPUT_LENGTH = 100000;
 
 const OVERLAY_ID = 'rt-api-setup-gate';
 const PULSE_CLASS = 'rt-api-setup-pulse';
-const API_SCREENSHOT = '/scripts/extensions/third-party/SillyTavern-MultihogDnDFramework-Spanish/assets/st-api-chat-completion.png';
+const API_SCREENSHOT = '/scripts/extensions/third-party/SillyTavern-MultihogDnDFramework/assets/st-api-chat-completion.png';
 
 const API_LABELS = {
     openai: 'Chat Completion',
@@ -26,24 +26,24 @@ const API_LABELS = {
 const CHECKLIST_ITEMS = [
     {
         id: 'chatCompletion',
-        title: 'Chat Completion está activado',
-        body: 'Text Completion es una API heredada previa al lanzamiento de ChatGPT. No la utilices.',
+        title: 'Chat Completion is enabled',
+        body: 'Text Completion is a legacy API that was relevant before ChatGPT came out. Do not use it.',
         shot: true,
     },
     {
         id: 'functionCalling',
-        title: 'Llamadas a funciones (Function Calling) activadas',
-        body: 'Es crucial para usar la versión más eficaz de herramientas en Multihog D&D, aunque existe un modo alternativo si tu modelo no soporta herramientas.',
+        title: 'Function calling is enabled',
+        body: 'This is crucial to use the more effective version of tools in Multihog D&D, though there is a "MacGyver" path available if you absolutely can\'t use tools.',
     },
     {
         id: 'maxContextUnlocked',
-        title: 'Límite de contexto máximo desbloqueado (ilimitado)',
-        body: 'No hay motivo para limitar el contexto hoy en día. Se recomienda usar un {{summarizer}} que oculte mensajes antiguos para que el contexto real no supere ~30k tokens. Imponer un límite artificial destruye las coincidencias de caché y aumenta el coste.',
+        title: 'Maximum context size is unlimited',
+        body: 'There is no reason to limit this today, and in fact there are reasons not to. You\'re supposed to use a {{summarizer}}, which hides messages, so your context is never larger than 30k or so anyway. Imposing an artificial context limit does nothing but destroy your cache hits, which means you pay more. Context caps are from an era before people figured out how to summarize context.',
     },
     {
         id: 'outputLength',
-        title: 'Longitud de salida configurada en 100.000 tokens',
-        body: 'Los valores predeterminados de SillyTavern son extremadamente bajos, lo que puede truncar respuestas largas de agentes (generando errores de sintaxis JSON al cortar la estructura). Configurar 100.000 tokens asegura que los agentes y el narrador puedan responder sin cortes.',
+        title: 'Output length is set to 100,000',
+        body: 'The defaults are extremely low, which make the program completely unusable from the get-go. The model will suddenly stop outputting, and the user is confused. Or worse: an agent is outputting a JSON object and the model hits this pathetic cap, truncating the JSON and giving a schema/syntax error.\n\nThe result is that my extension throws an error and looks broken. However, this is just another bad default.',
     },
 ];
 
@@ -230,7 +230,7 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
-const SUMMARIZER_LINK = '<a href="https://github.com/Lodactio/Extension-Summaryception" target="_blank" rel="noopener noreferrer">resumidor (summarizer)</a>';
+const SUMMARIZER_LINK = '<a href="https://github.com/Lodactio/Extension-Summaryception" target="_blank" rel="noopener noreferrer">summarizer</a>';
 
 function renderBody(text) {
     return escapeHtml(text)
@@ -242,7 +242,7 @@ function renderChecklist(statuses) {
     return CHECKLIST_ITEMS.map(item => {
         const ok = !!statuses[item.id];
         const shot = item.shot
-            ? `<img class="rt-api-setup-shot" src="${API_SCREENSHOT}" alt="Selector de API de SillyTavern con Chat Completion seleccionado">`
+            ? `<img class="rt-api-setup-shot" src="${API_SCREENSHOT}" alt="SillyTavern API dropdown with Chat Completion selected">`
             : '';
         return `
             <div class="rt-api-setup-item${ok ? ' is-ok' : ''}">
@@ -263,29 +263,29 @@ export function buildOverlayHtml(statuses = getApiSetupStatuses(), options = {})
         <div class="rt-api-setup-card" role="dialog" aria-labelledby="rt-api-setup-title">
             <div class="rt-api-setup-scroll">
             <div class="rt-api-setup-kicker">Anti-Museum Tour</div>
-            <h2 id="rt-api-setup-title">Ajustes de API de SillyTavern a revisar</h2>
-            <p>Este menú nace tras meses de revisar informes de error y descubrir que el 98% de las veces la causa son los ajustes por defecto de SillyTavern. Si se reciben errores de sintaxis JSON suele ser debido a que ST limita demasiado la longitud de salida máxima por defecto.</p>
+            <h2 id="rt-api-setup-title">SillyTavern API settings to check</h2>
+            <p>This menu is a result of months of taking &quot;bug reports&quot; from people and discovering 98% of the time the cause was the defaults of SillyTavern. People get JSON syntax errors and other stuff, and it turns out it&apos;s because ST makes its maximum output length far too low by default.</p>
             <div class="rt-api-setup-list" id="rt-api-setup-list">
                 ${renderChecklist(statuses)}
             </div>
             <div class="rt-api-setup-gm-block">
                 <div class="rt-api-setup-gm-row">
-                    <label class="rt-api-setup-gm-label" for="rt-api-setup-gm-name">Nombre de ficha del narrador</label>
+                    <label class="rt-api-setup-gm-label" for="rt-api-setup-gm-name">Narrator card name</label>
                     <input id="rt-api-setup-gm-name" class="rt-api-setup-gm-name text_pole" type="text" value="${escapeHtml(narratorCardName)}" placeholder="${escapeHtml(GAME_MASTER_CARD_NAME)}" maxlength="120">
-                    <button type="button" class="rt-api-setup-create-gm" id="rt-api-setup-create-gm">Crear ficha de narrador</button>
+                    <button type="button" class="rt-api-setup-create-gm" id="rt-api-setup-create-gm">Create narrator card</button>
                 </div>
-                <p class="rt-api-setup-gm-note">Multihog no utiliza un formato de chat 1 a 1, sino un formato narrativo similar a una novela que permite gestionar múltiples personajes con fluidez. Los mensajes se atribuyen a un narrador, no a un único personaje.</p>
+                <p class="rt-api-setup-gm-note">Multihog doesn&apos;t use a one-on-one chat format but uses a format written like a book, that seamlessly allows for multiple characters. The messages are attributed to a narrator, not a single character.</p>
             </div>
             <div class="rt-api-setup-status ${doneCount === 4 ? 'rt-api-setup-status-ok' : 'rt-api-setup-status-bad'}">
-                ${doneCount} / 4 ajustes recomendados activos. API actual: <b>${escapeHtml(describeMainApi())}</b>.
+                ${doneCount} / 4 recommended settings are on. Current API: <b>${escapeHtml(describeMainApi())}</b>.
             </div>
             </div>
             <div class="rt-api-setup-actions">
-                <button type="button" class="rt-api-setup-apply" id="rt-api-setup-apply">Aplicar ajustes recomendados</button>
-                <button type="button" class="rt-api-setup-show" id="rt-api-setup-show">Resaltar selector de API</button>
-                <button type="button" class="rt-api-setup-continue" id="rt-api-setup-continue">Continuar</button>
+                <button type="button" class="rt-api-setup-apply" id="rt-api-setup-apply">Apply recommended settings</button>
+                <button type="button" class="rt-api-setup-show" id="rt-api-setup-show">Highlight the API dropdown</button>
+                <button type="button" class="rt-api-setup-continue" id="rt-api-setup-continue">Continue</button>
             </div>
-            <p class="rt-api-setup-foot">Esta pantalla no volverá a aparecer automáticamente tras continuar. Puedes reabrirla en cualquier momento desde General y Visuales → Núcleo y Ramificaciones → Anti-Museum Tour.</p>
+            <p class="rt-api-setup-foot">This screen will not appear automatically after you continue. Reopen it anytime from General &amp; Visuals → Core &amp; Branching → Anti-Museum Tour.</p>
         </div>`;
 }
 

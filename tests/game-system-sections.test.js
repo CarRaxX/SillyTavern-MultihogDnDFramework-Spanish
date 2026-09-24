@@ -127,15 +127,16 @@ describe('effective system-prompt section state', () => {
         const settingsMarkup = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
         const onboarding = readFileSync(new URL('../renderer.js', import.meta.url), 'utf8');
 
-        expect(settingsMarkup).toContain('Persistent Maps (Alpha)');
+        expect(settingsMarkup).toContain('Persistent Maps');
         expect(settingsMarkup).toContain('Text command — no function calling');
         expect(settingsMarkup).toContain('rpg_map_architect_opener');
         expect(settingsMarkup).toContain('rpg_map_architect_opener_components');
         expect(settingsMarkup).toContain('id="rpg_map_architect_opener_components"');
-        expect(settingsMarkup).not.toContain('Persistent Maps (Alpha) — function calling MUST be enabled');
+        expect(settingsMarkup).not.toContain('Persistent Maps (Alpha)');
         expect(settingsMarkup).not.toContain('Location Mapping (Alpha)');
         expect(settingsMarkup).not.toContain('Dungeon Reality Mapping (Alpha)');
-        expect(onboarding).toContain('Persistent Maps (Alpha)');
+        expect(onboarding).toContain('Persistent Maps');
+        expect(onboarding).not.toContain('Persistent Maps (Alpha)');
         expect(onboarding).toContain('rt_onboarding_map_architect_opener');
         expect(indexSource).toContain('setLocationMappingEnabled(checked, fresh)');
         expect(indexSource).toContain('syncMapArchitectOpenerNestedVisibility');
@@ -146,5 +147,14 @@ describe('effective system-prompt section state', () => {
         expect(gameSystemsSource).toContain('isMapArchitectTextOpener(settings)');
         expect(gameSystemsSource).toContain('el.disabled = false');
         expect(gameSystemsSource).toContain('setLocationMappingEnabled(checked, settings)');
+    });
+});
+
+describe('bench ETA follows the live RNG mechanic', () => {
+    it('rewrites <bench_ETA_system> from diceFunctionTool and combat, not a single hard-coded roller', () => {
+        const gameSystemsSource = readFileSync(new URL('../game-systems.js', import.meta.url), 'utf8');
+        expect(gameSystemsSource).toContain('const useQueue = !settings.diceFunctionTool || inCombat');
+        expect(gameSystemsSource).toContain('call ${toolName} to resolve task success/failure');
+        expect(gameSystemsSource).toContain('pop a ${dieWord} from ${queueName} to resolve task success/failure');
     });
 });

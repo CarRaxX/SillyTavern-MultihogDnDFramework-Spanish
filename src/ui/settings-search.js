@@ -296,7 +296,7 @@ function setEmptyState(overlay, query, matchCount) {
     if (empty instanceof HTMLElement) {
         empty.hidden = !noHits;
         empty.textContent = noHits
-            ? `No hay ajustes que coincidan con «${query.trim()}».`
+            ? `No settings match “${query.trim()}”.`
             : '';
     }
     if (root instanceof HTMLElement) {

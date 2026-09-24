@@ -130,7 +130,7 @@ describe('getSettings fresh install', () => {
         expect(s.settingsVersion).toBe(FACTORY_SETTINGS_VERSION);
         expect(s.routerModules?.npc?.tag).toBe('NPC');
         expect(typeof s.routerModules?.npc?.instruction).toBe('string');
-        expect(s.mapEvolutionIntervalHours).toBe(12);
+        expect(s.mapEvolutionIntervalHours).toBe(8);
         expect(s.mapEvolutionOnSiteIntervalHours).toBe(1);
         expect(s.mapEvolutionOnSiteIntervalMinutes).toBe(0);
         expect(s.mapEvolutionOnSitePreset).toBe('dynamic');
@@ -144,7 +144,7 @@ describe('getSettings fresh install', () => {
             mapEvolutionOnSiteIntervalHours: 8,
         };
         const migrated = getSettings();
-        expect(migrated.mapEvolutionIntervalHours).toBe(12);
+        expect(migrated.mapEvolutionIntervalHours).toBe(8);
         expect(migrated.mapEvolutionOnSiteIntervalHours).toBe(1);
         expect(migrated.mapEvolutionOnSiteIntervalMinutes).toBe(0);
 
@@ -158,6 +158,89 @@ describe('getSettings fresh install', () => {
         expect(customized.mapEvolutionIntervalHours).toBe(8);
         expect(customized.mapEvolutionOnSiteIntervalHours).toBe(4);
         expect(customized.mapEvolutionOnSiteIntervalMinutes).toBe(0);
+    });
+
+    it('migrates untouched all-scope Evolution tickCount 1 → 2 even after factory version stamp', () => {
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            // Already at/above 8.80 — the broken isOlderThan gate would skip this.
+            settingsVersion: '2026.8.81',
+            mapEvolutionTickScope: 'all',
+            mapEvolutionTickCount: 1,
+        };
+        const migrated = getSettings();
+        expect(migrated.mapEvolutionTickCount).toBe(2);
+        expect(migrated.mapEvolutionAllScopeQueueCountApplied).toBe(true);
+        expect(migrated.settingsVersion).toBe(FACTORY_SETTINGS_VERSION);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.79',
+            mapEvolutionTickScope: 'all',
+            mapEvolutionTickCount: 1,
+        };
+        const fromBefore = getSettings();
+        expect(fromBefore.mapEvolutionTickCount).toBe(2);
+        expect(fromBefore.mapEvolutionAllScopeQueueCountApplied).toBe(true);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.81',
+            mapEvolutionTickScope: 'all',
+            mapEvolutionTickCount: 1,
+            mapEvolutionAllScopeQueueCountApplied: true,
+        };
+        const intentional = getSettings();
+        expect(intentional.mapEvolutionTickCount).toBe(1);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.81',
+            mapEvolutionTickScope: 'count',
+            mapEvolutionTickCount: 1,
+        };
+        const countScope = getSettings();
+        expect(countScope.mapEvolutionTickCount).toBe(1);
+        expect(countScope.mapEvolutionAllScopeQueueCountApplied).toBe(true);
+    });
+
+    it('migrates the shipped 12h other-maps interval to 8h without rewriting custom cadences', () => {
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.72',
+            mapEvolutionIntervalHours: 12,
+            mapEvolutionOnSiteIntervalHours: 1,
+            mapEvolutionOnSiteIntervalMinutes: 0,
+        };
+        const migrated = getSettings();
+        expect(migrated.mapEvolutionIntervalHours).toBe(8);
+        expect(migrated.mapEvolutionOnSiteIntervalHours).toBe(1);
+        expect(migrated.mapEvolutionOnSiteIntervalMinutes).toBe(0);
+        expect(migrated.mapEvolutionOtherMapsInterval8Applied).toBe(true);
+        expect(migrated.settingsVersion).toBe(FACTORY_SETTINGS_VERSION);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.72',
+            mapEvolutionIntervalHours: 12,
+            mapEvolutionOnSiteIntervalHours: 4,
+            mapEvolutionOnSiteIntervalMinutes: 0,
+        };
+        const customized = getSettings();
+        expect(customized.mapEvolutionIntervalHours).toBe(12);
+        expect(customized.mapEvolutionOnSiteIntervalHours).toBe(4);
+        expect(customized.mapEvolutionOtherMapsInterval8Applied).toBe(true);
+
+        for (const key of Object.keys(testExtensionSettings)) delete testExtensionSettings[key];
+        testExtensionSettings.rpg_tracker = {
+            settingsVersion: '2026.8.72',
+            mapEvolutionIntervalHours: 12,
+            mapEvolutionOnSiteIntervalHours: 1,
+            mapEvolutionOnSiteIntervalMinutes: 0,
+            mapEvolutionOtherMapsInterval8Applied: true,
+        };
+        const kept = getSettings();
+        expect(kept.mapEvolutionIntervalHours).toBe(12);
     });
 
     it('migrates shipped Map Evolution leave guidance without deleting customized cadences', () => {

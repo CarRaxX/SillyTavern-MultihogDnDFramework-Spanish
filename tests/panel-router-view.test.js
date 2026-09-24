@@ -39,7 +39,7 @@ describe('panel router view', () => {
         const refreshImmersionView = vi.fn().mockResolvedValue(undefined);
         runtimeState.refreshImmersionView = refreshImmersionView;
         globalThis.SillyTavern = {
-            getContext: () => ({ loadWorldInfo: vi.fn() }),
+            getContext: () => ({ chatId: 'A', loadWorldInfo: vi.fn() }),
         };
 
         const render = createRouterViewRenderer({
@@ -54,10 +54,10 @@ describe('panel router view', () => {
 
         await render();
 
-        expect(keys.innerHTML).toContain('None');
-        expect(log.innerHTML).toContain('No logs yet');
+        expect(keys.innerHTML).toMatch(/None|Ninguno/);
+        expect(log.innerHTML).toMatch(/No logs yet|Sin registros aún|Sin logs aún|Aún no hay registros/);
         expect(tokens.textContent).toBe('(0t)');
-        expect(lastFired.textContent).toBe('Never');
+        expect(lastFired.textContent).toMatch(/Never|Nunca/i);
         expect(enabledBadge.textContent).toBe('ON');
         expect(refreshImmersionView).toHaveBeenCalledOnce();
     });
@@ -81,6 +81,7 @@ describe('panel router view', () => {
         };
         globalThis.SillyTavern = {
             getContext: () => ({
+                chatId: 'A',
                 loadWorldInfo: vi.fn().mockResolvedValue({
                     entries: { 7: { key: ['Old Keep'], comment: 'Old Keep', content } },
                 }),

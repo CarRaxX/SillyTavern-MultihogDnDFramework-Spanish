@@ -49,8 +49,9 @@ describe('getEligibleCoreFieldNames', () => {
 describe('router.js core-field gating wiring', () => {
     it('threads isManual into applyAction', () => {
         expect(routerSource).toContain('async function applyAction(action, allBooks = {}, currentTime = \'\', breadcrumb = \'\', isManual = false, options = {})');
-        expect(routerSource).toContain('await applyAction(basicAction, archiveBooks, currentTime, breadcrumb, isManual)');
-        expect(routerSource).toContain('const commitResult = await applyAction(args, archiveBooks, currentTime, breadcrumb, isManual)');
+        expect(routerSource).toContain('await commitOwnedAction(basicAction)');
+        expect(routerSource).toContain('const commitResult = await commitOwnedAction(args)');
+        expect(routerSource).toContain('await applyAction(action, archiveBooks, currentTime, breadcrumb, isManual, { canCommit: ownsChat })');
     });
 
     it('hard-rejects non-Combat-Profile core updates on automatic passes', () => {
@@ -78,5 +79,11 @@ describe('router.js core-field gating wiring', () => {
         expect(fragmentSource).toContain('For notable existing-NPC moments that do not change any [CORE] field');
         expect(routerSource).toContain('resolveExistingNpcNudge(settings)');
         expect(moduleInstrSource).toContain('For notable existing-NPC moments that do not change any [CORE] field');
+    });
+
+    it('lets automatic Combat Profile patches follow [PARTY] lasting progression after level-up', () => {
+        expect(moduleInstrSource).toContain('## PARTY MECHANICAL STATE');
+        expect(moduleInstrSource).toContain('Do NOT create a Combat Profile from [PARTY] if none exists');
+        expect(schemaSource).toContain('also patch lasting stats from [PARTY] after level-up');
     });
 });

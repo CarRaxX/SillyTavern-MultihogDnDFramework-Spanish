@@ -2457,6 +2457,7 @@ function onChatChanged(newChatId) {
     // preserved as potentially real campaign data.
     runtimeState.pendingUnseenChatReset = null;
 
+    invalidateChatCommitGuards();
     // Drop in-flight State Tracker work for the departing chat. A late commit
     // would write into the arriving chat's projected settings / chatStates partition.
     if (runtimeState.stateController) {
@@ -2467,6 +2468,8 @@ function onChatChanged(newChatId) {
     // timer/watermark persists cannot target the arriving chat.
     try { stopRouterPass(); } catch (_) { /* ignore */ }
     try { stopWorldProgressionPass(); } catch (_) { /* ignore */ }
+    try { stopMapUpdaterPass(); } catch (_) { /* ignore */ }
+    try { stopMapEvolutionPass(); } catch (_) { /* ignore */ }
     // Real-Time location art uses the shared image queue and can wait minutes on
     // AI Horde; abort before flipping chat id so a late apply cannot target the
     // arriving chat (background portrait jobs pin chatId separately).
@@ -2491,6 +2494,7 @@ function onChatChanged(newChatId) {
     runtimeState.loreRedoStack = [];
 
     runtimeState.currentChatId = resolvedId;
+    const ownsChat = createChatCommitGuard(resolvedId, getActiveChatId);
     runtimeState.hasActiveDungeonMap = false;
 
     // Snapshot the departing chat's state BEFORE resetRouterTick mutates shared pools.
@@ -4833,36 +4837,42 @@ function syncOnboardingPersonaPrefsFromDom(el) {
  * Persona-derived onboarding preserves the active source Persona description.
  * Uses settings (not DOM) because sendDirectPrompt → refreshRenderedView removes the onboarding UI.
  * @param {string} [extraHints]
- * @param {{ preserveActivePersona?: boolean, preferredName?: string }} [options]
+ * @param {{ preserveActivePersona?: boolean, preferredName?: string, chatId?: string|null, canCommit?: () => boolean }} [options]
  */
 async function maybeCreateOnboardingPersona(extraHints = '', options = {}) {
     const s = getSettings();
     const createPlayerCard = !!s.onboardingCreatePersona;
     const createStPersona = s.onboardingCreateSillyTavernPersona !== false;
     if (!createPlayerCard && !createStPersona) return;
+    const passChatId = options.chatId ?? getActiveChatId();
+    const ownsChat = options.canCommit || createChatCommitGuard(passChatId, getActiveChatId);
+    if (!ownsChat()) return;
     const preferredName = String(options.preferredName || '').trim();
-    const charName = preferredName || extractCharNameFromMemo(s.currentMemo) || 'My Character';
+    const charName = preferredName || extractCharNameFromMemo(s.currentMemo) || 'Mi Personaje';
     if (createStPersona) {
         try {
             await activateSillyTavernPersona(charName, {
                 preserveExistingDescription: !!options.preserveActivePersona,
+                chatId: passChatId, canCommit: ownsChat,
             });
         } catch (error) {
             console.error('[RPG Tracker] Could not create name-only ST persona:', error);
-            toastr['warning'](`Character created, but the ST persona for "${charName}" could not be created.`, 'RPG Tracker');
+            toastr['warning'](`Personaje creado, pero no se pudo crear la persona de ST para "${charName}".`, 'RPG Tracker');
         }
     }
     if (!createPlayerCard) return;
+    if (!ownsChat()) return;
     const wordsRaw = s.onboardingPersonaWords === 'other'
         ? s.onboardingPersonaWordsCustom
         : s.onboardingPersonaWords;
     const wordCount = parseInt(String(wordsRaw || '150'), 10) || 150;
-    toastr['info'](`Generating Lorebook Agent Player Card for "${charName}"…`, 'RPG Tracker');
+    toastr['info'](`Generando Ficha de Jugador del Agente de Lorebook para "${charName}"…`, 'RPG Tracker');
     const bio = await generatePersonaBio(charName, wordCount, extraHints);
+    if (!ownsChat()) return;
     if (bio) {
-        showPersonaConfirmOverlay(bio, charName, wordCount, extraHints);
+        showPersonaConfirmOverlay(bio, charName, wordCount, extraHints, { chatId: passChatId, canCommit: ownsChat });
     } else {
-        toastr['warning']('Character created, but Player Card generation failed.', 'RPG Tracker');
+        toastr['warning']('Personaje creado, pero falló la generación de la Ficha de Jugador.', 'RPG Tracker');
     }
 }
 
@@ -5510,7 +5520,9 @@ let _restoreDeferCount = 0;
 const MAX_STASH_DEFER = 25;
 let _lastDynamicRngCombatState = null;
 
-export async function autoApplySysprompt(force = false) {
+export async function autoApplySysprompt(force = false, options = {}) {
+    const canCommit = options.canCommit || (() => true);
+    if (!canCommit()) return;
     const s = getSettings();
     // Keep CreateAreaMap / Map Updater in sync even when Custom Sysprompt Mode
     // skips rewriting Quick Prompt Main.
@@ -5519,6 +5531,7 @@ export async function autoApplySysprompt(force = false) {
     if (!force && !s.enabled) return;
 
     const content = await fetchBaseSyspromptRaw(s);
+    if (!canCommit()) return;
     if (!content) return;
 
     const built = buildSysprompt(content);

@@ -835,6 +835,80 @@ describe('Map Evolution', () => {
         expect(empty.baseline).toEqual([]);
     });
 
+    it('queues leftover due maps for later turns and always prefers the current map', () => {
+        const lastFiredMinutesFor = root => ({
+            'Forgotten Tomb': 0,
+            'Hall of the Ember-Ancestors': 60,
+            Morrowfen: 120,
+        }[root]);
+        const firstTurn = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'all',
+            count: 2,
+            randomize: false,
+            currentRoot: 'Morrowfen',
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(firstTurn.due.map(site => site.siteRoot)).toEqual(['Morrowfen', 'Forgotten Tomb']);
+
+        const onlyCurrent = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'all',
+            count: 1,
+            randomize: false,
+            currentRoot: 'Morrowfen',
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(onlyCurrent.due.map(site => site.siteRoot)).toEqual(['Morrowfen']);
+
+        const nextTurn = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'all',
+            count: 2,
+            randomize: false,
+            currentRoot: 'Morrowfen',
+            lastFiredMinutesFor: root => ({
+                'Forgotten Tomb': 8 * 60,
+                'Hall of the Ember-Ancestors': 60,
+                Morrowfen: 8 * 60,
+            }[root]),
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(nextTurn.due.map(site => site.siteRoot)).toEqual(['Hall of the Ember-Ancestors']);
+
+        const uncapped = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'all',
+            count: 0,
+            randomize: false,
+            currentRoot: 'Morrowfen',
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(uncapped.due.map(site => site.siteRoot)).toEqual([
+            'Morrowfen',
+            'Forgotten Tomb',
+            'Hall of the Ember-Ancestors',
+        ]);
+    });
+
+    it('does not inject the current map when it is outside the selected checklist', () => {
+        const lastFiredMinutesFor = () => 0;
+        const selected = pickSitesForEvolutionTick([tomb, hall, docks], {
+            scope: 'selected',
+            count: 2,
+            randomize: false,
+            selectedRoots: ['Hall of the Ember-Ancestors'],
+            currentRoot: 'Forgotten Tomb',
+            lastFiredMinutesFor,
+            currentMinutes: 8 * 60,
+            intervalHours: 4,
+        });
+        expect(selected.due.map(site => site.siteRoot)).toEqual(['Hall of the Ember-Ancestors']);
+    });
+
     it('resolves current-map and per-site interval overrides without changing Evolution behavior', () => {
         const options = {
             intervalHours: 12,
@@ -861,7 +935,7 @@ describe('Map Evolution', () => {
             onSiteIntervalHours: 0,
             onSiteIntervalMinutes: 0,
         })).toBe(0);
-        expect(resolveSiteEvolutionIntervalHours('Other Site', { currentRoot: 'Current Site' })).toBe(12);
+        expect(resolveSiteEvolutionIntervalHours('Other Site', { currentRoot: 'Current Site' })).toBe(8);
     });
 
     it('picks due maps from per-site intervals while leaving others waiting', () => {
@@ -938,6 +1012,18 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('Never substitute the configured interval for the actual elapsed duration');
         expect(evolution).toContain('pendingWorldReportsForSite');
         expect(evolution).toContain('mapEvolutionWorldReportApplications');
+        expect(evolution).toContain('loadRecentWorldReports(settings, ctx, passChatId)');
+        expect(evolution).toContain('const passChatId = getActiveChatId()');
+        expect(evolution).not.toContain('getEffectiveRouterCampaignPrefix(ctx.chatId || ctx.getCurrentChatId?.() || \'\')');
+        {
+            const loadFn = evolution.slice(
+                evolution.indexOf('async function loadRecentWorldReports'),
+                evolution.indexOf('function pendingWorldReportsForSite'),
+            );
+            expect(loadFn).toContain('chatId || getActiveChatId()');
+            expect(loadFn).toContain('getEffectiveRouterCampaignPrefix(id)');
+            expect(loadFn).not.toContain('getEffectiveRouterCampaignPrefix(ctx.chatId');
+        }
         expect(evolution).toContain('delete transaction.report_outcomes');
         expect(evolution).toContain('siteRoots');
         expect(evolution).toContain('listMappedEvolutionSites');
@@ -954,7 +1040,8 @@ describe('Map Evolution', () => {
         expect(evolution).toContain('holdExitBookkeeping');
         expect(evolution).toContain("exitResult?.skipped === 'busy'");
         expect(evolution).toContain('buildReportOutcomeStamps');
-        expect(evolution).toContain('try { persistMapEvolutionState(); } catch (_) { /* best-effort */ }');
+        expect(evolution).toContain('try { persistMapEvolutionState(); } catch (_) {');
+        expect(evolution).toContain("if (!ownsProjection()) return { skipped: 'chat_changed' };");
         expect(evolution).toContain('export async function loadMappedEvolutionSite');
         expect(evolution).toContain("from './map-evolution-lib.js'");
         expect(evolution).not.toContain("from './map-updater.js'");
@@ -964,7 +1051,7 @@ describe('Map Evolution', () => {
         expect(updater).not.toContain('EVOLVED');
         expect(updater).not.toContain('groundMapsAfterWorldProgression');
 
-        expect(hooks).toContain('mapResult = await runMapUpdaterPass');
+        expect(hooks).toContain('mapResult = chatCommitResult(ownsChat, await runMapUpdaterPass');
         expect(hooks.indexOf('mapResult = await runMapUpdaterPass')).toBeLessThan(hooks.indexOf('await maybeRunWorldProgression()'));
         expect(hooks.indexOf('await maybeRunWorldProgression()')).toBeLessThan(hooks.indexOf('await maybeRunMapEvolution()'));
         expect(hooks).not.toContain('groundMapsAfterWorldProgression');
@@ -982,7 +1069,7 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_onsite_preset"');
         expect(settingsMarkup).toContain('High Dynamism — tactical and soon discoverable');
         expect(settingsMarkup).toContain('Standard — same behavior as background maps');
-        expect(defaultsSource).toContain('mapEvolutionIntervalHours: 12');
+        expect(defaultsSource).toContain('mapEvolutionIntervalHours: 8');
         expect(defaultsSource).toContain('mapEvolutionConnectionSource: "default"');
         expect(defaultsSource).not.toContain('mapEvolutionConnectionSeeded');
         expect(defaultsSource).toContain('mapEvolutionOnSiteIntervalHours: 1');
@@ -999,6 +1086,8 @@ describe('Map Evolution', () => {
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_scope"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_count"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_tick_randomize"');
+        expect(settingsMarkup).toContain('All mapped sites (N per turn)');
+        expect(settingsMarkup).toContain('Leftover due maps stay queued for later turns');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_selected_list"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_evolve_now"');
         expect(settingsMarkup).toContain('id="rpg_map_evolution_last_fired"');

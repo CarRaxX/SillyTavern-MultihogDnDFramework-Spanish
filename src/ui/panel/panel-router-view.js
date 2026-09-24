@@ -1,5 +1,7 @@
 import { runtimeState } from '../../app/runtime-state.js';
 import { t } from '../../i18n/index.js';
+import { getActiveChatId } from '../../../state-manager.js';
+import { createChatCommitGuard } from '../../state/pass-affinity.js';
 import { stripDungeonMapSection } from '../../../dungeon-reality.js';
 
 /**
@@ -16,6 +18,7 @@ export function createRouterViewRenderer({
     setLorebookEntryPinned,
 }) {
     return async function renderRouterUI() {
+        const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
         const s = getSettings();
         const keysContainer = agentPanel.querySelector('#rt-agent-router-active-keys');
         const logContainer = agentPanel.querySelector('#rt-agent-router-log');
@@ -46,6 +49,7 @@ export function createRouterViewRenderer({
                 return [bookName, null];
             }
         }));
+        if (!ownsChat()) return;
         for (const [bookName, book] of bookLoads) {
             if (book) books[bookName] = book;
         }
@@ -129,6 +133,7 @@ export function createRouterViewRenderer({
         // Attach kill handlers (non-pinned)
         keysContainer.querySelectorAll('.rt-router-kill-key').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                if (!ownsChat()) return;
                 const target = /** @type {HTMLElement} */ (e.target);
                 const key = target.getAttribute('data-key');
                 const st = getSettings();
@@ -149,6 +154,7 @@ export function createRouterViewRenderer({
         // Attach unpin handlers (pinned)
         keysContainer.querySelectorAll('.rt-router-unpin-key').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                if (!ownsChat()) return;
                 e.stopPropagation();
                 const target = /** @type {HTMLElement} */ (e.currentTarget);
                 const key = target.getAttribute('data-key');

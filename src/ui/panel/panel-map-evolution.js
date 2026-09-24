@@ -1,3 +1,5 @@
+import { getActiveChatId } from '../../../state-manager.js';
+import { createChatCommitGuard, chatCommitResult, ignoreChatCancellation } from '../../state/pass-affinity.js';
 import { runtimeState } from '../../app/runtime-state.js';
 import { evolutionIntervalHoursForSettings, summarizeMapEvolutionSchedule } from '../../../map-evolution-lib.js';
 
@@ -68,11 +70,11 @@ export function wireAgentMapEvolution({
         const lastEl = agentPanel.querySelector('#rt-agent-map-evo-last-fired');
         const nextEl = agentPanel.querySelector('#rt-agent-map-evo-next-fire');
         const badge = agentPanel.querySelector('#rt-agent-map-evo-enabled-badge');
-        if (lastEl) lastEl.textContent = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Nunca';
+        if (lastEl) lastEl.textContent = schedule.lastMins >= 0 ? formatInWorldTime(schedule.lastMins) : 'Never';
         if (nextEl) nextEl.textContent = schedule.nextMins >= 0 ? formatInWorldTime(schedule.nextMins) : '—';
         if (badge) {
             const on = s.mapEvolutionEnabled !== false;
-            badge.textContent = on ? 'ACTIVADO' : 'DESACTIVADO';
+            badge.textContent = on ? 'ON' : 'OFF';
             badge.style.cssText = on ? BADGE_ON : BADGE_OFF;
         }
 
@@ -195,51 +197,53 @@ export function wireAgentMapEvolution({
 
     const fireNowBtn = agentPanel.querySelector('#rt-agent-map-evo-fire-now');
     if (fireNowBtn) {
-        fireNowBtn.addEventListener('click', async () => {
-            const { isMapEvolutionRunning, runMapEvolutionPass } = await import('../../../map-evolution.js');
-            const { isMapUpdaterRunning } = await import('../../../map-updater.js');
-            const { isRouterRunning } = await import('../../../router.js');
+        fireNowBtn.addEventListener('click', ignoreChatCancellation(async () => {
+            const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
+            const { isMapEvolutionRunning, runMapEvolutionPass } = chatCommitResult(ownsChat, await import('../../../map-evolution.js'));
+            const { isMapUpdaterRunning } = chatCommitResult(ownsChat, await import('../../../map-updater.js'));
+            const { isRouterRunning } = chatCommitResult(ownsChat, await import('../../../router.js'));
             if (isRouterRunning() || isMapUpdaterRunning() || isMapEvolutionRunning()) {
-                toastr.warning('Ya hay un agente en ejecución.', 'Evolución de Mapas');
+                toastr.warning('An agent is already running.', 'Map Evolution');
                 return;
             }
             /** @type {HTMLButtonElement} */ (fireNowBtn).disabled = true;
-            fireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Evolucionando…';
+            fireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Evolving…';
             try {
                 const result = typeof runtimeState.runMapEvolutionPassRef === 'function'
-                    ? await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true })
-                    : await runMapEvolutionPass({ trigger: 'manual', isManual: true });
+                    ? chatCommitResult(ownsChat, await runtimeState.runMapEvolutionPassRef({ trigger: 'manual', isManual: true }))
+                    : chatCommitResult(ownsChat, await runMapEvolutionPass({ trigger: 'manual', isManual: true }));
                 updateAgentMapEvolutionStatus();
                 if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
                     runtimeState.updateMapEvolutionScheduleDisplayRef();
                 }
                 const skipped = result?.skipped;
                 if (skipped === 'location_mapping_off' || skipped === 'dungeon_reality_off') {
-                    toastr.warning('Mapas Persistentes está desactivado.', 'Evolución de Mapas');
+                    toastr.warning('Persistent Maps is off.', 'Map Evolution');
                 } else if (skipped === 'no_maps' || skipped === 'no_active_map' || skipped === 'no_matching_sites' || skipped === 'no_selection') {
-                    toastr.warning('No hay ningún lugar mapeado para evolucionar.', 'Evolución de Mapas');
+                    toastr.warning('No mapped site to evolve.', 'Map Evolution');
                 } else if (skipped === 'disabled') {
-                    toastr.warning('La Evolución de Mapas está desactivada.', 'Evolución de Mapas');
+                    toastr.warning('Map Evolution is disabled.', 'Map Evolution');
                 } else if (skipped === 'busy') {
-                    toastr.warning('Ya hay un agente en ejecución.', 'Evolución de Mapas');
+                    toastr.warning('An agent is already running.', 'Map Evolution');
                 } else if (skipped === 'stopped') {
-                    toastr['info']('Detenido.', 'Evolución de Mapas');
+                    toastr['info']('Stopped.', 'Map Evolution');
                 } else if (result?.baseline) {
-                    toastr['info']('Línea base de intervalo registrada. La evolución se activará tras transcurrir el intervalo.', 'Evolución de Mapas');
+                    toastr['info']('Interval baseline stamped. Evolution will fire after the interval elapses.', 'Map Evolution');
                 } else if (result?.ok && result?.applied === 0) {
-                    toastr['info']('No hubo cambios duraderos.', 'Evolución de Mapas');
+                    toastr['info']('Nothing durable changed.', 'Map Evolution');
                 } else if (result?.ok) {
-                    toastr['success']('Evolución de Mapas aplicada.', 'Evolución de Mapas');
+                    toastr['success']('Map Evolution applied.', 'Map Evolution');
                 } else {
-                    toastr.error('No se pudo aplicar una actualización de evolución válida.', 'Evolución de Mapas');
+                    toastr.error('Could not apply a valid evolution update.', 'Map Evolution');
                 }
             } catch (e) {
-                toastr.error(`Error en la Evolución de Mapas: ${e.message}`, 'Evolución de Mapas');
+                if (!ownsChat()) return;
+                toastr.error(`Map Evolution error: ${e.message}`, 'Map Evolution');
             } finally {
                 /** @type {HTMLButtonElement} */ (fireNowBtn).disabled = false;
-                fireNowBtn.innerHTML = '<i class="fa-solid fa-map-location-dot"></i> Evolucionar Ahora';
+                fireNowBtn.innerHTML = '<i class="fa-solid fa-map-location-dot"></i> Evolve Now';
             }
-        });
+        }));
     }
 
     const resetBtn = agentPanel.querySelector('#rt-agent-map-evo-reset-timeline');
@@ -253,16 +257,17 @@ export function wireAgentMapEvolution({
             if (typeof runtimeState.updateMapEvolutionScheduleDisplayRef === 'function') {
                 runtimeState.updateMapEvolutionScheduleDisplayRef();
             }
-            toastr['info']('Cronología de Evolución de Mapas restablecida. El próximo intervalo comenzará desde la hora actual.', 'Evolución de Mapas');
+            toastr['info']('Map Evolution timeline reset. Next interval starts from the current time.', 'Map Evolution');
         });
     }
 
     const testingGroundBtn = agentPanel.querySelector('#rt-agent-map-evo-testing-ground');
     if (testingGroundBtn) {
-        testingGroundBtn.addEventListener('click', async () => {
-            const { openMapEvolutionTestingGround } = await import('./panel-map-evolution-debug.js');
-            await openMapEvolutionTestingGround();
-        });
+        testingGroundBtn.addEventListener('click', ignoreChatCancellation(async () => {
+            const ownsChat = createChatCommitGuard(getActiveChatId(), getActiveChatId);
+            const { openMapEvolutionTestingGround } = chatCommitResult(ownsChat, await import('./panel-map-evolution-debug.js'));
+            chatCommitResult(ownsChat, await openMapEvolutionTestingGround());
+        }));
     }
 
     return { updateStatus: updateAgentMapEvolutionStatus };
