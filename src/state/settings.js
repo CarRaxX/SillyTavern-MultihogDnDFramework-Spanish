@@ -15,6 +15,8 @@ import {
     PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1,
 } from './portrait-prompts.js';
 import { bindGetSettings } from './settings-ref.js';
+import { repairChatLinkMemoHistory } from '../features/chat/chat-link-conflict.js';
+import { trimMemoAndMapHistory } from './dungeon-map-history.js';
 import {
     enforceRealtimeVisualizationDisabled,
     setRealtimeVisualizationDisabled,
@@ -84,6 +86,22 @@ function getSettingsInternal(extensionSettings) {
     }
     
     const s = extensionSettings[MODULE_NAME];
+
+    if (s.chatLinkObjectHistoryVersion !== 1) {
+        for (const snapshot of [s, ...Object.values(s.chatStates || {}), ...Object.values(s.profiles || {})]) {
+            repairChatLinkMemoHistory(snapshot);
+        }
+        s.chatLinkObjectHistoryVersion = 1;
+    }
+
+    // Bound existing inactive chats too: their snapshots all share settings.json.
+    // Run once, before any history view is opened, not during intermediate commits.
+    if (s.memoHistoryRetentionVersion !== 2) {
+        for (const snapshot of [s, ...Object.values(s.chatStates || {}), ...Object.values(s.profiles || {})]) {
+            trimMemoAndMapHistory(snapshot);
+        }
+        s.memoHistoryRetentionVersion = 2;
+    }
 
     // Custom tracker definitions are framework configuration, not chat state.
     // Older Chat Link snapshots kept a separate customFields list per chat, so a
@@ -1426,20 +1444,27 @@ export function getEffectiveRouterCampaignPrefix(chatId) {
     const s = getSettings();
     const ov = (s.routerCampaignPrefixOverride || '').trim();
     const id = String(chatId || '');
-    if (!ov) return sanitizeCampaignPrefixString(id);
+    const renamePin = sanitizeCampaignPrefixString(s.chatStates?.[id]?.renamedCampaignPrefix || '');
+    const fallback = renamePin || sanitizeCampaignPrefixString(id);
+    if (!ov) return fallback;
 
     const sanitizedOv = sanitizeCampaignPrefixString(ov);
     const anchor = (s.routerCampaignPrefixOverrideAnchorChatId || '').trim();
     if (anchor) {
-        return id && id === anchor ? sanitizedOv : sanitizeCampaignPrefixString(id);
+        return id && id === anchor ? sanitizedOv : fallback;
     }
+
+    // An explicit per-chat link is stronger evidence than a legacy global
+    // override with no recorded owner. Modern manual edits always set an anchor.
+    if (renamePin) return renamePin;
 
     // Legacy unanchored override: only while evaluating the active chat.
     try {
         const ctx = SillyTavern.getContext();
-        const activeId = String(ctx?.getCurrentChatId?.() || ctx?.chatId || '');
+        const trackedId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
+        const activeId = String(trackedId || ctx?.getCurrentChatId?.() || ctx?.chatId || '');
         if (id && activeId && id !== activeId) {
-            return sanitizeCampaignPrefixString(id);
+            return fallback;
         }
     } catch (_) { /* fall through */ }
 
