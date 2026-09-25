@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.8.97] - 2026-09-25
+
+### Corregido
+- Cambiar de chat ahora cancela el trabajo pendiente de visualización en tiempo real sin desactivar permanentemente el modo. Las detenciones explícitas del usuario y los fallos de generación siguen desactivando futuros intentos hasta ser reactivados.
+- "Al entrar a una ubicación (una vez por lugar)" ahora reutiliza el arte existente al revisitar lugares en vez de comportarse como "cada cambio de ubicación". Los demás modos de disparo conservan su comportamiento habitual.
+- La preferencia de fondo automático de ubicación se trata explícitamente como configuración global, junto a las demás preferencias de visualización, al limpiar instantáneas de chat heredadas.
+
 ## [2026.8.87] - 2026-09-13
 
 ### Corregido

@@ -2409,9 +2409,11 @@ export function resetRealtimeLocationGenerationFailure() {
 }
 
 /** Stop an active/queued Real-Time request and prevent another attempt. */
-export function stopRealtimeLocationGeneration() {
-    realtimeLocationGenerationFailed = true;
-    setRealtimeVisualizationDisabled(true);
+export function stopRealtimeLocationGeneration({ disable = true } = {}) {
+    if (disable) {
+        realtimeLocationGenerationFailed = true;
+        setRealtimeVisualizationDisabled(true);
+    }
     activeRealtimeLocationAbortController?.abort();
     activeRealtimeLocationAbortController = null;
 }

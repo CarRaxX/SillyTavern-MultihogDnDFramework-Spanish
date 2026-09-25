@@ -1527,6 +1527,7 @@ export const CHAT_STATE_GLOBAL_UI_KEYS = [
     'portraitAutoGenerateNpcs',
     'portraitAutoGenerateLocations',
     'portraitAutoGenerateSceneView',
+    'portraitAutoApplyLocationBackground',
     'portraitRealtimeTriggerMode',
     'portraitRealtimeEveryNOutputs',
     'portraitRegenerateVisitedLocations',
