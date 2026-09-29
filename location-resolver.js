@@ -119,13 +119,27 @@ export function resolveCurrentLocationPath(rawText, allPaths, opts = {}) {
 
     if (inputTokens.length > 1) {
         const parentTokens = inputTokens.slice(0, -1);
-        const parentHint = parentTokens.join(' ');
-        const hinted = resolveCurrentLocationPath(
-            `${parentHint} ${leafCandidates[0].split(' :: ').pop()}`,
-            leafCandidates,
-            { activeLocPaths: opts.activeLocPaths },
-        );
-        if (hinted) return hinted;
+        let bestCandidate = null;
+        let bestCandidateScore = -1;
+
+        for (const candidate of leafCandidates) {
+            const parts = candidate.split(' :: ');
+            const ancestorTokens = pathPartsToTokens(parts.slice(0, -1));
+            let matches = 0;
+            for (const pt of parentTokens) {
+                if (ancestorTokens.includes(pt)) {
+                    matches++;
+                }
+            }
+            if (matches > bestCandidateScore) {
+                bestCandidateScore = matches;
+                bestCandidate = candidate;
+            }
+        }
+
+        if (bestCandidate && bestCandidateScore > 0) {
+            return bestCandidate;
+        }
     }
 
     return leafCandidates.sort((a, b) => b.split(' :: ').length - a.split(' :: ').length)[0];
