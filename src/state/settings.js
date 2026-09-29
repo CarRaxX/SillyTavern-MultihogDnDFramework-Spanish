@@ -7,7 +7,7 @@ import { MODULE_NAME, DEFAULT_PC_SECTIONS, DEFAULT_NPC_SECTIONS } from './schema
 import { DEFAULT_MODULES } from './default-modules.js';
 import { buildDefaultSettings, FACTORY_SETTINGS_VERSION } from './defaults.js';
 import { isOlderThan } from './versions.js';
-import { buildNpcInstruction, buildLocInstruction, buildFacInstruction } from './module-instructions.js';
+import { buildNpcInstruction, buildLocInstruction, buildFacInstruction, upgradeNpcCreationGuidance } from './module-instructions.js';
 import {
     getDefaultPortraitLocationSystemPrompt,
     isShippedPortraitLocationSystemPrompt,
@@ -16,7 +16,7 @@ import {
 } from './portrait-prompts.js';
 import { bindGetSettings } from './settings-ref.js';
 import { repairChatLinkMemoHistory } from '../features/chat/chat-link-conflict.js';
-import { trimMemoAndMapHistory } from './dungeon-map-history.js';
+import { trimStoredHistories } from './history-retention.js';
 import {
     enforceRealtimeVisualizationDisabled,
     setRealtimeVisualizationDisabled,
@@ -95,12 +95,12 @@ function getSettingsInternal(extensionSettings) {
     }
 
     // Bound existing inactive chats too: their snapshots all share settings.json.
-    // Run once, before any history view is opened, not during intermediate commits.
-    if (s.memoHistoryRetentionVersion !== 2) {
+    // Run once for this retention version, before any history view is opened.
+    if (s.memoHistoryRetentionVersion !== 3) {
         for (const snapshot of [s, ...Object.values(s.chatStates || {}), ...Object.values(s.profiles || {})]) {
-            trimMemoAndMapHistory(snapshot);
+            trimStoredHistories(snapshot);
         }
-        s.memoHistoryRetentionVersion = 2;
+        s.memoHistoryRetentionVersion = 3;
     }
 
     // Custom tracker definitions are framework configuration, not chat state.
@@ -1142,6 +1142,12 @@ function getSettingsInternal(extensionSettings) {
             s.mapEvolutionIntervalHours = 8;
         }
         s.mapEvolutionOtherMapsInterval8Applied = true;
+    }
+
+    // Existing installs store the NPC instruction as text. Refresh only the exact
+    // shipped creation paragraph, preserving all other edits to that prompt.
+    if (s.routerModules?.npc) {
+        s.routerModules.npc.instruction = upgradeNpcCreationGuidance(s.routerModules.npc.instruction);
     }
 
     // Stamp factory version even when a release has no field rewrites

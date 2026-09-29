@@ -2,6 +2,18 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [2026.9.23] - 2026-09-29
+
+### Añadido
+- **Almacenamiento de historial respaldado en archivos:** Los historiales de memos, instantáneas de mapas de mazmorra y registros de Evolución de Mapa ahora se guardan en archivos comprimidos individuales por chat en SillyTavern en vez de inflar el archivo `settings.json` global. Incluye migración guiada desde la interfaz.
+- **Soporte de clientes HTTP en red local (LAN):** La persistencia e hidratación de archivos de historial funciona de manera transparente en clientes web conectados por HTTP local sin requerir un contexto seguro estricto.
+- **Limpieza de datos de chats huérfanos y purga segura de lorebooks:** Nuevo botón para auditar y limpiar datos residuales de chats borrados, con confirmación interactiva para eliminar libros de lore huérfanos sin afectar los vinculados fuera de Multihog.
+
+### Mejorado
+- **Perfiles persistentes de PNJ:** Al registrar por primera vez un PNJ, el sistema construye un perfil duradero completando campos clave (cuerpo, personalidad, hábitos, fortalezas y debilidades) a partir del rol y la cultura, evitando marcadores de posición ("Desconocido").
+- **Prevención de TDZ en Router:** Resolución dinámica de paneles de conexión para evitar errores de Temporal Dead Zone durante el arranque del chat.
+- **Optimización de memoria:** Límite de retención de registros de actividad y relaciones ajustado a 20 entradas.
+
 ## [2026.8.97] - 2026-09-25
 
 ### Corregido
