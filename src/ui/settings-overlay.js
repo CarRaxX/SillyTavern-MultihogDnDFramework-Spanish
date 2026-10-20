@@ -22,14 +22,14 @@ import {
 
 /** @type {{ id: string, icon: string, label: string, match: RegExp }[]} */
 const TAB_DEFS = [
-    { id: 'general', icon: 'fa-gears', label: 'General & Visuals', match: /General\s*&\s*Visuals/i },
-    { id: 'connections', icon: 'fa-plug', label: 'Connections', match: /Connections/i },
-    { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Game Systems', match: /Game Systems/i },
-    { id: 'statetracker', icon: 'fa-brain', label: 'State Tracker', match: /State Tracker/i },
-    { id: 'agent', icon: 'fa-route', label: 'Lorebook Agent', match: /Lorebook Agent/i },
-    { id: 'maparchitect', icon: 'fa-map', label: 'Persistent Maps', match: /Persistent Maps/i },
-    { id: 'worldprog', icon: 'fa-globe', label: 'World Progression', match: /World Progression/i },
-    { id: 'companion', icon: 'fa-comments', label: 'Adventure Companion', match: /Adventure Companion/i },
+    { id: 'general', icon: 'fa-gears', label: 'General y Visuales', match: /(?:General\s*(?:&|y)\s*Visual(?:s|es)|Ajustes General)/i },
+    { id: 'connections', icon: 'fa-plug', label: 'Conexiones y Modelos', match: /(?:Connections|Conexiones)/i },
+    { id: 'gamesystems', icon: 'fa-dice-d20', label: 'Sistemas de Juego', match: /(?:Game Systems|Sistemas de Juego)/i },
+    { id: 'statetracker', icon: 'fa-brain', label: 'Rastreador de Estado', match: /(?:State Tracker|Rastreador de Estado)/i },
+    { id: 'agent', icon: 'fa-route', label: 'Agente de Lorebook', match: /(?:Lorebook Agent|Agente de Lorebook)/i },
+    { id: 'maparchitect', icon: 'fa-map', label: 'Mapas Persistentes', match: /(?:Persistent Maps|Mapas Persistentes)/i },
+    { id: 'worldprog', icon: 'fa-globe', label: 'Progresión del Mundo', match: /(?:World Progression|Progresión del Mundo)/i },
+    { id: 'companion', icon: 'fa-comments', label: 'Acompañante de Aventura', match: /(?:Adventure Companion|Acompañante de Aventura)/i },
 ];
 
 let _lastTab = 'general';

@@ -73,9 +73,9 @@ describe('settings overlay', () => {
         expect(mapIdx).toBeGreaterThan(agentIdx);
         expect(worldIdx).toBeGreaterThan(mapIdx);
 
-        expect(overlaySource).toContain("label: 'General & Visuals'");
-        expect(overlaySource).toContain("label: 'Persistent Maps'");
-        expect(overlaySource).toContain('match: /Persistent Maps/i');
+        expect(overlaySource).toMatch(/label:\s*'(?:General & Visuals|General y Visuales)'/);
+        expect(overlaySource).toMatch(/label:\s*'(?:Persistent Maps|Mapas Persistentes)'/);
+        expect(overlaySource).toMatch(/match:\s*\/\(\?:Persistent Maps\|Mapas Persistentes\)\/i/);
         expect(indexSource).toContain('initSettingsOverlay(settingsHtml');
         expect(indexSource).toContain("settings-stub");
         expect(indexSource).toContain("openSettingsOverlay('connections')");
@@ -113,5 +113,42 @@ describe('settings overlay', () => {
         expect(style).toContain('.rt-so-search-hidden');
         expect(style).toContain('.rt-so-search-hit');
         expect(style).toContain('rt-so-tab-has-match');
+    });
+
+    it('resolves all 8 primary tabs from localized settings.html markup', () => {
+        const primaryHeaders = [
+            'Ajustes General y Visuales',
+            'Conexiones y Modelos',
+            'Sistemas de Juego y Libros de Reglas',
+            'Rastreador de Estado y Configuración de Ficha',
+            'Agente de Lorebook y Asistente IA',
+            'Mapas Persistentes',
+            'Progresión del Mundo',
+            'Acompañante de Aventura',
+        ];
+        const tabDefs = [
+            { id: 'general', match: /(?:General\s*(?:&|y)\s*Visual(?:s|es)|Ajustes General)/i },
+            { id: 'connections', match: /(?:Connections|Conexiones)/i },
+            { id: 'gamesystems', match: /(?:Game Systems|Sistemas de Juego)/i },
+            { id: 'statetracker', match: /(?:State Tracker|Rastreador de Estado)/i },
+            { id: 'agent', match: /(?:Lorebook Agent|Agente de Lorebook)/i },
+            { id: 'maparchitect', match: /(?:Persistent Maps|Mapas Persistentes)/i },
+            { id: 'worldprog', match: /(?:World Progression|Progresión del Mundo)/i },
+            { id: 'companion', match: /(?:Adventure Companion|Acompañante de Aventura)/i },
+        ];
+        const resolvedIds = primaryHeaders.map((header) => {
+            const hit = tabDefs.find(t => t.match.test(header));
+            return hit?.id || null;
+        });
+        expect(resolvedIds).toEqual([
+            'general',
+            'connections',
+            'gamesystems',
+            'statetracker',
+            'agent',
+            'maparchitect',
+            'worldprog',
+            'companion',
+        ]);
     });
 });
