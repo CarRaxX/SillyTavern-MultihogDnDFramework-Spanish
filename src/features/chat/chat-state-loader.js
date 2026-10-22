@@ -61,6 +61,7 @@ export function createChatStateLoader({
         if (saved.modules) s.modules = { ...s.modules, ...saved.modules };
         if (saved.blockOrder) s.blockOrder = JSON.parse(JSON.stringify(saved.blockOrder));
         if (saved.stockPrompts) s.stockPrompts = loadStockPromptsFromProfile(saved.stockPrompts);
+        if (saved.stockTemplates) s.stockTemplates = JSON.parse(JSON.stringify(saved.stockTemplates));
     }
     // Custom tracker definitions remain global under legacy Chat Link. When setup
     // lock is enabled, the chat-specific definitions were restored above.

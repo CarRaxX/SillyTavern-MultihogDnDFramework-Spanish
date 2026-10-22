@@ -372,6 +372,7 @@ export function writeModuleSchemaBackup(chatId) {
             // these to whatever was last actually on disk. Mirror them too so edited
             // stock prompts / narrator toggles self-heal on the next boot.
             stockPrompts: JSON.parse(JSON.stringify(s.stockPrompts || {})),
+            stockTemplates: JSON.parse(JSON.stringify(s.stockTemplates || {})),
             syspromptModules: JSON.parse(JSON.stringify(s.syspromptModules || {})),
             narrativePacing: s.narrativePacing || 'normal',
             cyoaConfig: JSON.parse(JSON.stringify(s.cyoaConfig || {})),
@@ -402,6 +403,8 @@ export function getPendingModuleSchemaBackup() {
         const backupOrder = JSON.stringify(backup.blockOrder);
         const liveStockPrompts = JSON.stringify(s.stockPrompts || {});
         const backupStockPrompts = JSON.stringify(backup.stockPrompts || {});
+        const liveStockTemplates = JSON.stringify(s.stockTemplates || {});
+        const backupStockTemplates = JSON.stringify(backup.stockTemplates || {});
         const liveSyspromptModules = JSON.stringify(s.syspromptModules || {});
         const backupSyspromptModules = JSON.stringify(backup.syspromptModules || {});
         const liveNarrativePacing = s.narrativePacing || 'normal';
@@ -410,6 +413,7 @@ export function getPendingModuleSchemaBackup() {
         const backupCyoaConfig = JSON.stringify(backup.cyoaConfig || {});
         const alreadyMatched = liveTags === backupTags && liveOrder === backupOrder
             && (!backup.stockPrompts || liveStockPrompts === backupStockPrompts)
+            && (!backup.stockTemplates || liveStockTemplates === backupStockTemplates)
             && (!backup.syspromptModules || liveSyspromptModules === backupSyspromptModules)
             && liveNarrativePacing === backupNarrativePacing
             && (!backup.cyoaConfig || liveCyoaConfig === backupCyoaConfig);
@@ -446,6 +450,9 @@ export function applyModuleSchemaBackup(preferredChatId, backupOverride = null) 
         }
         if (backup.stockPrompts && typeof backup.stockPrompts === 'object') {
             s.stockPrompts = { ...s.stockPrompts, ...JSON.parse(JSON.stringify(backup.stockPrompts)) };
+        }
+        if (backup.stockTemplates && typeof backup.stockTemplates === 'object') {
+            s.stockTemplates = { ...s.stockTemplates, ...JSON.parse(JSON.stringify(backup.stockTemplates)) };
         }
         if (backup.syspromptModules && typeof backup.syspromptModules === 'object') {
             s.syspromptModules = { ...s.syspromptModules, ...JSON.parse(JSON.stringify(backup.syspromptModules)) };
@@ -506,6 +513,7 @@ export function saveChatState(chatId, opts = {}) {
         modules:      JSON.parse(JSON.stringify(s.modules)),
         blockOrder:   JSON.parse(JSON.stringify(s.blockOrder  || BLOCK_ORDER)),
         stockPrompts: snapshotStockPromptsForProfile(s.stockPrompts),
+        stockTemplates: JSON.parse(JSON.stringify(s.stockTemplates || {})),
         quests:       JSON.parse(JSON.stringify(s.quests || [])), // persist full array (incl. completed) for cross-session UI display
         historyIndex: s.historyIndex ?? -1,
         activeRouterKeys: JSON.parse(JSON.stringify(s.activeRouterKeys || [])),

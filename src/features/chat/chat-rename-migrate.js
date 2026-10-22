@@ -63,7 +63,7 @@ export function stripChatFileExtension(name) {
 const KNOWN_PARTITION_KEYS = new Set([
     'currentMemo', 'combatDefeatedUi', 'memoPersistedAt', 'memoPersistedBy',
     'memoHistory', 'dungeonMapHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
-    'modules', 'blockOrder', 'stockPrompts', 'quests', 'historyIndex',
+    'modules', 'blockOrder', 'stockPrompts', 'stockTemplates', 'quests', 'historyIndex',
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',
     'routerCampaignPrefix', 'renamedCampaignPrefix', 'routerLookback', 'routerLastRunChatLength',
     'routerLastRunAt', 'mapUpdaterLastRunChatLength', 'mapUpdaterLastRunAt', 'mapUpdaterLastSiteRoot', 'mapUpdaterPendingExitRoot',

@@ -483,6 +483,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         stockPrompts: { ...DEFAULT_STOCK_PROMPTS },
 
+        stockTemplates: {},
+
         customFields: [],
 
         customSyspromptLibrary: [],

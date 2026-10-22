@@ -509,7 +509,7 @@ export function computeBundledPromptsFingerprintForSnapshot(snapshot) {
  * (profiles/chatStates/memo). See game-cartridges.js for the save/load/
  * export/import logic that operates on this shape.
  */
-const CARTRIDGE_PAYLOAD_KEYS = [
+export const CARTRIDGE_PAYLOAD_KEYS = [
     'customSyspromptLibrary',
     'syspromptSectionOrder',
     'syspromptModules',
@@ -530,6 +530,7 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     'blockOrder',
     'modules',
     'stockPrompts',
+    'stockTemplates',
     'systemPromptTemplate',
     'portraitNpcSystemPrompt',
     'portraitCharacterSystemPrompt',
@@ -588,9 +589,9 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
     {
         id: 'stateTracker',
         label: 'State Tracker',
-        description: 'Extractor prompt, module toggles, block order, stock prompts, RNG & time-format flags',
+        description: 'Extractor prompt, module toggles, block order, stock prompts & templates, RNG & time-format flags',
         keys: [
-            'systemPromptTemplate', 'modules', 'blockOrder', 'stockPrompts',
+            'systemPromptTemplate', 'modules', 'blockOrder', 'stockPrompts', 'stockTemplates',
             'syspromptModules', 'narrativePacing', 'syspromptSectionOrder', 'customSyspromptLibrary',
             'rngEnabled', 'diceFunctionTool', 'diceD100Mode',
             'rngToolD20', 'rngToolD100', 'rngQueueD20', 'rngQueueD100',

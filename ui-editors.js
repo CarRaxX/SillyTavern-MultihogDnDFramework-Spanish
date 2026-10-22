@@ -827,12 +827,27 @@ export function buildStockModulePreviewMemo(content, tag) {
     return `[${normalizedTag}]\n${body}\n[/${normalizedTag}]`;
 }
 
-function getInitialStockModulePreviewContent(settings, blockTag, promptText) {
+export function getInitialStockModulePreviewContent(settings, blockTag, promptText, promptModKey) {
     const normalizedTag = String(blockTag || '').trim().toUpperCase();
-    return extractStockModulePreviewContent(settings?.currentMemo, normalizedTag)
-        || STOCK_MODULE_PREVIEW_SAMPLES[normalizedTag]
-        || extractStockModulePreviewContent(promptText, normalizedTag)
-        || 'Example preview content';
+    const modKey = String(promptModKey || blockTag || '').trim().toLowerCase();
+
+    // 1. Current live game memo (if in active chat)
+    const liveContent = extractStockModulePreviewContent(settings?.currentMemo, normalizedTag);
+    if (liveContent) return liveContent;
+
+    // 2. Custom cartridge template defined in stockTemplates (by modKey or normalizedTag)
+    const customTemplate = settings?.stockTemplates?.[modKey] 
+        || settings?.stockTemplates?.[normalizedTag];
+    if (customTemplate && typeof customTemplate === 'string' && customTemplate.trim()) {
+        return extractStockModulePreviewContent(customTemplate, normalizedTag) || customTemplate.trim();
+    }
+
+    // 3. Example template embedded in the prompt instructions itself ([TAG]...[/TAG])
+    const promptContent = extractStockModulePreviewContent(promptText, normalizedTag);
+    if (promptContent) return promptContent;
+
+    // 4. Factory default sample
+    return STOCK_MODULE_PREVIEW_SAMPLES[normalizedTag] || 'Example preview content';
 }
 
 export function openPromptEditor(blockTag, title, currentText, defaultText, onSave, promptModKey) {
@@ -903,7 +918,7 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
 
     const modKey = promptModKey || blockTag.toLowerCase();
     const s = getSettings();
-    templateEl.value = getInitialStockModulePreviewContent(s, blockTag, currentText);
+    templateEl.value = getInitialStockModulePreviewContent(s, blockTag, currentText, modKey);
     titleEl.textContent = title;
     textEl.value = currentText;
     overlay.style.display = 'flex';
@@ -969,15 +984,22 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
         if (!isNaN(ps) && ps >= 1) {
             s.modulePageSizes[blockTag.toUpperCase()] = ps;
         }
+        if (!s.stockTemplates) s.stockTemplates = {};
+        s.stockTemplates[modKey] = templateEl.value;
         // Apply text first, then persist so the checkpoint captures the completed edit.
-        onSave(textEl.value);
+        onSave(textEl.value, templateEl.value);
+        saveSettings();
         close();
     };
 
     const resetHandler = () => {
         if (confirm("Reset this prompt to the factory default?")) {
             textEl.value = defaultText;
-            templateEl.value = getInitialStockModulePreviewContent(s, blockTag, defaultText);
+            if (s.stockTemplates && s.stockTemplates[modKey]) {
+                delete s.stockTemplates[modKey];
+                saveSettings();
+            }
+            templateEl.value = getInitialStockModulePreviewContent(s, blockTag, defaultText, modKey);
             schedulePreview();
         }
     };

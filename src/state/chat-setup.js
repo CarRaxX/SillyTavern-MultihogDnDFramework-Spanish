@@ -50,6 +50,7 @@ export const CHAT_SETUP_KEYS = Object.freeze([
     'modules',
     'blockOrder',
     'stockPrompts',
+    'stockTemplates',
     'modulePageSizes',
 ]);
 
