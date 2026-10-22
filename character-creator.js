@@ -1104,19 +1104,30 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
 
 export function extractCharNameFromMemo(memo) {
     if (!memo) return '';
+    const resolveCandidateName = (raw) => {
+        if (!raw) return '';
+        let cleaned = raw.replace(/<[^>]+>/g, '').trim();
+        if (/\{\{user\}\}/i.test(cleaned) || /^user$/i.test(cleaned)) {
+            const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext?.() : null;
+            const substituted = ctx?.substituteParams ? ctx.substituteParams(cleaned) : '';
+            cleaned = substituted || ctx?.name2 || '';
+        }
+        return cleaned.trim();
+    };
+
     const charBlock = memo.match(/\[CHARACTER\]([\s\S]*?)\[\/CHARACTER\]/i);
     if (charBlock) {
         const firstLine = charBlock[1].replace(/<[^>]+>/g, '').trim().split('\n')[0].trim();
         const m = firstLine.match(/^([^(:\[\n]{2,50}?)(?:\s*\(|\s*:)/);
         if (m) {
-            const candidate = m[1].trim();
-            if (candidate && !/^(character|unknown|user|name)$/i.test(candidate)) return candidate;
+            const candidate = resolveCandidateName(m[1]);
+            if (candidate && !/^(character|unknown|user|name|\{\{user\}\})$/i.test(candidate)) return candidate;
         }
     }
     const nameField = memo.match(/(?:^|\n)\s*(?:Name|Character Name)\s*[:\|]\s*([^\n\|\[<]{2,60})/im);
     if (nameField) {
-        const candidate = nameField[1].replace(/<[^>]+>/g, '').trim();
-        if (candidate && !/^(character|unknown|user)$/i.test(candidate)) return candidate;
+        const candidate = resolveCandidateName(nameField[1]);
+        if (candidate && !/^(character|unknown|user|name|\{\{user\}\})$/i.test(candidate)) return candidate;
     }
     return '';
 }

@@ -46,12 +46,32 @@ export function lookupCustomPortraitSrc(settings, entityName, portraitsMap) {
     const key = normalizeEntityName(entityName);
     if (!key) return '';
     const map = portraitsMap ?? settings?.customPortraits;
+    if (!map) return '';
     // Lorebook Agent cards and tracker cards share this portrait map. Their names
     // are usually identical, but a case-insensitive fallback makes a tracker card
     // resilient to normal narrator formatting differences ("ALICE" vs "Alice").
-    const raw = map?.[key] || Object.entries(map || {}).find(([storedName]) =>
+    let raw = map?.[key] || Object.entries(map || {}).find(([storedName]) =>
         normalizeEntityName(storedName).localeCompare(key, undefined, { sensitivity: 'accent' }) === 0,
     )?.[1];
+
+    // Bridge resolution: If not found, bridge dynamically between {{user}} and active ST user/persona name
+    if (!raw) {
+        try {
+            const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext?.() : null;
+            const activeUser = normalizeEntityName(ctx?.name2 || '');
+            const isUserMacroKey = /^(?:\{\{user\}\}|user)$/i.test(key);
+            if (activeUser) {
+                if (isUserMacroKey) {
+                    raw = map[activeUser] || Object.entries(map).find(([storedName]) =>
+                        normalizeEntityName(storedName).localeCompare(activeUser, undefined, { sensitivity: 'accent' }) === 0,
+                    )?.[1];
+                } else if (key.localeCompare(activeUser, undefined, { sensitivity: 'accent' }) === 0) {
+                    raw = map['{{user}}'] || map['user'];
+                }
+            }
+        } catch (_) { /* ignore */ }
+    }
+
     return raw ? resolvePortraitDisplaySrc(raw) : '';
 }
 

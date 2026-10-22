@@ -33,6 +33,26 @@ function makeBarAnimationData(barId, current, max, kind = 'linear', animateOverr
 }
 
 /**
+ * Resolves ST macros (e.g. {{user}}) in entity display names dynamically.
+ * Never hardcodes any user name — queries the active SillyTavern session.
+ * @param {string} name
+ * @returns {string}
+ */
+export function resolveEntityDisplayName(name) {
+    if (!name) return '';
+    if (/\{\{user\}\}/i.test(name)) {
+        try {
+            const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext?.() : null;
+            const substituted = ctx?.substituteParams ? ctx.substituteParams(name) : '';
+            return substituted || name.replace(/\{\{user\}\}/gi, ctx?.name2 || 'Usuario');
+        } catch (_) {
+            return name;
+        }
+    }
+    return name;
+}
+
+/**
  * Extracts a time-of-day emoji + accent color from any free-form string containing
  * an "HH:MM[ AM/PM]" clock pattern (e.g. a [TIME] block line, or a "Current Time" string).
  * Shared by the TIME card renderer and the Tab Mode footer clock so both stay in sync.
@@ -1001,7 +1021,7 @@ export function renderDayNightBadge(str) {
             if (isNpcMarker) {
                 currentEntity = rawLine.slice(marker[0].length).trim().replace(/:\s*$/, '').trim() || 'NPC';
                 lastEntityIdx = results.length;
-                results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div></div>`);
+                results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(resolveEntityDisplayName(currentEntity))}</div></div>`);
                 continue;
             }
 
@@ -1546,21 +1566,21 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         const dispMax = showAsPct && hasKnownRange ? 100 : maxRaw;
                         const label = hasMax ? `${dispCur}/${dispMax}` : `${curRaw}`;
 
-                        currentEntity = name;
+                        currentEntity = resolveEntityDisplayName(name);
                         const barId = `${tag}:${currentEntity}:HP`;
                         const barBg = getBarBackground(barId, hpColor, pct);
 
                         lastEntityIdx = results.length;
                         if (inlineEntityName) {
                             results.push(`<div class="rt-entity-row" style="display:block; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
-                                <div class="rt-entity-name" style="font-size:1.1em; margin-bottom:6px;">${escapeHtmlWithColor(currentEntity)}</div>
+                                <div class="rt-entity-name" style="font-size:1.1em; margin-bottom:6px;">${escapeHtmlWithColor(resolveEntityDisplayName(currentEntity))}</div>
                                 <div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''} style="position:relative; height:14px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,0.1); margin-bottom:4px; width:100%;">
                                     <div class="rt-hp-bar" style="width:${pct.toFixed(1)}%; height:100%; border-radius:4px; background:${barBg}; transition:width 0.3s;"></div>
                                 </div>
                                 <span class="rt-hp-label" style="display:block; font-size:0.82em; opacity:0.85; text-align:left; line-height:1.2;">${label}</span>
                             </div>`);
                         } else {
-                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
+                            results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(resolveEntityDisplayName(currentEntity))}</div><div class="rt-hp-bar-wrap${unknownHp ? ' rt-hp-unknown' : ''}" title="Click to recolor HP" data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" data-recolor-explicit-color="${inlineBarRule?.color ? 'true' : 'false'}"${hasKnownRange ? makeBarAnimationData(barId, cur, max) : ''}><div class="rt-hp-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div></div><span class="rt-hp-label">${label}</span></div>`);
                         }
 
                         if (status) {
@@ -1607,11 +1627,11 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             }
                         }
 
-                        currentEntity = entityLabel;
+                        currentEntity = resolveEntityDisplayName(entityLabel);
                         lastEntityIdx = results.length;
 
                         // Render as entity-name header with optional rest as a sub-label (e.g. class info)
-                        let headerHtml = `<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div>`;
+                        let headerHtml = `<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(resolveEntityDisplayName(currentEntity))}</div>`;
                         if (restOfHeader) {
                             headerHtml += `<span class="rt-hp-label" style="opacity:0.75; font-size:0.9em;">${escapeHtmlWithColor(restOfHeader)}</span>`;
                         }
