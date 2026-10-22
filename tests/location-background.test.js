@@ -32,7 +32,7 @@ vi.mock('../src/ui/panel/dungeon-map-panel.js', () => ({}));
 vi.mock('../src/state/section-enabled.js', () => ({ isLocationMappingEnabled: () => false }));
 vi.mock('../src/app/runtime-state.js', () => ({ runtimeState: {} }));
 
-import { buildImmersionSceneState, loadAllLocationPaths, loadLocationEntryByPath, maybeAutoGenerateImmersionSceneArt, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath, runRealtimeSceneArtCheck } from '../immersion.js';
+import { buildImmersionSceneState, loadAllLocationPaths, loadLocationEntryByPath, maybeAutoGenerateImmersionSceneArt, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath, runRealtimeSceneArtCheck, getCurrentLocationText } from '../immersion.js';
 import { applyLocationImageToChatBackground, triggerBackgroundLocationGeneration } from '../portraits.js';
 import { invalidateChatCommitGuards } from '../src/state/pass-affinity.js';
 import { isWorldInfoBookKnown, scanRecentOutputForPresentNpcs } from '../router.js';
@@ -238,5 +238,34 @@ describe('location background syncing', () => {
         host.context.chat.push({ mes: 'one' }, { mes: 'two' });
         maybeAutoGenerateImmersionSceneArt(scene, () => {});
         expect(triggerBackgroundLocationGeneration).toHaveBeenCalledTimes(mode === 'every_n_outputs' ? 1 : 0);
+    });
+
+    describe('getCurrentLocationText multilingual resilience', () => {
+        it('parses standard English Location tag in footer', () => {
+            const ctx = { chat: [{ mes: 'Narrative\n*(Status: 10/10) | (Location: Whispering Woods)*' }] };
+            expect(getCurrentLocationText('', ctx)).toBe('Whispering Woods');
+        });
+
+        it('parses Spanish Ubicación and Lugar tags in footer', () => {
+            const ctx1 = { chat: [{ mes: 'Narrativa\n*(Status: 20/20) | (Ubicación: Bosque Brumoso)*' }] };
+            expect(getCurrentLocationText('', ctx1)).toBe('Bosque Brumoso');
+
+            const ctx2 = { chat: [{ mes: 'Narrativa\n*(Status: 20/20) | (Lugar: Claro de Piedra)*' }] };
+            expect(getCurrentLocationText('', ctx2)).toBe('Claro de Piedra');
+        });
+
+        it('parses markdown list and bold formats', () => {
+            const ctx = {
+                chat: [{
+                    mes: 'Narrativa\n**[ESTADO ACTUAL]**\n*   **Ubicación:** Bosque Brumoso (Zona de Transición)\n*   **HP:** 20/20'
+                }]
+            };
+            expect(getCurrentLocationText('', ctx)).toBe('Bosque Brumoso (Zona de Transición)');
+        });
+
+        it('falls back to memo location with Spanish prefix', () => {
+            const memo = '[TIME]\nUbicación: Tierras Altas :: Ruinas\nHora: 10:00\n[/TIME]';
+            expect(getCurrentLocationText(memo, { chat: [] })).toBe('Tierras Altas :: Ruinas');
+        });
     });
 });

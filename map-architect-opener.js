@@ -127,7 +127,7 @@ function normalizeInclude(value) {
 }
 
 function inferSiteFromFooter(text) {
-    const match = String(text || '').match(/\(Location:\s*([^)]+)\)/i);
+    const match = String(text || '').match(/\((?:Location|Ubicación|Lugar):\s*([^)]+)\)/i);
     return match ? String(match[1] || '').trim() : '';
 }
 

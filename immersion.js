@@ -29,11 +29,13 @@ export function getCurrentLocationText(memo, ctx) {
     if (chatCtx?.chat?.length) {
         for (let i = chatCtx.chat.length - 1; i >= 0; i--) {
             const msgContent = chatCtx.chat[i]?.mes || chatCtx.chat[i]?.['content'] || '';
-            const m = msgContent.match(/\(Location:\s*([^)]+)\)/i);
+            const m = msgContent.match(/\((?:Location|Ubicación|Lugar):\s*([^)]+)\)/i);
             if (m) return m[1].trim();
+            const mAlt = msgContent.match(/(?:^|\n)\s*(?:[-*]\s*)?(?:\*{1,2})?(?:Location|Ubicación|Lugar):(?:\*{1,2})?\s*([^\n\r*]+)/i);
+            if (mAlt) return mAlt[1].trim();
         }
     }
-    const locMatch = (memo || '').match(/Location:\s*([^)\n]+)/i);
+    const locMatch = (memo || '').match(/(?:Location|Ubicación|Lugar):\s*([^)\n]+)/i);
     return locMatch ? locMatch[1].trim() : '';
 }
 
