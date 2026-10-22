@@ -1,6 +1,6 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage, getBarAnimateChanges } from './state-manager.js';
 import { lookupCustomPortraitSrc } from './portrait-storage.js';
-import { escapeHtml, decodeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline, isEmergentQuest } from './memo-processor.js';
+import { escapeHtml, decodeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline, isEmergentQuest, parseQuestsFromText } from './memo-processor.js';
 import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, renderStartingGearTierOptions, TAG_DISPLAY_NAMES } from './constants.js';
 import { isResolvedCombatantStatusLine, parseCombatSideHeader } from './src/state/combat-persistence.js';
 import { buildDisplayGroupRenderPlan } from './src/features/display-groups.js';
@@ -1500,19 +1500,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     }
 
                     // 2. Entity anchor: classic "Name: X/Y HP ..." or explicit ((HP)) marker
-                    let hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*HP\s*[:|,]?\s*(.*)$/i);
-                    const isHpMarker = (markerCode === 'HP' || markerCode === 'HPB' || markerCode === 'HPBAR');
+                    // In [CHARACTER], only the initial entity header line defines the character card;
+                    // subsequent lines with ((BAR)) (e.g. - Fuerza: ((BAR)) 15/100) are attributes, not new entities.
+                    const isBulletedSubLine = /^\s*[-*+•–—]/.test(rawLine);
+                    let hpMatch = null;
+                    if ((tag !== 'CHARACTER' || lastEntityIdx === -1) && !isBulletedSubLine) {
+                        hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*HP\s*[:|,]?\s*(.*)$/i);
+                        const isHpMarker = (markerCode === 'HP' || markerCode === 'HPB' || markerCode === 'HPBAR');
 
-                    // If marker is specifically ((HP)), try a more relaxed regex (optional HP suffix)
-                    if (!hpMatch && isHpMarker) {
-                        hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
-                    }
+                        // If marker is specifically ((HP)), try a more relaxed regex (optional HP suffix)
+                        if (!hpMatch && isHpMarker) {
+                            hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
+                        }
 
-                    // Inline-marker fallback: line was rewritten to just the value portion
-                    // (e.g. "HP: 20/20" or bare "20/20"). Use a flexible regex that makes the
-                    // label prefix ("HP:") optional so both forms parse correctly.
-                    if (!hpMatch && inlineEntityName) {
-                        hpMatch = line.match(/^(?:(.+?):\s*)?([+-]?\d[\d,]*|\?+)(?:\/(\d[\d,]*|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
+                        // Inline-marker fallback: line was rewritten to just the value portion
+                        // (e.g. "HP: 20/20" or bare "20/20"). Use a flexible regex that makes the
+                        // label prefix ("HP:") optional so both forms parse correctly.
+                        if (!hpMatch && inlineEntityName) {
+                            hpMatch = line.match(/^(?:(.+?):\s*)?([+-]?\d[\d,]*|\?+)(?:\/(\d[\d,]*|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
+                        }
                     }
 
                     if (hpMatch) {
@@ -2615,7 +2621,13 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
      * @returns {string}
      */
     function renderSectionCard(tag, blocks, collapsed, detached, sectionPages, filterTag, uiOptions = {}) {
-        if (tag === 'QUESTS') return ''; // Quest log has dedicated high-fidelity renderer, skip standard card
+        if (tag === 'QUESTS') {
+            if (filterTag === 'QUESTS') {
+                const rawQuests = parseQuestsFromText(blocks['QUESTS'] || '');
+                return renderQuestLog(rawQuests || [], '', collapsed, detached, 'QUESTS');
+            }
+            return ''; // Quest log has dedicated high-fidelity renderer, skip standard card in main panel
+        }
         const content = blocks[tag];
         if (content === undefined && filterTag) {
             return `<div class="rt-empty">Esperando datos de ${TAG_DISPLAY_NAMES[tag] || tag}...</div>`;

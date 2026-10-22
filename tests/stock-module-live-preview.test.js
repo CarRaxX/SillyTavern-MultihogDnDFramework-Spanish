@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../portrait-storage.js', () => ({
+    lookupCustomPortraitSrc: () => '',
+}));
+
 import { CARTRIDGE_PAYLOAD_KEYS, CARTRIDGE_PAYLOAD_GROUPS, getFactoryCartridgePayload } from '../src/state/factory-and-diff.js';
+import { blockToItems, renderMemoAsCards } from '../renderer.js';
 
 const editorSource = readFileSync(new URL('../ui-editors.js', import.meta.url), 'utf8');
 
@@ -54,5 +60,25 @@ describe('stock module editor live preview', () => {
         expect(editorSource).toContain('settings?.stockTemplates?.[modKey]');
         expect(editorSource).toContain('extractStockModulePreviewContent(promptText, normalizedTag)');
         expect(editorSource).toContain('STOCK_MODULE_PREVIEW_SAMPLES[normalizedTag]');
+    });
+
+    it('keeps attribute bars inside the single character entity without splitting into multiple cards', () => {
+        const content = `CarRaxX (Forastero): 12/12 HP
+- Fuerza: ((BAR)) 15/100 (Novato)
+- Resistencia: ((BAR)) 12/100 (Novato)
+- Agilidad: ((BAR)) 18/100 (Novato)
+- Voluntad: ((BAR)) 15/100 (Quebradizo)
+- Intelecto: ((BAR)) 20/100 (Común)`;
+        const items = blockToItems('CHARACTER', content);
+        expect(items.length).toBe(1);
+        expect(items[0]).toContain('CarRaxX');
+        expect(items[0]).toContain('Fuerza:');
+        expect(items[0]).toContain('Intelecto:');
+    });
+
+    it('renders quest log in isolated preview for QUESTS block', () => {
+        const preview = renderMemoAsCards('[QUESTS]\nQUEST: The Missing Sheep\nSTATUS: active\nREWARD: 100 GP\n[/QUESTS]', 'QUESTS');
+        expect(preview).toContain('The Missing Sheep');
+        expect(preview).toContain('100 GP');
     });
 });

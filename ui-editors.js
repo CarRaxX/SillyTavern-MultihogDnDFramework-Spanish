@@ -823,7 +823,9 @@ export function buildStockModulePreviewMemo(content, tag) {
     const normalizedTag = String(tag || '').trim().toUpperCase();
     if (!normalizedTag) return '';
     const unwrapped = extractStockModulePreviewContent(content, normalizedTag);
-    const body = unwrapped || String(content || '').trim() || 'Nothing in testing sandbox';
+    let body = unwrapped || String(content || '').trim() || 'Nothing in testing sandbox';
+    const userName = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext?.()?.name2) || 'CarRaxX';
+    body = body.replace(/\{\{user\}\}/gi, userName);
     return `[${normalizedTag}]\n${body}\n[/${normalizedTag}]`;
 }
 
