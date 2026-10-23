@@ -899,7 +899,8 @@ Generate exactly {factionCount} factions, {locationCount} locations, and {confli
 - Put all descriptive text on the following line(s). In conflicts, state the parties naturally in the prose; never use a \`Parties involved:\` subheading.
 - Do not use bold text, bullet lists, tables, JSON, or any headings other than the required \`##\` sections and \`###\` titles.
 - Keep every premise consistent with the provided source material. Named individuals may constrain the result but must never become skeleton entries.
-- Maximum two sentences per premise. Output only the structured content.`,
+- Maximum two sentences per premise. Output only the structured content.
+- LANGUAGE REQUIREMENT: Write all faction names, location names, conflict titles, and premise descriptions in SPANISH. Headers may be either in English (## FACTIONS, ## LOCATIONS, ## CONFLICTS) or in Spanish (## FACCIONES, ## UBICACIONES, ## CONFLICTOS).`,
 
 
         routerSystemPromptTemplate: prepareShippedLorebookPromptTemplate(`<basic_instructions>

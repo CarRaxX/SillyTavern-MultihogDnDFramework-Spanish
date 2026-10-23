@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildSkeletonLorebookSourceContext } from '../src/features/world-progression/skeleton-lorebooks.js';
+import { buildSkeletonLorebookSourceContext, parseSkeletonOutput } from '../src/features/world-progression/skeleton-lorebooks.js';
 import { getSettings } from '../state-manager.js';
 import { testExtensionSettings } from './setup.js';
 
@@ -117,5 +117,69 @@ Generate exactly {factionCount} factions and {npcCount} NPCs.`,
         expect(routerSource).toContain('Do NOT name or identify player characters, party members, NPCs, factions, institutions, locations, quests, or conflicts');
         expect(routerSource).toContain('Never turn a party member or current story participant into Skeleton Source material.');
         expect(routerSource).toContain('Output ONLY the single-paragraph Skeleton Source.');
+    });
+});
+
+describe('parseSkeletonOutput bilingual resilience', () => {
+    it('parses English headers into standard categories', () => {
+        const text = `## FACTIONS
+### Iron Guild
+Controls iron trade and mines.
+
+## LOCATIONS
+### Deep Barrow
+An ancient mist-shrouded cemetery.
+
+## CONFLICTS
+### Border Skirmish
+Rising tensions along the southern wall.`;
+
+        const records = parseSkeletonOutput(text);
+        expect(records).toHaveLength(3);
+        expect(records[0]).toEqual({ label: 'Iron Guild', content: 'Controls iron trade and mines.', category: 'FAC' });
+        expect(records[1]).toEqual({ label: 'Deep Barrow', content: 'An ancient mist-shrouded cemetery.', category: 'LOC' });
+        expect(records[2]).toEqual({ label: 'Border Skirmish', content: 'Rising tensions along the southern wall.', category: 'EVENT' });
+    });
+
+    it('parses Spanish headers with or without accents', () => {
+        const text = `## FACCIONES
+### Gremio del Hierro
+Controla el comercio del mineral y las minas.
+
+## UBICACIONES
+### Túmulo Profundo
+Un cementerio ancestral cubierto de niebla densa.
+
+## CONFLICTOS
+### Escaramuza Fronteriza
+Creciente tensión militar a lo largo de la muralla sur.`;
+
+        const records = parseSkeletonOutput(text);
+        expect(records).toHaveLength(3);
+        expect(records[0]).toEqual({ label: 'Gremio del Hierro', content: 'Controla el comercio del mineral y las minas.', category: 'FAC' });
+        expect(records[1]).toEqual({ label: 'Túmulo Profundo', content: 'Un cementerio ancestral cubierto de niebla densa.', category: 'LOC' });
+        expect(records[2]).toEqual({ label: 'Escaramuza Fronteriza', content: 'Creciente tensión militar a lo largo de la muralla sur.', category: 'EVENT' });
+    });
+
+    it('parses Spanish alternative headers like FACCIÓN, LOCALIZACIÓN, LUGARES y EVENTOS', () => {
+        const text = `## FACCIÓN
+**La Orden Solar**: Monasterio militar celoso de las reliquias.
+
+## LOCALIZACIÓN
+### Bastión Carmesí
+Fortaleza de piedra rojiza en las montañas.
+
+## EVENTOS
+### Crisis de Abastecimiento
+Hambruna inminente tras el bloqueo de caminos.`;
+
+        const records = parseSkeletonOutput(text);
+        expect(records).toHaveLength(3);
+        expect(records[0].category).toBe('FAC');
+        expect(records[0].label).toBe('La Orden Solar');
+        expect(records[1].category).toBe('LOC');
+        expect(records[1].label).toBe('Bastión Carmesí');
+        expect(records[2].category).toBe('EVENT');
+        expect(records[2].label).toBe('Crisis de Abastecimiento');
     });
 });

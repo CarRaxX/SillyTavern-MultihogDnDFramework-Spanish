@@ -6,7 +6,7 @@ import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInW
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
 import { isLorebookAgentRuntimeActive, isLocationMappingEnabled } from './src/state/section-enabled.js';
-import { buildSkeletonLorebookSourceContext } from './src/features/world-progression/skeleton-lorebooks.js';
+import { buildSkeletonLorebookSourceContext, parseSkeletonOutput } from './src/features/world-progression/skeleton-lorebooks.js';
 import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 import {
     resolveAutoPassRestriction,
@@ -5513,110 +5513,7 @@ ${historicalDump}`;
  * @param {string} rawText
  * @returns {Array<{label: string, content: string, category: string}>}
  */
-function parseSkeletonOutput(rawText) {
-    const categoryMap = {
-        'FACTIONS': 'FAC',
-        'FACTION': 'FAC',
-        'LOCATIONS': 'LOC',
-        'LOCATION': 'LOC',
-        'CONFLICTS': 'EVENT',
-        'CONFLICT': 'EVENT',
-        'EVENTS': 'EVENT',
-    };
-
-    const records = [];
-    const lines = rawText.split('\n');
-    
-    let currentCategory = null;
-    let currentItem = null;
-
-    const sectionRegex = /^##\s+([A-Z]+)/i;
-    const subHeaderRegex = /^###\s+(.+)/;
-    const listRegexBold = /^\s*(?:[\*\-\d\.\s]*)\s*\*\*(.+?)\*\*\s*[:\-]?\s*(.*)/;
-    const listRegexPlain = /^\s*(?:[\*\-\d\.\s]*)\s*([^:\-\n]+)\s*[:\-]\s*(.*)/;
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmedLine = line.trim();
-
-        // 1. Check for ## Section Header
-        const secMatch = line.match(sectionRegex);
-        if (secMatch) {
-            if (currentItem) {
-                records.push(currentItem);
-                currentItem = null;
-            }
-            const key = secMatch[1].toUpperCase();
-            currentCategory = categoryMap[key] || null;
-            continue;
-        }
-
-        // Unknown sections — notably the retired NPC/NPCS category emitted by
-        // an old custom prompt — are intentionally ignored.
-        if (!currentCategory) continue;
-
-        // 2. Check for ### Sub-header
-        const subMatch = line.match(subHeaderRegex);
-        if (subMatch) {
-            if (currentItem) {
-                records.push(currentItem);
-            }
-            currentItem = {
-                label: subMatch[1].trim(),
-                content: '',
-                category: currentCategory
-            };
-            continue;
-        }
-
-        // 3. Bold names are explicit entry titles. A plain `Name: description`
-        // line is only a title when no entry is open; otherwise it is ordinary
-        // content such as `Parties involved:` or a hyphenated description.
-        let listMatch = line.match(listRegexBold);
-        if (!listMatch && !currentItem) {
-            listMatch = line.match(listRegexPlain);
-        }
-        if (listMatch) {
-            if (currentItem) {
-                records.push(currentItem);
-            }
-            currentItem = {
-                label: listMatch[1].trim(),
-                content: listMatch[2].trim(),
-                category: currentCategory
-            };
-            continue;
-        }
-
-        // 4. Append to existing item content
-        if (currentItem) {
-            if (trimmedLine) {
-                if (currentItem.content) {
-                    currentItem.content += ' ' + trimmedLine;
-                } else {
-                    currentItem.content = trimmedLine;
-                }
-            }
-        }
-    }
-
-    if (currentItem) {
-        records.push(currentItem);
-    }
-
-    // Clean up content strings (collapse multiple spaces, remove quotes)
-    for (const rec of records) {
-        rec.content = rec.content.replace(/\s+/g, ' ').trim();
-        if (rec.content.startsWith('"') && rec.content.endsWith('"')) {
-            rec.content = rec.content.slice(1, -1).trim();
-        }
-        if (rec.content.startsWith("'") && rec.content.endsWith("'")) {
-            rec.content = rec.content.slice(1, -1).trim();
-        }
-    }
-
-    return records.filter(r => r.label && r.content && ['FAC', 'LOC', 'EVENT'].includes(r.category));
-}
+export { parseSkeletonOutput };
 
 /**
  * Generates the World Skeleton: a hidden lorebook of foundational undiscovered
@@ -5661,7 +5558,8 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
 - The World Skeleton contains only FACTIONS, LOCATIONS, and CONFLICTS/EVENTS.
 - Never create an NPC/NPCS section or a named-individual skeleton entry.
 - Named individuals in source material are canon constraints only. Do not extract, duplicate, or transform them into skeleton entries.
-- World Progression advances locations and wider currents; ordinary NPC lore is created by the GM and Lorebook Agent when an individual becomes real in play.`;
+- World Progression advances locations and wider currents; ordinary NPC lore is created by the GM and Lorebook Agent when an individual becomes real in play.
+- LANGUAGE REQUIREMENT: Write all faction names, location names, conflict titles, and premise descriptions in SPANISH.`;
 
     let sourceLorebooksStr = '';
     if (settings.worldProgressionSkeletonUseLorebooks) {
@@ -5681,7 +5579,7 @@ export async function runSkeletonGenerationPass(atmosphereSummary, append = fals
                 throw new Error('Lorebook-only mode is enabled, but the selected source lorebooks contain no usable entries.');
             }
             systemPrompt += `\n\n## LOREBOOK-ONLY MODE — OVERRIDES EXACT COUNTS
-Only output factions, locations, and conflicts explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate premises. Ignore the requested category counts; output the eligible macro premises established by the source material, and omit an empty category section. Never output named individuals.`;
+Only output factions, locations, and conflicts explicitly mentioned in the supplied lorebook source material. Do not invent, infer, or extrapolate premises. Ignore the requested category counts; output the eligible macro premises established by the source material, and omit an empty category section. Never output named individuals. Write all premises in SPANISH.`;
         }
     }
 
@@ -5692,7 +5590,7 @@ Only output factions, locations, and conflicts explicitly mentioned in the suppl
             .filter(e => e.comment && e.content && ['FAC', 'LOC', 'EVENT'].includes(e.extensions?.rpgCategory));
         if (entries.length > 0) {
             const formattedEntries = entries.map(e => {
-                const cleanContent = e.content.replace(/^\[Day 0 Baseline\]\n?/i, '').trim();
+                const cleanContent = e.content.replace(/^\[(?:Day|Día|Dia)\s+0\s+[^\]]+\]\n?/i, '').trim();
                 return `### ${e.comment}\n${cleanContent}`;
             }).join('\n\n');
             existingEntitiesStr = `Avoid duplicating these or generating similar premises. Build on top of or expand this context with new, unique macro premises:\n\n${formattedEntries}`;
@@ -6034,6 +5932,7 @@ A single paragraph describing the world's broad social texture, environment, hie
 - Do NOT list or summarize specific plot events.
 - Never turn a party member or current story participant into Skeleton Source material.
 - Do not invent facts unsupported by the chat.
+- LANGUAGE REQUIREMENT: Write the entire Skeleton Source paragraph in SPANISH.
 
 Output ONLY the single-paragraph Skeleton Source. No preamble or meta-commentary.`;
 

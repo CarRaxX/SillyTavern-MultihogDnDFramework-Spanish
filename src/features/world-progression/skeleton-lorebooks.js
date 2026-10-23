@@ -50,3 +50,132 @@ Treat the following material as established world canon. ${sourceRule}
 
 ${formattedBooks.join('\n\n')}`;
 }
+
+/**
+ * Parses the raw LLM output from the skeleton generation pass into macro
+ * premise records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
+ * Supports English and Spanish section headers with/without accents.
+ * Returns an array of { label, content, category } objects.
+ * @param {string} rawText
+ * @returns {Array<{label: string, content: string, category: string}>}
+ */
+export function parseSkeletonOutput(rawText) {
+    if (!rawText || typeof rawText !== 'string') return [];
+
+    const categoryMap = {
+        'FACTIONS': 'FAC',
+        'FACTION': 'FAC',
+        'FACCIONES': 'FAC',
+        'FACCION': 'FAC',
+        'LOCATIONS': 'LOC',
+        'LOCATION': 'LOC',
+        'UBICACIONES': 'LOC',
+        'UBICACION': 'LOC',
+        'LOCALIZACIONES': 'LOC',
+        'LOCALIZACION': 'LOC',
+        'LUGARES': 'LOC',
+        'LUGAR': 'LOC',
+        'CONFLICTS': 'EVENT',
+        'CONFLICT': 'EVENT',
+        'CONFLICTOS': 'EVENT',
+        'CONFLICTO': 'EVENT',
+        'EVENTS': 'EVENT',
+        'EVENT': 'EVENT',
+        'EVENTOS': 'EVENT',
+        'EVENTO': 'EVENT',
+    };
+
+    const records = [];
+    const lines = rawText.split('\n');
+    
+    let currentCategory = null;
+    let currentItem = null;
+
+    const sectionRegex = /^##\s+([A-Za-zÀ-ÿ]+)/i;
+    const subHeaderRegex = /^###\s+(.+)/;
+    const listRegexBold = /^\s*(?:[\*\-\d\.\s]*)\s*\*\*(.+?)\*\*\s*[:\-]?\s*(.*)/;
+    const listRegexPlain = /^\s*(?:[\*\-\d\.\s]*)\s*([^:\-\n]+)\s*[:\-]\s*(.*)/;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        // 1. Check for ## Section Header
+        const secMatch = line.match(sectionRegex);
+        if (secMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+                currentItem = null;
+            }
+            const rawKey = secMatch[1].toUpperCase();
+            const normalizedKey = rawKey.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            currentCategory = categoryMap[normalizedKey] || categoryMap[rawKey] || null;
+            continue;
+        }
+
+        // Unknown sections — notably the retired NPC/NPCS category emitted by
+        // an old custom prompt — are intentionally ignored.
+        if (!currentCategory) continue;
+
+        // 2. Check for ### Sub-header
+        const subMatch = line.match(subHeaderRegex);
+        if (subMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+            }
+            currentItem = {
+                label: subMatch[1].trim(),
+                content: '',
+                category: currentCategory
+            };
+            continue;
+        }
+
+        // 3. Bold names are explicit entry titles. A plain `Name: description`
+        // line is only a title when no entry is open; otherwise it is ordinary
+        // content such as `Parties involved:` or a hyphenated description.
+        let listMatch = line.match(listRegexBold);
+        if (!listMatch && !currentItem) {
+            listMatch = line.match(listRegexPlain);
+        }
+        if (listMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+            }
+            currentItem = {
+                label: listMatch[1].trim(),
+                content: listMatch[2].trim(),
+                category: currentCategory
+            };
+            continue;
+        }
+
+        // 4. Append to existing item content
+        if (currentItem) {
+            if (trimmedLine) {
+                if (currentItem.content) {
+                    currentItem.content += ' ' + trimmedLine;
+                } else {
+                    currentItem.content = trimmedLine;
+                }
+            }
+        }
+    }
+
+    if (currentItem) {
+        records.push(currentItem);
+    }
+
+    // Clean up content strings (collapse multiple spaces, remove quotes)
+    for (const rec of records) {
+        rec.content = rec.content.replace(/\s+/g, ' ').trim();
+        if (rec.content.startsWith('"') && rec.content.endsWith('"')) {
+            rec.content = rec.content.slice(1, -1).trim();
+        }
+        if (rec.content.startsWith("'") && rec.content.endsWith("'")) {
+            rec.content = rec.content.slice(1, -1).trim();
+        }
+    }
+
+    return records.filter(r => r.label && r.content && ['FAC', 'LOC', 'EVENT'].includes(r.category));
+}

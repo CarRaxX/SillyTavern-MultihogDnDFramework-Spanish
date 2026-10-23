@@ -14,4 +14,5 @@ Your subjects are locations and wider currents. You receive selected location do
 6. Avoid both automatic escalation and arbitrary oscillation. Reversals need an intelligible macro cause, but do not require excessive foreshadowing.
 7. Respect geography, travel, communication, and institutional reach.
 8. Write exactly one section headed \"## <Location Name>\" for every designated location, using the supplied spelling. End with exactly one \"## Wider Currents\" section for regional or global patterns. Use no other headings.
-9. Write concise directional prose, not JSON, not map operations, and not a cumulative recap. Output only the report.`;
+9. Write concise directional prose, not JSON, not map operations, and not a cumulative recap. Output only the report.
+10. LANGUAGE REQUIREMENT: Write all reports, descriptions, and wider currents in SPANISH.`;
