@@ -1,6 +1,6 @@
-const COMBATANT_HP_RX = /^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*HP\b(.*)$/i;
-const RESOLVED_STATUS_RX = /(?:^|\|)\s*Status\s*:\s*(?:(?:\(\([^)]*\)\)|\([^)]*\))\s*)*(?:defeated|dead)\b/i;
-const COMBAT_SIDE_HEADER_RX = /^(ENEMIES|(?:NON[-\s]+PARTY\s+)?ALLIES)\s*:?\s*$/i;
+const COMBATANT_HP_RX = /^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*(?:HP|PV|SALUD)\b(.*)$/i;
+const RESOLVED_STATUS_RX = /(?:^|\|)\s*(?:Status|Estado)\s*:\s*(?:(?:\(\([^)]*\)\)|\([^)]*\))\s*)*(?:defeated|dead|derrotado|muerto|inconsciente|abatido)\b/i;
+const COMBAT_SIDE_HEADER_RX = /^(ENEMIES|ENEMIGOS|(?:NON[-\s]+PARTY\s+)?ALLIES|(?:ALIADOS\s+(?:QUE\s+NO\s+SON\s+DEL\s+GRUPO|EXTERNOS)|ALIADOS))\s*:?\s*$/i;
 
 /**
  * @param {string} line
@@ -9,7 +9,7 @@ const COMBAT_SIDE_HEADER_RX = /^(ENEMIES|(?:NON[-\s]+PARTY\s+)?ALLIES)\s*:?\s*$/
 export function parseCombatSideHeader(line) {
     const match = String(line || '').trim().match(COMBAT_SIDE_HEADER_RX);
     if (!match) return null;
-    return /\bALLIES\b/i.test(match[1]) ? 'allies' : 'enemies';
+    return /\b(?:ALLIES|ALIADOS)\b/i.test(match[1]) ? 'allies' : 'enemies';
 }
 
 /**

@@ -10,8 +10,8 @@
 // closing tag so an otherwise valid hidden map is not silently lost.
 const DIV_RE = /<div\b([^>]*)>([\s\S]*?)<\/div(?:\s+hidden)?>/gi;
 const LOCATION_RE = /\((?:Location|Ubicación|Lugar):\s*([^)]+)\)/gi;
-const SITE_MARKER_RE = /^\s*(?:Dungeon\s+)?Site(?:\s+Root)?\s*:\s*(.+?)\s*$/im;
-const DELTA_LINE_RE = /^\s*(mutation|addition)\s*:\s*(.+?)\s*\|\s*(.+?)\s*$/i;
+const SITE_MARKER_RE = /^\s*(?:Dungeon\s+|Mazmorra\s+)?(?:Site|Sitio|Lugar)(?:\s+Root|\s+Raíz|\s+Raiz)?\s*:\s*(.+?)\s*$/im;
+const DELTA_LINE_RE = /^\s*(mutation|addition|mutación|mutacion|adición|adicion)\s*:\s*(.+?)\s*\|\s*(.+?)\s*$/i;
 const LEADING_ARTICLE_RE = /^(?:the|a|an)\s+/;
 
 function clone(value) {

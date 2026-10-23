@@ -198,9 +198,12 @@ export function highlightNumbers(text) {
 export function extractCurrentTimeStr(timeBlockContent) {
     if (!timeBlockContent) return '';
     const lines = timeBlockContent.split('\n').map(l => l.trim()).filter(Boolean);
-    const timeLine = lines.find(line => !line.toLowerCase().startsWith('last rest:'));
+    const timeLine = lines.find(line => {
+        const lower = line.toLowerCase();
+        return !lower.startsWith('last rest:') && !lower.startsWith('último descanso:') && !lower.startsWith('ultimo descanso:');
+    });
     if (!timeLine) return '';
-    return timeLine.replace(/^(?:current\s+)?time:\s*/i, '').trim();
+    return timeLine.replace(/^(?:(?:current\s+)?time|hora(?:\s+actual)?):\s*/i, '').trim();
 }
 
 /** Replace the current-time line inside a [TIME] block, preserving Last Rest. */
@@ -215,7 +218,7 @@ export function replaceMemoCurrentTime(memo, timeLabel) {
         const lines = inner.split('\n');
         let replaced = false;
         const next = lines.map(line => {
-            if (!replaced && line.trim() && !/^\s*last rest:/i.test(line)) {
+            if (!replaced && line.trim() && !/^\s*(?:last\s+rest|último\s+descanso|ultimo\s+descanso):/i.test(line)) {
                 replaced = true;
                 const prefix = line.match(/^\s*/)?.[0] || '';
                 return `${prefix}${label}`;
@@ -238,7 +241,7 @@ export function replaceMemoCurrentTime(memo, timeLabel) {
 export function isRestTimeUnset(str) {
     const v = String(str || '').trim();
     if (!v) return true;
-    return /^(?:N\/A|NA|NONE|NEVER|NULL|—|-)$/i.test(v);
+    return /^(?:N\/A|NA|NONE|NEVER|NULL|NUNCA|NINGUNO|NINGUNA|SIN\s+DESCANSO|—|-)$/i.test(v);
 }
 
 /**
@@ -254,7 +257,7 @@ export function parseInWorldTime(str) {
     }
     if (isRestTimeUnset(str)) return null;
     const ddmmyyMatch = str.match(/\b(\d{1,2})\/(\d{1,2})\/(\d+)\b/);
-    const dayMatch = str.match(/(?:Day|D)\s*(\d+)/i);
+    const dayMatch = str.match(/(?:Day|Día|Dia|D)\s*(\d+)/i);
     const timeMatch = str.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
     
     let d = 1;
@@ -293,6 +296,7 @@ export function parseInWorldTime(str) {
 
 const NO_DEADLINE_SENTINELS = new Set([
     'none', 'n/a', 'na', 'no deadline', 'no time limit', '-', '—', 'null', 'unlimited', 'tbd', 'unknown',
+    'ninguno', 'ninguna', 'sin límite', 'sin limite', 'sin fecha', 'sin plazo', 'indefinido', 'desconocido',
 ]);
 
 /**
@@ -316,7 +320,7 @@ export function questHasEffectiveDeadline(quest) {
     return true;
 }
 
-const EMERGENT_GIVER_RE = /^(self|player|\{\{user\}\}|emergent|none|n\/a|na|-|—)$/i;
+const EMERGENT_GIVER_RE = /^(self|player|\{\{user\}\}|emergent|none|n\/a|na|-|—|propio|propia|jugador|emergente|ninguno|ninguna)$/i;
 
 /**
  * Emergent / self-imposed quests have no NPC expecting completion — no FRUSTRATION_COEFF or MOOD.
@@ -594,7 +598,8 @@ export function syncQuestsToMemo() {
  */
 export function isArchivedQuestStatus(status) {
     const s = String(status || '').toLowerCase().trim();
-    return s === 'completed' || s === 'failed' || s === 'past deadline';
+    return s === 'completed' || s === 'failed' || s === 'past deadline'
+        || s === 'completada' || s === 'completado' || s === 'fallida' || s === 'fallido' || s === 'expirada' || s === 'vencida';
 }
 
 /**
@@ -603,13 +608,13 @@ export function isArchivedQuestStatus(status) {
  * @returns {string[]|null} null if not plain-text quest format
  */
 function splitQuestTextBlocks(content) {
-    if (!content || !/^QUEST:/m.test(content)) return null;
-    return content.split(/^(?=QUEST:\s)/m).filter(b => b.trim());
+    if (!content || !/^(?:QUEST|MISIÓN|MISION):/mi.test(content)) return null;
+    return content.split(/^(?=(?:QUEST|MISIÓN|MISION):\s)/mi).filter(b => b.trim());
 }
 
 /** @param {string} block */
 function questTextBlockIsArchived(block) {
-    const m = block.match(/^\s*STATUS:\s*(.+)$/im);
+    const m = block.match(/^\s*(?:STATUS|ESTADO):\s*(.+)$/im);
     if (!m) return false;
     return isArchivedQuestStatus(m[1].trim());
 }
@@ -666,8 +671,8 @@ export const stripCompletedQuestsFromMemo = stripArchivedQuestsFromMemo;
 // Strip any leading bullet before matching so formatting drift doesn't cause the
 // command to be missed entirely and fall through to literal-block persistence.
 const LEADING_BULLET_RX = /^\s*[-*+•–—]\s*(?=\[)/;
-const BENCH_CMD_RX = /^\[BENCH\]\s*(.+?)(?:\s*[—–-]\s*(.+))?$/i;
-const UNBENCH_CMD_RX = /^\[UNBENCH\]\s*(.+)$/i;
+const BENCH_CMD_RX = /^\[(?:BENCH|RESERVA)\]\s*(.+?)(?:\s*[—–-]\s*(.+))?$/i;
+const UNBENCH_CMD_RX = /^\[(?:UNBENCH|ACTIVAR)\]\s*(.+)$/i;
 
 function stripLeadingBullet(line) {
     return line.replace(LEADING_BULLET_RX, '');
@@ -699,7 +704,7 @@ function isBenchCommandOnlyContent(content) {
     if (!content || /^(?:REMOVED|EXPIRED|CLEARED|NONE)$/i.test(content.trim())) return false;
     const lines = content.trim().split('\n').map(l => stripLeadingBullet(l.trim())).filter(Boolean);
     if (!lines.length) return false;
-    return lines.every(l => /^\[(?:BENCH|UNBENCH)\]/i.test(l));
+    return lines.every(l => /^\[(?:BENCH|UNBENCH|RESERVA|ACTIVAR)\]/i.test(l));
 }
 
 function resolveMemberEntry(entries, queryName) {
@@ -900,11 +905,11 @@ function replaceMemoBlock(memo, tag, innerContent) {
 // as a member boundary instead of silently vanishing from the parsed roster.
 const PARTY_MEMBER_MARKER_TOKEN = '(?:\\(\\([^)]*\\)\\)\\s*)*';
 const PARTY_MEMBER_HEADER_RX = new RegExp(
-    `^\\s*[-*+•–—]?(?:\\s+)?(.+?):\\s*${PARTY_MEMBER_MARKER_TOKEN}([+-]?[\\d,]+)(?:\\/([\\d,]+))?\\s*HP\\b`,
+    `^\\s*[-*+•–—]?(?:\\s+)?(.+?):\\s*${PARTY_MEMBER_MARKER_TOKEN}([+-]?[\\d,]+)(?:\\/([\\d,]+))?\\s*(?:HP|PV|SALUD|PUNTOS DE VIDA)\\b`,
     'i',
 );
-const PARTY_MEMBER_COMPACT_HEADER_RX = /^\s*[-*+•–—]?(?:\s+)?(.+?):\s*(Benched\s*\([^)]*\)|Benched\b.*)$/i;
-const PARTY_SUBFIELD_LABELS = /^(Combat|Gear|Proficiencies|Attr|Saves|Skills|Traits|Abilities|Spells|HD|Status):/i;
+const PARTY_MEMBER_COMPACT_HEADER_RX = /^\s*[-*+•–—]?(?:\s+)?(.+?):\s*((?:Benched|En reserva|Reserva)\s*\([^)]*\)|(?:Benched|En reserva|Reserva)\b.*)$/i;
+const PARTY_SUBFIELD_LABELS = /^(Combat|Gear|Proficiencies|Attr|Saves|Skills|Traits|Abilities|Spells|HD|Status|Combate|Equipo|Competencias|Atributos|Salvaciones|Habilidades|Maestrías|Maestrias|Rasgos|Hechizos|Estado):/i;
 
 function isPartyMemberHeaderLine(line) {
     const trimmed = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
@@ -1117,7 +1122,7 @@ export function memoForGmContext(memo) {
 export function parseQuestsFromText(text) {
     if (!text || !text.trim()) return [];
 
-    const questBlocks = text.trim().split(/^QUEST:/m);
+    const questBlocks = text.trim().split(/^(?:QUEST|MISIÓN|MISION):/mi);
     const quests = [];
 
     for (const block of questBlocks) {
@@ -1127,34 +1132,37 @@ export function parseQuestsFromText(text) {
         const title = lines[0].trim();
         if (!title) continue;
 
-        /** @param {string} key */
-        const getField = (key) => {
-            const re = new RegExp(`^\\s*${key}:\\s*(.+)$`, 'mi');
-            const m = block.match(re);
-            return m ? m[1].trim() : null;
+        /** @param {string[]} keys */
+        const getField = (...keys) => {
+            for (const key of keys) {
+                const re = new RegExp(`^\\s*${key}:\\s*(.+)$`, 'mi');
+                const m = block.match(re);
+                if (m) return m[1].trim();
+            }
+            return null;
         };
 
-        const rawGiver  = getField('GIVER') || '';
+        const rawGiver  = getField('GIVER', 'DONANTE', 'EMISOR', 'ENCARGO') || '';
         const giverParts = rawGiver.split(' @ ');
         const giverName = giverParts[0]?.trim() || 'Unknown';
         const giverLoc  = giverParts[1]?.trim() || 'Unknown';
 
-        const rawCoeff = getField('FRUSTRATION_COEFF');
+        const rawCoeff = getField('FRUSTRATION_COEFF', 'COEF_FRUSTRACION', 'FRUSTRACION');
         const coeff = rawCoeff ? parseFloat(rawCoeff) : null;
 
-        const typeField = (getField('TYPE') || '').trim().toLowerCase();
-        const emergentField = (getField('EMERGENT') || '').trim().toLowerCase();
-        const emergent = typeField === 'emergent'
-            || /^(true|yes|1)$/i.test(emergentField)
+        const typeField = (getField('TYPE', 'TIPO') || '').trim().toLowerCase();
+        const emergentField = (getField('EMERGENT', 'EMERGENTE') || '').trim().toLowerCase();
+        const emergent = typeField === 'emergent' || typeField === 'emergente'
+            || /^(true|yes|1|si|sí)$/i.test(emergentField)
             || EMERGENT_GIVER_RE.test(giverName);
 
         // Objectives: OBJ_ACTIVE, OBJ_COMPLETED/OBJ_DONE, or OBJ_FAILED lines
         // Robust: handles both one-per-line and comma-separated objectives on a single line
         const objectives = [];
-        const objRe = /^\s*(OBJ_ACTIVE|OBJ_DONE|OBJ_COMPLETED|OBJ_FAILED):\s*(.+)$/gmi;
+        const objRe = /^\s*(OBJ_ACTIVE|OBJ_DONE|OBJ_COMPLETED|OBJ_FAILED|OBJ_ACTIVO|OBJ_COMPLETADO|OBJ_HECHO|OBJ_FALLIDO):\s*(.+)$/gmi;
         // Read OBJ_TOTAL lines into a map keyed by order index for assignment below
         const objTotals = [];
-        const objTotalRe = /^\s*OBJ_TOTAL:\s*(\d+)$/gmi;
+        const objTotalRe = /^\s*(?:OBJ_TOTAL|OBJ_OBJETIVO_TOTAL):\s*(\d+)$/gmi;
         let objTotalMatch;
         while ((objTotalMatch = objTotalRe.exec(block)) !== null) {
             objTotals.push(parseInt(objTotalMatch[1], 10));
@@ -1163,8 +1171,8 @@ export function parseQuestsFromText(text) {
         let objIdx = 0;
         while ((objMatch = objRe.exec(block)) !== null) {
             const tag = objMatch[1].toUpperCase();
-            const isDone = (tag === 'OBJ_DONE' || tag === 'OBJ_COMPLETED');
-            const isFailed = (tag === 'OBJ_FAILED');
+            const isDone = (tag === 'OBJ_DONE' || tag === 'OBJ_COMPLETED' || tag === 'OBJ_COMPLETADO' || tag === 'OBJ_HECHO');
+            const isFailed = (tag === 'OBJ_FAILED' || tag === 'OBJ_FALLIDO');
             const rawContent = objMatch[2].trim();
 
             // Detect comma-separated objectives: "Obj one (required), Obj two (optional)"
@@ -1176,19 +1184,27 @@ export function parseQuestsFromText(text) {
                 : [rawContent];
 
             for (const part of parts) {
-                const p = part.trim();
+                let p = part.trim();
                 if (!p) continue;
-                const isOptional = /\(optional\)$/i.test(p);
-                // Strip (required)/(optional) suffix
-                let objText = p.replace(/\s*\((required|optional)\)\s*$/i, '').trim();
                 // Extract inline [progress/total] counter, e.g. "Collect mushrooms [4/6]"
                 let progress = undefined;
                 let total = objTotals[objIdx] ?? undefined;
-                const progressMatch = objText.match(/\[(\d+)\/(\d+)\]\s*$/);
+                const progressMatch = p.match(/\[(\d+)\/(\d+)\]\s*$/);
                 if (progressMatch) {
                     progress = parseInt(progressMatch[1], 10);
                     total    = parseInt(progressMatch[2], 10);
-                    objText  = objText.replace(/\s*\[\d+\/\d+\]\s*$/, '').trim();
+                    p        = p.replace(/\s*\[\d+\/\d+\]\s*$/, '').trim();
+                }
+                const isOptional = /\((?:optional|opcional)\)$/i.test(p);
+                // Strip (required)/(optional) suffix
+                let objText = p.replace(/\s*\((?:required|optional|requerido|obligatorio|opcional)\)\s*$/i, '').trim();
+                if (progress == null) {
+                    const progressMatch2 = objText.match(/\[(\d+)\/(\d+)\]\s*$/);
+                    if (progressMatch2) {
+                        progress = parseInt(progressMatch2[1], 10);
+                        total    = parseInt(progressMatch2[2], 10);
+                        objText  = objText.replace(/\s*\[\d+\/\d+\]\s*$/, '').trim();
+                    }
                 }
                 if (!objText) continue;
                 const entry = {
@@ -1205,20 +1221,27 @@ export function parseQuestsFromText(text) {
 
         // Rewards: REWARD lines
         const rewards = [];
-        const rewardRe = /^\s*REWARD:\s*(.+)$/gmi;
+        const rewardRe = /^\s*(?:REWARD|RECOMPENSA|PREMIO):\s*(.+)$/gmi;
         let rewardMatch;
         while ((rewardMatch = rewardRe.exec(block)) !== null) {
             rewards.push(rewardMatch[1].trim());
         }
 
+        const rawStatus = (getField('STATUS', 'ESTADO') || 'active').toLowerCase();
+        const normStatus = (rawStatus === 'completada' || rawStatus === 'completado') ? 'completed'
+            : (rawStatus === 'fallida' || rawStatus === 'fallido') ? 'failed'
+            : (rawStatus === 'expirada' || rawStatus === 'vencida') ? 'past deadline'
+            : (rawStatus === 'activa' || rawStatus === 'activo') ? 'active'
+            : rawStatus;
+
         quests.push({
             id:                     getField('ID') || `quest_${Date.now()}_${quests.length}`,
             title,
-            status:                 getField('STATUS') || 'active',
+            status:                 normStatus,
             giver_name:             giverName,
             giver_location:         giverLoc,
-            accepted_time:          getField('ACCEPTED'),
-            deadline_time:          getField('DEADLINE'),
+            accepted_time:          getField('ACCEPTED', 'ACEPTADA', 'ACEPTADO', 'FECHA'),
+            deadline_time:          getField('DEADLINE', 'PLAZO', 'LIMITE', 'LÍMITE'),
             emergent:               emergent || undefined,
             type:                   emergent ? 'emergent' : undefined,
             // Emergent/self-imposed: no NPC expects completion → never store a coeff

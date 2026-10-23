@@ -1591,11 +1591,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                     results[lastEntityIdx] += `<div class="rt-entity-sub-line"><span class="rt-entity-sub-label">AC:</span> ${escapeHtmlWithColor(part.substring(3).trim())}</div>`;
                                 } else if (part.toLowerCase().startsWith('saves:')) {
                                     results[lastEntityIdx] += `<div class="rt-entity-sub-line"><span class="rt-entity-sub-label">Saves:</span> ${highlightParens(escapeHtmlWithColor(part.substring(6).trim()))}</div>`;
-                                } else if (part.toLowerCase().startsWith('status:')) {
+                                } else if (part.toLowerCase().startsWith('status:') || part.toLowerCase().startsWith('estado:')) {
                                     if (tag === 'COMBAT' && isResolvedCombatantStatusLine(part)) {
                                         defeatedCombatants.add(currentEntity.toLocaleLowerCase());
                                     }
-                                    results[lastEntityIdx] += `<div class="rt-entity-sub-line rt-units-container"><span class="rt-entity-sub-label">Status:</span> ${renderPills(part.substring(7).trim())}</div>`;
+                                    const val = part.replace(/^(?:status|estado):\s*/i, '');
+                                    results[lastEntityIdx] += `<div class="rt-entity-sub-line rt-units-container"><span class="rt-entity-sub-label">Status:</span> ${renderPills(val.trim())}</div>`;
                                 } else if (part.toLowerCase().startsWith('other:') || part.toLowerCase().startsWith('res:')) {
                                     const lbl = part.toLowerCase().startsWith('res:') ? 'Res:' : 'Other:';
                                     const start = part.toLowerCase().startsWith('res:') ? 4 : 6;
@@ -1716,7 +1717,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     if (asMarker !== null) return asMarker;
 
                     // New format: Total: 1,200 / 2,700 XP (Level 3)
-                    let m = line.match(/Total:\s*([\d,]+)\s*\/\s*([\d,]+)\s*XP\s*\(Level\s*(\d+)\)/i);
+                    let m = line.match(/(?:Total:\s*)?([\d,]+)\s*\/\s*([\d,]+)\s*(?:XP|EXP)\s*\((?:Level|Nivel)\s*(\d+)\)/i);
                     if (m) {
                         const [, curRaw, maxRaw, level] = m;
                         const cur = Number(curRaw.replace(/,/g, ''));
@@ -1738,7 +1739,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     }
 
                     // Legacy format: XP: 1,200/2,700 or Level: 3 | XP: 1,200/2,700
-                    m = line.match(/(?:Level:\s*(\d+)\s*\|?\s*)?XP:\s*([\d,]+)\/([\d,]+)/i);
+                    m = line.match(/(?:(?:Level|Nivel):\s*(\d+)\s*\|?\s*)?(?:XP|EXP):\s*([\d,]+)\/([\d,]+)/i);
                     if (m) {
                         const [, level, curRaw, maxRaw] = m;
                         const cur = Number(curRaw.replace(/,/g, ''));
@@ -2902,8 +2903,8 @@ function extractBenchedRoster(content) {
             if (nameOnly) current = { name: nameOnly, status: '' };
             continue;
         }
-        if (/^status:/i.test(line)) {
-            current.status = line.replace(/^status:\s*/i, '').trim();
+        if (/^(?:status|estado):/i.test(line)) {
+            current.status = line.replace(/^(?:status|estado):\s*/i, '').trim();
         }
     }
     if (current) results.push(current);
