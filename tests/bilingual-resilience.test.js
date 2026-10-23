@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../portrait-storage.js', () => ({
+    lookupCustomPortraitSrc: () => '',
+}));
+
 import {
     extractCurrentTimeStr,
     replaceMemoCurrentTime,
@@ -13,6 +18,9 @@ import {
     parseCombatSideHeader,
     isResolvedCombatantStatusLine,
 } from '../src/state/combat-persistence.js';
+import { getCardAppearanceSynopsis } from '../src/ui/panel/card-synopsis.js';
+import { parseMapArchitectCreateDirective } from '../src/ui/panel/agent-terminal-direct.js';
+import { renderSpellGroups } from '../renderer.js';
 
 describe('Bilingual Resilience: Time and Rest parsers', () => {
     it('extracts current time from Spanish time block', () => {
@@ -133,3 +141,45 @@ describe('Bilingual Resilience: Combat and Status parser', () => {
         expect(isResolvedCombatantStatusLine('Status: Healthy')).toBe(false);
     });
 });
+
+describe('Bilingual Resilience: NPC Synopsis, Map Directives and Router World Time', () => {
+    it('extracts NPC appearance synopsis from Spanish fields', () => {
+        const spanishNpc = `[CORE]
+Especie / Linaje: Humano de la Tierra
+Cuerpo: Joven de piel morena con ojos violetas
+Equipo Visible: Gabardina negra y ropa casual
+Personalidad: Analítico y reflexivo
+Naturaleza Álmica: Manifestado — Punto de Quiebre
+[/CORE]`;
+        const synopsis = getCardAppearanceSynopsis(spanishNpc);
+        expect(synopsis).toBe('Humano de la Tierra — Joven de piel morena con ojos violetas');
+    });
+
+    it('parses map creation directives in both Spanish and English', () => {
+        const enDirect = 'create a DUNGEON map for "Forgotten Crypt"';
+        expect(parseMapArchitectCreateDirective(enDirect)).toEqual({
+            kind: 'DUNGEON',
+            site: 'Forgotten Crypt',
+        });
+
+        const esDirect = 'crear mapa de mazmorra para "Cripta Olvidada"';
+        expect(parseMapArchitectCreateDirective(esDirect)).toEqual({
+            kind: 'DUNGEON',
+            site: 'Cripta Olvidada',
+        });
+
+        const esDirect2 = 'crea un mapa de ASENTAMIENTO para \'Aldea del Roble\'';
+        expect(parseMapArchitectCreateDirective(esDirect2)).toEqual({
+            kind: 'SETTLEMENT',
+            site: 'Aldea del Roble',
+        });
+    });
+
+    it('renders spell groups in Spanish with Nivel and Trucos', () => {
+        const html = renderSpellGroups('Trucos: Luz | Nivel 1 (2/3): Misil Mágico');
+        expect(html).toContain('Trucos');
+        expect(html).toContain('Nivel 1');
+        expect(html).toContain('rt-slot-available');
+    });
+});
+

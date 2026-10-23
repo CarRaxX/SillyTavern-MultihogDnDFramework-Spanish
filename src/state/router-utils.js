@@ -355,7 +355,7 @@ export function patchLabeledSection(text, field, newContent, opts = {}) {
         if (h && !otherHeaders.includes(h)) otherHeaders.push(h);
     }
     for (const rawLine of body.split('\n')) {
-        const hm = rawLine.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:/);
+        const hm = rawLine.trim().match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 \/&'-]+?)\s*:/);
         if (hm) {
             const nm = hm[1].trim();
             if (!otherHeaders.includes(nm)) otherHeaders.push(nm);
@@ -410,7 +410,7 @@ function extractLabeledFieldMap(text) {
         buf = [];
     };
     for (const raw of String(text || '').split('\n')) {
-        const hm = raw.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:(.*)$/);
+        const hm = raw.trim().match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 \/&'-]+?)\s*:(.*)$/);
         if (hm) {
             flush();
             current = hm[1].trim();

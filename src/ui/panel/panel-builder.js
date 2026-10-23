@@ -1515,7 +1515,7 @@ export function createPanel(dependencies) {
             const inlineSubLabelBlacklist = new Set(['species', 'ethnicity', 'gender', 'age', 'race', 'body type', 'height', 'build']);
             const discoveredNames = [];
             for (const rawLine of coreContent.split('\n')) {
-                const hm = rawLine.trim().match(/^([A-Z][A-Za-z0-9 \/&]+?)\s*:/);
+                const hm = rawLine.trim().match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 \/&'-]+?)\s*:/);
                 if (hm) {
                     const nm = hm[1].trim();
                     const nmLc = nm.toLowerCase();
@@ -2178,15 +2178,21 @@ export function createPanel(dependencies) {
                             const displayNameLower = displayName.toLowerCase();
                             const layoutS = getSettings();
                             const isNpcBook = displayNameLower === 'npcs' || displayNameLower === 'npc' ||
-                                bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc');
+                                displayNameLower === 'pnjs' || displayNameLower === 'pnj' ||
+                                bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc') ||
+                                bookNameLowerFull.endsWith('_pnjs') || bookNameLowerFull.endsWith('_pnj');
                             const useNpcCardView = isNpcBook && layoutS.npcPortraits !== false;
 
                             const isLocBook = displayNameLower === 'locations' || displayNameLower === 'location' ||
-                                bookNameLowerFull.endsWith('_locations') || bookNameLowerFull.endsWith('_location');
+                                displayNameLower === 'ubicaciones' || displayNameLower === 'ubicacion' ||
+                                displayNameLower === 'lugares' || displayNameLower === 'lugar' ||
+                                bookNameLowerFull.endsWith('_locations') || bookNameLowerFull.endsWith('_location') ||
+                                bookNameLowerFull.endsWith('_ubicaciones') || bookNameLowerFull.endsWith('_ubicacion') ||
+                                bookNameLowerFull.endsWith('_lugares') || bookNameLowerFull.endsWith('_lugar');
                             const useLocImageView = isLocBook && !!layoutS.locationImages;
 
-                            const isWorldBook = displayNameLower === 'world' ||
-                                bookNameLowerFull.endsWith('_world');
+                            const isWorldBook = displayNameLower === 'world' || displayNameLower === 'mundo' ||
+                                bookNameLowerFull.endsWith('_world') || bookNameLowerFull.endsWith('_mundo');
 
                             const folder = document.createElement('div');
                             folder.style.cssText = 'flex-shrink: 0; margin-bottom: 2px;';
@@ -3170,7 +3176,7 @@ export function createPanel(dependencies) {
                                 getLocationDescription = (content) => {
                                     if (!content) return '';
                                     const cleanContent = stripDungeonMapSection(content).replace(/\[\/?CORE\]/gi, '');
-                                    const coreMatch = cleanContent.match(/(?:^|\n)\s*(?:\[CORE\])?\s*([\s\S]*?)(?=\n\s*(?:Atmosphere|Notable Features|History|Connections|Dangers|Resources):|$)/i);
+                                    const coreMatch = cleanContent.match(/(?:^|\n)\s*(?:\[CORE\])?\s*([\s\S]*?)(?=\n\s*(?:Atmosphere|Atm[oó]sfera|Notable Features|Rasgos Notables|Caracter[ií]sticas Notables|History|Historia|Connections|Conexiones|Dangers|Peligros|Resources|Recursos):|$)/i);
                                     if (coreMatch?.[1]?.trim()) {
                                         return substituteDisplayMacros(coreMatch[1].trim().substring(0, 260));
                                     }
@@ -3577,34 +3583,35 @@ export function createPanel(dependencies) {
 
                                 const getEntryParts = (item) => {
                                     const bookNameLower = (item.book || '').toLowerCase();
-                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event') ||
+                                        bookNameLower.includes('eventos') || bookNameLower.includes('evento');
 
                                     if (isEventsBook) {
                                         // Check for DD/MM/YY
                                         const dateRegex = /\[([^\]]*\b(\d{1,2})\/(\d{1,2})\/(\d+)\b[^\]]*)\](.*)/i;
                                         const dateMatch = item.label.match(dateRegex);
                                         if (dateMatch) {
-                                            const dd = dateMatch[2].padStart(2, '0');
-                                            const mm = dateMatch[3].padStart(2, '0');
-                                            let yy = dateMatch[4];
-                                            if (yy.length === 2) yy = '20' + yy;
-                                            if (yy.length < 4) yy = yy.padStart(4, '0');
-                                            const dateStr = `${dd}/${mm}/${yy}`;
-                                            let bracketContent = dateMatch[1]
-                                                .replace(new RegExp(`(?:,\\s*)?${dateMatch[2]}\\/${dateMatch[3]}\\/${dateMatch[4]}(?:\\s*,)?`, 'i'), '')
-                                                .trim();
-                                            const title = dateMatch[5].trim();
-                                            const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
-                                            return [dateStr, cleanLabel];
+                                             const dd = dateMatch[2].padStart(2, '0');
+                                             const mm = dateMatch[3].padStart(2, '0');
+                                             let yy = dateMatch[4];
+                                             if (yy.length === 2) yy = '20' + yy;
+                                             if (yy.length < 4) yy = yy.padStart(4, '0');
+                                             const dateStr = `${dd}/${mm}/${yy}`;
+                                             let bracketContent = dateMatch[1]
+                                                 .replace(new RegExp(`(?:,\\s*)?${dateMatch[2]}\\/${dateMatch[3]}\\/${dateMatch[4]}(?:\\s*,)?`, 'i'), '')
+                                                 .trim();
+                                             const title = dateMatch[5].trim();
+                                             const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
+                                             return [dateStr, cleanLabel];
                                         }
 
-                                        // Check for "[10:40 AM, Day 2] The Uprising" or similar patterns containing Day/D and numbers
-                                        const dayRegex = /\[([^\]]*(?:Day|D)\s*(\d+)[^\]]*)\](.*)/i;
+                                        // Check for "[10:40 AM, Day 2] The Uprising" or similar patterns containing Day/Día/Dia/D and numbers
+                                        const dayRegex = /\[([^\]]*(?:Day|D[ií]a|D)\s*(\d+)[^\]]*)\](.*)/i;
                                         const match = item.label.match(dayRegex);
                                         if (match) {
                                             const dayStr = `Day ${match[2]}`;
                                             let bracketContent = match[1]
-                                                .replace(new RegExp(`(?:,\\s*)?(?:Day|D)\\s*${match[2]}(?:\\s*,)?`, 'i'), '')
+                                                .replace(new RegExp(`(?:,\\s*)?(?:Day|D[ií]a|D)\\s*${match[2]}(?:\\s*,)?`, 'i'), '')
                                                 .trim();
                                             const title = match[3].trim();
                                             const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
@@ -3618,11 +3625,12 @@ export function createPanel(dependencies) {
 
                                 const compareNodeKeys = (a, b, bookName) => {
                                     const bookNameLower = (bookName || '').toLowerCase();
-                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event') ||
+                                        bookNameLower.includes('eventos') || bookNameLower.includes('evento');
                                     if (isEventsBook) {
-                                        // Check if keys start with "Day X"
-                                        const aDayMatch = a.match(/^Day\s+(\d+)/i);
-                                        const bDayMatch = b.match(/^Day\s+(\d+)/i);
+                                        // Check if keys start with "Day X" or "Día X"
+                                        const aDayMatch = a.match(/^(?:Day|D[ií]a)\s+(\d+)/i);
+                                        const bDayMatch = b.match(/^(?:Day|D[ií]a)\s+(\d+)/i);
                                         if (aDayMatch && bDayMatch) {
                                             return parseInt(aDayMatch[1], 10) - parseInt(bDayMatch[1], 10);
                                         }
@@ -3728,8 +3736,9 @@ export function createPanel(dependencies) {
 
                                     // Status dot
                                     const bookNameLower = (bookName || '').toLowerCase();
-                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
-                                    const isDayNode = isEventsBook && (/^Day\s+\d+$/i.test(node.name) || /^\d{1,2}\/\d{1,2}\/\d+$/.test(node.name));
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event') ||
+                                        bookNameLower.includes('eventos') || bookNameLower.includes('evento');
+                                    const isDayNode = isEventsBook && (/^(?:Day|D[ií]a)\s+\d+$/i.test(node.name) || /^\d{1,2}\/\d{1,2}\/\d+$/.test(node.name));
 
                                     let statusDotHtml = '';
                                     if (node.item) {
@@ -3768,7 +3777,8 @@ export function createPanel(dependencies) {
                                     let deleteHtml = '';
                                     let locFullPath = '';
 
-                                    const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world';
+                                    const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world' ||
+                                        bookNameLower.endsWith('_mundo') || bookNameLower === 'mundo';
 
                                     if (node.item) {
                                         const entryTokens = Math.round(stripDungeonMapSection(node.item.content || '').length / 4);

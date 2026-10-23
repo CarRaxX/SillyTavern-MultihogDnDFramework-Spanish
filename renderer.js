@@ -265,7 +265,7 @@ export function renderDayNightBadge(str) {
             case 'xp_bar': {
                 // Flexible: parses any "X/Y" with optional "Level N" anywhere in value
                 const xm = value.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
-                const lm = value.match(/level\s*(\d+)/i);
+                const lm = value.match(/(?:level|nivel)\s*(\d+)/i);
                 if (xm) {
                     const cur = parseInt(xm[1].replace(/,/g, ''), 10);
                     const max = parseInt(xm[2].replace(/,/g, ''), 10);
@@ -578,14 +578,14 @@ export function renderDayNightBadge(str) {
     }
 
     export function renderSpellGroups(val) {
-        const isCompound = /\|/.test(val) && /(?:Level\s*\d+|Cantrips?)/i.test(val);
+        const isCompound = /\|/.test(val) && /(?:(?:Level|Nivel)\s*\d+|Cantrips?|Trucos?)/i.test(val);
         const groups = isCompound ? val.split(/\s*\|\s*/) : [val];
         let html = '';
         for (const group of groups) {
-            const m = group.trim().match(/^(Level\s*\d+|Cantrips?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*(?::\s*(.+))?$/i);
+            const m = group.trim().match(/^((?:Level|Nivel)\s*\d+|Cantrips?|Trucos?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*(?::\s*(.+))?$/i);
             if (!m) continue;
             const [, lbl, availStr, maxStr, spellList] = m;
-            const isCantrip = /cantrip/i.test(lbl);
+            const isCantrip = /cantrip|truco/i.test(lbl);
             let pipsHtml = '';
             if (!isCantrip && availStr !== undefined && maxStr !== undefined) {
                 const avail = parseInt(availStr, 10), maxSlots = parseInt(maxStr, 10);
@@ -1525,19 +1525,19 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     const isBulletedSubLine = /^\s*[-*+•–—]/.test(rawLine);
                     let hpMatch = null;
                     if ((tag !== 'CHARACTER' || lastEntityIdx === -1) && !isBulletedSubLine) {
-                        hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*HP\s*[:|,]?\s*(.*)$/i);
+                        hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?\s*(?:HP|PV|SALUD)\s*[:|,]?\s*(.*)$/i);
                         const isHpMarker = (markerCode === 'HP' || markerCode === 'HPB' || markerCode === 'HPBAR');
 
                         // If marker is specifically ((HP)), try a more relaxed regex (optional HP suffix)
                         if (!hpMatch && isHpMarker) {
-                            hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
+                            hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+|\?+)(?:\/([\d,]+|\?+))?(?:\s*(?:HP|PV|SALUD))?\s*[:|,]?\s*(.*)$/i);
                         }
 
                         // Inline-marker fallback: line was rewritten to just the value portion
                         // (e.g. "HP: 20/20" or bare "20/20"). Use a flexible regex that makes the
                         // label prefix ("HP:") optional so both forms parse correctly.
                         if (!hpMatch && inlineEntityName) {
-                            hpMatch = line.match(/^(?:(.+?):\s*)?([+-]?\d[\d,]*|\?+)(?:\/(\d[\d,]*|\?+))?(?:\s*HP)?\s*[:|,]?\s*(.*)$/i);
+                            hpMatch = line.match(/^(?:(.+?):\s*)?([+-]?\d[\d,]*|\?+)(?:\/(\d[\d,]*|\?+))?(?:\s*(?:HP|PV|SALUD))?\s*[:|,]?\s*(.*)$/i);
                         }
                     }
 
@@ -1769,10 +1769,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     const asMarker = tryRenderMarker(line, tag, '', idx);
                     if (asMarker !== null) return asMarker;
 
-                    const m = line.match(/^(Level\s*\d+|Cantrips?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*:\s*(.+)$/i);
+                    const m = line.match(/^((?:Level|Nivel)\s*\d+|Cantrips?|Trucos?)\s*(?:\((\d+)\/(\d+)[^)]*\))?\s*:\s*(.+)$/i);
                     if (!m) return `<div class="rt-card-item">${escapeHtmlWithColor(line)}</div>`;
                     const [, label, availStr, maxStr, spellList] = m;
-                    const isCantrip = /cantrip/i.test(label);
+                    const isCantrip = /cantrip|truco/i.test(label);
                     let pipsHtml = '';
                     if (!isCantrip && availStr !== undefined && maxStr !== undefined) {
                         const avail = parseInt(availStr, 10), max = parseInt(maxStr, 10);
@@ -2823,8 +2823,8 @@ function extractPartyVitals(content) {
     const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
     const results = [];
     for (const rawLine of lines) {
-        const line = rawLine.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+)(?:\/([\d,]+))?\s*HP\s*[:|,]?\s*/i);
+        const line = rawLine.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = line.match(/^(.+?):\s*([+-]?[\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)\s*[:|,]?\s*/i);
         if (!hpMatch) continue;
         const [, nameRaw, curRaw, maxRaw] = hpMatch;
         const name = nameRaw.trim();
@@ -2891,8 +2891,8 @@ function extractBenchedRoster(content) {
     const results = [];
     let current = null;
     for (const rawLine of lines) {
-        const line = rawLine.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = line.match(/^(.+?):\s*[+-]?[\d,]+(?:\/[\d,]+)?\s*HP/i);
+        const line = rawLine.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = line.match(/^(.+?):\s*[+-]?[\d,]+(?:\/[\d,]+)?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) {
             if (current) results.push(current);
             current = { name: hpMatch[1].trim(), status: '' };

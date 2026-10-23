@@ -3,11 +3,11 @@
  */
 
 const NEXT_HEADER =
-    'Species|Body|Worn Equipment|Equipment|Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Combat Profile|Relationship with|Friendship\\/Rapport|Affection\\/Interest';
+    'Species|Body|Worn Equipment|Equipment|Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Combat Profile|Relationship with|Friendship\\/Rapport|Affection\\/Interest|Especie(?:\\s*\\/\\s*Linaje)?|Cuerpo|Equipo(?:\\s+Visible)?|Apariencia(?:\\/Especie)?|Personalidad|Trasfondo|Naturaleza\\s+[AÁaá]lmica|Perfil\\s+de\\s+Combate|Relaci[oó]n(?:\\s+con)?|Amistad(?:\\/Rapport)?|Afecto(?:\\/Inter[eé]s)?';
 
 function extractField(cleanContent, name) {
     const re = new RegExp(
-        `(?:^|\\n)\\s*${name}\\s*:\\s*([\\s\\S]*?)(?=\\s*(?:${NEXT_HEADER})\\s*:|$)`,
+        `(?:^|\\n)\\s*(?:${name})\\s*:\\s*([\\s\\S]*?)(?=\\s*(?:${NEXT_HEADER})\\s*:|$)`,
         'i',
     );
     const m = cleanContent.match(re);
@@ -16,16 +16,18 @@ function extractField(cleanContent, name) {
 
 function extractCoreFields(content) {
     const cleanContent = String(content || '').replace(/\[\/?CORE\]/gi, '');
-    const species = extractField(cleanContent, 'Species');
-    const body = extractField(cleanContent, 'Body');
-    const legacy = extractField(cleanContent, 'Appearance\\/Species') || extractField(cleanContent, 'Appearance');
-    const personality = extractField(cleanContent, 'Personality');
+    const species = extractField(cleanContent, 'Species|Especie(?:\\s*\\/\\s*Linaje)?|Origen');
+    const body = extractField(cleanContent, 'Body|Cuerpo');
+    const legacy = extractField(cleanContent, 'Appearance\\/Species|Appearance|Apariencia(?:\\/Especie)?');
+    const personality = extractField(cleanContent, 'Personality|Personalidad');
     const lines = cleanContent.split('\n').map(l => l.trim())
         .filter(l => l
             && !/^\[ID:/i.test(l)
             && !/^Friendship\/Rapport:/i.test(l)
             && !/^Affection\/Interest:/i.test(l)
-            && !/^(?:Species|Body|Worn Equipment|Equipment|Appearance(?:\/Species)?)\s*:?\s*$/i.test(l));
+            && !/^Amistad(?:\/Rapport)?:/i.test(l)
+            && !/^Afecto(?:\/Inter[eé]s)?:/i.test(l)
+            && !/^(?:Species|Body|Worn Equipment|Equipment|Appearance(?:\/Species)?|Especie(?:\s*\/\s*Linaje)?|Cuerpo|Equipo(?:\s+Visible)?|Apariencia(?:\/Especie)?)\s*:?\s*$/i.test(l));
     const fallback = lines.slice(0, 2).join(' ');
     return { species, body, legacy, personality, fallback };
 }

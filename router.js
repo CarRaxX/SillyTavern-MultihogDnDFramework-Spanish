@@ -1941,7 +1941,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 broadcastStep('thought', 'Thinking...');
                 const basicResp = await sendStateRequest(routerSettings, cleanupSystemPrompt, cleanupUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
                 assertOwnsChat();
-                const thoughtMatchC = basicResp.match(/(?:Thought|Reasoning):\s*([\s\S]*?)(?=\[\[|$)/i);
+                const thoughtMatchC = basicResp.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*([\s\S]*?)(?=\[\[|$)/i);
                 if (thoughtMatchC) broadcastStep('thought', thoughtMatchC[1].trim().substring(0, 300));
                 broadcastStep('thought', 'Parsing cleanup tags...');
                 const cleanupAction = parseBasicTags(basicResp, archiveBooks);
@@ -2060,7 +2060,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 assertOwnsChat();
 
                 if (result.content) {
-                    const thoughtLine = result.content.match(/(?:Thought|Reasoning):\s*(.*)/i)?.[1]?.trim()
+                    const thoughtLine = result.content.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*(.*)/i)?.[1]?.trim()
                         || result.content.trim().split('\n')[0];
                     if (thoughtLine) broadcastStep('thought', thoughtLine.substring(0, 200));
                 }
@@ -2248,7 +2248,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
             assertOwnsChat();
 
-            const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
+            const thoughtMatchB = basicResp.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*([\s\S]*?)(?=\[\[|$)/i);
             if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
             broadcastStep('thought', 'Parsing tags...');
             const basicAction = parseBasicTags(basicResp, archiveBooks);
@@ -2582,7 +2582,7 @@ ${recordCategoryGuidance}`;
 
                 // Show any inline thought the model included alongside the tool call
                 if (result.content) {
-                    const thoughtLine = result.content.match(/Thought:\s*(.*)/i)?.[1]?.trim()
+                    const thoughtLine = result.content.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*(.*)/i)?.[1]?.trim()
                         || result.content.trim().split('\n')[0];
                     if (thoughtLine) broadcastStep('thought', thoughtLine.substring(0, 200));
                 }
@@ -5017,7 +5017,7 @@ export async function purgeWorldHistoryForChat(opts = {}) {
 export function parseInWorldMinutes(timeStr) {
     if (!timeStr) return -1;
     const ddmmyyMatch = timeStr.match(/\b(\d{1,2})\/(\d{1,2})\/(\d+)\b/);
-    const dayMatch = timeStr.match(/(?:Day|D)\s*(\d+)/i);
+    const dayMatch = timeStr.match(/(?:Day|D[ií]a|D)\s*(\d+)/i);
     const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
     if (!ddmmyyMatch && !dayMatch && !timeMatch) return -1;
     return parseInWorldTime(timeStr);
@@ -5171,7 +5171,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
 
                 // Determine the day range covered by these reports
                 const dayNums = toConsolidate.map(([, e]) => {
-                    const m = (e.comment || '').match(/Day\s+(\d+)/i);
+                    const m = (e.comment || '').match(/(?:Day|D[ií]a)\s+(\d+)/i);
                     return m ? parseInt(m[1], 10) : null;
                 }).filter(n => n !== null);
                 const minDay = dayNums.length ? Math.min(...dayNums) : 1;
@@ -5394,8 +5394,8 @@ ${historicalDump}`;
     // 7. Store the entry via applyAction (routes to the _World lorebook).
     //    archiveBooks already loaded in step 1 - no re-fetch needed.
     const entryKeys = ['world progression', 'world report', periodLabel.toLowerCase()];
-    const dayNum = periodLabel.match(/day\s+(\d+)/i)?.[1];
-    if (dayNum) entryKeys.push(`day ${dayNum}`);
+    const dayNum = periodLabel.match(/(?:day|d[ií]a)\s+(\d+)/i)?.[1];
+    if (dayNum) entryKeys.push(`day ${dayNum}`, `día ${dayNum}`);
 
     await applyAction({
         record: [{ label: periodLabel, keys: entryKeys, content: reportContent.trim(), category: 'WORLD' }],
@@ -5898,7 +5898,7 @@ export async function runWorldProgressionConsolidationPass(targetCount) {
         .join('\n\n');
 
     const dayNums = toConsolidate.map(([, e]) => {
-        const m = (e.comment || '').match(/Day\s+(\d+)/i);
+        const m = (e.comment || '').match(/(?:Day|D[ií]a)\s+(\d+)/i);
         return m ? parseInt(m[1], 10) : null;
     }).filter(n => n !== null);
     const minDay = dayNums.length ? Math.min(...dayNums) : 1;

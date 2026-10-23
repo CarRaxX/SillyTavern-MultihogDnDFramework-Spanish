@@ -212,7 +212,7 @@ Location is coarse-to-fine and may be four or more tiers.
  */
 function extractFooterFormatAfterWith(inner) {
     if (!inner) return '';
-    const m = String(inner).match(/\bwith\b\s*:?\s*([\s\S]*)/i);
+    const m = String(inner).match(/\b(?:with|con)\b\s*:?\s*([\s\S]*)/i);
     return (m ? m[1] : '').trim();
 }
 

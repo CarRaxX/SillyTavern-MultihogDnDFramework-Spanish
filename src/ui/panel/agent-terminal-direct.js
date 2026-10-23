@@ -28,11 +28,15 @@ function parseLookback(raw, fallback = 10) {
 /** Extract an explicit Map Architect creation target from a natural direct command. */
 export function parseMapArchitectCreateDirective(value) {
     const text = String(value || '').trim();
-    const match = text.match(/\bcreate\s+(?:an?\s+)?(SETTLEMENT|DUNGEON|INTERIOR)\s+map\s+for\s+(?:"([^"]+)"|'([^']+)'|([^:\r\n]+?))\s*(?::|$)/i);
+    const match = text.match(/\b(?:create\s+(?:an?\s+)?(SETTLEMENT|DUNGEON|INTERIOR)\s+map\s+for|crea(?:r)?\s+(?:un\s+)?mapa\s+de\s+(SETTLEMENT|ASENTAMIENTO|DUNGEON|MAZMORRA|INTERIOR)\s+para)\s+(?:"([^"]+)"|'([^']+)'|([^:\r\n]+?))\s*(?::|$)/i);
     if (!match) return null;
-    const site = String(match[2] || match[3] || match[4] || '').trim();
-    if (!site) return null;
-    return { kind: match[1].toUpperCase(), site };
+    const kindRaw = match[1] || match[2];
+    const site = String(match[3] || match[4] || match[5] || '').trim();
+    if (!site || !kindRaw) return null;
+    let kind = kindRaw.toUpperCase();
+    if (kind === 'ASENTAMIENTO') kind = 'SETTLEMENT';
+    if (kind === 'MAZMORRA') kind = 'DUNGEON';
+    return { kind, site };
 }
 
 /**
