@@ -10,10 +10,18 @@
 // the pack that ships in the box.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { getSettings, getFactoryCartridgePayload, CARTRIDGE_PAYLOAD_GROUPS } from './state-manager.js';
+import {
+    getSettings,
+    getFactoryCartridgePayload,
+    CARTRIDGE_PAYLOAD_GROUPS,
+    clearDeletedCustomTagTombstones,
+    syncChatSetupCatalogs,
+    saveChatState,
+} from './state-manager.js';
 import { escapeHtml } from './memo-processor.js';
 import { refreshOrderList } from './ui-editors.js';
 import { t } from './src/i18n/index.js';
+import { runtimeState } from './src/app/runtime-state.js';
 import {
     saveSettings,
     refreshRenderedView,
@@ -113,6 +121,13 @@ export function applyCartridgePayload(settings, payload) {
     // "-- No Preset --" and let the user choose/save explicitly.
     delete settings['_activePreset_npcSectionPresets'];
     delete settings['_activePreset_pcSectionPresets'];
+
+    // Saneamiento de lápidas y sincronización del catálogo central
+    if (Array.isArray(settings.customFields) && settings.customFields.length > 0) {
+        const customTags = settings.customFields.map(f => f?.tag).filter(Boolean);
+        if (customTags.length > 0) clearDeletedCustomTagTombstones(customTags);
+    }
+    syncChatSetupCatalogs(settings);
 }
 
 /**
@@ -244,6 +259,7 @@ export async function loadCartridge(cartridge) {
 
     // Set up listeners in a timeout since the popup DOM generates asynchronously.
     setTimeout(() => {
+        if (typeof document === 'undefined') return;
         const checkboxes = document.querySelectorAll('.rt-gc-load-group-cb');
         checkboxes.forEach(cb => {
             const groupId = cb.getAttribute('data-group-id');
@@ -277,7 +293,24 @@ export async function loadCartridge(cartridge) {
 
     const settings = getSettings();
     applyCartridgePayloadKeys(settings, cartridge.payload, keysToApply);
-    saveSettings();
+
+    // 1. Limpiar lápidas de módulos personalizados importados para evitar purga en boot
+    if (Array.isArray(settings.customFields) && settings.customFields.length > 0) {
+        const customTags = settings.customFields.map(f => f?.tag).filter(Boolean);
+        if (customTags.length > 0) clearDeletedCustomTagTombstones(customTags);
+    }
+
+    // 2. Sincronizar definiciones en los catálogos globales
+    syncChatSetupCatalogs(settings);
+
+    // 3. Si hay un chat activo y el bloqueo por chat está habilitado, fijar la instantánea en su partición
+    const currentChatId = runtimeState?.currentChatId || SillyTavern?.getContext?.()?.chatId || null;
+    if (currentChatId && settings.chatLinkEnabled && settings.chatSetupLinkEnabled) {
+        saveChatState(currentChatId, { skipDiskWrite: true });
+    }
+
+    // 4. Forzar persistencia inmediata en disco
+    saveSettings(true);
     refreshOrderList();
     syncAllNarratorTogglesForUnlockState();
     refreshRenderedView();

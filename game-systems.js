@@ -390,6 +390,7 @@ function syncNarratorToggleUi(tag, settings) {
  * Call once on settings init, and after any Control Room enable/unlock/re-lock change.
  */
 export function syncAllNarratorTogglesForUnlockState() {
+    if (typeof document === 'undefined') return;
     const settings = getSettings();
     Object.keys(NARRATOR_TOGGLE_IDS).forEach(tag => syncNarratorToggleUi(tag, settings));
 }

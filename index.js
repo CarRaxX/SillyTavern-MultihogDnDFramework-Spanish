@@ -4130,7 +4130,17 @@ async function loadProfile(name) {
     s.activeProfile = name;
     runtimeState.historyViewIndex = -1;
 
-    saveSettings();
+    // Saneamiento de lápidas, sincronización de catálogos y persistencia
+    if (Array.isArray(s.customFields) && s.customFields.length > 0) {
+        const customTags = s.customFields.map(f => f?.tag).filter(Boolean);
+        if (customTags.length > 0) clearDeletedCustomTagTombstones(customTags);
+    }
+    syncChatSetupCatalogs(s);
+    const profileChatId = runtimeState.currentChatId || SillyTavern.getContext()?.chatId || null;
+    if (profileChatId && s.chatLinkEnabled && s.chatSetupLinkEnabled) {
+        saveChatState(profileChatId, { skipDiskWrite: true });
+    }
+    saveSettings(true);
     // Refresh UI
     refreshOrderList();
     // Refresh delta panel

@@ -1,4 +1,18 @@
-import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, recordDeletedCustomTags, clearDeletedCustomTagTombstones, removeChatSetupCatalogEntries, getChatSetupItemScope, setChatSetupItemScope, setChatSetupItemEnabled } from './state-manager.js';
+import {
+    getSettings,
+    getNpcRelationshipMaxDefault,
+    DEFAULT_NPC_SECTIONS,
+    DEFAULT_PC_SECTIONS,
+    recordDeletedCustomTags,
+    clearDeletedCustomTagTombstones,
+    removeChatSetupCatalogEntries,
+    getChatSetupItemScope,
+    setChatSetupItemScope,
+    setChatSetupItemEnabled,
+    syncChatSetupCatalogs,
+    saveChatState,
+} from './state-manager.js';
+import { runtimeState } from './src/app/runtime-state.js';
 import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
@@ -1221,7 +1235,12 @@ export async function importModulesFromJson(jsonString) {
         return;
     }
 
-    saveSettings();
+    syncChatSetupCatalogs(s);
+    const currentChatId = runtimeState?.currentChatId || SillyTavern?.getContext?.()?.chatId || null;
+    if (currentChatId && s.chatLinkEnabled && s.chatSetupLinkEnabled) {
+        saveChatState(currentChatId, { skipDiskWrite: true });
+    }
+    saveSettings(true);
     refreshOrderList();
     syncMemoView();
     toastr['success'](`Imported ${importedCount} custom module(s).`, 'Multihog Framework');
@@ -1306,6 +1325,7 @@ export function syncSettingsAndUI(updateFn) {
 }
 
 export function refreshOrderList() {
+    if (typeof document === 'undefined') return;
     const s = getSettings();
     const list = document.getElementById('rpg_tracker_order_list');
     if (!list) return;
