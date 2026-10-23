@@ -1646,7 +1646,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 
 
         // Extract Current Context (Time & Location)
-        const timeRegex = /(\d{1,2}:\d{2}\s*(?:AM|PM)?,\s*(?:Day\s*\d+|\d{1,2}\/\d{1,2}\/\d+))/i;
+        const timeRegex = /(\d{1,2}:\d{2}\s*(?:AM|PM)?,\s*(?:(?:Day|D[ií]a)\s*\d+|\d{1,2}\/\d{1,2}\/\d+))/i;
         const narrativeTimeMatch = recentChatString.match(timeRegex);
         const memoTimeMatch = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
         const cleanMemoTime = memoTimeMatch ? extractCurrentTimeStr(memoTimeMatch[1]) : '';
