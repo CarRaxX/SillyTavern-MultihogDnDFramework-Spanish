@@ -1432,7 +1432,7 @@ export async function applyDungeonMapCommit(transaction, expectedContext, allBoo
     const applied = applyDungeonMapTransaction(parsed.document, transaction, { frozenAreaIds, currentTime });
     if (!applied.ok) return applied;
 
-    const timestampRegex = /(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
+    const timestampRegex = /(?:\[(?:Day|D[ií]a)\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
     const timePrefix = currentTime ? `[${currentTime}] ` : '';
     for (const chronicle of applied.chronicles) {
         let text = sanitizeLorebookRecordContent(chronicle.text).trim();
@@ -2848,7 +2848,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     let changed = false;
     const errors = [];
     const allBookNames = Object.keys(allBooks);
-    const TIMESTAMP_REGEX = /(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
+    const TIMESTAMP_REGEX = /(?:\[(?:Day|D[ií]a)\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)\b/i;
     const linkedPc = getLinkedPlayerCharacter();
     const linkedPcName = linkedPc?.name || '';
 
@@ -2930,7 +2930,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             let delta = (up.content || '').replace(/\[ID:[^\]]+\]\n?/gi, '').trim();
             delta = sanitizeLorebookRecordContent(delta);
             // Ensure each [Day X,...] or [DD/MM/YY,...] timestamp begins on its own line
-            delta = delta.replace(/(.)\s+(\[(?:Day\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
+            delta = delta.replace(/(.)\s+(\[(?:(?:Day|D[ií]a)\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
             // Append delta to the existing chronicle
             const existing = (book.entries[uid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
             delta = deduplicateContent(existing, delta);
@@ -3239,7 +3239,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                     }
 
                     // Ensure each [Day X,...] or [DD/MM/YY,...] timestamp begins on its own line
-                    delta = delta.replace(/(.)\s+(\[(?:Day\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
+                    delta = delta.replace(/(.)\s+(\[(?:(?:Day|D[ií]a)\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
                     delta = deduplicateContent(existing, delta);
                     bookData.entries[existingUid].content = existing && delta ? `${existing}\n${delta}` : (existing || delta);
 
@@ -5150,9 +5150,9 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
 
             // Classify entries: raw = individual period reports; consolidated = range summaries
             const isRawReport = (label) => {
-                if (!/^day\s+\d+/i.test(label)) return false; // must start with "Day N"
-                if (/days?\s+\d+\s*[\-\u2013\u2014]\s*\d+/i.test(label)) return false; // "Days N-M"
-                if (/condensed|compressed|merged|summary/i.test(label)) return false;
+                if (!/^(?:day|d[ií]a)\s+\d+/i.test(label)) return false; // must start with "Day N" or "Día N"
+                if (/(?:days?|d[ií]as?)\s+\d+\s*[\-\u2013\u2014]\s*\d+/i.test(label)) return false; // "Days N-M"
+                if (/condensed|compressed|merged|summary|condensado|resumido|resumen/i.test(label)) return false;
                 return true;
             };
 
@@ -5774,9 +5774,9 @@ export async function runWorldProgressionConsolidationPass(targetCount) {
         .sort(([a], [b]) => Number(a) - Number(b));
 
     const isRawReport = (label) => {
-        if (!/^day\s+\d+/i.test(label)) return false;
-        if (/days?\s+\d+\s*[\-\u2013\u2014]\s*\d+/i.test(label)) return false;
-        if (/condensed|compressed|merged|summary/i.test(label)) return false;
+        if (!/^(?:day|d[ií]a)\s+\d+/i.test(label)) return false;
+        if (/(?:days?|d[ií]as?)\s+\d+\s*[\-\u2013\u2014]\s*\d+/i.test(label)) return false;
+        if (/condensed|compressed|merged|summary|condensado|resumido|resumen/i.test(label)) return false;
         return true;
     };
 
@@ -5806,7 +5806,7 @@ export async function runWorldProgressionConsolidationPass(targetCount) {
         : `Days ${minDay}\u2013${maxDay}`;
 
     const consolidationSystemPrompt =
-`You are the World Archivist. Compress the following World Progression reports into a single, unified summary while preserving maximum narrative signal.
+`You are the World Archivist. Compress the following World Progression reports into a single, unified summary while preserving maximum narrative signal. Write the summary in SPANISH.
 
 ## RULES
 1. Merge all reports into a single coherent, present-tense narrative.

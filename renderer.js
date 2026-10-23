@@ -1503,7 +1503,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     }
 
                     // 1. Combat Round header
-                    if (tag === 'COMBAT' && /Combat Round\s*\d+/i.test(line)) {
+                    if (tag === 'COMBAT' && /(?:Combat\s+Round|Ronda(?:\s+de\s+combate)?|Asalto(?:\s+de\s+combate)?)\s*\d+/i.test(line)) {
                         results.push(`<div class="rt-combat-round">${escapeHtmlWithColor(line)}</div>`);
                         lastEntityIdx = -1;
                         continue;

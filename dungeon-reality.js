@@ -1353,10 +1353,10 @@ function splitLocationSegments(location) {
  * not a named interior the party has entered.
  * e.g. "behind the general store", "outside the inn", "near the chapel".
  */
-const EXTERIOR_RELATIVE_LOCATION_RE = /^(?:behind|beside|besides|near|outside|around|past|across from|in front of|at the (?:back|rear|side|front) of|next to|by|along|beyond|opposite(?:\s+to)?|against)\s+(?:the\s+)?(.+)$/i;
+const EXTERIOR_RELATIVE_LOCATION_RE = /^(?:behind|beside|besides|near|outside|around|past|across from|in front of|at the (?:back|rear|side|front) of|next to|by|along|beyond|opposite(?:\s+to)?|against|detr[aá]s\s+de|junto\s+a|al\s+lado\s+de|cerca\s+de|fuera\s+de|alrededor\s+de|frente\s+a|delante\s+de|m[aá]s\s+all[aá]\s+de)\s+(?:the\s+|el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i;
 
 /** Explicit interior phrasing that should resolve to an existing structure name. */
-const INTERIOR_OF_LOCATION_RE = /^(?:inside|within|in)\s+(?:the\s+)?(.+)$/i;
+const INTERIOR_OF_LOCATION_RE = /^(?:inside|within|in|dentro\s+de|en\s+el\s+interior\s+de|en)\s+(?:the\s+|el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i;
 
 const FOOTER_REFERENTIAL_STRUCTURE_KINDS = new Set(['BUILDING', 'OBJECT']);
 

@@ -263,8 +263,8 @@ function getBenchedPartyMembers() {
     if (!block) return [];
     const members = [];
     for (const line of block.split('\n').map(l => l.trim()).filter(Boolean)) {
-        const cleanLine = line.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        const cleanLine = line.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) members.push(hpMatch[1].trim());
     }
     return members;
@@ -1391,9 +1391,9 @@ export function getCharacterBlockNames(settings) {
     const charBlock = blocks['CHARACTER'] || '';
     const names = [];
     for (const line of charBlock.split('\n')) {
-        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
+        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
         if (!cleanLine) continue;
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) {
             names.push(hpMatch[1].trim());
             continue;
@@ -1512,16 +1512,16 @@ export async function autoGeneratePartyPortraits(refresh) {
     // Include player character (from CHARACTER block)
     const charBlock = blocks['CHARACTER'] || '';
     for (const line of charBlock.split('\n')) {
-        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) namesSet.add(hpMatch[1].trim());
     }
 
     // Include party members
     const partyBlock = blocks['PARTY'] || '';
     for (const line of partyBlock.split('\n')) {
-        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) namesSet.add(hpMatch[1].trim());
     }
 
@@ -1688,8 +1688,8 @@ export function getEnemyEntities() {
     
     const charBlock = blocks['CHARACTER'] || '';
     for (const line of charBlock.split('\n')) {
-        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) excludeNames.add(hpMatch[1].trim().toUpperCase());
     }
 
@@ -1697,9 +1697,9 @@ export function getEnemyEntities() {
     const lines = combatBlock.split('\n').map(l => l.trim()).filter(Boolean);
     const enemies = [];
     for (const line of lines) {
-        if (/Combat Round\s*\d+/i.test(line)) continue;
-        const cleanLine = line.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
-        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        if (/(?:Combat\s+Round|Ronda(?:\s+de\s+combate)?|Asalto(?:\s+de\s+combate)?)\s*\d+/i.test(line)) continue;
+        const cleanLine = line.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-zÀ-ÿ]))/, '');
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*(?:HP|PV|SALUD)/i);
         if (hpMatch) {
             const name = hpMatch[1].trim();
             if (!excludeNames.has(name.toUpperCase())) {

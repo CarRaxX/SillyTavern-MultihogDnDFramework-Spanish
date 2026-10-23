@@ -159,7 +159,7 @@ function recentStoryContext(ctx, settings, { isManual = false, lookback = null, 
 }
 
 function currentTimeFrom(settings, recentStory) {
-    const timeRegex = /(\d{1,2}:\d{2}\s*(?:AM|PM)?,\s*(?:Day\s*\d+|\d{1,2}\/\d{1,2}\/\d+))/i;
+    const timeRegex = /(\d{1,2}:\d{2}\s*(?:AM|PM)?,\s*(?:(?:Day|D[ií]a)\s*\d+|\d{1,2}\/\d{1,2}\/\d+))/i;
     const narrativeTimeMatch = String(recentStory || '').match(timeRegex);
     const memoTimeMatch = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
     const cleanMemoTime = memoTimeMatch ? extractCurrentTimeStr(memoTimeMatch[1]) : '';
