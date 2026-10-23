@@ -73,7 +73,7 @@ export function computeUnpinnedActiveCount(activeKeys, pinnedKeys) {
 }
 
 /** Structured NPC [CORE] field headers used to infer category when the model omits it. */
-const NPC_CORE_FIELD_HINT = /\b(Species|Personality|Brief Background|Habits\s*\/\s*Behaviors|Habits & Behaviors|Strengths|Flaws|Worn Equipment|Combat Profile)\s*:/i;
+const NPC_CORE_FIELD_HINT = /\b(Species|Personality|Brief Background|Habits\s*\/\s*Behaviors|Habits & Behaviors|Strengths|Flaws|Worn Equipment|Combat Profile|Especie(?:\s*\/\s*Linaje)?|Personalidad|Trasfondo|Naturaleza\s+[AÁaá]lmica|Perfil\s+de\s+Combate|Equipo(?:\s+Visible)?|Fortalezas|Debilidades|Defectos|Virtudes)\s*:/i;
 
 /** Canonical lorebook suffixes for the stock Lorebook Agent categories. */
 const STOCK_ROUTER_CATEGORY_BOOKS = Object.freeze({
@@ -156,7 +156,7 @@ export function inferRecordCategory(rec) {
     if (/\[CORE\]/i.test(content) && NPC_CORE_FIELD_HINT.test(content)) return 'NPC';
 
     // Timestamped event-style labels (without ::, which already returned LOC).
-    if (/(?:\[Day\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)/i.test(label)) return 'EVENT';
+    if (/(?:\[(?:Day|D[ií]a)\s+\d+|\[\d{1,2}\/\d{1,2}\/\d+)/i.test(label)) return 'EVENT';
 
     return null;
 }

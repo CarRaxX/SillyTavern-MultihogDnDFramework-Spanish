@@ -36,12 +36,24 @@ describe('inferRecordCategory', () => {
             label: 'Lissa',
             content: '[CORE]\nSpecies: Human\nPersonality: Practical\nStrengths:\n- Expert rope maintenance\n[/CORE]',
         })).toBe('NPC');
+        expect(inferRecordCategory({
+            label: 'Lissa',
+            content: '[CORE]\nEspecie: Humana\nPersonalidad: Práctica\nFortalezas:\n- Experta en sogas\n[/CORE]',
+        })).toBe('NPC');
     });
 
     it('infers EVENT from timestamped labels', () => {
         expect(inferRecordCategory({
             label: '[Day 1, 08:50 AM] Boe explained the economy',
             content: 'Visitors keep coming to the Long Ring.',
+        })).toBe('EVENT');
+        expect(inferRecordCategory({
+            label: '[Día 1, 08:50] Boe explicó la economía',
+            content: 'Llegan visitantes al anillo.',
+        })).toBe('EVENT');
+        expect(inferRecordCategory({
+            label: '[Dia 2, 14:00] La forja fue destruida',
+            content: 'Humo en el horizonte.',
         })).toBe('EVENT');
     });
 
