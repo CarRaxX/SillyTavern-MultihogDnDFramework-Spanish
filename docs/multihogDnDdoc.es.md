@@ -144,6 +144,22 @@ Cada X horas dentro del juego (por defecto 24h), el componente de Progresión de
 
 ---
 
+## Techos de prompts
+
+Sin caché de prefijo, cada token se paga en cada re-prefill. Los «Techos de prompts» (cajón **⚙️ Rendimiento (modelo local)** → bloque **🧱 Techos de Prompts**) ponen topes en tokens estimados (4 caracteres ≈ 1 token) a los tres bloques largos que viajan a los modelos, para que una cola de partida no infle cada petición. Los valores de fábrica (1600 / 4096 / 5) no recortan nada en el uso medio medido (memo ≈358 tok, informes de mundo de 300-400 tok).
+
+| Campo (clave) | Fábrica | Qué topa | Reglas |
+|---|---|---|---|
+| Memo de Estado (`rpg_ceiling_tracker_memo`) | 1600 (800-4000) | El memo de estado que ven el Rastreador y el Narrador | En el **rastreador** solo caen estados históricos `TRACKER STATE -N` enteros del más viejo al más nuevo; el `TRACKER STATE 0` **nunca se corta** (el modelo lo reemite en las revisiones y una sección perdida sería irreversible). En el **narrador** sí caen bloques `[TAG]…[/TAG]` completos del último al primero, con preámbulo y cabecera intactos. |
+| Bloque de Mundo (`rpg_ceiling_world_block`) | 4096 (2048-8192) | El bloque «World Progression Reports» del narrador y el historial del trabajo de Mundo | Caen informes `### […]` ENTEROS, el más viejo primero; cabeceras, preámbulos y dossiers de ubicación no se tocan. 0 = sin techo. |
+| Reportes Históricos (`rpg_ceiling_world_history`) | 5 (3-10) | Nº de reportes históricos del mundo que lee el trabajo de World Progression | Sustituye al «0 = incluir todos» del Retroceso Histórico: con retroceso activo se usa el **mínimo** de los dos (retroceso antiguo respetado). 0 = sin techo (todos). Con >5 reportes guardados este tope SÍ cambia el trabajo: es su objetivo. |
+
+Honestidades debidas: `chars/4` **subestima el español y el JSON un ~15-30 %**, así que el techo real es mayor que el nominal (R3). Ningún recorte es silencioso: cada recorte emite un aviso en la consola (`[Multihog][Techos]`) y un evento que suma en el pie del panel del Agente («✂️ Recortes de techo (sesión): ficha N · mundo M»); los contadores duran solo la sesión y no se guardan en ningún sitio. El campo vacío o sin número vuelve al valor de fábrica, nunca se interpreta como «sin techo». Nada de esto toca el prompt del Narrador (sysprompt / Control Room), los sufijos de Revisión Completa ni escribe el `settings.json` de SillyTavern.
+
+Nota fuera de esta extensión: el ritmo de resumen 3→5 que se comenta por ahí es **`sc_turns_per_summary` de la extensión Summaryception**, ajena a este framework; se cambia desde el panel de Extensiones de SillyTavern, no desde aquí.
+
+---
+
 ## Comandos de Barra (Slash Commands)
 
 | Comando | Propósito |

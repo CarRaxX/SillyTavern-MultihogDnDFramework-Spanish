@@ -218,7 +218,32 @@ export function wireAgentActivity({
         syncLastRunDisplay();
     });
 
+    // ── Recortes de techo de prompts (ola 4, D-3) ──────────────────────────
+    // Contadores SOLO de la sesión (R5): en memoria, sin saveSettings, sin
+    // disco. El emisor (src/state/prompt-ceilings.js) manda UN evento
+    // rt_prompt_ceiling_cut por llamada con recorte; aquí se suman las unidades
+    // por familia de zona (ficha_* y mundo_*) y se repinta el pie del panel.
+    const ceilingCutsEl = agentPanel.querySelector('#rt-agent-ceiling-cuts');
+    const ceilingCutsTotals = { ficha: 0, mundo: 0 };
+    function syncCeilingCutsDisplay() {
+        if (!ceilingCutsEl) return;
+        if (ceilingCutsTotals.ficha + ceilingCutsTotals.mundo === 0) {
+            ceilingCutsEl.textContent = '';
+            return;
+        }
+        ceilingCutsEl.textContent = `✂️ Recortes de techo (sesión): ficha ${ceilingCutsTotals.ficha} · mundo ${ceilingCutsTotals.mundo}`;
+    }
+    document.addEventListener('rt_prompt_ceiling_cut', (event) => {
+        const zona = String(event?.detail?.zona || '');
+        const unidades = Number(event?.detail?.unidades) || 0;
+        if (zona.startsWith('ficha_')) ceilingCutsTotals.ficha += unidades;
+        else if (zona.startsWith('mundo_')) ceilingCutsTotals.mundo += unidades;
+        else return;
+        syncCeilingCutsDisplay();
+    });
+    syncCeilingCutsDisplay();
+
     // ── Lorebook Terminal Logic ──
 
-    return { syncAgentNav, syncLastRunDisplay, updateUndoLabel };
+    return { syncAgentNav, syncLastRunDisplay, syncCeilingCutsDisplay, updateUndoLabel };
 }

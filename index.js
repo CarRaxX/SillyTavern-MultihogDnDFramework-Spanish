@@ -108,6 +108,14 @@ import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 import {
+    PROMPT_CEILING_DEFAULTS,
+    PROMPT_CEILING_SETTINGS_KEYS,
+    announceCeilingCut,
+    applyUnitCeiling,
+    clampPromptCeiling,
+    estimatePromptTokens,
+} from './src/state/prompt-ceilings.js';
+import {
     DEFAULT_MAP_THEME,
     FACTORY_MAP_THEME_PRESETS,
     MAP_THEME_FIELDS,
@@ -2830,13 +2838,17 @@ async function refreshExtensionPrompt() {
                     const [, uidB] = b.split('::');
                     return Number(uidA) - Number(uidB);
                 });
+                // Ruta MUERTA (verificado en T6): refreshExtensionPrompt no tiene
+                // ni una llamada; se techa por paridad con la ruta viva.
+                const worldUnits = [];
                 for (const k of sortedKeys) {
                     const [bookName, uid] = k.split('::');
                     const entry = worldBooks[bookName]?.entries?.[uid];
                     if (entry && entry.content) {
-                        worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${entry.content}\n\n`;
+                        worldUnits.push(`### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${entry.content}\n\n`);
                     }
                 }
+                worldBlock = applyWorldInjectionCeiling(worldUnits, s);
             }
 
             if (injectedContext || worldBlock) {
@@ -2864,6 +2876,130 @@ async function refreshExtensionPrompt() {
     } catch (error) {
         if (ownsChat()) throw error;
 }
+}
+
+/**
+ * Cajón «🧱 Techos de prompts» (ola 4, D-4): el render LEE y pinta los tres
+ * valores guardados tal cual; nunca escribe (AC0).
+ * @param {object} settings
+ */
+function renderPromptCeilingsBox(settings) {
+    const campos = [
+        ['rpg_ceiling_tracker_memo', PROMPT_CEILING_SETTINGS_KEYS.trackerMemo],
+        ['rpg_ceiling_world_block', PROMPT_CEILING_SETTINGS_KEYS.worldBlock],
+        ['rpg_ceiling_world_history', PROMPT_CEILING_SETTINGS_KEYS.worldHistory],
+    ];
+    for (const [id, clave] of campos) {
+        const campo = document.getElementById(id);
+        if (campo) campo.value = settings?.[clave] ?? '';
+    }
+}
+
+/**
+ * Enlaces del cajón de techos (D-4): el `change` persiste el valor CLAMPADO
+ * (campo vacío o basura → default de fábrica, jamás «sin techo» involuntario),
+ * avisa en español y repinta; «Restaurar» deja 1600 / 4096 / 5. Nada de esto
+ * escribe el `settings.json` de SillyTavern: solo ajustes de la extensión.
+ * @param {object} settings
+ */
+function bindPromptCeilingControls(settings) {
+    const caja = document.getElementById('rpg_prompt_ceilings_box');
+    if (!caja) return;
+    const pintar = () => renderPromptCeilingsBox(settings);
+    const etiquetas = { trackerMemo: 'Memo de Estado', worldBlock: 'Bloque de Mundo', worldHistory: 'Reportes Históricos' };
+    const campos = [
+        ['rpg_ceiling_tracker_memo', 'trackerMemo'],
+        ['rpg_ceiling_world_block', 'worldBlock'],
+        ['rpg_ceiling_world_history', 'worldHistory'],
+    ];
+    for (const [id, clave] of campos) {
+        const campo = document.getElementById(id);
+        if (!campo || campo.dataset.rtBound === '1') continue;
+        campo.dataset.rtBound = '1';
+        campo.addEventListener('change', () => {
+            const aplicado = clampPromptCeiling(clave, campo.value);
+            settings[PROMPT_CEILING_SETTINGS_KEYS[clave]] = aplicado;
+            saveSettings();
+            toastr['success'](
+                `Techo «${etiquetas[clave]}»: ${aplicado === 0 ? 'sin techo' : `${aplicado} ${clave === 'worldHistory' ? 'reportes' : 'tokens estimados'}`}. El recorte solo aparece si algún bloque lo rebasa y se anuncia en el panel del agente.`,
+                'Techos de Prompts',
+            );
+            pintar();
+        });
+    }
+    const boton = document.getElementById('rpg_ceiling_reset');
+    if (boton && boton.dataset.rtBound !== '1') {
+        boton.dataset.rtBound = '1';
+        boton.addEventListener('click', () => {
+            settings[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo] = PROMPT_CEILING_DEFAULTS.trackerMemo;
+            settings[PROMPT_CEILING_SETTINGS_KEYS.worldBlock] = PROMPT_CEILING_DEFAULTS.worldBlock;
+            settings[PROMPT_CEILING_SETTINGS_KEYS.worldHistory] = PROMPT_CEILING_DEFAULTS.worldHistory;
+            saveSettings();
+            toastr['info']('Techos de fábrica restaurados: 1600 / 4096 / 5. En uso medio no recortan nada.', 'Techos de Prompts');
+            pintar();
+        });
+    }
+    pintar();
+}
+
+/**
+ * Ficha→rastreador con techo de la spec 2026-11-05 (D-2/P2, T4): arma el
+ * `priorMemoText` que ya armaba main (TRACKER STATE 0 + estados -N del más viejo
+ * al más nuevo) y solo descarta estados históricos ENTEROS del más viejo al más
+ * nuevo hasta caber. TRACKER STATE 0 NUNCA se corta: con `fullReviewStateMode`
+ * el modelo reemite el memo y una sección perdida sería irreversible. Si STATE 0
+ * solo ya excede el techo, viaja íntegro con aviso `excede_state0` (P2).
+ * Con los techos de fábrica y un memo medio (≈358 tok) la salida es byte a byte
+ * la de main y no se emite ningún evento (AC1).
+ * @param {object} settings
+ * @returns {string} priorMemoText
+ */
+function buildTrackerPriorMemoText(settings) {
+    const state0Text = `## TRACKER STATE 0 (Current)\n${stripMemoHtml(memoForTrackerContext(settings.currentMemo))}\n\n`;
+    const techo = clampPromptCeiling('trackerMemo', settings[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo]);
+    const historyCount = (settings.trackerHistoryCount || 1) - 1;
+    if (historyCount <= 0 || !settings.memoHistory || settings.memoHistory.length === 0) {
+        const tokens0 = estimatePromptTokens(state0Text);
+        if (techo > 0 && tokens0 > techo) announceCeilingCut('ficha_rastreador', { unidades: 0, tokens: tokens0, motivo: 'excede_state0' });
+        return state0Text;
+    }
+    const historyToInclude = settings.memoHistory.slice(0, historyCount).reverse();
+    // Del más viejo (-N) al más nuevo (-1): mismo orden que main y mismo
+    // oldest-first del techo. STATE 0 viaja como base intocable del módulo.
+    const unidades = historyToInclude.map((memo, i) => {
+        const offset = -(historyToInclude.length - i);
+        return `## TRACKER STATE ${offset}\n${stripMemoHtml(memoForTrackerContext(memo))}\n\n`;
+    });
+    const corte = applyUnitCeiling(unidades, techo, { base: state0Text });
+    if (corte.recortadas > 0) {
+        announceCeilingCut('ficha_rastreador', {
+            unidades: corte.recortadas,
+            tokens: corte.tokensRecortados,
+            ...(corte.excede ? { motivo: 'excede_state0' } : {}),
+        });
+    } else {
+        const tokens0 = estimatePromptTokens(state0Text);
+        if (techo > 0 && tokens0 > techo) announceCeilingCut('ficha_rastreador', { unidades: 0, tokens: tokens0, motivo: 'excede_state0' });
+    }
+    return corte.texto + state0Text;
+}
+
+/**
+ * Mundo→narrador con techo (ola 4, T6). El T6 probó que esta ruta de
+ * `refreshExtensionPrompt` está MUERTA (cero llamadas; `installRouterInterceptor`
+ * limpia el prompt heredado y declara la inyección en exclusiva de
+ * narrative-hooks.js), pero se techa igual para que, si reviviera, no pudiera
+ * duplicar el recorte. El cuerpo es BYTE A BYTE idéntico al de
+ * `narrative-hooks.js` (paridad AST en tests/prompt-ceilings-world-injection).
+ * @param {string[]} worldUnits unidades `### […]…\n\n` en orden ascendente de uid
+ * @param {object} settings
+ * @returns {string} concatenación de las unidades conservadas (idem main si cabe)
+ */
+function applyWorldInjectionCeiling(worldUnits, settings) {
+    const techo = clampPromptCeiling('worldBlock', settings?.[PROMPT_CEILING_SETTINGS_KEYS.worldBlock]);
+    const corte = applyUnitCeiling(Array.isArray(worldUnits) ? worldUnits : [], techo);
+    if (corte.recortadas > 0) announceCeilingCut('mundo_narrador', { unidades: corte.recortadas, tokens: corte.tokensRecortados });
+    return corte.texto;
 }
 
 function installRouterInterceptor() {
@@ -3529,16 +3665,9 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
             chunks.push(chatLogLines);
         }
 
-        let priorMemoText = `## TRACKER STATE 0 (Current)\n${stripMemoHtml(memoForTrackerContext(settings.currentMemo))}\n\n`;
-        const historyCount = (settings.trackerHistoryCount || 1) - 1;
-        if (historyCount > 0 && settings.memoHistory && settings.memoHistory.length > 0) {
-            const historyToInclude = settings.memoHistory.slice(0, historyCount).reverse();
-            const historyString = historyToInclude.map((memo, i) => {
-                const offset = -(historyToInclude.length - i);
-                return `## TRACKER STATE ${offset}\n${stripMemoHtml(memoForTrackerContext(memo))}`;
-            }).join('\n\n');
-            priorMemoText = historyString + '\n\n' + priorMemoText;
-        }
+        // Ficha→rastreador con techo (ola 4, T4): mismo texto que main si cabe;
+        // solo caen estados -N por la cabecera y TRACKER STATE 0 jamás se corta.
+        const priorMemoText = buildTrackerPriorMemoText(settings);
 
         // ── Per-chunk commit helper ──
         // Treats each chunk result as a full "turn": commits to settings, archives history,
@@ -6692,6 +6821,7 @@ function organizeConnectionSettingsUI() {
         bindConnectionApplyAllControls();
         bindThinkingPolicyControls(settings);
         bindLoreRhythmControls(settings);
+        bindPromptCeilingControls(settings);
 
         // Bind drawer toggles ONLY for our own content to avoid global conflicts.
         // IMPORTANT: expand each comma-root before appending `.inline-drawer-toggle`.

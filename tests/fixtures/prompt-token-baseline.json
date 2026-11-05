@@ -1,0 +1,33 @@
+{
+  "_nota": "Línea base de tamaños de prompts de máquina (ola 4, T3, spec 2026-11-05). Medida sobre la rama base main=df7b3cc con `Math.ceil(chars/4)` sobre las CONSTANTES DE FÁBRICA exportadas (los prompts persistidos por el usuario no se miden aquí: la dieta de constantes no llega a ellos, D-6). OJO R3: chars/4 SUBESTIMA el español, los acentos y el JSON un ~15-30 % (≈3-3,5 chars/token reales); el coste real es mayor que tok4. tests/prompt-token-audit.test.js falla si algún prompt de máquina crece >0 % sobre estos chars. Las listas blancas se derivan de los parsers (map-evolution-lib.js y map-updater-lib.js: literales 'TOKEN'; map-architect-parser.js: tabla MACHINE_TOKEN_ALIASES de bilingual-contract.js, que es su contrato de claves) filtradas a los tokens presentes en sus prompts; tests/prompt-diet-contracts.test.js exige que TODOS sigan presentes antes y después de cualquier dieta.",
+  "rama_base": "main=df7b3cc",
+  "fecha_medicion": "2026-11-05",
+  "prompts": {
+    "map_evolution": { "chars": 22189, "tok4": 5548 },
+    "map_updater": { "chars": 17651, "tok4": 4413 },
+    "map_evolution_compress": { "chars": 1650, "tok4": 413 },
+    "world_progression": { "chars": 2224, "tok4": 556 },
+    "map_architect_topology": { "chars": 6582, "tok4": 1646 },
+    "map_architect": { "chars": 6416, "tok4": 1604 },
+    "map_architect_brief": { "chars": 2266, "tok4": 567 },
+    "map_evolution_direct": { "chars": 3071, "tok4": 768 },
+    "map_updater_direct": { "chars": 3698, "tok4": 925 }
+  },
+  "compactos_sin_recorte_D6": ["map_evolution_compress", "world_progression", "map_architect_brief", "map_evolution_direct", "map_updater_direct"],
+  "mapped_site_bloque": {
+    "chars_con_ejemplo": 297,
+    "chars_estaticos": 280,
+    "tok4_con_ejemplo": 75,
+    "ejemplo_siteRoot": "the-ashen-ossuary",
+    "ahorro_dieta_a_por_pasada": "≈297 chars ≈75 tok por vuelta del agente: era la COPIA del user message; el system prompt de esa misma petición conserva el bloque intacto (rutas básica y nativa)."
+  },
+  "examples_secciones_aplazadas_ola5": {
+    "map_evolution": { "chars": 6321, "tok4": 1581, "ejemplos": 12, "estado": "APLADADO por el oráculo certificado: sin medir la tasa de JSON válido con VRAM el ahorro no es verificable (D-6 b/c)" },
+    "map_updater": { "chars": 4239, "tok4": 1060, "ejemplos": 10, "estado": "APLADADO por el oráculo certificado: sin medir la tasa de JSON válido con VRAM el ahorro no es verificable (D-6 b/c)" }
+  },
+  "blancas": {
+    "evolution": ["ADD_AREA", "ADD_ASSET", "DEAD", "DESTROYED", "MOVE_ASSET", "REMOVE_ASSET", "SET_AREA", "SET_ASSET", "SET_CONNECTION"],
+    "updater": ["ADD_ASSET", "CREATURE", "PARTY", "REMOVE_ASSET", "SET_ASSET", "UNREVEALED"],
+    "architect": ["LOC", "action", "actor", "at", "comment", "content", "field", "id", "label", "name", "op", "open", "reason", "rel", "summary", "targets", "uid"]
+  }
+}

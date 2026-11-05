@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { canCommitPassForChat } from '../src/state/pass-affinity.js';
+import {
+    PROMPT_CEILING_SETTINGS_KEYS,
+    announceCeilingCut,
+    applyUnitCeiling,
+    clampPromptCeiling,
+} from '../src/state/prompt-ceilings.js';
 
 const source = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
 
@@ -30,7 +36,14 @@ function installWorldProgression(context) {
     const end = source.indexOf(endMarker, start);
     if (end < 0) throw new Error('Missing World Skeleton marker after WP pass');
     const fnBody = source.slice(start, end).replace(/^export /, '');
-    runInContext(`${controllerDecl}\n${stopFn}\n${fnBody}`, context);
+    // Ola 4 (T7): el pase llama ahora a los dos helpers del techo del historial;
+    // se instalan en el mismo contexto, como los helpers del controlador.
+    const ceilingHelpers = ['resolveWorldHistoryLimit', 'buildWorldJobHistoryDump'].map(nombre => {
+        const i = source.indexOf(`function ${nombre}(`);
+        if (i < 0) throw new Error(`Missing ${nombre}`);
+        return source.slice(i, source.indexOf('\n}', i) + 2);
+    }).join('\n');
+    runInContext(`${controllerDecl}\n${ceilingHelpers}\n${stopFn}\n${fnBody}`, context);
     return {
         run: context.runWorldProgressionPass,
         stop: context.stopWorldProgressionPass,
@@ -46,7 +59,9 @@ describe('World Progression chat ownership', () => {
         const broadcast = vi.fn();
         const context = createContext({
         ...chatAffinity,
-            console: { log() {}, warn() {}, error() {} },
+            console: { log() {}, info() {}, warn() {}, error() {} },
+            // Techos de prompts (ola 4): dependencias del vuelco del historial.
+            PROMPT_CEILING_SETTINGS_KEYS, announceCeilingCut, applyUnitCeiling, clampPromptCeiling,
             AbortController,
             canCommitPassForChat,
             getActiveChatId: () => chatId,
@@ -118,7 +133,9 @@ describe('World Progression chat ownership', () => {
         const apply = vi.fn();
         const context = createContext({
         ...chatAffinity,
-            console: { log() {}, warn() {}, error() {} },
+            console: { log() {}, info() {}, warn() {}, error() {} },
+            // Techos de prompts (ola 4): dependencias del vuelco del historial.
+            PROMPT_CEILING_SETTINGS_KEYS, announceCeilingCut, applyUnitCeiling, clampPromptCeiling,
             AbortController,
             canCommitPassForChat,
             getActiveChatId: () => chatId,

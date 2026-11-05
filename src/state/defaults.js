@@ -819,6 +819,18 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         routerCleanupUseThreshold: true,
 
+        // ── Techos de prompts (ola 4, C5: D-1/D-5) ────────────────────────────────
+        // tokens ≈ chars/4 (R3: subestima español y JSON un ~15-30 %; el techo
+        // efectivo es mayor que el nominal). 0 = sin techo SOLO donde la spec lo
+        // permite. world_history es Nº de reportes (no tokens): el default 5
+        // sustituye al 0=todo del lookback según la tabla lookback×techo de D-2.
+
+        rpg_ceiling_tracker_memo: 1600,     // ficha→rastreador y ficha→narrador (800-4000)
+
+        rpg_ceiling_world_block: 4096,      // mundo→narrador y mundo→trabajo, tokens (2048-8192)
+
+        rpg_ceiling_world_history: 5,       // reportes históricos del trabajo mundo (3-10; 0 = sin techo)
+
         // ── World Progression (deterministic, standalone pass) ────────────────────
 
         worldProgressionEnabled: false,           // master toggle
