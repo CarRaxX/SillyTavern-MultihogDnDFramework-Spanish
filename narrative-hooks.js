@@ -46,6 +46,13 @@ import {
 } from './dungeon-reality.js';
 import { runMapArchitect } from './map-architect.js';
 import {
+    PROMPT_CEILING_SETTINGS_KEYS,
+    announceCeilingCut,
+    applyTextCeiling,
+    applyUnitCeiling,
+    clampPromptCeiling,
+} from './src/state/prompt-ceilings.js';
+import {
     applyMapArchitectTextOpenerCyoaCaveat,
     buildMapArchitectContinueBrief,
     clearAssistantReasoning,
@@ -158,6 +165,39 @@ function substituteLoreMacros(content) {
     } catch (_) {
         return content;
     }
+}
+
+/**
+ * Ficha→narrador con techo (ola 4, T5, D-2/P2): el memo inyectado en el user
+ * message cada turno es LECTURA para el narrador, así que aquí SÍ caen bloques
+ * `[TAG]…[/TAG]` completos del STATE 0, con orden fijo del último al primero
+ * (R4: nada de prioridad improvisada). El preámbulo y la cabecera
+ * `## TRACKER STATE 0 (Current)` viajan siempre intactos; el split es sin
+ * pérdida, así que con memo medio (≈358 tok) la salida es idéntica a main (AC1).
+ * @param {string} memoText memo ya limpio y recortado de HTML
+ * @param {object} settings
+ * @returns {string} memoText bajo el techo `rpg_ceiling_tracker_memo`
+ */
+function applyNarratorMemoCeiling(memoText, settings) {
+    const techo = clampPromptCeiling('trackerMemo', settings?.[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo]);
+    const corte = applyTextCeiling(memoText, techo, 'tag', 'ficha_narrador', { desde: 'nuevas' });
+    return corte.texto;
+}
+
+/**
+ * Mundo→narrador con techo (ola 4, T6): las unidades `### […]` del bloque
+ * `## WORLD PROGRESSION REPORTS` caen oldest-first hasta caber en
+ * `rpg_ceiling_world_block`. Esta función debe ser BYTE A BYTE idéntica a la de
+ * `index.js` (paridad AST verificada en tests/prompt-ceilings-world-injection).
+ * @param {string[]} worldUnits unidades `### […]…\n\n` en orden ascendente de uid
+ * @param {object} settings
+ * @returns {string} concatenación de las unidades conservadas (idem main si cabe)
+ */
+function applyWorldInjectionCeiling(worldUnits, settings) {
+    const techo = clampPromptCeiling('worldBlock', settings?.[PROMPT_CEILING_SETTINGS_KEYS.worldBlock]);
+    const corte = applyUnitCeiling(Array.isArray(worldUnits) ? worldUnits : [], techo);
+    if (corte.recortadas > 0) announceCeilingCut('mundo_narrador', { unidades: corte.recortadas, tokens: corte.tokensRecortados });
+    return corte.texto;
 }
 
 /**
@@ -1470,7 +1510,9 @@ export function installInterceptor() {
                 if (settings.currentMemo) {
                     // Defensive cleanup: auto-heal duplicate blocks (e.g. from previous runs or tag drift)
                     settings.currentMemo = deduplicateMemo(settings.currentMemo);
-                    const memoText = stripMemoHtml(memoForGmContext(settings.currentMemo)).trim();
+                    // Techo de ficha→narrador (ola 4): solo lectura; si no cabe,
+                    // caen [TAG] completos del último al primero, preámbulo intacto.
+                    const memoText = applyNarratorMemoCeiling(stripMemoHtml(memoForGmContext(settings.currentMemo)).trim(), settings);
                     injections += `${STATE_MEMO_INJECT_PREAMBLE}\n\n## TRACKER STATE 0 (Current)\n${memoText}\n\n`;
                 }
 
@@ -1619,7 +1661,7 @@ export function installInterceptor() {
             if (settings.worldProgressionEnabled && (settings.activeWorldKeys || []).length > 0) {
                 try {
                     const ctx = SillyTavern.getContext();
-                    let worldBlock = '';
+                    const worldUnits = [];
                     const bookCache = {};
                     const sortedKeys = [...settings.activeWorldKeys].sort((a, b) => {
                         const [, uidA] = a.split('::');
@@ -1631,9 +1673,12 @@ export function installInterceptor() {
                         if (!bookCache[bookName]) bookCache[bookName] = chatCommitResult(ownsChat, await ctx.loadWorldInfo(bookName));
                         const entry = bookCache[bookName]?.entries?.[uid];
                         if (entry?.content) {
-                            worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
+                            worldUnits.push(`### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`);
                         }
                     }
+                    // Techo de mundo→narrador (ola 4, T6): ruta VIVA del bloque
+                    // «## WORLD PROGRESSION REPORTS»; la copia de index.js está muerta.
+                    const worldBlock = applyWorldInjectionCeiling(worldUnits, settings);
                     if (worldBlock) {
                         wpInjections = `\n## WORLD PROGRESSION REPORTS\n${worldBlock.trim()}\n`;
                     }

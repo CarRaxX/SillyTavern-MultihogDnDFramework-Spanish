@@ -2837,13 +2837,17 @@ async function refreshExtensionPrompt() {
                     const [, uidB] = b.split('::');
                     return Number(uidA) - Number(uidB);
                 });
+                // Ruta MUERTA (verificado en T6): refreshExtensionPrompt no tiene
+                // ni una llamada; se techa por paridad con la ruta viva.
+                const worldUnits = [];
                 for (const k of sortedKeys) {
                     const [bookName, uid] = k.split('::');
                     const entry = worldBooks[bookName]?.entries?.[uid];
                     if (entry && entry.content) {
-                        worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${entry.content}\n\n`;
+                        worldUnits.push(`### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${entry.content}\n\n`);
                     }
                 }
+                worldBlock = applyWorldInjectionCeiling(worldUnits, s);
             }
 
             if (injectedContext || worldBlock) {
@@ -2913,6 +2917,24 @@ function buildTrackerPriorMemoText(settings) {
         if (techo > 0 && tokens0 > techo) announceCeilingCut('ficha_rastreador', { unidades: 0, tokens: tokens0, motivo: 'excede_state0' });
     }
     return corte.texto + state0Text;
+}
+
+/**
+ * Mundo→narrador con techo (ola 4, T6). El T6 probó que esta ruta de
+ * `refreshExtensionPrompt` está MUERTA (cero llamadas; `installRouterInterceptor`
+ * limpia el prompt heredado y declara la inyección en exclusiva de
+ * narrative-hooks.js), pero se techa igual para que, si reviviera, no pudiera
+ * duplicar el recorte. El cuerpo es BYTE A BYTE idéntico al de
+ * `narrative-hooks.js` (paridad AST en tests/prompt-ceilings-world-injection).
+ * @param {string[]} worldUnits unidades `### […]…\n\n` en orden ascendente de uid
+ * @param {object} settings
+ * @returns {string} concatenación de las unidades conservadas (idem main si cabe)
+ */
+function applyWorldInjectionCeiling(worldUnits, settings) {
+    const techo = clampPromptCeiling('worldBlock', settings?.[PROMPT_CEILING_SETTINGS_KEYS.worldBlock]);
+    const corte = applyUnitCeiling(Array.isArray(worldUnits) ? worldUnits : [], techo);
+    if (corte.recortadas > 0) announceCeilingCut('mundo_narrador', { unidades: corte.recortadas, tokens: corte.tokensRecortados });
+    return corte.texto;
 }
 
 function installRouterInterceptor() {

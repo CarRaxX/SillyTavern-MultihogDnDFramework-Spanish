@@ -1,0 +1,26 @@
+{
+  "spec": "docs/specs/2026-11-05-techos-y-dieta-prompts.spec.md",
+  "rama_base": "main=df7b3cc",
+  "cabecera": "## WORLD PROGRESSION REPORTS",
+  "apariciones_en_peticion": 1,
+  "resolucion_T6": "rutas excluyentes: la copia de index.js vive en refreshExtensionPrompt(), que NO tiene ni una llamada en todo el repo (AST) y cuyo prompt heredado ('rpg_tracker_lore') lo limpia installRouterInterceptor declarando la inyección en exclusiva de narrative-hooks.js (rpgTrackerInterceptor). No hay duplicado real en la misma petición del narrador: NO se aplica la dieta (d) y se techa la ruta viva de narrative-hooks.js con paridad AST byte a byte en la ruta muerta de index.js.",
+  "rutas": {
+    "viva_narrative_hooks": {
+      "funcion": "rpgTrackerInterceptor (generación de la petición)",
+      "variable": "wpInjections",
+      "techo_aplicado": "applyWorldInjectionCeiling(worldUnits, settings) en narrative-hooks.js",
+      "zona_evento": "mundo_narrador"
+    },
+    "muerta_index_js": {
+      "funcion": "refreshExtensionPrompt()",
+      "llamadas_en_repo": 0,
+      "techo_aplicado": "applyWorldInjectionCeiling idéntico (paridad AST; inocuo mientras siga muerta)",
+      "doble_conteo_R1": "imposible: cero ejecuciones"
+    }
+  },
+  "evidencias": [
+    "index.js::installRouterInterceptor(): setExtensionPrompt('rpg_tracker_lore', '', 0, 0) con el comentario DISABLED que declara la inyección exclusiva de narrative-hooks.js (heredado de la ola que eliminó el interceptor duplicado).",
+    "AST de index.js: 0 CallExpression con callee 'refreshExtensionPrompt' en todo el repo (tests/prompt-ceilings-world-injection.test.js lo comprueba en vivo, sin fe en esta cifra).",
+    "Literal '## WORLD PROGRESSION REPORTS': 1 ocurrencia en narrative-hooks.js (viva) y 1 en index.js (dentro de la ruta muerta); una petición ensamblada solo por rutas vivas lleva el bloque UNA vez."
+  ]
+}
