@@ -128,6 +128,14 @@ Misiones aceptadas, objetivos y coeficientes de frustración de PNJs.
 
 El Agente de Lorebook actúa como el bibliotecario del mundo. Examina la narrativa reciente a intervalos regulares (cada N turnos) para crear, actualizar o archivar entradas de personajes, lugares, facciones y eventos en los libros de lore de la campaña.
 
+### Ritmo del agente de lore
+
+Un solo dial, en el cajón «Rendimiento (modelo local)» de Conexiones y Modelos, gobierna a la vez la **frecuencia** (cada cuántos mensajes corre el agente) y las **vueltas** de su bucle texto-acción: forman un par coherente `vueltas = frecuencia + 2` (un commit por pasada, un turno investigado por mensaje acumulado y un margen) y NO son mandos independientes. Las posiciones de la tabla son (1, 3), (2, 4) y (3, 5) —esta última es la de fábrica—, con ~30, ~15 y ~9 llamadas típicas por 10 turnos respectivamente (el tooltip de cada una cita su coste real). Un ritmo más lento retrasa el lore en contexto a cambio de menos llamadas; el backlog completo solo se procesa en el modo «Desde la última ejecución» (con «Número de turnos fijo» no hay acumulado y el dial solo cambia la frecuencia).
+
+Si los valores guardados no coinciden EXACTAMENTE con una fila —por ejemplo las antiguas «cada turno con 5 vueltas» (1, 5)—, el dial muestra **«Personalizado (avanzado)»** y revela los dos campos sueltos con sus valores intactos: abrir los ajustes no reescribe nada y elegir «Personalizado» tampoco escribe; los sueltos solo persisten enteros dentro de sus cotas (1-6 y 2-8) y el recorte se aplica al salir del campo, avisando. «Restaurar valores de fábrica» devuelve (3, 5). El ritmo nuevo surte efecto en la siguiente generación; «Ejecutar ahora» y los ticks de mapa y mundo no se ven afectados.
+
+Aviso honesto (conocido y aceptado, no corregido en esta ola): si las vueltas se agotan sin que el agente llegue a consolidar, la pasada termina sin aviso y la marca de agua avanza — el trozo de narrativa no registrado se pierde. La regla del par lo mitiga, no lo elimina.
+
 ---
 
 ## Progresión del Mundo (World Progression)
