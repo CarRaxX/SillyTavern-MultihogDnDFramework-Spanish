@@ -19,6 +19,7 @@ export * from './src/state/default-modules.js';
 export * from './src/state/defaults.js';
 export * from './src/state/lorebook-prompt-templates.js';
 export * from './src/state/lorebook-runtime-fragments.js';
+export * from './src/state/content-fingerprint.js';
 export * from './src/state/factory-and-diff.js';
 export * from './src/state/settings.js';
 export * from './src/state/chat-persistence.js';
