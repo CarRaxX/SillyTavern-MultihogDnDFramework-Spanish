@@ -108,6 +108,13 @@ import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 import {
+    PROMPT_CEILING_SETTINGS_KEYS,
+    announceCeilingCut,
+    applyUnitCeiling,
+    clampPromptCeiling,
+    estimatePromptTokens,
+} from './src/state/prompt-ceilings.js';
+import {
     DEFAULT_MAP_THEME,
     FACTORY_MAP_THEME_PRESETS,
     MAP_THEME_FIELDS,
@@ -2866,6 +2873,48 @@ async function refreshExtensionPrompt() {
 }
 }
 
+/**
+ * Ficha→rastreador con techo de la spec 2026-11-05 (D-2/P2, T4): arma el
+ * `priorMemoText` que ya armaba main (TRACKER STATE 0 + estados -N del más viejo
+ * al más nuevo) y solo descarta estados históricos ENTEROS del más viejo al más
+ * nuevo hasta caber. TRACKER STATE 0 NUNCA se corta: con `fullReviewStateMode`
+ * el modelo reemite el memo y una sección perdida sería irreversible. Si STATE 0
+ * solo ya excede el techo, viaja íntegro con aviso `excede_state0` (P2).
+ * Con los techos de fábrica y un memo medio (≈358 tok) la salida es byte a byte
+ * la de main y no se emite ningún evento (AC1).
+ * @param {object} settings
+ * @returns {string} priorMemoText
+ */
+function buildTrackerPriorMemoText(settings) {
+    const state0Text = `## TRACKER STATE 0 (Current)\n${stripMemoHtml(memoForTrackerContext(settings.currentMemo))}\n\n`;
+    const techo = clampPromptCeiling('trackerMemo', settings[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo]);
+    const historyCount = (settings.trackerHistoryCount || 1) - 1;
+    if (historyCount <= 0 || !settings.memoHistory || settings.memoHistory.length === 0) {
+        const tokens0 = estimatePromptTokens(state0Text);
+        if (techo > 0 && tokens0 > techo) announceCeilingCut('ficha_rastreador', { unidades: 0, tokens: tokens0, motivo: 'excede_state0' });
+        return state0Text;
+    }
+    const historyToInclude = settings.memoHistory.slice(0, historyCount).reverse();
+    // Del más viejo (-N) al más nuevo (-1): mismo orden que main y mismo
+    // oldest-first del techo. STATE 0 viaja como base intocable del módulo.
+    const unidades = historyToInclude.map((memo, i) => {
+        const offset = -(historyToInclude.length - i);
+        return `## TRACKER STATE ${offset}\n${stripMemoHtml(memoForTrackerContext(memo))}\n\n`;
+    });
+    const corte = applyUnitCeiling(unidades, techo, { base: state0Text });
+    if (corte.recortadas > 0) {
+        announceCeilingCut('ficha_rastreador', {
+            unidades: corte.recortadas,
+            tokens: corte.tokensRecortados,
+            ...(corte.excede ? { motivo: 'excede_state0' } : {}),
+        });
+    } else {
+        const tokens0 = estimatePromptTokens(state0Text);
+        if (techo > 0 && tokens0 > techo) announceCeilingCut('ficha_rastreador', { unidades: 0, tokens: tokens0, motivo: 'excede_state0' });
+    }
+    return corte.texto + state0Text;
+}
+
 function installRouterInterceptor() {
     const ctx = SillyTavern.getContext();
     const { addPromptManagerInterceptor, addChatInterceptor, addInterceptor } = ctx;
@@ -3529,16 +3578,9 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
             chunks.push(chatLogLines);
         }
 
-        let priorMemoText = `## TRACKER STATE 0 (Current)\n${stripMemoHtml(memoForTrackerContext(settings.currentMemo))}\n\n`;
-        const historyCount = (settings.trackerHistoryCount || 1) - 1;
-        if (historyCount > 0 && settings.memoHistory && settings.memoHistory.length > 0) {
-            const historyToInclude = settings.memoHistory.slice(0, historyCount).reverse();
-            const historyString = historyToInclude.map((memo, i) => {
-                const offset = -(historyToInclude.length - i);
-                return `## TRACKER STATE ${offset}\n${stripMemoHtml(memoForTrackerContext(memo))}`;
-            }).join('\n\n');
-            priorMemoText = historyString + '\n\n' + priorMemoText;
-        }
+        // Ficha→rastreador con techo (ola 4, T4): mismo texto que main si cabe;
+        // solo caen estados -N por la cabecera y TRACKER STATE 0 jamás se corta.
+        const priorMemoText = buildTrackerPriorMemoText(settings);
 
         // ── Per-chunk commit helper ──
         // Treats each chunk result as a full "turn": commits to settings, archives history,
