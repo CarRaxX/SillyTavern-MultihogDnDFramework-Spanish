@@ -2023,7 +2023,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             if (settings.routerBasicMode) {
                 const cleanupUserPrompt = cleanupContext;
                 broadcastStep('thought', 'Thinking...');
-                const basicResp = await sendStateRequest(routerSettings, cleanupSystemPrompt, cleanupUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
+                const basicResp = await sendStateRequest(routerSettings, cleanupSystemPrompt, cleanupUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent', thinkingJob: 'lorebook_agent' });
                 assertOwnsChat();
                 const thoughtMatchC = basicResp.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*([\s\S]*?)(?=\[\[|$)/i);
                 if (thoughtMatchC) broadcastStep('thought', thoughtMatchC[1].trim().substring(0, 300));
@@ -2140,7 +2140,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             while (cleanupTurns < maxTurns) {
                 cleanupTurns++;
                 broadcastStep('thought', `Cleanup thinking (Turn ${cleanupTurns}/${maxTurns})...`);
-                const result = await sendAgentTurn(routerSettings, cleanupMessages, usesNativeTools ? cleanupAgentTools : null, _routerSignal);
+                const result = await sendAgentTurn(routerSettings, cleanupMessages, usesNativeTools ? cleanupAgentTools : null, _routerSignal, { thinkingJob: 'lorebook_agent' });
                 assertOwnsChat();
 
                 if (result.content) {
@@ -2329,7 +2329,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${curationInstruction}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n${formatArchiveIndexSection(keyringText)}\n\n${formatCurrentLocationSection(currentHierarchy)}${formatMappedSiteAgentNote(activeDungeonContext)}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${pcCharacterSeedSection}${activeCombatSection}${partyMechanicalSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
-            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent' });
+            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal, { stream: true, debugSource: 'Lorebook Agent', thinkingJob: 'lorebook_agent' });
             assertOwnsChat();
 
             const thoughtMatchB = basicResp.match(/(?:Thought|Reasoning|Pensamiento|Razonamiento):\s*([\s\S]*?)(?=\[\[|$)/i);
@@ -2661,7 +2661,7 @@ ${recordCategoryGuidance}`;
 
                 // Only pass tool schemas to connections that support native tool calling.
                 // Profile/default connections ignore or mishandle the tools parameter.
-                const result = await sendAgentTurn(routerSettings, messages, usesNativeTools ? agentTools : null, _routerSignal);
+                const result = await sendAgentTurn(routerSettings, messages, usesNativeTools ? agentTools : null, _routerSignal, { thinkingJob: 'lorebook_agent' });
                 assertOwnsChat();
 
                 // Show any inline thought the model included alongside the tool call
@@ -4278,7 +4278,7 @@ Output a JSON object:
             maxTokens: (settings.routerMaxTokens !== undefined && settings.routerMaxTokens !== null && settings.routerMaxTokens !== '') ? Number(settings.routerMaxTokens) : 1000,
         };
 
-        const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'Lorebook Archivist' });
+        const result = await sendStateRequest(routerSettings, systemPrompt, userPrompt, null, { stream: true, debugSource: 'Lorebook Archivist', thinkingJob: 'lorebook_agent' });
         if (!ownsChat()) {
             (/** @type {any} */ (toastr)).warning('Scene not saved: active chat changed.', 'Lorebook Agent');
             return;
@@ -5373,7 +5373,7 @@ ${rawDump}`;
 
                 let consolidatedContent = null;
                 try {
-                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, signal, { stream: true, debugSource: 'World Progression' });
+                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, signal, { stream: true, debugSource: 'World Progression', thinkingJob: 'world_progression' });
                 } catch (e) {
                     if (e?.name === 'AbortError' || !ownsChat()) return abortForChatChange();
                     broadcastStep('error', `World Progression consolidation failed: ${e.message} — continuing without consolidation.`);
@@ -5548,7 +5548,7 @@ ${historicalDump}`;
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${selectedLocations.length} locations, ${historicalReportLines.length} prior reports)...`);
     let reportContent;
     try {
-        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'World Progression' });
+        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'World Progression', thinkingJob: 'world_progression' });
     } catch (e) {
         if (e?.name === 'AbortError' || !ownsChat()) return abortForChatChange();
         broadcastStep('error', `World Progression generation failed: ${e.message}`);
@@ -5995,7 +5995,7 @@ ${rawDump}`;
 
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Manually consolidating ${toConsolidate.length} reports into "${consolidatedLabel}"...`);
 
-    const consolidatedContent = chatCommitResult(ownsChat, await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression' }));
+    const consolidatedContent = chatCommitResult(ownsChat, await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt, null, { stream: true, debugSource: 'World Progression', thinkingJob: 'world_progression' }));
     if (!consolidatedContent || !consolidatedContent.trim()) {
         throw new Error("LLM returned an empty response during consolidation.");
     }

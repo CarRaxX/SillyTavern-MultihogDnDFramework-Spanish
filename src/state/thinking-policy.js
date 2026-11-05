@@ -227,6 +227,20 @@ export function applyThinkingPolicyToBody(body, policy, jobId = null) {
 }
 
 /**
+ * Trabajo del que pasa el rastreador en cada vuelta (D5). La auditoría de
+ * contexto completo y el modo Revisión de Estado Completa son trabajo de juicio
+ * y solo admiten `heredar`|`presupuesto`; la transcripción normal sí puede ir
+ * sin pensamiento porque su salida es el memo en texto.
+ * @param {{isFullContext?:boolean, fullReviewStateMode?:boolean}} pase
+ * @returns {'tracker_audit'|'tracker_full_review'|'state_tracker'}
+ */
+export function thinkingJobForTrackerPass(pase = {}) {
+    if (pase.isFullContext) return 'tracker_audit';
+    if (pase.fullReviewStateMode) return 'tracker_full_review';
+    return 'state_tracker';
+}
+
+/**
  * Ruta efectiva del trabajo (D8): con la fuente «OpenAI compatible» el cuerpo es
  * propio y la política aplica; con `default`/`profile` manda SillyTavern y la
  * política queda inerte.

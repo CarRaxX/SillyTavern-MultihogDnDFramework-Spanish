@@ -403,7 +403,7 @@ describe('Map Updater', () => {
         const updater = readFileSync(new URL('../map-updater.js', import.meta.url), 'utf8');
         expect(updater).toContain('export function stopMapUpdaterPass()');
         expect(updater).toContain('new AbortController()');
-        expect(updater).toContain('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
+        expect(updater).toContain("sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal, { thinkingJob: 'map_runtime' })");
         expect(updater).toContain("source: 'map_updater'");
         expect(updater).toContain("broadcastStep('start', 'Initializing Map Updater...')");
         expect(updater).toContain("broadcastStep('thought', 'Requesting occupancy update...')");
@@ -423,7 +423,7 @@ describe('Map Updater', () => {
         expect(updater.indexOf("skipped: 'disabled'")).toBeLessThan(startIdx);
         expect(updater.indexOf("skipped: 'location_mapping_off'")).toBeLessThan(startIdx);
         const loopRecheckIdx = updater.indexOf('if (!isLocationMappingEnabled(getSettings()))', startIdx);
-        const sendIdx = updater.indexOf('sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal)');
+        const sendIdx = updater.indexOf("sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal, { thinkingJob: 'map_runtime' })");
         expect(loopRecheckIdx).toBeGreaterThan(startIdx);
         expect(sendIdx).toBeGreaterThan(loopRecheckIdx);
     });
