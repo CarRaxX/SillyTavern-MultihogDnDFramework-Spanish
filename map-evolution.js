@@ -20,6 +20,7 @@ import {
 } from './dungeon-reality.js';
 import { isLocationMappingEnabled } from './src/state/section-enabled.js';
 import { parseMapArchitectResponse } from './map-architect-parser.js';
+import { normalizeMachineKeys } from './src/state/bilingual-contract.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 import { selectMapEvolutionSystemPrompt } from './map-evolution-direct-prompt.js';
@@ -227,14 +228,21 @@ function parseCompressionDigests(raw) {
     const value = parsed.value;
     if (!value) return { ok: false, error: parsed.error || 'No JSON object was found.' };
     let rows = [];
-    if (Array.isArray(value.digests)) rows = value.digests;
-    else if (Array.isArray(value)) rows = value;
-    else if (typeof value.summary === 'string') rows = [value];
+    // `digests` y su alias español (`Resúmenes`) llegan ya plegados del parser; se
+    // vuelve aquí por si el objeto viene de otro camino.
+    const normalizado = normalizeMachineKeys(value);
+    if (Array.isArray(normalizado.digests)) rows = normalizado.digests;
+    else if (Array.isArray(normalizado)) rows = normalizado;
+    else if (typeof normalizado.summary === 'string') rows = [normalizado];
     const digests = rows.map(row => {
         if (typeof row === 'string') return { at: 'Compressed history', summary: row };
+        // C4 (spec 2026-11-05): el compresor escribe a veces «Cuándo»/«Resumen» en
+        // lugar de `at`/`summary`. Sólo se renombran esas claves conocidas; el texto
+        // del resumen sale tal cual (D6).
+        const fila = normalizeMachineKeys(row);
         return {
-            at: String(row?.at || row?.span || '').trim(),
-            summary: String(row?.summary || row?.cause || '').trim(),
+            at: String(fila?.at || fila?.span || '').trim(),
+            summary: String(fila?.summary || fila?.cause || '').trim(),
         };
     }).filter(row => row.summary);
     if (!digests.length) return { ok: false, error: 'No digests' };

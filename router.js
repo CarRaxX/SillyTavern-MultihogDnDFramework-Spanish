@@ -1,5 +1,6 @@
 import { getSettings, getActiveChatId, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp, persistMapEvolutionState, getNpcRelationshipMax, clampRelationshipValue, buildRouterRelationshipInstruction, sanitizeRouterState, adjustPromptTimestamps, DEFAULT_NPC_SECTIONS, saveChatState, computeUnpinnedActiveCount, extractCharacterBlock, extractPartyBlock, isPcCoreTarget, isAppearanceField, isEquipmentField, isCombatProfileField, getEligibleCoreFieldNames, patchLabeledSection, mergePreservedColorMarkup, expandLorebookPromptTemplate, resolveRecordCategoryTag, getEnabledRouterCategoryTags, getRouterCategoryBookSuffix, buildRouterCategoryMap } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
+import { coerceMachineEnum, machineTokenAlternation } from './src/state/bilingual-contract.js';
 import { canCommitPassForChat, createChatCommitGuard, assertChatCommit, chatCommitResult } from './src/state/pass-affinity.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent, parseJsonWithColorRepair } from './memo-processor.js';
@@ -253,6 +254,9 @@ async function fetchRouterArchiveBooks(prefix, ctx) {
     return books;
 }
 
+/** Ejes de relación admitidos por el contrato (valores de máquina en inglés). */
+const RELATIONSHIP_AXES = Object.freeze(['friendship', 'affection']);
+
 /**
  * Parses a single Action: toolname({...}) call from a text response.
  * Used as a fallback for profile/default connections that don't support native tool calling.
@@ -265,7 +269,11 @@ async function fetchRouterArchiveBooks(prefix, ctx) {
 function parseTextAction(text) {
     // Find the last "Action:" line to be safe, then extract the balanced JSON argument.
     // Tolerates markdown formatting like **Action:**, *Action:*, ### Action, - Action: etc.
-    const parts = ('\n' + text).split(/\n(?:\*\*|\*|__|_|###|##|#|-|\s)*Action\b(?:\*\*|\*|__|_|:|\s)*\s*/i);
+    // C4 (spec 2026-11-05): el marcador también vale en español («Acción:»). Los alias
+    // salen de la tabla del contrato, y el límite `\b` se cambia por una mirada al
+    // alfabeto: `\b` no ve frontera después de una vocal acentuada («Acción:»).
+    const marcador = new RegExp(`\\n(?:\\*\\*|\\*|__|_|###|##|#|-|\\s)*(?:${machineTokenAlternation('action')})(?![\\p{L}])(?:\\*\\*|\\*|__|_|:|\\s)*\\s*`, 'iu');
+    const parts = ('\n' + text).split(marcador);
     if (parts.length < 2) return null;
     const lastPart = parts[parts.length - 1].trim();
 
@@ -3526,7 +3534,9 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             errors.push(`Cannot update relationship on World Skeleton entry: ${id}`);
             continue;
         }
-        const f = field.toLowerCase();
+        // C4: el eje puede venir como «Amistad»/«Afecto» y se guarda bajo la clave
+        // canónica del contrato; un eje que no existe sigue rechazándose igual.
+        const f = coerceMachineEnum(field, RELATIONSHIP_AXES) || String(field || '').toLowerCase();
         if (f !== 'friendship' && f !== 'affection') {
             errors.push(`Unknown relationship field "${field}" for ${id}`);
             continue;
@@ -4041,11 +4051,15 @@ function parseBasicTags(text, archiveBooks) {
     }
 
     // REL tag parser: [[REL: Book::UID | Friendship | +15]]
-    const relRegex = /\[\[REL:\s*([^|]+)\|\s*(friendship|affection)\s*\|\s*([+-]?\d+)\s*\]\]/gi;
+    // C4: «[[REL: X | Amistad | +15]]» es el mismo contrato escrito en español (D6):
+    // sólo se pliega el nombre del eje, nunca el identificador del PNJ.
+    // El eje va en un grupo CAPTURADOR: el parser lee rm[2] (eje) y rm[3] (delta),
+    // exactamente como leía el regex literal de antes.
+    const relRegex = new RegExp(`\\[\\[REL:\\s*([^|]+)\\|\\s*(${machineTokenAlternation('friendship')}|${machineTokenAlternation('affection')})\\s*\\|\\s*([+-]?\\d+)\\s*\\]\\]`, 'gi');
     let rm;
     while ((rm = relRegex.exec(text)) !== null) {
         const id    = rm[1].trim();
-        const field = rm[2].trim().toLowerCase();
+        const field = coerceMachineEnum(rm[2].trim(), RELATIONSHIP_AXES) || rm[2].trim().toLowerCase();
         const delta = parseInt(rm[3], 10);
         if (id && field && !isNaN(delta)) {
             action.rel.push({ id, field, delta });

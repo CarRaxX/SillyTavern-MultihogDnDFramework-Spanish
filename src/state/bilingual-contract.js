@@ -39,21 +39,24 @@ export function foldMachineToken(valor) {
 
 /**
  * Tabla de alias (D6). Cada clave es el token canónico en inglés que ya entiende
- * el contrato; su lista trae las variantes en español (y las variantes inglesas
- * que el modelo escribe en plural o con sinónimos evidentes).
+ * el contrato; su lista trae las variantes en español y las formas inglesas que
+ * el modelo escribe en plural. A propósito se dejan fuera sustantivos sueltos que
+ * un usuario puede tener como categoría propia o como nombre de algo ('Grupo',
+ * 'Bando', 'Aventura'): alias tan generales romperían la regla de no tocar los
+ * nombres propios.
  */
 export const MACHINE_TOKEN_ALIASES = Object.freeze({
     // ── Categorías del Agente de Lorebook ──────────────────────────────────────
-    NPC: ['NPC', 'PNJ', 'Personaje', 'Personajes'],
-    LOC: ['LOC', 'Location', 'Locations', 'Ubicación', 'Localización', 'Lugar', 'Sitio'],
-    QUEST: ['QUEST', 'Quest', 'Misión', 'Mision', 'Encargo', 'Aventura'],
-    FAC: ['FAC', 'Faction', 'Factions', 'Facción', 'Bando', 'Grupo'],
-    EVENT: ['EVENT', 'Event', 'Evento', 'Suceso', 'Acontecimiento'],
+    NPC: ['NPC', 'PNJ'],
+    LOC: ['LOC', 'Location', 'Locations', 'Ubicación', 'Localización', 'Lugar'],
+    QUEST: ['QUEST', 'Quest', 'Misión', 'Encargo'],
+    FAC: ['FAC', 'Faction', 'Factions', 'Facción'],
+    EVENT: ['EVENT', 'Event', 'Evento'],
     WORLD: ['WORLD', 'World', 'Mundo'],
 
     // ── Ejes de relación de los PNJ ────────────────────────────────────────────
-    friendship: ['friendship', 'amistad', 'amigo'],
-    affection: ['affection', 'afecto', 'cariño', 'amor'],
+    friendship: ['friendship', 'amistad'],
+    affection: ['affection', 'afecto', 'cariño'],
 
     // ── Estado de los hilos causales de Evolución ──────────────────────────────
     open: ['open', 'abierto', 'abierta', 'activo'],

@@ -1,4 +1,7 @@
+import { createContext, runInContext } from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
+import { parseAst } from 'rollup/parseAst';
 
 vi.mock('../portrait-storage.js', () => ({
     lookupCustomPortraitSrc: () => '',
@@ -21,6 +24,10 @@ import {
 import { getCardAppearanceSynopsis } from '../src/ui/panel/card-synopsis.js';
 import { parseMapArchitectCreateDirective } from '../src/ui/panel/agent-terminal-direct.js';
 import { renderSpellGroups } from '../renderer.js';
+import { getRouterCategoryBookSuffix, buildRouterCategoryMap } from '../src/state/router-utils.js';
+import { normalizeEvolutionThread } from '../map-evolution-lib.js';
+import { parseMapArchitectResponse } from '../map-architect-parser.js';
+import { coerceMachineEnum, machineTokenAlternation } from '../src/state/bilingual-contract.js';
 
 describe('Bilingual Resilience: Time and Rest parsers', () => {
     it('extracts current time from Spanish time block', () => {
@@ -183,3 +190,194 @@ Naturaleza Álmica: Manifestado — Punto de Quiebre
     });
 });
 
+
+// ── C4 aplicado (spec 2026-11-05, T8) ─────────────────────────────────────────
+// Un test por cada punto tocado. Las funciones privadas de `router.js` y
+// `map-evolution.js` se ejecutan de verdad dentro de un contexto con sus
+// dependencias inyectadas (el mismo patrón de `router-snapshot-diet.test.js`),
+// así que no hace falta abrir ningún export nuevo ni llamar a un servidor.
+const fuenteRouter = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
+const fuenteEvolucion = readFileSync(new URL('../map-evolution.js', import.meta.url), 'utf8');
+
+function fuenteFuncion(codigo, nombre) {
+    let encontrada = null;
+    const visitar = nodo => {
+        if (!nodo || typeof nodo !== 'object' || encontrada) return;
+        if ((nodo.type === 'FunctionDeclaration' || nodo.type === 'FunctionExpression') && nodo.id?.name === nombre) {
+            encontrada = codigo.slice(nodo.start, nodo.end);
+            return;
+        }
+        for (const valor of Object.values(nodo)) {
+            if (Array.isArray(valor)) valor.forEach(visitar);
+            else if (valor && typeof valor === 'object') visitar(valor);
+        }
+    };
+    visitar(parseAst(codigo));
+    if (!encontrada) throw new Error(`Falta la función ${nombre}`);
+    return encontrada;
+}
+
+function fuenteConstante(codigo, nombre) {
+    const inicio = codigo.indexOf(`const ${nombre} =`);
+    if (inicio < 0) throw new Error(`Falta la constante ${nombre}`);
+    const fin = codigo.indexOf(';', inicio);
+    return codigo.slice(inicio, fin + 1);
+}
+
+describe('C4 aplicado: categorías del Agente de Lorebook (router-utils.js)', () => {
+    it('una categoría en español cae en el libro del stock correcto', () => {
+        expect(getRouterCategoryBookSuffix('Mundo')).toBe('World');
+        expect(getRouterCategoryBookSuffix('EVENTO')).toBe('Events');
+        expect(getRouterCategoryBookSuffix(' PNJ ')).toBe('NPCs');
+        expect(getRouterCategoryBookSuffix('Misión')).toBe('Quests');
+        expect(getRouterCategoryBookSuffix('Ubicación')).toBe('Locations');
+        expect(getRouterCategoryBookSuffix('Facción')).toBe('Factions');
+    });
+
+    it('una categoría propia conserva su nombre, acentos incluidos (D6)', () => {
+        expect(getRouterCategoryBookSuffix('Bóveda')).toBe('Bóveda');
+        expect(getRouterCategoryBookSuffix('Tesoro')).toBe('Tesoro');
+        expect(buildRouterCategoryMap({ routerCustomTags: [{ tag: 'Bóveda' }] })).toEqual({ 'BÓVEDA': 'Bóveda' });
+    });
+});
+
+describe('C4 aplicado: marcador de herramienta (router.js parseTextAction)', () => {
+    function parsearTexto(texto) {
+        const contexto = createContext({
+            machineTokenAlternation,
+            parseJsonWithColorRepair: (crudo) => {
+                try { return { ok: true, value: JSON.parse(crudo) }; } catch (error) { return { ok: false, error: String(error) }; }
+            },
+            console,
+        });
+        runInContext(fuenteFuncion(fuenteRouter, 'parseTextAction'), contexto);
+        return contexto.parseTextAction(texto);
+    }
+
+    it('acepta «Acción:» escrito en español, también con markdown', () => {
+        const en = parsearTexto('Antes nada.\nAction: grep_lore("PjN de prueba")');
+        expect(en?.name).toBe('grep_lore');
+        expect(en?.args).toEqual({ query: 'PjN de prueba' });
+
+        const es = parsearTexto('Antes nada.\n**Acción:** grep_lore("PjN de prueba")');
+        expect(es?.name).toBe('grep_lore');
+        expect(es?.args).toEqual({ query: 'PjN de prueba' });
+
+        const esAcentoMal = parsearTexto('Acción:inspect_book("PjN de prueba")');
+        expect(esAcentoMal?.name).toBe('inspect_book');
+    });
+
+    it('una frase normal en español que contiene «accion» no se vuelve herramienta', () => {
+        expect(parsearTexto('La acción del vigilante fue rápida.')).toBeNull();
+        expect(parsearTexto('Acción recomendada: esperar fuera de la bóveda.')).toBeNull();
+    });
+});
+
+describe('C4 aplicado: eje de relación (router.js parseBasicTags)', () => {
+    function parsearEtiquetas(texto) {
+        const contexto = createContext({
+            machineTokenAlternation,
+            coerceMachineEnum,
+            getSettings: () => ({}),
+            RELATIONSHIP_AXES: runInContext(
+                `${fuenteConstante(fuenteRouter, 'RELATIONSHIP_AXES')}\n;RELATIONSHIP_AXES;`,
+                createContext({ Object }),
+            ),
+            console,
+        });
+        runInContext(fuenteFuncion(fuenteRouter, 'parseBasicTags'), contexto);
+        return contexto.parseBasicTags(texto, []);
+    }
+
+    it('«Amistad» y «Afecto» valen lo que Friendship y Affection', () => {
+        const ingles = parsearEtiquetas('[[REL: A_NPCs::3 | Friendship | +15]]');
+        const espanol = parsearEtiquetas('[[REL: A_NPCs::3 | Amistad | +15]]');
+        expect(espanol.rel).toEqual(ingles.rel);
+        expect(espanol.rel).toEqual([{ id: 'A_NPCs::3', field: 'friendship', delta: 15 }]);
+
+        const afecto = parsearEtiquetas('[[REL: A_NPCs::3 | Afecto | -4]]');
+        expect(afecto.rel).toEqual([{ id: 'A_NPCs::3', field: 'affection', delta: -4 }]);
+
+        const carino = parsearEtiquetas('[[REL: A_NPCs::3 | CARIÑO | -4]]');
+        expect(carino.rel).toEqual([{ id: 'A_NPCs::3', field: 'affection', delta: -4 }]);
+    });
+
+    it('un eje inventado sigue sin producir comando', () => {
+        expect(parsearEtiquetas('[[REL: A_NPCs::3 | Lealtad | +15]]').rel).toEqual([]);
+    });
+
+    it('applyAction pliega el eje antes de validarlo', () => {
+        expect(fuenteRouter).toContain("const f = coerceMachineEnum(field, RELATIONSHIP_AXES) || String(field || '').toLowerCase();");
+    });
+});
+
+describe('C4 aplicado: estado del hilo causal (map-evolution-lib.js)', () => {
+    it('abierto, resuelto y transformado valen como el inglés', () => {
+        const base = { cause: 'El PjN de prueba encendió la antorcha' };
+        expect(normalizeEvolutionThread({ ...base, status: 'Abierto' }).status).toBe('open');
+        expect(normalizeEvolutionThread({ ...base, status: 'RESUELTO' }).status).toBe('resolved');
+        expect(normalizeEvolutionThread({ ...base, status: 'transformada' }).status).toBe('transformed');
+        expect(normalizeEvolutionThread({ ...base, status: 'en_llamas' }).status).toBe('open');
+        expect(normalizeEvolutionThread(base).status).toBe('open');
+    });
+
+    it('la causa y el resumen salen intactos', () => {
+        const hilo = normalizeEvolutionThread({
+            cause: 'La Bóveda del Dragón Álmico se derrumbó — Día 4',
+            summary: 'Los guardianes huyen al norte, sin plegar acentos',
+            status: 'cerrado',
+        });
+        expect(hilo.status).toBe('resolved');
+        expect(hilo.cause).toBe('La Bóveda del Dragón Álmico se derrumbó — Día 4');
+        expect(hilo.summary).toBe('Los guardianes huyen al norte, sin plegar acentos');
+    });
+});
+
+describe('C4 aplicado: claves del compresor de Evolución (map-evolution.js)', () => {
+    function parsearDigests(respuesta) {
+        const contexto = createContext({
+            parseMapArchitectResponse,
+            normalizeMachineKeys: (valor) => valor,
+        });
+        runInContext(fuenteFuncion(fuenteEvolucion, 'parseCompressionDigests'), contexto);
+        return contexto.parseCompressionDigests(respuesta);
+    }
+
+    it('lee «Cuándo» y «Resumen» igual que at y summary', () => {
+        const ingles = parsearDigests('{"digests":[{"at":"Día 3","summary":"Cae la torre"}]}');
+        const espanol = parsearDigests('{"Resúmenes":[{"Cuándo":"Día 3","Resumen":"Cae la torre"}]}');
+        expect(espanol.ok).toBe(true);
+        expect(espanol.digests).toEqual(ingles.digests);
+    });
+
+    it('sin resumen utilizable falla igual que antes', () => {
+        expect(parsearDigests('{"digests":[{"at":"Día 3"}]}')).toMatchObject({ ok: false });
+        expect(parsearDigests('texto suelto sin JSON')).toMatchObject({ ok: false });
+    });
+});
+
+describe('C4 aplicado: JSON con claves en español (map-architect-parser.js)', () => {
+    it('pliega las claves del contrato y deja el texto tal cual', () => {
+        const salida = parseMapArchitectResponse([
+            'Por supuesto, aquí tienes el mapa pedido:',
+            '```json',
+            '{"Operaciones":[{"Operacion":"ADD_ASSET","Nombre":"Torre Vigía del PjN de prueba","Causa":"Vigilancia"}],"Tipo":"DUNGEON"}',
+            '```',
+            'Espero que te sirva para la sesión de hoy.',
+        ].join('\n'));
+        expect(salida.error).toBeNull();
+        expect(salida.value.operations[0]).toEqual({ op: 'ADD_ASSET', name: 'Torre Vigía del PjN de prueba', cause: 'Vigilancia' });
+        expect(salida.value.type).toBe('DUNGEON');
+    });
+
+    it('una clave desconocida y su valor salen intactos', () => {
+        const salida = parseMapArchitectResponse('{"Bóveda":{"Nombre Propio":"Álvaro del Pozo"},"notas":"Día 4, 08:00"}');
+        expect(salida.value).toEqual({ 'Bóveda': { 'Nombre Propio': 'Álvaro del Pozo' }, notas: 'Día 4, 08:00' });
+    });
+
+    it('un JSON truncado sigue devolviendo error en lugar de reventar', () => {
+        const salida = parseMapArchitectResponse('{"operations":[{"op":"ADD_ASSET","name":"Torre');
+        expect(salida.value).toBeNull();
+        expect(salida.error).toMatch(/incomplete|Invalid/i);
+    });
+});
