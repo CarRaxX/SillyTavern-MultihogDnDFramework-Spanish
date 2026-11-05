@@ -212,6 +212,12 @@ export function wireAgentActivity({
         syncLastRunDisplay();
     });
 
+    // Dial de ritmo (ola 3): evento propio para no arrastrar a los oyentes de
+    // rt_generation_tick. Aquí solo se repinta el «Next in»: cero ticks, cero lógica.
+    document.addEventListener('rt_lore_rhythm_changed', () => {
+        syncLastRunDisplay();
+    });
+
     // ── Lorebook Terminal Logic ──
 
     return { syncAgentNav, syncLastRunDisplay, updateUndoLabel };

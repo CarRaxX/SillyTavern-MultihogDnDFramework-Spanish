@@ -705,6 +705,22 @@
                             <button type="button" id="rpg_thinking_policy_reset" class="menu_button interactable" style="width:100%;font-size:11px;" title="Deja los ocho trabajos otra vez en Heredar: comportamiento idéntico al de siempre.">
                                 <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores heredados
                             </button>
+                            <div id="rpg_lore_rhythm_box" style="margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px; display:flex; flex-direction:column; gap:6px;">
+                                <div style="font-size: 0.78em; font-weight: bold; opacity: 0.85;">🥁 Ritmo del Agente de Lorebook</div>
+                                <div style="font-size: 0.75em; opacity: 0.7; line-height: 1.4;">
+                                    Un solo dial gobierna la <b>frecuencia</b> (cada cuántos mensajes corre el agente) y las <b>vueltas</b> de su bucle texto-acción: forman un par coherente, no son mandos independientes. Al elegir una posición de la tabla se guarda ese par al instante; abrir estos ajustes no escribe nada por sí solo. Si tus valores actuales no coinciden EXACTAMENTE con ninguna fila, el dial muestra <b>«Personalizado (avanzado)»</b> y tus dos campos sueltos intactos: elegir «Personalizado» tampoco escribe nada. El ritmo nuevo surte efecto en la siguiente generación; «Ejecutar ahora» y los ticks de mapa y mundo no se ven afectados.
+                                </div>
+                                <select id="rpg_lore_rhythm_select" class="text_pole" style="width:100%;font-size:0.8em;" title="Frecuencia y vueltas del Agente de Lorebook en un único dial. Cada posición explica su coste estimado por 10 turnos."></select>
+                                <div id="rpg_lore_rhythm_custom_row" style="display:none; flex-direction:column; gap:4px; padding-left:14px;">
+                                    <label title="Cada cuántos mensajes corre el agente por sí solo. Solo enteros de 1 a 6: fuera de la tabla el dial sigue mostrando «Personalizado». Bajar la frecuencia retrasa el lore en contexto.">Ejecutar Cada N Mensajes <span style="opacity:0.55; font-size:0.9em;">(1-6)</span></label>
+                                    <input id="rpg_tracker_router_run_every" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" min="1" max="50" />
+                                    <label title="Vueltas del bucle texto-acción en cada pasada: una para el commit y las demás para la narrativa acumulada. Solo enteros de 2 a 8. Con una sola vuelta por turno acumulado puede truncarse en silencio lo que no quepa.">Turnos Máximos del Agente <span style="opacity:0.55; font-size:0.9em;">(2-8)</span></label>
+                                    <input id="rpg_tracker_router_max_turns" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" min="1" max="50" />
+                                </div>
+                                <button type="button" id="rpg_lore_rhythm_reset" class="menu_button interactable" style="width:100%;font-size:11px;" title="Vuelve a los valores de fábrica (cada 3 turnos, 5 vueltas): la posición ahorrativa de siempre.">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores de fábrica (3, 5)
+                                </button>
+                            </div>
                         </div>
                     </details>
                 </div>
@@ -1255,12 +1271,6 @@
                                     </div>
 
 
-                                    <label title="Frecuencia de activación automática del Agente de Lorebook. Cada turno (1) garantiza que las entradas estén siempre en contexto. Cada 3+ turnos permite ver más narrativa antes de actualizar.">Ejecutar Cada N Mensajes <span style="opacity:0.55; font-size:0.9em;">(ejecutar en cada turno produce más detalle pero puede requerir limpieza ocasional)</span></label>
-                                    <input id="rpg_tracker_router_run_every" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" min="1" max="50" />
-                                    
-                                    <label>Turnos Máximos del Agente</label>
-                                    <input id="rpg_tracker_router_max_turns" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" min="1" max="50" />
-                                    
                                     <label>Claves Activas Máximas</label>
                                     <input id="rpg_tracker_router_max_activations" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" min="1" max="20" />
                                     

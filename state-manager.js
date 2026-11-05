@@ -28,6 +28,7 @@ export * from './src/state/main-sysprompt-backup.js';
 export * from './src/state/chat-setup.js';
 export * from './src/state/map-themes.js';
 export * from './src/state/thinking-policy.js';
+export * from './src/state/lore-rhythm.js';
 export * from './src/state/bilingual-contract.js';
 export * from './src/state/profiles.js';
 export * from './src/state/router-utils.js';
