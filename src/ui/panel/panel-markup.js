@@ -445,6 +445,7 @@ export function buildPanelMarkup({ settings, agentPanelCollapsedClass }) {
                     </div>
                     <div class="rt-agent-footer-right">
                         <div id="rt-agent-last-run"></div>
+                        <div id="rt-agent-ceiling-cuts" title="Recortes de techo de prompts de esta sesión (se reinician al recargar; no se guardan en ningún sitio)"></div>
                     </div>
                 </div>
                 <div class="rt-resizer-br" id="rt-agent-resizer-br" title="Redimensionar desde abajo-derecha"></div>
