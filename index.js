@@ -1,5 +1,6 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
 import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { FACTORY_RHYTHM_ID, LORE_RHYTHM_CUSTOM_ID, LORE_RHYTHM_PRESETS, clampLoreRhythmCustom, factoryRhythmValues, getLoreRhythmPreset, resolveLoreRhythmId, rhythmPresetEstimate } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
@@ -656,6 +657,118 @@ function bindThinkingPolicyControls(settings) {
             saveSettings();
             pintar();
             toastr['info']('Los ocho trabajos vuelven a Heredar: las peticiones salen igual que siempre.', 'Rendimiento (modelo local)');
+        });
+    }
+    pintar();
+}
+
+/**
+ * Opciones del dial único de ritmo (D-1/D-5): las tres filas de la tabla canónica
+ * más «Personalizado (avanzado)». Cada tooltip cita su coste real por 10 turnos
+ * (⌊10/runEvery⌋ pasadas; típicas ≈ ×3 por el cierre al primer commit; peor
+ * ×(maxTurns+2)) y advierte sin prometer lo que el motor no da: backlog completo
+ * solo en «Desde la última ejecución» (R2: con turnos fijos no hay acumulado),
+ * un único commit por pasada y vueltas inertes en modo básico (R3).
+ * @param {unknown} settings Ajustes actuales: solo para marcar la opción derivada.
+ * @returns {string} HTML de las cuatro opciones.
+ */
+function buildLoreRhythmOptionsHtml(settings) {
+    const resuelto = resolveLoreRhythmId(settings);
+    const avisoComun = ' Retrasar el ritmo retrasa el lore en contexto; el backlog completo solo se procesa en el modo «Desde la última ejecución» — con «Número de turnos fijo» no hay acumulado y el dial solo cambia la frecuencia. Un único commit por pasada; en modo básico las vueltas extra son inertes.';
+    const opciones = LORE_RHYTHM_PRESETS.map(fila => {
+        const est = rhythmPresetEstimate(fila);
+        const fabrica = fila.id === FACTORY_RHYTHM_ID ? ' Valores de fábrica.' : '';
+        const titulo = `~${est.tipicas} llamadas (≤${est.peor} si se agotan las vueltas) y ${est.pasadas} pasadas por 10 turnos.${avisoComun}${fabrica}`;
+        return `<option value="${fila.id}"${fila.id === resuelto ? ' selected' : ''} title="${escapeHtml(titulo)}">${escapeHtml(fila.label)}</option>`;
+    }).join('');
+    const tituloCustom = 'Tus dos valores sueltos se quedan tal cual: elegir esta opción no escribe nada. Cotas 1-6 y 2-8; mientras no coincidan EXACTAMENTE con una fila de la tabla el dial seguirá diciendo «Personalizado».';
+    return `${opciones}<option value="${LORE_RHYTHM_CUSTOM_ID}"${LORE_RHYTHM_CUSTOM_ID === resuelto ? ' selected' : ''} title="${escapeHtml(tituloCustom)}">Personalizado (avanzado)</option>`;
+}
+
+/**
+ * Pinta el dial desde los ajustes (D-3: render puro, no escribe settings ni
+ * guarda; cero modelo, cero red). Los campos sueltos solo se muestran en
+ * «Personalizado» y con el valor guardado tal cual, aunque esté fuera de cota.
+ * @param {object} settings
+ */
+function renderLoreRhythmBox(settings) {
+    const select = document.getElementById('rpg_lore_rhythm_select');
+    if (!select) return;
+    const resuelto = resolveLoreRhythmId(settings);
+    select.innerHTML = buildLoreRhythmOptionsHtml(settings);
+    select.value = resuelto;
+    const fila = document.getElementById('rpg_lore_rhythm_custom_row');
+    if (fila) fila.style.display = resuelto === LORE_RHYTHM_CUSTOM_ID ? 'flex' : 'none';
+    const runEvery = document.getElementById('rpg_tracker_router_run_every');
+    if (runEvery) runEvery.value = settings?.routerRunEvery ?? '';
+    const maxTurns = document.getElementById('rpg_tracker_router_max_turns');
+    if (maxTurns) maxTurns.value = settings?.routerMaxTurns ?? '';
+}
+
+/**
+ * Aplica una posición de la tabla (D-6): persiste el par, resetea el tick en
+ * memoria vía globalThis (nunca importa narrative-hooks) y emite el evento
+ * propio `rt_lore_rhythm_changed`, escuchado solo por el refresco del «Next in»
+ * del panel. No toca la marca de agua ni el historial ni las ejecuciones
+ * manuales; aquí no hay `runRouterPass` ni `fetch`.
+ * @param {object} settings
+ * @param {string} presetId Id de una fila de `LORE_RHYTHM_PRESETS`
+ * @returns {ReadonlyObject|null} la fila aplicada, o null si el id no es de tabla
+ */
+function applyLoreRhythmPreset(settings, presetId) {
+    const fila = getLoreRhythmPreset(presetId);
+    if (!fila) return null;
+    settings.routerRunEvery = fila.runEvery;
+    settings.routerMaxTurns = fila.maxTurns;
+    saveSettings();
+    if (typeof globalThis._rpgResetRouterAutoTick === 'function') {
+        globalThis._rpgResetRouterAutoTick('lore_rhythm_dial');
+    }
+    document.dispatchEvent(new CustomEvent('rt_lore_rhythm_changed'));
+    if (window.jQuery) {
+        // El panel flotante refleja el par nuevo sin reescribir sus propios enlaces.
+        window.jQuery('#rt-agent-router-run-every').val(fila.runEvery);
+        window.jQuery('#rt-agent-router-max-turns').val(fila.maxTurns);
+    }
+    return fila;
+}
+
+/**
+ * Cajón «Ritmo del Agente de Lorebook» (patrón ola 2): repinta al abrir, escucha
+ * el dial y el botón de restaurar. Los dos campos sueltos se enlazan UNA sola vez
+ * en organizeConnectionSettingsUI (sus IDs no se vuelven a tocar aquí).
+ * @param {object} settings
+ */
+function bindLoreRhythmControls(settings) {
+    const caja = document.getElementById('rpg_local_thinking_policy_box');
+    const select = document.getElementById('rpg_lore_rhythm_select');
+    if (!caja || !select) return;
+    const pintar = () => renderLoreRhythmBox(settings);
+    // El panel flotante puede cambiar el ritmo fuera de este cajón: al abrirlo se
+    // vuelve a derivar todo para que el dial no muestre una posición vieja.
+    caja.addEventListener('toggle', pintar);
+    select.addEventListener('change', () => {
+        const elegido = String(select.value || '');
+        if (elegido === LORE_RHYTHM_CUSTOM_ID) {
+            // D-3: elegir «Personalizado» no escribe nada: solo revela los sueltos.
+            const fila = document.getElementById('rpg_lore_rhythm_custom_row');
+            if (fila) fila.style.display = 'flex';
+            return;
+        }
+        const aplicada = applyLoreRhythmPreset(settings, elegido);
+        if (!aplicada) return;
+        toastr['success'](`El agente correrá cada ${aplicada.runEvery} mensaje(s) con ${aplicada.maxTurns} vueltas como máximo.`, 'Ritmo del Agente de Lorebook');
+        pintar();
+    });
+    const boton = document.getElementById('rpg_lore_rhythm_reset');
+    if (boton && boton.dataset.rtBound !== '1') {
+        boton.dataset.rtBound = '1';
+        boton.addEventListener('click', () => {
+            const aplicada = applyLoreRhythmPreset(settings, FACTORY_RHYTHM_ID);
+            if (!aplicada) return;
+            const fabrica = factoryRhythmValues();
+            toastr['info'](`Ritmo de fábrica restaurado: cada ${fabrica.runEvery} mensajes con ${fabrica.maxTurns} vueltas (3, 5).`, 'Ritmo del Agente de Lorebook');
+            pintar();
         });
     }
     pintar();
@@ -6578,6 +6691,7 @@ function organizeConnectionSettingsUI() {
         organizeConnectionSettingsUI();
         bindConnectionApplyAllControls();
         bindThinkingPolicyControls(settings);
+        bindLoreRhythmControls(settings);
 
         // Bind drawer toggles ONLY for our own content to avoid global conflicts.
         // IMPORTANT: expand each comma-root before appending `.inline-drawer-toggle`.
@@ -11872,15 +11986,64 @@ RULES:
             $('#rt-agent-router-lookback').val(settings.routerLookback);
             saveSettings();
         });
+        // Ritmo del Agente de Lorebook (ola 3): `input` solo persiste enteros DENTRO de
+        // cota — vacío, texto, decimal o valor fuera de la cota no escriben nada (AC0:
+        // lo que no se entiende no reescribe lo guardado). El `change` nuevo aplica el
+        // clamp del módulo, cita el valor original y avisa en español. Sin doble binding:
+        // estos IDs solo se enlazan aquí; el dial vive en bindLoreRhythmControls.
         $('#rpg_tracker_router_run_every').val(settings.routerRunEvery || 3).on('input', function () {
-            settings.routerRunEvery = parseInt(String($(this).val() || '')) || 3;
+            const texto = String($(this).val() ?? '').trim();
+            const bruto = texto === '' ? Number.NaN : Number(texto);
+            if (!Number.isSafeInteger(bruto)) return;
+            if (clampLoreRhythmCustom('runEvery', bruto) !== bruto) return;
+            settings.routerRunEvery = bruto;
             $('#rt-agent-router-run-every').val(settings.routerRunEvery);
             saveSettings();
+        }).on('change', function () {
+            const texto = String($(this).val() ?? '').trim();
+            const enCota = clampLoreRhythmCustom('runEvery', texto);
+            if (enCota === null) {
+                $(this).val(settings.routerRunEvery || 3);
+                $('#rt-agent-router-run-every').val(settings.routerRunEvery || 3);
+                return;
+            }
+            if (enCota !== Number(texto)) {
+                toastr.warning(`«Ejecutar Cada N Mensajes» se ha recortado de ${texto} a ${enCota}: el dial admite de 1 a 6.`, 'Ritmo del Agente de Lorebook');
+                settings.routerRunEvery = enCota;
+                saveSettings();
+            } else if (settings.routerRunEvery !== enCota) {
+                settings.routerRunEvery = enCota;
+                saveSettings();
+            }
+            $(this).val(settings.routerRunEvery || 3);
+            $('#rt-agent-router-run-every').val(settings.routerRunEvery || 3);
         });
         $('#rpg_tracker_router_max_turns').val(settings.routerMaxTurns).on('input', function () {
-            settings.routerMaxTurns = parseInt(String($(this).val() || '')) || 5;
+            const texto = String($(this).val() ?? '').trim();
+            const bruto = texto === '' ? Number.NaN : Number(texto);
+            if (!Number.isSafeInteger(bruto)) return;
+            if (clampLoreRhythmCustom('maxTurns', bruto) !== bruto) return;
+            settings.routerMaxTurns = bruto;
             $('#rt-agent-router-max-turns').val(settings.routerMaxTurns);
             saveSettings();
+        }).on('change', function () {
+            const texto = String($(this).val() ?? '').trim();
+            const enCota = clampLoreRhythmCustom('maxTurns', texto);
+            if (enCota === null) {
+                $(this).val(settings.routerMaxTurns);
+                $('#rt-agent-router-max-turns').val(settings.routerMaxTurns);
+                return;
+            }
+            if (enCota !== Number(texto)) {
+                toastr.warning(`«Turnos Máximos del Agente» se han recortado de ${texto} a ${enCota}: el dial admite de 2 a 8.`, 'Ritmo del Agente de Lorebook');
+                settings.routerMaxTurns = enCota;
+                saveSettings();
+            } else if (settings.routerMaxTurns !== enCota) {
+                settings.routerMaxTurns = enCota;
+                saveSettings();
+            }
+            $(this).val(settings.routerMaxTurns);
+            $('#rt-agent-router-max-turns').val(settings.routerMaxTurns);
         });
         $('#rpg_tracker_router_max_activations').val(settings.routerMaxActivations).on('input', function () {
             const val = parseInt(String($(this).val() || '')) || 12;
