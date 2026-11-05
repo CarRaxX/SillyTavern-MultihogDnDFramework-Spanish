@@ -10,6 +10,12 @@ import { isLorebookAgentRuntimeActive, isLocationMappingEnabled } from './src/st
 import { buildSkeletonLorebookSourceContext, parseSkeletonOutput } from './src/features/world-progression/skeleton-lorebooks.js';
 import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
 import {
+    PROMPT_CEILING_SETTINGS_KEYS,
+    announceCeilingCut,
+    applyUnitCeiling,
+    clampPromptCeiling,
+} from './src/state/prompt-ceilings.js';
+import {
     resolveAutoPassRestriction,
     resolveCombatProfileGuidance,
     resolveExistingNpcNudge,
@@ -5213,6 +5219,50 @@ function computePeriodLabel(startMinutes, endMinutes, intervalHours) {
 }
 
 /**
+ * Tabla lookback×techo de la spec 2026-11-05 (D-2/P4, T7): cuántos reportes
+ * históricos entra por libro en el trabajo de Mundo. 0 = sin límite por ese
+ * mando. (0,0)→todo · (techo 0, lookback N)→N · (techo T, lookback 0)→T ·
+ * (T, N)→mín(N,T). Con los valores de fábrica (techo 5, lookback 0) el default
+ * 5 SÍ cambia el trabajo cuando hay más de 5 entradas `_world`: es el objetivo
+ * de la ola y consta en el CHANGELOG (D-5); con ≤5 entradas la salida es idéntica
+ * a main (AC1).
+ * @param {object} settings
+ * @returns {number} 0 = todos; N > 0 = como máximo N por libro
+ */
+function resolveWorldHistoryLimit(settings) {
+    const techo = clampPromptCeiling('worldHistory', settings?.[PROMPT_CEILING_SETTINGS_KEYS.worldHistory]);
+    const lookback = Number(settings?.worldProgressionHistoryLookback) || 0;
+    if (techo === 0 && lookback <= 0) return 0;
+    if (techo === 0) return lookback;
+    if (lookback <= 0) return techo;
+    return Math.min(techo, lookback);
+}
+
+/**
+ * Vuelca los reportes históricos del trabajo de Mundo bajo el techo de tokens
+ * `rpg_ceiling_world_block` (después de la tabla de entradas): caen líneas
+ * `### …` ENTERAS oldest-first y los preámbulos y cabeceras quedan intocables
+ * (D-2). UN solo evento `rt_prompt_ceiling_cut` por pasada con la suma de
+ * entradas filtradas y unidades cortadas (zona mundo_trabajo). Si todo cayera,
+ * queda la línea de respaldo «No prior World Progression reports.» que ya usaba
+ * main. `dossierDump` y el esqueleto NO van bajo techo (Non-Goals §2).
+ * @param {string[]} historicalReportLines
+ * @param {number} entradasFiltradas por la tabla lookback×techo
+ * @param {object} settings
+ * @returns {string}
+ */
+function buildWorldJobHistoryDump(historicalReportLines, entradasFiltradas, settings) {
+    const techo = clampPromptCeiling('worldBlock', settings?.[PROMPT_CEILING_SETTINGS_KEYS.worldBlock]);
+    // Unidades con su separador pegado: `unidades.join('')` reproduce exactamente
+    // el `join('\n\n')` de main (split sin pérdida, AC1).
+    const unidades = historicalReportLines.map((linea, i) => (i < historicalReportLines.length - 1 ? `${linea}\n\n` : linea));
+    const corte = applyUnitCeiling(unidades, techo);
+    const unidadesRecortadas = entradasFiltradas + corte.recortadas;
+    if (unidadesRecortadas > 0) announceCeilingCut('mundo_trabajo', { unidades: unidadesRecortadas, tokens: corte.tokensRecortados });
+    return corte.texto || 'No prior World Progression reports.';
+}
+
+/**
  * Standalone deterministic World Progression pass.
  * Called by maybeRunWorldProgression() in narrative-hooks.js when the in-world interval
  * has elapsed. Never invoked by the Lorebook Agent itself.
@@ -5451,14 +5501,20 @@ ${rawDump}`;
     // 3. Historical macro context only. Location lore and pertinent read-only
     //    constraints are assembled below by buildWorldProgressionLocationDossiers().
     const historicalReportLines = [];
+    // Techo de historial (ola 4, T7): tabla lookback×techo por libro; lo que cae
+    // se suma al evento mundo_trabajo (un evento por pasada, D-3).
+    const worldHistoryLimit = resolveWorldHistoryLimit(settings);
+    let worldHistoryEntradasFiltradas = 0;
     for (const [bookName, book] of Object.entries(archiveBooks)) {
         const nameLower = String(bookName || '').toLowerCase();
         const isWorldBook = nameLower.endsWith('_world') || nameLower === 'world';
         if (!isWorldBook || !book?.entries) continue;
         let sortedEntries = Object.entries(book.entries)
             .sort(([left], [right]) => Number(left) - Number(right));
-        const historyLookback = settings.worldProgressionHistoryLookback ?? 0;
-        if (historyLookback > 0) sortedEntries = sortedEntries.slice(-historyLookback);
+        if (worldHistoryLimit > 0 && sortedEntries.length > worldHistoryLimit) {
+            worldHistoryEntradasFiltradas += sortedEntries.length - worldHistoryLimit;
+            sortedEntries = sortedEntries.slice(-worldHistoryLimit);
+        }
         for (const [, entry] of sortedEntries) {
             const content = String(entry?.content || '').trim();
             if (!content) continue;
@@ -5466,9 +5522,7 @@ ${rawDump}`;
             historicalReportLines.push(`### ${label}\n${content}`);
         }
     }
-    const historicalDump = historicalReportLines.length
-        ? historicalReportLines.join('\n\n')
-        : 'No prior World Progression reports.';
+    const historicalDump = buildWorldJobHistoryDump(historicalReportLines, worldHistoryEntradasFiltradas, settings);
 
     // 4. Grab recent narrative blocks (for current scene context) if configured
     let recentNarrative = '';

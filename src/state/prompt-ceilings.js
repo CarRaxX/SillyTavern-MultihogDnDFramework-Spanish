@@ -169,33 +169,6 @@ export function applyUnitCeiling(unidades, techo, opciones = {}) {
 }
 
 /**
- * Unifica recorte por unidad para los cuatro puntos de D-2: split sin pérdida +
- * techo + anuncio. Con techo 0 o texto que cabe, salida IDÉNTICA a la entrada
- * (AC1) y ni log, ni evento, ni contador (D-3). Si el texto no tiene ninguna
- * unidad, NO se corta y se avisa con motivo `sin_unidad`.
- * @param {unknown} texto texto íntegro candidato al techo
- * @param {unknown} techo tokens (0 = sin techo)
- * @param {'tag'|'world'} tipo
- * @param {string} zona una de PROMPT_CEILING_ZONAS
- * @param {{ desde?: 'viejas'|'nuevas' }} opciones
- * @returns {{ texto: string, recortadas: number }}
- */
-export function applyTextCeiling(texto, techo, tipo, zona, opciones = {}) {
-    const fuente = String(texto ?? '');
-    const t = Number(techo);
-    if (!Number.isFinite(t) || t <= 0) return { texto: fuente, recortadas: 0 };
-    const { unidades, sinUnidad } = splitPromptUnits(fuente, tipo);
-    if (sinUnidad) {
-        const tokens = estimatePromptTokens(fuente);
-        if (tokens > t) announceCeilingCut(zona, { unidades: 0, tokens, motivo: 'sin_unidad' });
-        return { texto: fuente, recortadas: 0 };
-    }
-    const corte = applyUnitCeiling(unidades, t, opciones);
-    if (corte.recortadas > 0) announceCeilingCut(zona, { unidades: corte.recortadas, tokens: corte.tokensRecortados });
-    return { texto: corte.texto, recortadas: corte.recortadas };
-}
-
-/**
  * Visibilidad de un recorte (D-3): log en español + UN evento `rt_prompt_ceiling_cut`
  * con `detail { zona, unidades, tokens }` (y `motivo` si lo hay). Nunca guarda
  * ajustes. Silencioso si no hay nada que anunciar: el llamador solo llama aquí

@@ -5,9 +5,10 @@ import { parseAst } from 'rollup/parseAst';
 import {
     PROMPT_CEILING_SETTINGS_KEYS,
     announceCeilingCut,
-    applyTextCeiling,
+    applyUnitCeiling,
     clampPromptCeiling,
     estimatePromptTokens,
+    splitPromptUnits,
 } from '../src/state/prompt-ceilings.js';
 
 // T5 (spec 2026-11-05): ficha→narrador. El memo se inyecta en el user message
@@ -52,7 +53,7 @@ afterEach(() => {
 
 function aplicar(memoText, settings) {
     const contexto = createContext({
-        PROMPT_CEILING_SETTINGS_KEYS, clampPromptCeiling, applyTextCeiling, announceCeilingCut,
+        PROMPT_CEILING_SETTINGS_KEYS, clampPromptCeiling, splitPromptUnits, applyUnitCeiling, estimatePromptTokens, announceCeilingCut,
     });
     runInContext(extraer('applyNarratorMemoCeiling'), contexto);
     return contexto.applyNarratorMemoCeiling(memoText, settings);

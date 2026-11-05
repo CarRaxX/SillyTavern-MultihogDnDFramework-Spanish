@@ -48,9 +48,10 @@ import { runMapArchitect } from './map-architect.js';
 import {
     PROMPT_CEILING_SETTINGS_KEYS,
     announceCeilingCut,
-    applyTextCeiling,
     applyUnitCeiling,
     clampPromptCeiling,
+    estimatePromptTokens,
+    splitPromptUnits,
 } from './src/state/prompt-ceilings.js';
 import {
     applyMapArchitectTextOpenerCyoaCaveat,
@@ -180,7 +181,15 @@ function substituteLoreMacros(content) {
  */
 function applyNarratorMemoCeiling(memoText, settings) {
     const techo = clampPromptCeiling('trackerMemo', settings?.[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo]);
-    const corte = applyTextCeiling(memoText, techo, 'tag', 'ficha_narrador', { desde: 'nuevas' });
+    if (techo <= 0) return memoText;
+    const { unidades, sinUnidad } = splitPromptUnits(memoText, 'tag');
+    if (sinUnidad) {
+        const tokens = estimatePromptTokens(memoText);
+        if (tokens > techo) announceCeilingCut('ficha_narrador', { unidades: 0, tokens, motivo: 'sin_unidad' });
+        return memoText;
+    }
+    const corte = applyUnitCeiling(unidades, techo, { desde: 'nuevas' });
+    if (corte.recortadas > 0) announceCeilingCut('ficha_narrador', { unidades: corte.recortadas, tokens: corte.tokensRecortados });
     return corte.texto;
 }
 

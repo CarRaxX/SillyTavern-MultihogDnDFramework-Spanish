@@ -6,7 +6,6 @@ import {
     PROMPT_CEILING_SETTINGS_KEYS,
     PROMPT_CEILING_ZONAS,
     announceCeilingCut,
-    applyTextCeiling,
     applyUnitCeiling,
     clampPromptCeiling,
     estimatePromptTokens,
@@ -126,12 +125,14 @@ describe('splitPromptUnits: sin pérdida y [TAG] sin partir', () => {
     });
 
     it('sin ninguna unidad → sinUnidad=true y el texto NO se corta (motivo sin_unidad)', () => {
-        const { unidades, sinUnidad } = splitPromptUnits('prosa suelta sin bloques', 'tag');
+        const prosa = 'prosa suelta sin bloques '.repeat(200);
+        const { unidades, sinUnidad } = splitPromptUnits(prosa, 'tag');
         expect(unidades).toEqual([]);
         expect(sinUnidad).toBe(true);
-        const salida = applyTextCeiling('prosa suelta sin bloques '.repeat(200), 100, 'tag', 'ficha_narrador');
-        expect(salida.texto).toBe('prosa suelta sin bloques '.repeat(200));
-        expect(salida.recortadas).toBe(0);
+        // Composición del llamador (así la usan narrative-hooks y router): sin
+        // unidades no se corta nada y solo se avisa si además supera el techo.
+        expect(estimatePromptTokens(prosa)).toBeGreaterThan(100);
+        announceCeilingCut('ficha_narrador', { unidades: 0, tokens: estimatePromptTokens(prosa), motivo: 'sin_unidad' });
         expect(eventos.length).toBe(1);
         expect(eventos[0].detail).toMatchObject({ zona: 'ficha_narrador', motivo: 'sin_unidad', unidades: 0 });
     });
@@ -204,15 +205,24 @@ describe('applyUnitCeiling: oldest-first por unidad entera, orden conservado', (
     });
 });
 
-describe('applyTextCeiling + announceCeilingCut (D-3: visibilidad)', () => {
+describe('Composición del llamador (split + techo + anuncio) y D-3', () => {
+    /** Espejo exacto de la composición que usan narrative-hooks y router. */
+    function composition(memo, techo, opciones = {}) {
+        const { unidades } = splitPromptUnits(memo, 'tag');
+        const corte = applyUnitCeiling(unidades, techo, opciones);
+        if (corte.recortadas > 0) announceCeilingCut('ficha_narrador', { unidades: corte.recortadas, tokens: corte.tokensRecortados });
+        return corte;
+    }
+
     it('si cabe: ni log, ni evento, ni contador; texto idéntico', () => {
         const memo = '[TIME]\ncorto\n[/TIME]';
         const consola = [];
         const info = console.info;
         console.info = (...a) => consola.push(a);
-        const r = applyTextCeiling(memo, 1600, 'tag', 'ficha_narrador');
+        const r = composition(memo, 1600);
         console.info = info;
-        expect(r).toEqual({ texto: memo, recortadas: 0 });
+        expect(r.texto).toBe(memo);
+        expect(r.recortadas).toBe(0);
         expect(eventos.length).toBe(0);
         expect(consola.length).toBe(0);
     });
@@ -223,7 +233,7 @@ describe('applyTextCeiling + announceCeilingCut (D-3: visibilidad)', () => {
         const infos = [];
         const info = console.info;
         console.info = (...a) => infos.push(String(a[0] || ''));
-        const r = applyTextCeiling(memo, 1600, 'tag', 'ficha_narrador', { desde: 'nuevas' });
+        const r = composition(memo, 1600, { desde: 'nuevas' });
         console.info = info;
         expect(r.recortadas).toBe(2);
         expect(eventos.length).toBe(1);
