@@ -10,6 +10,12 @@
 import { getSettings } from './state-manager.js';
 import { logTransaction } from './debug-viewer.js';
 import { parseJsonWithColorRepair } from './memo-processor.js';
+import {
+    THINKING_POLICY_SETTINGS_KEY,
+    applyThinkingPolicyToBody,
+    describeThinkingEffect,
+    resolveThinkingPolicy,
+} from './src/state/thinking-policy.js';
 
 /** Placeholder that survives SillyTavern substituteParams() in generateRaw. */
 export const RT_USER_MACRO_SENTINEL = '__RT_USER_MACRO__';
@@ -589,6 +595,52 @@ function resolveMaxTokens(settings) {
     return (val > 0) ? val : 8192;
 }
 
+/**
+ * Política de pensamiento efectiva de una petición propia (spec 2026-11-05, D2).
+ * `options.thinkingPolicy` manda (ya viene resuelta y validada por el llamante);
+ * si sólo trae `options.thinkingJob` se lee de los ajustes de ese trabajo y, en
+ * su ausencia, de los ajustes globales — los cuerpos derivados de mapas o del
+ * Agente de Lorebook no arrastran la clave.
+ * @param {object|null} settings Ajustes de la petición, si el llamante los tiene
+ * @param {{thinkingJob?: string, thinkingPolicy?: object}} options
+ * @returns {{mode:string,tokens?:number}}
+ */
+function thinkingPolicyForRequest(settings, options = {}) {
+    const jobId = options.thinkingJob || null;
+    if (options.thinkingPolicy) return applyJobEligibility(options.thinkingPolicy, jobId);
+    if (!jobId) return { mode: 'heredar' };
+    const conClave = settings && settings[THINKING_POLICY_SETTINGS_KEY];
+    if (conClave) return resolveThinkingPolicy(settings, jobId);
+    try {
+        return resolveThinkingPolicy(getSettings()[THINKING_POLICY_SETTINGS_KEY] || {}, jobId);
+    } catch (_) {
+        // Ajustes todavía sin montar (arranque de la extensión): no se toca nada.
+        return { mode: 'heredar' };
+    }
+}
+
+/** Revalida la elegibilidad del trabajo (D5) sobre una política ya resuelta. */
+function applyJobEligibility(policy, jobId) {
+    return jobId ? resolveThinkingPolicy({ [jobId]: policy }, jobId) : policy;
+}
+
+/**
+ * Aplica la política al cuerpo que está a punto de salir (D3/D4). Con `heredar`
+ * el objeto queda intacto: ni un byte nuevo, exactamente el comportamiento actual.
+ * @param {Record<string, unknown>} body
+ * @param {object|null} settings
+ * @param {{thinkingJob?: string, thinkingPolicy?: object}} options
+ * @param {string} fuente Ruta de conexión real de la petición
+ */
+function applyThinkingPolicyToRequest(body, settings, options = {}, fuente = '') {
+    const policy = thinkingPolicyForRequest(settings, options);
+    if (options.thinkingJob && settings?.debugMode) {
+        const estado = describeThinkingEffect({ [THINKING_POLICY_SETTINGS_KEY]: { [options.thinkingJob]: policy } }, options.thinkingJob, fuente || settings?.connectionSource);
+        console.log(`[RPG Tracker] Pensamiento del trabajo "${options.thinkingJob}": ${estado.text}`);
+    }
+    return applyThinkingPolicyToBody(body, policy, options.thinkingJob || null);
+}
+
 // ── Ollama ─────────────────────────────────────────────────────────────────────
 
 export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null, stream = false) {
@@ -709,7 +761,7 @@ export async function fetchOllamaModels(url) {
 
 // ── OpenAI Compatible ──────────────────────────────────────────────────────────
 
-export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null) {
+export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}, signal = null, jsonSchema = null, options = {}) {
     if (!url) throw new Error('OpenAI Compatible URL is not configured.');
     if (!model) throw new Error('OpenAI Compatible model name is not set.');
 
@@ -746,6 +798,11 @@ export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt
             },
         };
     }
+
+    // Pensamiento por trabajo (spec 2026-11-05, D3/D4): este cuerpo es propio,
+    // así que es uno de los dos puntos donde la política gobernar el razonamiento.
+    // En «heredar» queda byte a byte como siempre.
+    applyThinkingPolicyToRequest(requestBody, null, options);
 
     console.log(`[RPG Tracker] sendViaOpenAI — model: "${model}", url: "${endpoint}"`);
     if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
@@ -930,7 +987,7 @@ function extractRawStateResponse(context, raw) {
  * @param {string} systemPrompt
  * @param {string} userPrompt
  * @param {AbortSignal|null} [signal]
- * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null, stream?: boolean, debugSource?: string }} [options]
+ * @param {{ preserveUserMacro?: boolean, userMacroNames?: string[], jsonSchema?: object|null, stream?: boolean, debugSource?: string, thinkingJob?: string, thinkingPolicy?: object }} [options]
  * @returns {Promise<string>}
  */
 export async function sendStateRequest(settings, systemPrompt, userPrompt, signal = null, options = {}) {
@@ -939,6 +996,20 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     const jsonSchema = options.jsonSchema || null;
     const stream = !!options.stream;
     const debugSource = String(options.debugSource || 'Tracker').trim() || 'Tracker';
+    const thinkingJob = options.thinkingJob || null;
+    // La política se resuelve una sola vez (D2) y sólo la consume la rama `openai`
+    // (D1): por SillyTavern no caben los campos de razonamiento.
+    const thinkingPolicy = thinkingJob
+        ? thinkingPolicyForRequest(settings, { thinkingJob, thinkingPolicy: options.thinkingPolicy })
+        : null;
+    if (thinkingJob && settings?.debugMode) {
+        const estado = describeThinkingEffect(
+            { [THINKING_POLICY_SETTINGS_KEY]: { [thinkingJob]: thinkingPolicy } },
+            thinkingJob,
+            settings.connectionSource,
+        );
+        console.log(`[RPG Tracker] Pensamiento del trabajo "${thinkingJob}": ${estado.text}`);
+    }
     const finalize = (text) => {
         let val = (preserveUserMacro && typeof text === 'string')
             ? restoreUserMacro(text, userMacroNames)
@@ -1037,7 +1108,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        const text = await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null);
+        const text = await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null,
+            { thinkingJob, thinkingPolicy });
         logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
         return finalize(text);
     }
@@ -1157,7 +1229,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
  * @param {AbortSignal|null} signal
  * @returns {Promise<{content: string, toolCall: {name: string, args: object, id: string} | null}>}
  */
-export async function sendAgentTurn(settings, messages, tools = null, signal = null) {
+export async function sendAgentTurn(settings, messages, tools = null, signal = null, options = {}) {
     const context = SillyTavern.getContext();
 
     // ── OpenAI compatible ────────────────────────────────────────────────────
@@ -1190,6 +1262,9 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
         };
         if (tools?.length) body.tools = tools;
         body.max_tokens = resolveMaxTokens(settings);
+        // El otro cuerpo gobernable (spec 2026-11-05, D3). La rama ollama y las
+        // rutas de SillyTavern se quedan exactamente como estaban (D3/AC0).
+        applyThinkingPolicyToRequest(body, settings, options, 'openai');
 
         // PATCH: always route through ST's server-side CORS proxy (requires enableCorsProxy).
         // Browser-direct fetches to remote endpoints (e.g. opencode.ai) fail CORS preflight.
