@@ -108,6 +108,7 @@ import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from './map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from './map-evolution-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_COMPRESS_SYSTEM_PROMPT } from './map-evolution-compress-prompt.js';
 import {
+    PROMPT_CEILING_DEFAULTS,
     PROMPT_CEILING_SETTINGS_KEYS,
     announceCeilingCut,
     applyUnitCeiling,
@@ -2875,6 +2876,70 @@ async function refreshExtensionPrompt() {
     } catch (error) {
         if (ownsChat()) throw error;
 }
+}
+
+/**
+ * Cajón «🧱 Techos de prompts» (ola 4, D-4): el render LEE y pinta los tres
+ * valores guardados tal cual; nunca escribe (AC0).
+ * @param {object} settings
+ */
+function renderPromptCeilingsBox(settings) {
+    const campos = [
+        ['rpg_ceiling_tracker_memo', PROMPT_CEILING_SETTINGS_KEYS.trackerMemo],
+        ['rpg_ceiling_world_block', PROMPT_CEILING_SETTINGS_KEYS.worldBlock],
+        ['rpg_ceiling_world_history', PROMPT_CEILING_SETTINGS_KEYS.worldHistory],
+    ];
+    for (const [id, clave] of campos) {
+        const campo = document.getElementById(id);
+        if (campo) campo.value = settings?.[clave] ?? '';
+    }
+}
+
+/**
+ * Enlaces del cajón de techos (D-4): el `change` persiste el valor CLAMPADO
+ * (campo vacío o basura → default de fábrica, jamás «sin techo» involuntario),
+ * avisa en español y repinta; «Restaurar» deja 1600 / 4096 / 5. Nada de esto
+ * escribe el `settings.json` de SillyTavern: solo ajustes de la extensión.
+ * @param {object} settings
+ */
+function bindPromptCeilingControls(settings) {
+    const caja = document.getElementById('rpg_prompt_ceilings_box');
+    if (!caja) return;
+    const pintar = () => renderPromptCeilingsBox(settings);
+    const etiquetas = { trackerMemo: 'Memo de Estado', worldBlock: 'Bloque de Mundo', worldHistory: 'Reportes Históricos' };
+    const campos = [
+        ['rpg_ceiling_tracker_memo', 'trackerMemo'],
+        ['rpg_ceiling_world_block', 'worldBlock'],
+        ['rpg_ceiling_world_history', 'worldHistory'],
+    ];
+    for (const [id, clave] of campos) {
+        const campo = document.getElementById(id);
+        if (!campo || campo.dataset.rtBound === '1') continue;
+        campo.dataset.rtBound = '1';
+        campo.addEventListener('change', () => {
+            const aplicado = clampPromptCeiling(clave, campo.value);
+            settings[PROMPT_CEILING_SETTINGS_KEYS[clave]] = aplicado;
+            saveSettings();
+            toastr['success'](
+                `Techo «${etiquetas[clave]}»: ${aplicado === 0 ? 'sin techo' : `${aplicado} ${clave === 'worldHistory' ? 'reportes' : 'tokens estimados'}`}. El recorte solo aparece si algún bloque lo rebasa y se anuncia en el panel del agente.`,
+                'Techos de Prompts',
+            );
+            pintar();
+        });
+    }
+    const boton = document.getElementById('rpg_ceiling_reset');
+    if (boton && boton.dataset.rtBound !== '1') {
+        boton.dataset.rtBound = '1';
+        boton.addEventListener('click', () => {
+            settings[PROMPT_CEILING_SETTINGS_KEYS.trackerMemo] = PROMPT_CEILING_DEFAULTS.trackerMemo;
+            settings[PROMPT_CEILING_SETTINGS_KEYS.worldBlock] = PROMPT_CEILING_DEFAULTS.worldBlock;
+            settings[PROMPT_CEILING_SETTINGS_KEYS.worldHistory] = PROMPT_CEILING_DEFAULTS.worldHistory;
+            saveSettings();
+            toastr['info']('Techos de fábrica restaurados: 1600 / 4096 / 5. En uso medio no recortan nada.', 'Techos de Prompts');
+            pintar();
+        });
+    }
+    pintar();
 }
 
 /**
@@ -6756,6 +6821,7 @@ function organizeConnectionSettingsUI() {
         bindConnectionApplyAllControls();
         bindThinkingPolicyControls(settings);
         bindLoreRhythmControls(settings);
+        bindPromptCeilingControls(settings);
 
         // Bind drawer toggles ONLY for our own content to avoid global conflicts.
         // IMPORTANT: expand each comma-root before appending `.inline-drawer-toggle`.

@@ -721,6 +721,21 @@
                                     <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores de fábrica (3, 5)
                                 </button>
                             </div>
+                            <div id="rpg_prompt_ceilings_box" style="margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px; display:flex; flex-direction:column; gap:6px;">
+                                <div style="font-size: 0.78em; font-weight: bold; opacity: 0.85;">🧱 Techos de Prompts</div>
+                                <div style="font-size: 0.75em; opacity: 0.7; line-height: 1.4;">
+                                    Topes de tamaño, en tokens estimados (4 caracteres ≈ 1 token), para los bloques largos que viajan a los modelos en cada pasada. Cada recorte descarta bloques ENTEROS empezando por lo MÁS ANTIGUO, nunca parte un <b>[TAG]</b> ni un informe, y se anuncia en el registro y en el panel del agente. Con los valores de fábrica (1600 / 4096 / 5) ningún uso normal se recorta: memo medio ≈358 tok y respuesta del narrador ≈852 tok medidos. <b>0 = sin techo</b> donde esté permitido. Ojo: chars/4 <b>subestima el español y el JSON un ~15-30 %</b>, el techo real es mayor que el nominal; los contadores del panel duran solo la sesión.
+                                </div>
+                                <label title="Toque en tokens del memo de estado que ven el rastreador y el narrador cada turno. El memo medio mide ≈358 tok: con 1600 jamás se corta en uso normal. En el rastreador el TRACKER STATE 0 NUNCA se recorta; en el narrador sí caen [TAG] completos del último al primero. 800-4000 tokens; 0 = sin techo.">Memo de Estado (ficha) <span style="opacity:0.55; font-size:0.9em;">(800-4000 · 0 = sin techo)</span></label>
+                                <input id="rpg_ceiling_tracker_memo" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" />
+                                <label title="Toque en tokens del bloque «World Progression Reports» que ve el narrador y del historial que ve el trabajo de Mundo. Los informes medio rondan 300-400 tok: con 4096 caben holgadamente 10. Cae primero el informe MÁS VIEJO; las cabeceras y preámbulos no se tocan. 2048-8192 tokens; 0 = sin techo.">Bloque de Mundo (tokens) <span style="opacity:0.55; font-size:0.9em;">(2048-8192 · 0 = sin techo)</span></label>
+                                <input id="rpg_ceiling_world_block" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" />
+                                <label title="Nº máximo de reportes históricos del mundo que lee el trabajo de World Progression (no son tokens). Sustituye al «0 = incluir todos» del Retroceso Histórico: si tu retroceso es más estricto, manda el retroceso (se usa el mínimo de los dos). Con >5 reportes guardados este tope SÍ cambia el trabajo: es lo querido de esta ola. 3-10; 0 = sin techo (todos).">Reportes Históricos de Mundo (nº) <span style="opacity:0.55; font-size:0.9em;">(3-10 · 0 = sin techo)</span></label>
+                                <input id="rpg_ceiling_world_history" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" />
+                                <button type="button" id="rpg_ceiling_reset" class="menu_button interactable" style="width:100%;font-size:11px;" title="Deja los tres techos en sus valores de fábrica: no recortan nada en uso medio y son los recomendados.">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores de fábrica (1600 / 4096 / 5)
+                                </button>
+                            </div>
                         </div>
                     </details>
                 </div>
