@@ -508,7 +508,7 @@ export async function runMapUpdaterPass({ isManual = false, lookback = null, bui
             }
             if (attempt > 0) broadcastStep('thought', `Correction pass ${attempt}...`);
             else broadcastStep('thought', 'Requesting occupancy update...');
-            const output = chatCommitResult(ownsChat, await sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal));
+            const output = chatCommitResult(ownsChat, await sendStateRequest(requestSettings(settings), systemPrompt, prompt, signal, { thinkingJob: 'map_runtime' }));
             const parsed = parseMapArchitectResponse(output);
             if (!parsed.value) {
                 lastIssues = [{ code: 'INVALID_JSON', path: '$', hint: parsed.error || 'No JSON object was found.' }];

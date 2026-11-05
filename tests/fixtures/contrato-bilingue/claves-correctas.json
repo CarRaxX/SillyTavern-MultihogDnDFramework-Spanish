@@ -1,0 +1,61 @@
+[
+    {
+        "id": "claves-correctas-01",
+        "origen": "banco dorado sintético (PjN de prueba): JSON del Arquitecto de Mapas con las claves del contrato en inglés",
+        "entrada": "```json\n{\"operations\":[{\"op\":\"ADD_ASSET\",\"name\":\"Torre de prueba\",\"type\":\"STRUCTURE\"}],\"type\":\"DUNGEON\"}\n```",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": {
+                    "operations": [{ "op": "ADD_ASSET", "name": "Torre de prueba", "type": "STRUCTURE" }],
+                    "type": "DUNGEON"
+                },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "claves-correctas-02",
+        "origen": "banco dorado sintético (PjN de prueba): las mismas claves escritas en español valen lo mismo (C4/D6)",
+        "entrada": "{\"Operaciones\":[{\"Operacion\":\"ADD_ASSET\",\"Nombre\":\"Torre de prueba\",\"Tipo\":\"STRUCTURE\"}],\"Tipo\":\"DUNGEON\"}",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": {
+                    "operations": [{ "op": "ADD_ASSET", "name": "Torre de prueba", "type": "STRUCTURE" }],
+                    "type": "DUNGEON"
+                },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "claves-correctas-03",
+        "origen": "banco dorado sintético: una clave que no está en la tabla del contrato sale intacta, con su acento",
+        "entrada": "{\"operations\":[],\"notas\":\"La Bóveda de prueba sigue en pie — Día 4, 08:00\",\"Nombre Propio\":\"Álvaro de prueba\"}",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": {
+                    "operations": [],
+                    "notas": "La Bóveda de prueba sigue en pie — Día 4, 08:00",
+                    "Nombre Propio": "Álvaro de prueba"
+                },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "claves-correctas-04",
+        "origen": "banco dorado sintético (PjN de prueba): salida del compresor de Evolución con claves canónicas",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"digests\":[{\"at\":\"Día 3\",\"summary\":\"La Torre de prueba queda en ruinas\"}]}",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": {
+                "ok": true,
+                "digests": [{ "at": "Día 3", "summary": "La Torre de prueba queda en ruinas" }]
+            }
+        }
+    }
+]

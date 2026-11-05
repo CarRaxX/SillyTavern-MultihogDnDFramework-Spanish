@@ -1,8 +1,19 @@
-/** Pull a JSON object from an otherwise valid fenced/prefaced model response. */
+import { normalizeMachineKeys } from './src/state/bilingual-contract.js';
+
+/**
+ * Pull a JSON object from an otherwise valid fenced/prefaced model response.
+ *
+ * C4 (spec 2026-11-05): las claves del objeto se pliegan contra la tabla del
+ * contrato (`Operaciones` → `operations`, `Nombre` → `name`, `Resumen` →
+ * `summary`). Es la única transformación que sufre la respuesta: el JSON puede venir
+ * con texto español alrededor, con las claves en español o truncado, y el
+ * contenido narrativo de los valores no se toca nunca (D6).
+ * @param {string} response
+ */
 export function parseMapArchitectResponse(response) {
     let source = String(response || '').trim();
     source = source.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    try { return { value: JSON.parse(source), error: null }; } catch (_) {}
+    try { return { value: normalizeMachineKeys(JSON.parse(source)), error: null }; } catch (_) {}
 
     const start = source.indexOf('{');
     if (start < 0) return { value: null, error: 'No JSON object was found.' };
@@ -22,7 +33,7 @@ export function parseMapArchitectResponse(response) {
         if (char === '}') {
             depth--;
             if (depth === 0) {
-                try { return { value: JSON.parse(source.slice(start, index + 1)), error: null }; }
+                try { return { value: normalizeMachineKeys(JSON.parse(source.slice(start, index + 1))), error: null }; }
                 catch (error) { return { value: null, error: `Invalid JSON: ${error.message}` }; }
             }
         }

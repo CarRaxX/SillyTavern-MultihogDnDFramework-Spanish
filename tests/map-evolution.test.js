@@ -1031,7 +1031,7 @@ describe('Map Evolution', () => {
         expect(evolution).not.toContain('normalizeDungeonLabel(currentLocation).includes(normalizeDungeonLabel(site.siteRoot))');
         expect(evolution).toContain("scope === 'active'");
         expect(evolution).toContain('for (const site of [...baselineOnly, ...toEvolve])');
-        expect(evolution).toContain("{ stream: true, debugSource: 'Map Evolution' }");
+        expect(evolution).toContain("{ stream: true, debugSource: 'Map Evolution', thinkingJob: 'map_evolution' }");
         expect(evolution).toContain('OPEN CAUSAL THREADS (THIS SITE)');
         expect(evolution).toContain('settings.mapEvolutionThreadsBySite');
         expect(evolution).toContain('Field reminder: Every operation needs cause');

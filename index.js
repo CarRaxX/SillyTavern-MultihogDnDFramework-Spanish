@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
@@ -563,6 +563,102 @@ function bindConnectionApplyAllControls() {
             'Connections & Models',
         );
     });
+}
+
+
+/**
+ * Traducción de los modos de pensamiento para el cajón (D8). Los valores son
+ * tokens de máquina en español fijo (D2); sólo las etiquetas se muestran.
+ */
+const THINKING_MODE_LABELS_ES = {
+    heredar: 'Herdar (lo de siempre)',
+    presupuesto: 'Presupuesto de tokens',
+    desactivar: 'Sin pensamiento',
+};
+
+/**
+ * Fila del cajón «Rendimiento (modelo local)» (D8): selector de modo, campo de
+ * presupuesto y RUTA EFECTIVA del trabajo. La ruta se pinta con la fuente de
+ * conexión que el trabajo tiene ahora mismo, para que el humano no mida a ciegas:
+ * «OpenAI compatible» manda nuestro cuerpo (la política aplica); API Principal o
+ * Perfil pasan por SillyTavern (la política es inerte y manda su presupuesto global).
+ * @param {{id:string,label:string,note:string,source:string,modes:ReadonlyArray<string>}} job
+ * @param {{mode:string,tokens?:number}} policy
+ * @param {string} connectionSource Fuente real del trabajo
+ * @returns {string}
+ */
+function buildThinkingPolicyRowHtml(job, policy, connectionSource) {
+    const route = describeThinkingRoute(connectionSource);
+    const opciones = job.modes
+        .map(modo => `<option value="${modo}"${modo === policy.mode ? ' selected' : ''}>${escapeHtml(THINKING_MODE_LABELS_ES[modo] || modo)}</option>`)
+        .join('');
+    const presupuesto = `<input id="rpg_thinking_tokens_${job.id}" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole rt-thinking-policy-tokens" data-job="${job.id}" value="${Number.isSafeInteger(policy.tokens) ? policy.tokens : ''}" placeholder="tokens" style="width:80px;font-size:0.78em;${policy.mode === 'presupuesto' ? '' : 'display:none;'}" title="Tokens de pensamiento para este trabajo (entero positivo). Vacío o inválido vuelve a Heredar." />`;
+    return `<div class="rt-thinking-policy-row flex-container gap-1" data-job="${job.id}" style="align-items:center;flex-wrap:wrap;">
+        <span class="rt-thinking-policy-label" style="flex:1;min-width:210px;font-size:0.8em;" title="${escapeHtml(job.note)}">${escapeHtml(job.label)}</span>
+        <select id="rpg_thinking_mode_${job.id}" class="text_pole rt-thinking-policy-mode" data-job="${job.id}" style="width:190px;font-size:0.78em;" title="${escapeHtml(job.note)}">${opciones}</select>
+        ${presupuesto}
+        <span id="rpg_thinking_route_${job.id}" class="rt-thinking-policy-route" style="font-size:0.72em;" title="${escapeHtml(route.tooltip)}">${escapeHtml(route.label)}${route.controlable ? '' : ' — política inerte'}</span>
+    </div>`;
+}
+
+/** Pinta las filas del cajón con la política y las fuentes de ahora mismo. */
+function renderThinkingPolicyBox(settings) {
+    const contenedor = document.getElementById('rpg_thinking_policy_rows');
+    if (!contenedor) return;
+    const mapa = { localThinkingPolicy: settings?.localThinkingPolicy || {} };
+    contenedor.innerHTML = THINKING_JOBS
+        .map(job => buildThinkingPolicyRowHtml(job, resolveThinkingPolicy(mapa, job.id), settings?.[job.source]))
+        .join('');
+}
+
+/**
+ * Guarda un dial movido. El mapa se revalida entero con `normalizeThinkingPolicy`
+ * (D2), así que un modo inventado, un presupuesto basura o un «desactivar» en un
+ * trabajo de juicio vuelven a Heredar antes de tocar los ajustes.
+ * @param {object} settings
+ * @param {string} jobId
+ * @returns {{mode:string,tokens?:number}} política finalmente guardada
+ */
+function saveThinkingPolicyJob(settings, jobId) {
+    const modo = String(document.getElementById(`rpg_thinking_mode_${jobId}`)?.value || 'heredar');
+    const bruto = String(document.getElementById(`rpg_thinking_tokens_${jobId}`)?.value || '').trim();
+    const saneado = normalizeThinkingPolicy({
+        ...(settings.localThinkingPolicy || {}),
+        [jobId]: { mode: modo, tokens: bruto ? Number(bruto) : undefined },
+    });
+    settings.localThinkingPolicy = saneado;
+    saveSettings();
+    return resolveThinkingPolicy({ localThinkingPolicy: saneado }, jobId);
+}
+
+/** Cajón «Rendimiento (modelo local)»: pinta, escucha los diables y el botón de restaurar. */
+function bindThinkingPolicyControls(settings) {
+    const caja = document.getElementById('rpg_local_thinking_policy_box');
+    if (!caja) return;
+    const pintar = () => renderThinkingPolicyBox(settings);
+    // Las fuentes de conexión cambian fuera de este cajón: al abrirlo se vuelve a
+    // leer todo para que la ruta efectiva nunca se quede vieja.
+    caja.addEventListener('toggle', pintar);
+    caja.addEventListener('change', (event) => {
+        const destino = event.target;
+        if (!destino?.dataset?.job) return;
+        const guardado = saveThinkingPolicyJob(settings, destino.dataset.job);
+        if (String(destino.value || '') === 'presupuesto' && guardado.mode !== 'presupuesto') {
+            toastr.warning('El presupuesto ha de ser un número entero mayor que cero; el trabajo se queda en Heredar.', 'Rendimiento (modelo local)');
+        }
+        pintar();
+    });
+    const boton = document.getElementById('rpg_thinking_policy_reset');
+    if (boton && boton.dataset.rtBound !== '1') {
+        boton.dataset.rtBound = '1';
+        boton.addEventListener('click', () => {
+            settings.localThinkingPolicy = normalizeThinkingPolicy({});
+            saveSettings();
+            pintar();
+            toastr['info']('Los ocho trabajos vuelven a Heredar: las peticiones salen igual que siempre.', 'Rendimiento (modelo local)');
+        });
+    }
+    pintar();
 }
 
 
@@ -3423,7 +3519,9 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     suffix;
             }
 
-            const result = chatCommitResult(ownsOperation, await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' }));
+            // Trabajo del pase (D5): la auditoría y la revisión completa son de
+            // juicio y no admiten «desactivar»; la transcripción normal sí puede.
+            const result = chatCommitResult(ownsOperation, await sendStateRequest(settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker', thinkingJob: thinkingJobForTrackerPass({ isFullContext, fullReviewStateMode: settings.fullReviewStateMode }) }));
 
             if (signal.aborted) break;
             if (!canCommitPassForChat(passChatId, runtimeState.currentChatId)) {
@@ -3727,7 +3825,7 @@ export async function sendDirectPrompt(message, options = {}) {
             settings.userPromptSuffix;
 
         broadcastStateTrackerStep('thought', 'Requesting memo update from State Tracker...');
-        const result = chatCommitResult(ownsOperation, await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker' }));
+        const result = chatCommitResult(ownsOperation, await sendStateRequest(options.connectionSettings || settings, systemPrompt, userPrompt, signal, { stream: true, debugSource: 'Tracker', thinkingJob: thinkingJobForTrackerPass({ fullReviewStateMode: settings.fullReviewStateMode }) }));
 
         if (!canCommitPassForChat(passChatId, runtimeState.currentChatId, { aborted: signal.aborted })) {
             broadcastStateTrackerStep('error', signal.aborted ? 'Stopped by user.' : 'Stopped because the active chat changed.');
@@ -6479,6 +6577,7 @@ function organizeConnectionSettingsUI() {
 
         organizeConnectionSettingsUI();
         bindConnectionApplyAllControls();
+        bindThinkingPolicyControls(settings);
 
         // Bind drawer toggles ONLY for our own content to avoid global conflicts.
         // IMPORTANT: expand each comma-root before appending `.inline-drawer-toggle`.

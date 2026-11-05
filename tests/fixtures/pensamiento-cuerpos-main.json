@@ -1,0 +1,138 @@
+{
+  "ollama-directo": {
+    "cuerpo": {
+      "model": "modelo-prueba",
+      "messages": [
+        {
+          "role": "system",
+          "content": "SISTEMA"
+        },
+        {
+          "role": "user",
+          "content": "USUARIO"
+        }
+      ],
+      "stream": false,
+      "options": {
+        "temperature": 0.1,
+        "top_p": 1,
+        "top_k": 40,
+        "repeat_penalty": 1.1,
+        "num_predict": 4096
+      }
+    },
+    "texto": "{\"model\":\"modelo-prueba\",\"messages\":[{\"role\":\"system\",\"content\":\"SISTEMA\"},{\"role\":\"user\",\"content\":\"USUARIO\"}],\"stream\":false,\"options\":{\"temperature\":0.1,\"top_p\":1,\"top_k\":40,\"repeat_penalty\":1.1,\"num_predict\":4096}}"
+  },
+  "openai-directo": {
+    "cuerpo": {
+      "model": "modelo-prueba",
+      "messages": [
+        {
+          "role": "system",
+          "content": "SISTEMA"
+        },
+        {
+          "role": "user",
+          "content": "USUARIO"
+        }
+      ],
+      "temperature": 0.1,
+      "top_p": 1,
+      "frequency_penalty": 0,
+      "presence_penalty": 0,
+      "stream": true,
+      "reasoning_format": "auto",
+      "max_tokens": 4096
+    },
+    "texto": "{\"model\":\"modelo-prueba\",\"messages\":[{\"role\":\"system\",\"content\":\"SISTEMA\"},{\"role\":\"user\",\"content\":\"USUARIO\"}],\"temperature\":0.1,\"top_p\":1,\"frequency_penalty\":0,\"presence_penalty\":0,\"stream\":true,\"reasoning_format\":\"auto\",\"max_tokens\":4096}"
+  },
+  "estado-peticion-openai": {
+    "cuerpo": {
+      "model": "modelo-prueba",
+      "messages": [
+        {
+          "role": "system",
+          "content": "<reasoning_guidelines>\nTu tiempo de pensamiento es moderado. Evita introducciones largas, repeticiones o desvíos dentro de tu razonamiento. Planifica la solución en pasos rápidos, evalúa los escenarios con brevedad y concluye tu análisis antes de agotar el espacio para pasar a la respuesta.\n</reasoning_guidelines>\n\nSISTEMA"
+        },
+        {
+          "role": "user",
+          "content": "USUARIO"
+        }
+      ],
+      "temperature": 0.1,
+      "top_p": 1,
+      "frequency_penalty": 0,
+      "presence_penalty": 0,
+      "stream": true,
+      "reasoning_format": "auto",
+      "max_tokens": 4096
+    },
+    "texto": "{\"model\":\"modelo-prueba\",\"messages\":[{\"role\":\"system\",\"content\":\"<reasoning_guidelines>\\nTu tiempo de pensamiento es moderado. Evita introducciones largas, repeticiones o desvíos dentro de tu razonamiento. Planifica la solución en pasos rápidos, evalúa los escenarios con brevedad y concluye tu análisis antes de agotar el espacio para pasar a la respuesta.\\n</reasoning_guidelines>\\n\\nSISTEMA\"},{\"role\":\"user\",\"content\":\"USUARIO\"}],\"temperature\":0.1,\"top_p\":1,\"frequency_penalty\":0,\"presence_penalty\":0,\"stream\":true,\"reasoning_format\":\"auto\",\"max_tokens\":4096}"
+  },
+  "turno-agente-openai": {
+    "cuerpo": {
+      "model": "modelo-prueba",
+      "messages": [
+        {
+          "role": "system",
+          "content": "SISTEMA"
+        },
+        {
+          "role": "user",
+          "content": "USUARIO"
+        }
+      ],
+      "temperature": 0.1,
+      "top_p": 1,
+      "stream": true,
+      "reasoning_format": "auto",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "herramienta_prueba",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        }
+      ],
+      "max_tokens": 4096
+    },
+    "texto": "{\"model\":\"modelo-prueba\",\"messages\":[{\"role\":\"system\",\"content\":\"SISTEMA\"},{\"role\":\"user\",\"content\":\"USUARIO\"}],\"temperature\":0.1,\"top_p\":1,\"stream\":true,\"reasoning_format\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"herramienta_prueba\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}],\"max_tokens\":4096}"
+  },
+  "turno-agente-ollama": {
+    "cuerpo": {
+      "model": "modelo-prueba",
+      "messages": [
+        {
+          "role": "system",
+          "content": "SISTEMA"
+        },
+        {
+          "role": "user",
+          "content": "USUARIO"
+        }
+      ],
+      "stream": false,
+      "options": {
+        "temperature": 0.1,
+        "top_p": 1
+      },
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "herramienta_prueba",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        }
+      ]
+    },
+    "texto": "{\"model\":\"modelo-prueba\",\"messages\":[{\"role\":\"system\",\"content\":\"SISTEMA\"},{\"role\":\"user\",\"content\":\"USUARIO\"}],\"stream\":false,\"options\":{\"temperature\":0.1,\"top_p\":1},\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"herramienta_prueba\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}]}"
+  }
+}

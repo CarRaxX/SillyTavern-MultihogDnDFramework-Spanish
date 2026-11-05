@@ -1514,6 +1514,17 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
         /** Selected module example keys: stock:CHARACTER, field:TAG, sysprompt:id */
         gameSystemWizardModuleExampleKeys: [],
 
+        /**
+         * Pensamiento por trabajo (spec 2026-11-05, D2). Mapa
+         * `{ <jobId>: { mode: 'heredar'|'presupuesto'|'desactivar', tokens?: int } }`.
+         * Vacío por defecto: todos los trabajos están en `heredar`, que es
+         * literalmente el comportamiento actual - el cuerpo de la petición no
+         * gana ni un byte hasta que el usuario mueva un dial (AC0/D4).
+         * Sólo se guardan las entradas distintas de `heredar`.
+         * @type {Record<string, {mode:string,tokens?:number}>}
+         */
+        localThinkingPolicy: {},
+
         lastResetVersion: "",
 
         lastSeenPromptDefaultsFingerprint: "",

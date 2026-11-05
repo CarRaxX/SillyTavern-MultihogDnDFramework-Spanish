@@ -2,6 +2,8 @@
  * Router state sanitization and timestamp template adjusters.
  */
 
+import { canonicalMachineToken } from './bilingual-contract.js';
+
 export function sanitizeRouterState(s) {
     if (!s) return;
     const isGoodId = (id) => typeof id === 'string' && id.includes('::');
@@ -85,9 +87,21 @@ const STOCK_ROUTER_CATEGORY_BOOKS = Object.freeze({
     WORLD: 'World',
 });
 
-/** @param {unknown} value */
+/**
+ * Normaliza una etiqueta de categoría.
+ *
+ * C4 (spec 2026-11-05): un alias español de una categoría del stock (`Mundo`,
+ * `Evento`, `PNJ`, `Misión`…) vale exactamente lo mismo que su token inglés. El
+ * plegado sólo se aplica contra la lista conocida de categorías del stock: una
+ * etiqueta propia del usuario (`Bóveda`, `Tesoro`) sale intacta, sin plegar
+ * acentos ni tocar su texto (regla dura de D6).
+ * @param {unknown} value
+ */
 function normalizeRouterCategoryTag(value) {
-    return String(value || '').trim().toUpperCase();
+    const crudo = String(value || '').trim().toUpperCase();
+    if (!crudo) return '';
+    const canonico = canonicalMachineToken(crudo);
+    return (canonico && STOCK_ROUTER_CATEGORY_BOOKS[canonico]) ? canonico : crudo;
 }
 
 /**

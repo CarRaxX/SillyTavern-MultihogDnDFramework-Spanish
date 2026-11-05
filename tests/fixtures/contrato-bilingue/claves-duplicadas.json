@@ -1,0 +1,40 @@
+[
+    {
+        "id": "duplicadas-01",
+        "origen": "banco dorado sintético: clave del contrato en inglés y su alias español en el mismo objeto",
+        "entrada": "{\"operations\":[{\"op\":\"ADD_ASSET\",\"name\":\"Torre de prueba\",\"Nombre\":\"Torre gemela de prueba\"}]}",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": {
+                    "operations": [{ "op": "ADD_ASSET", "name": "Torre de prueba", "Nombre": "Torre gemela de prueba" }]
+                },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "duplicadas-02",
+        "origen": "banco dorado sintético: el compresor escribe `digests` y `Resúmenes` a la vez; manda el canónico",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"digests\":[{\"at\":\"Día 1\",\"summary\":\"Se levanta la Torre de prueba\"}],\"Resúmenes\":[{\"Cuándo\":\"Día 9\",\"Resumen\":\"Este digest sobrante se ignora\"}]}",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": { "ok": true, "digests": [{ "at": "Día 1", "summary": "Se levanta la Torre de prueba" }] }
+        }
+    },
+    {
+        "id": "duplicadas-03",
+        "origen": "banco dorado sintético: dos etiquetas de relación para el mismo PjN, una en cada idioma",
+        "entrada": "Texto suelto. [[REL: PjN de prueba | Amistad | +15]] y luego [[REL: PjN de prueba | friendship | -2]]",
+        "esperado": {
+            "sujeto": "etiqueta-rel",
+            "resultado": {
+                "rel": [
+                    { "id": "PjN de prueba", "field": "friendship", "delta": 15 },
+                    { "id": "PjN de prueba", "field": "friendship", "delta": -2 }
+                ]
+            }
+        }
+    }
+]

@@ -112,7 +112,7 @@ describe('World Progression / Lorebook Agent chat-switch affinity', () => {
         );
         expect(wpSlice.indexOf("error: 'chat_changed'")).toBeGreaterThan(-1);
         expect(wpSlice).toContain(
-            'await sendStateRequest(routerSettings, systemPrompt, userPrompt, signal, { stream: true, debugSource: \'World Progression\' })',
+            'await sendStateRequest(routerSettings, systemPrompt, userPrompt, signal, { stream: true, debugSource: \'World Progression\', thinkingJob: \'world_progression\' })',
         );
         const firstOwnsGuard = wpSlice.indexOf('if (!ownsChat()) return abortForChatChange()');
         expect(firstOwnsGuard).toBeGreaterThan(-1);

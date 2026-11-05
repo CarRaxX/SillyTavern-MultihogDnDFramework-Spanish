@@ -1,0 +1,35 @@
+[
+    {
+        "id": "enums-es-01",
+        "origen": "banco dorado sintético: enum de estado de hilo escrito en español (C4)",
+        "entrada": { "cause": "El PjN de prueba prendió fuego a la Torre de prueba", "summary": "La torre arde", "status": "Resuelto" },
+        "esperado": {
+            "sujeto": "hilo",
+            "resultado": { "estado": "resolved", "causa": "El PjN de prueba prendió fuego a la Torre de prueba", "resumen": "La torre arde" }
+        }
+    },
+    {
+        "id": "enums-es-02",
+        "origen": "banco dorado sintético: eje de relación escrito en español en la etiqueta [[REL: …]]",
+        "entrada": "[[REL: PjN de prueba | Amistad | +15]]",
+        "esperado": {
+            "sujeto": "etiqueta-rel",
+            "resultado": { "rel": [{ "id": "PjN de prueba", "field": "friendship", "delta": 15 }] }
+        }
+    },
+    {
+        "id": "enums-es-03",
+        "origen": "banco dorado sintético: categoría del Agente de Lorebook en español → libro del stock",
+        "entrada": "Mundo",
+        "esperado": { "sujeto": "categoria", "resultado": { "sufijo": "World" } }
+    },
+    {
+        "id": "enums-es-04",
+        "origen": "banco dorado sintético: marcador de herramienta en español en una respuesta de texto",
+        "entrada": "Reviso el archivo.\n**Acción:** grep_lore(\"PjN de prueba\")",
+        "esperado": {
+            "sujeto": "accion-texto",
+            "resultado": { "nombre": "grep_lore", "args": { "query": "PjN de prueba" } }
+        }
+    }
+]

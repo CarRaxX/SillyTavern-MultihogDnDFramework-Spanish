@@ -4,6 +4,7 @@
  */
 import { dungeonSiteRootsMatch, normalizeDungeonLabel, pickActiveSiteForLocation, resolveCurrentMapPlacement } from './dungeon-reality.js';
 import { findNthUserMessageStartIdx, formatAgentChatLogFromIndex, parseInWorldTime } from './memo-processor.js';
+import { coerceMachineEnum } from './src/state/bilingual-contract.js';
 
 export const DEFAULT_MAP_EVOLUTION_LOOKBACK = 20;
 
@@ -672,9 +673,15 @@ export function applyTestingGroundWorldState(snapshot, settings) {
     return true;
 }
 
+/**
+ * Estado del hilo causal. C4 (spec 2026-11-05): «abierto», «resuelto» o
+ * «transformado» valen lo mismo que el token inglés; un valor que no sea ninguno
+ * de ellos sigue cayendo a `open` exactamente que antes (D6: sólo se pliega un
+ * enum contra la lista conocida, el texto de la causa no se toca jamás).
+ * @param {unknown} value
+ */
 function normalizeThreadStatus(value) {
-    const status = String(value || '').trim().toLowerCase();
-    return MAP_THREAD_STATUSES.includes(status) ? status : 'open';
+    return coerceMachineEnum(value, MAP_THREAD_STATUSES) || 'open';
 }
 
 export function normalizeEvolutionThread(value) {
