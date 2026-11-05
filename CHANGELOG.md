@@ -2,6 +2,17 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [Unreleased] - 2026-11-05
+
+### Cambiado
+- **Dieta del blob `extension_settings.rpg_tracker`:** el historial del Agente de Lorebook pasa a formato 2 (`snapshotFormat`, `bookFingerprintsPre/Post`, `finalized`). Durante el paso las preimágenes completas viven en memoria y en `routerHistory` sólo se guarda copia textual de los libros que el paso cambió o borró; desaparece el guardado forzoso previo al paso. En la campaña de prueba (8 libros, 3 tocados, 5 pasos) el historial queda por debajo del 40 % del texto íntegro equivalente.
+- **Defaults enviados como huellas:** `lastSeenPromptDefaultsSnapshot` guarda un digest (`{ v: 2, fingerprint, elements }`, una huella de 64 bits por elemento) en lugar del texto íntegro (~205 KB). El diálogo «Qué cambió» enumera elementos por etiqueta con insignias calculadas por huella y la WAL de `localStorage` se reescribe en forma compacta para que el texto no resucite al recargar.
+- **Migración transparente y no destructiva:** `migrateCustomFields` convierte entradas antiguas conservando sus copias (todo lo deshacible sigue deshaciéndose) y pasa los defaults a digest; sólo descarta entradas de paso abortado sin preimagen. Es idempotente y persiste una única vez.
+
+### Añadido
+- **Guarda anti-edición manual al deshacer:** si un libro con preimagen cambió después del paso, se pregunta una sola vez antes de escribir en disco; sin confirmación, o sin diálogo disponible, ese libro se conserva intacto y se restauran los demás. Las entradas de paso a medias sin preimagen se rechazan con aviso.
+- **Estampa `lastSeenAt`** en cada partición de `chatStates` en el flujo normal de guardado. `pruneInactiveChatStates` queda implementada y cubierta por pruebas, pero sin activar: podar chats cerrados sigue siendo decisión del operador.
+
 ## [2026.9.23] - 2026-09-29
 
 ### Añadido

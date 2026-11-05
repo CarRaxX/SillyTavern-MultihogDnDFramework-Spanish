@@ -6449,7 +6449,15 @@ function organizeConnectionSettingsUI() {
         const earlyChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
         if (earlyChatId) await ensureLocalMemoRecovery(earlyChatId);
     }
-    migrateCustomFields();
+    // Dieta del blob (spec 2026-11-05, D6/R5): la WAL ya se aplicó arriba, así que la
+    // migración parte de los datos buenos. Si cambió algo se persiste una vez y se
+    // reescribe la WAL en su forma compacta para que el texto antigo no resucite al
+    // recargar (si no, el peso volvería en cada carga).
+    if (migrateCustomFields()) {
+        const migradas = getSettings();
+        stampCriticalSettingsSynced(migradas, writeCriticalSettingsBackup(migradas));
+        void saveSettings(true);
+    }
     createPanel();
 
     try {

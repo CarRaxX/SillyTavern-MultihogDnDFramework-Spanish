@@ -23,6 +23,8 @@ import {
 } from './realtime-visualization-guard.js';
 import { migrateChatSetupCatalogs } from './chat-setup.js';
 import { LOREBOOK_RUNTIME_FRAGMENT_KEYS } from './lorebook-runtime-fragments.js';
+import { fingerprintLorebook } from './content-fingerprint.js';
+import { buildBundledPromptsDigest, isBundledPromptsDigest, normalizeBundledPromptsSnapshot } from './factory-and-diff.js';
 import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.js';
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
@@ -1480,11 +1482,72 @@ export function getEffectiveRouterCampaignPrefix(chatId) {
 // ── One-time data migrations ───────────────────────────────────────────────────
 
 /**
+ * Dieta del blob (spec 2026-11-05, D6): reescribe en memoria lo que ya no necesita
+ * texto íntegro. Idempotente y NO destructiva: todo lo que antes se podía deshacer
+ * sigue deshaciéndose, y sólo se descartan entradas de paso a medias sin preimagen,
+ * que de por sí no pueden restaurarse (R3).
+ * @param {Record<string, any>} settings
+ * @returns {boolean} true si algo cambió y hay que persistirlo
+ */
+export function migrateBlobDiet(settings) {
+    const s = settings;
+    if (!s || typeof s !== 'object') return false;
+    let cambió = false;
+
+    // 1. Entradas del historial del Agente de Lorebooks → formato 2.
+    if (Array.isArray(s.routerHistory) && s.routerHistory.length) {
+        /** @type {any[]} */
+        const conservadas = [];
+        for (const entrada of s.routerHistory) {
+            if (!entrada || typeof entrada !== 'object') continue;
+            const copias = (entrada.bookSnapshots && typeof entrada.bookSnapshots === 'object')
+                ? entrada.bookSnapshots
+                : null;
+            const tienePreimagen = !!copias && Object.keys(copias).length > 0;
+            if (!tienePreimagen && entrada.finalized === false) {
+                // Paso abortado antes de cerrar y sin preimagen en el blob: el
+                // arranque no puede ofrecerlo como deshacible.
+                cambió = true;
+                continue;
+            }
+            if (entrada.snapshotFormat === 2 || !tienePreimagen) {
+                conservadas.push(entrada);
+                continue;
+            }
+            // Entrada antiga: se CONSERVAN sus copias textuales (son la preimagen) y
+            // se derivan de ellas las huellas previas. Se dejan sin huellas
+            // posteriores: no hay estado posterior que comparar y la guarda D2 no
+            // debe dar avisos falsos con datos migrados.
+            entrada.snapshotFormat = 2;
+            entrada.finalized = true;
+            entrada.bookFingerprintsPre = Object.fromEntries(
+                Object.entries(copias).map(([nombre, libro]) => [nombre, fingerprintLorebook(libro)]),
+            );
+            delete entrada.bookFingerprintsPost;
+            conservadas.push(entrada);
+            cambió = true;
+        }
+        if (conservadas.length !== s.routerHistory.length) s.routerHistory = conservadas;
+    }
+
+    // 2. Defaults reconocidos: del texto íntegro al digest de huellas.
+    const guardado = s.lastSeenPromptDefaultsSnapshot;
+    if (guardado && typeof guardado === 'object' && !isBundledPromptsDigest(guardado)) {
+        s.lastSeenPromptDefaultsSnapshot = buildBundledPromptsDigest(normalizeBundledPromptsSnapshot(guardado));
+        cambió = true;
+    }
+
+    return cambió;
+}
+
+/**
  * Migrates custom fields from legacy formats to the current template-based format.
  * Safe to call repeatedly — idempotent.
+ * @returns {boolean} true si alguna migración cambió algo (el llamador persiste)
  */
 export function migrateCustomFields() {
     const s = getSettings();
+    let cambió = false;
 
     // Strip placeholder NEW_TAG entries persisted from previous sessions (one-time cleanup at init)
     if (Array.isArray(s.routerCustomTags)) {
@@ -1496,6 +1559,7 @@ export function migrateCustomFields() {
         if (field.renderType !== undefined && !field.rows && !field.template) {
             field.rows = [];
             delete field.renderType;
+            cambió = true;
         }
         // Migration 2: Convert rows to template (New)
         if (field.rows && !field.template) {
@@ -1510,8 +1574,14 @@ export function migrateCustomFields() {
             }).join('\n').trim();
             delete field.rows;
             delete field.renderType;
+            cambió = true;
         }
     });
+
+    // Dieta del blob (D6): se aplica al final para que la WAL ya aplicada en el
+    // arranque (index.js) sea la entrada buena de la que partir.
+    if (migrateBlobDiet(s)) cambió = true;
+    return cambió;
 }
 
 
