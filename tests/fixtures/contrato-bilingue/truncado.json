@@ -1,0 +1,21 @@
+[
+    {
+        "id": "truncado-01",
+        "origen": "banco dorado sintético: respuesta cortada a media transacción (el presupuesto se agotó)",
+        "entrada": "{\"operations\":[{\"op\":\"ADD_ASSET\",\"name\":\"Torre de prue",
+        "esperado": { "sujeto": "map-architect", "resultado": { "value": null, "error": true } }
+    },
+    {
+        "id": "truncado-02",
+        "origen": "banco dorado sintético: el compresor se queda a medias y no debe inventar digests",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"Resúmenes\":[{\"Cuándo\":\"Día 6\",\"Resumen\":\"La guarnición aban",
+        "esperado": { "sujeto": "compresor", "resultado": { "ok": false, "digests": null } }
+    },
+    {
+        "id": "truncado-03",
+        "origen": "banco dorado sintético: etiqueta de relación sin cerrar no produce comando",
+        "entrada": "[[REL: PjN de prueba | Amistad | +15",
+        "esperado": { "sujeto": "etiqueta-rel", "resultado": { "rel": [] } }
+    }
+]

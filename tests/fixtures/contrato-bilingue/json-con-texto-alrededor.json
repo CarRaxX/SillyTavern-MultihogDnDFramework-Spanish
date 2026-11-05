@@ -1,0 +1,39 @@
+[
+    {
+        "id": "texto-alrededor-01",
+        "origen": "banco dorado sintético: el modelo envuelve el JSON en prosa y cercas de markdown",
+        "entrada": "Claro, aquí tienes la transacción del PjN de prueba:\n\n```json\n{\"Operaciones\":[{\"Operacion\":\"ADD_ASSET\",\"Nombre\":\"Puente de prueba\"}],\"Tipo\":\"SETTLEMENT\"}\n```\n\n¿Quieres que amplíe la descripción?",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": { "operations": [{ "op": "ADD_ASSET", "name": "Puente de prueba" }], "type": "SETTLEMENT" },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "texto-alrededor-02",
+        "origen": "banco dorado sintético: JSON sin cercas, con texto antes y después",
+        "entrada": "Transacción lista: {\"operations\":[{\"op\":\"REMOVE_ASSET\",\"name\":\"Arco de prueba\",\"cause\":\"Derrumbado\"}]} — eso es todo por ahora.",
+        "esperado": {
+            "sujeto": "map-architect",
+            "resultado": {
+                "value": { "operations": [{ "op": "REMOVE_ASSET", "name": "Arco de prueba", "cause": "Derrumbado" }] },
+                "error": false
+            }
+        }
+    },
+    {
+        "id": "texto-alrededor-03",
+        "origen": "banco dorado sintético: el compresor responde con resumen en prosa + digests en español",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "Hechos cerrados del PjN de prueba:\n{\"Resúmenes\":[{\"Cuándo\":\"Día 5\",\"Resumen\":\"La guarnición abandona la Torre de prueba\"}]}\nFin del resumen.",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": {
+                "ok": true,
+                "digests": [{ "at": "Día 5", "summary": "La guarnición abandona la Torre de prueba" }]
+            }
+        }
+    }
+]

@@ -1,7 +1,6 @@
-import { createContext, runInContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { parseAst } from 'rollup/parseAst';
+import { funcionPrivada, valorConstante } from './helpers/codigo-fuente.js';
 
 vi.mock('../portrait-storage.js', () => ({
     lookupCustomPortraitSrc: () => '',
@@ -199,31 +198,6 @@ Naturaleza Álmica: Manifestado — Punto de Quiebre
 const fuenteRouter = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
 const fuenteEvolucion = readFileSync(new URL('../map-evolution.js', import.meta.url), 'utf8');
 
-function fuenteFuncion(codigo, nombre) {
-    let encontrada = null;
-    const visitar = nodo => {
-        if (!nodo || typeof nodo !== 'object' || encontrada) return;
-        if ((nodo.type === 'FunctionDeclaration' || nodo.type === 'FunctionExpression') && nodo.id?.name === nombre) {
-            encontrada = codigo.slice(nodo.start, nodo.end);
-            return;
-        }
-        for (const valor of Object.values(nodo)) {
-            if (Array.isArray(valor)) valor.forEach(visitar);
-            else if (valor && typeof valor === 'object') visitar(valor);
-        }
-    };
-    visitar(parseAst(codigo));
-    if (!encontrada) throw new Error(`Falta la función ${nombre}`);
-    return encontrada;
-}
-
-function fuenteConstante(codigo, nombre) {
-    const inicio = codigo.indexOf(`const ${nombre} =`);
-    if (inicio < 0) throw new Error(`Falta la constante ${nombre}`);
-    const fin = codigo.indexOf(';', inicio);
-    return codigo.slice(inicio, fin + 1);
-}
-
 describe('C4 aplicado: categorías del Agente de Lorebook (router-utils.js)', () => {
     it('una categoría en español cae en el libro del stock correcto', () => {
         expect(getRouterCategoryBookSuffix('Mundo')).toBe('World');
@@ -242,17 +216,12 @@ describe('C4 aplicado: categorías del Agente de Lorebook (router-utils.js)', ()
 });
 
 describe('C4 aplicado: marcador de herramienta (router.js parseTextAction)', () => {
-    function parsearTexto(texto) {
-        const contexto = createContext({
-            machineTokenAlternation,
-            parseJsonWithColorRepair: (crudo) => {
-                try { return { ok: true, value: JSON.parse(crudo) }; } catch (error) { return { ok: false, error: String(error) }; }
-            },
-            console,
-        });
-        runInContext(fuenteFuncion(fuenteRouter, 'parseTextAction'), contexto);
-        return contexto.parseTextAction(texto);
-    }
+    const parsearTexto = funcionPrivada(fuenteRouter, 'parseTextAction', {
+        machineTokenAlternation,
+        parseJsonWithColorRepair: (crudo) => {
+            try { return { ok: true, value: JSON.parse(crudo) }; } catch (error) { return { ok: false, error: String(error) }; }
+        },
+    });
 
     it('acepta «Acción:» escrito en español, también con markdown', () => {
         const en = parsearTexto('Antes nada.\nAction: grep_lore("PjN de prueba")');
@@ -274,20 +243,12 @@ describe('C4 aplicado: marcador de herramienta (router.js parseTextAction)', () 
 });
 
 describe('C4 aplicado: eje de relación (router.js parseBasicTags)', () => {
-    function parsearEtiquetas(texto) {
-        const contexto = createContext({
-            machineTokenAlternation,
-            coerceMachineEnum,
-            getSettings: () => ({}),
-            RELATIONSHIP_AXES: runInContext(
-                `${fuenteConstante(fuenteRouter, 'RELATIONSHIP_AXES')}\n;RELATIONSHIP_AXES;`,
-                createContext({ Object }),
-            ),
-            console,
-        });
-        runInContext(fuenteFuncion(fuenteRouter, 'parseBasicTags'), contexto);
-        return contexto.parseBasicTags(texto, []);
-    }
+    const parsearEtiquetas = funcionPrivada(fuenteRouter, 'parseBasicTags', {
+        machineTokenAlternation,
+        coerceMachineEnum,
+        getSettings: () => ({}),
+        RELATIONSHIP_AXES: valorConstante(fuenteRouter, 'RELATIONSHIP_AXES'),
+    });
 
     it('«Amistad» y «Afecto» valen lo que Friendship y Affection', () => {
         const ingles = parsearEtiquetas('[[REL: A_NPCs::3 | Friendship | +15]]');
@@ -334,14 +295,11 @@ describe('C4 aplicado: estado del hilo causal (map-evolution-lib.js)', () => {
 });
 
 describe('C4 aplicado: claves del compresor de Evolución (map-evolution.js)', () => {
-    function parsearDigests(respuesta) {
-        const contexto = createContext({
-            parseMapArchitectResponse,
-            normalizeMachineKeys: (valor) => valor,
-        });
-        runInContext(fuenteFuncion(fuenteEvolucion, 'parseCompressionDigests'), contexto);
-        return contexto.parseCompressionDigests(respuesta);
-    }
+    // El parser ya pliega las claves del contrato (T8): aquí se inyecta tal cual.
+    const parsearDigests = funcionPrivada(fuenteEvolucion, 'parseCompressionDigests', {
+        parseMapArchitectResponse,
+        normalizeMachineKeys: (valor) => valor,
+    });
 
     it('lee «Cuándo» y «Resumen» igual que at y summary', () => {
         const ingles = parsearDigests('{"digests":[{"at":"Día 3","summary":"Cae la torre"}]}');

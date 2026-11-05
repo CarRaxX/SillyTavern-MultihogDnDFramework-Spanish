@@ -1,0 +1,38 @@
+[
+    {
+        "id": "compresor-desactivar-01",
+        "origen": "banco dorado sintético: compresión de historial cerrado con el pensamiento apagado (C1/D5, D3 `desactivar`)",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"digests\":[{\"at\":\"Día 2\",\"summary\":\"El PjN de prueba desmonta el campamento\"}]}",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": { "ok": true, "digests": [{ "at": "Día 2", "summary": "El PjN de prueba desmonta el campamento" }] }
+        }
+    },
+    {
+        "id": "compresor-desactivar-02",
+        "origen": "banco dorado sintético: sin pensamiento el modelo responde en lista de frases, sin objeto por digest",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"Resúmenes\":[\"La Torre de prueba arde\",\"El PjN de prueba cruza el río\"]}",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": {
+                "ok": true,
+                "digests": [
+                    { "at": "Compressed history", "summary": "La Torre de prueba arde" },
+                    { "at": "Compressed history", "summary": "El PjN de prueba cruza el río" }
+                ]
+            }
+        }
+    },
+    {
+        "id": "compresor-desactivar-03",
+        "origen": "banco dorado sintético: sin pensamiento el modelo devuelve sólo un resumen en texto y nada de digests",
+        "politica": { "trabajo": "map_evolution_compress", "modo": "desactivar" },
+        "entrada": "{\"Resumen\":\"El PjN de prueba abandona la Bóveda de prueba\"}",
+        "esperado": {
+            "sujeto": "compresor",
+            "resultado": { "ok": true, "digests": [{ "at": "", "summary": "El PjN de prueba abandona la Bóveda de prueba" }] }
+        }
+    }
+]
