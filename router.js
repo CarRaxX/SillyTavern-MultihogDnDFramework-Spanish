@@ -15,12 +15,17 @@ import {
 } from './src/state/lorebook-runtime-fragments.js';
 import {
     bookBelongsToCampaignPrefix as bookBelongsToPrefix,
+    changedBooksFromFingerprints,
+    getBookPreimage,
     getCreatedLorebookNames,
     getLorebookSnapshotNames,
+    isEntryRestorable,
     isLoreHistoryEntryForChat,
     isLoreRedoEntryForChat,
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
+import { fingerprintLorebook } from './src/state/content-fingerprint.js';
+import { runtimeState } from './src/app/runtime-state.js';
 import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
 import { findMostRecentNarratorMessage, stripCyoaChoiceBlocks } from './src/state/present-now.js';
 import {
@@ -422,13 +427,23 @@ export function rememberCampaignBook(bookName, settings = getSettings()) {
     return existing.size !== before;
 }
 
-function buildRouterLoreState(settings, { prefix, chatId, bookSnapshots }) {
+/**
+ * Estado del Agente de Lorebooks para deshacer/rehacer.
+ * Formato 2 (spec 2026-11-05): `bookFingerprintsPre` cubre TODOS los libros de la
+ * campaña y `bookSnapshots` sólo guarda copia de los que el paso tocó, que se
+ * deciden al cerrarlo. `bookSnapshots` conserva nombre y forma para seguir leyendo
+ * blobs antiguos.
+ */
+function buildRouterLoreState(settings, { prefix, chatId, bookSnapshots, bookFingerprints, finalized = true } = {}) {
     const chatState = chatId ? settings.chatStates?.[chatId] : null;
+    const nombres = (bookSnapshots && typeof bookSnapshots === 'object')
+        ? Object.keys(bookSnapshots)
+        : Object.keys(bookFingerprints || {});
     return {
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         campaignPrefix: prefix || '',
         chatId,
-        campaignBookNames: Object.keys(bookSnapshots || {}),
+        campaignBookNames: nombres,
         campaignBooks: cloneRouterValue(chatState?.campaignBooks, []),
         activeRouterKeys: cloneRouterValue(settings.activeRouterKeys, []),
         activeWorldKeys: cloneRouterValue(settings.activeWorldKeys, []),
@@ -438,7 +453,10 @@ function buildRouterLoreState(settings, { prefix, chatId, bookSnapshots }) {
         pcCharacterBlockSeeded: !!settings.pcCharacterBlockSeeded,
         routerLastRunChatLength: settings.routerLastRunChatLength ?? 0,
         routerLastRunAt: settings.routerLastRunAt ?? 0,
+        snapshotFormat: 2,
+        bookFingerprintsPre: cloneRouterValue(bookFingerprints, {}),
         bookSnapshots: cloneRouterValue(bookSnapshots, {}),
+        finalized: !!finalized,
     };
 }
 
@@ -1239,15 +1257,33 @@ export async function restoreCampaignLocationsBook(snapshot, ctx = SillyTavern.g
     return true;
 }
 
+/**
+ * Cierra la entrada del historial del paso (spec 2026-11-05, D1-A).
+ * Con el estado ya escrito en disco decide qué libros cambió el paso comparando las
+ * huellas previas contra las posteriores: de esos, y sólo de esos, se guarda copia
+ * en el blob. Los libros borrados por el paso también la conservan (es su preimagen),
+ * y los creados no la necesitan porque el deshacer los elimina.
+ */
 async function finalizeRouterHistorySnapshot(runId, canCommit = () => true) {
     if (!runId || !canCommit()) return;
     const settings = getSettings();
     const snapshot = (settings.routerHistory || []).find(entry => entry?.runId === runId);
-    if (!snapshot) return;
+    if (!snapshot) {
+        delete runtimeState.lorePrePassPreimages[runId];
+        return;
+    }
+    const preimagenes = runtimeState.lorePrePassPreimages[runId] || {};
+    const liberarPreimagenes = () => { delete runtimeState.lorePrePassPreimages[runId]; };
     const prefix = snapshot.campaignPrefix || getLivePrefix();
     if (!prefix) {
         snapshot.createdBookNames = [];
         snapshot.deletedBookNames = [];
+        // Sin prefijo de campaña no se puede enumerar el estado posterior para
+        // recortar: se conservan todas las preimágenes para no perder el deshacer.
+        snapshot.bookSnapshots = cloneRouterValue(preimagenes, {});
+        snapshot.finalized = true;
+        liberarPreimagenes();
+        void saveSettings();
         return;
     }
     const chatId = snapshot.chatId || getRouterChatId();
@@ -1260,6 +1296,25 @@ async function finalizeRouterHistorySnapshot(runId, canCommit = () => true) {
     const after = new Set(currentNames);
     snapshot.createdBookNames = currentNames.filter(name => !before.has(name));
     snapshot.deletedBookNames = [...before].filter(name => !after.has(name));
+
+    // Huellas del estado posterior, libro a libro y con la comprobación de propiedad
+    // entre medias: un cambio de chat abandona el cierre sin escribir nada.
+    const huellasPosteriores = {};
+    for (const name of currentNames) {
+        const libro = await loadWorldInfoFresh(name);
+        if (!canCommit()) return;
+        if (libro) huellasPosteriores[name] = fingerprintLorebook(libro);
+    }
+    const copias = {};
+    for (const name of changedBooksFromFingerprints(snapshot.bookFingerprintsPre, huellasPosteriores)) {
+        const preimagen = getBookPreimage({ bookSnapshots: preimagenes }, name);
+        if (preimagen) copias[name] = preimagen;
+        else console.warn(`[RPG Tracker] Snapshot: no preimage for "${name}"; undo cannot restore it.`);
+    }
+    snapshot.bookSnapshots = copias;
+    snapshot.bookFingerprintsPost = huellasPosteriores;
+    snapshot.finalized = true;
+    liberarPreimagenes();
     void saveSettings();
 }
 
@@ -1528,28 +1583,42 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 
         // ?? Snapshot state BEFORE this pass (for rollback) ??????????????????
         {
+            // Spec 2026-11-05 (D1-A): las copias completas se quedan en memoria y el
+            // blob del historial sólo recibirá las de los libros que el paso toque.
+            const huellasPrevias = {};
+            const preimagenes = {};
+            for (const [name, book] of Object.entries(archiveBooks)) {
+                huellasPrevias[name] = fingerprintLorebook(book);
+                preimagenes[name] = JSON.parse(JSON.stringify(book));
+            }
             const snapshot = buildRouterLoreState(settings, {
                 prefix,
                 chatId: getRouterChatId(ctx),
-                bookSnapshots: archiveBooks,
+                bookFingerprints: huellasPrevias,
+                finalized: false,
             });
             snapshot.runId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
             _routerSnapshotRunId = snapshot.runId;
             _routerPrePassWatermark = snapshot.routerLastRunChatLength;
             _routerTriggerMsg = [...(ctx.chat || [])].reverse().find(m => !m.is_user && !m.is_system);
-            for (const [name, book] of Object.entries(archiveBooks)) {
-                snapshot.bookSnapshots[name] = JSON.parse(JSON.stringify(book));
-            }
+            runtimeState.lorePrePassPreimages[snapshot.runId] = preimagenes;
             if (!settings.routerHistory) settings.routerHistory = [];
             settings.routerHistory.unshift(snapshot);
             if (settings.routerHistory.length > LOREBOOK_ROLLBACK_LIMIT) settings.routerHistory.length = LOREBOOK_ROLLBACK_LIMIT;
+            // Las preimágenes de entradas ya fuera del historial (recorte, deshacer)
+            // ya no sirven para nada: se liberan aquí para no acumularlas.
+            const vivas = new Set(settings.routerHistory.map(entry => entry?.runId));
+            for (const runIdMemoria of Object.keys(runtimeState.lorePrePassPreimages)) {
+                if (!vivas.has(runIdMemoria)) delete runtimeState.lorePrePassPreimages[runIdMemoria];
+            }
             recordSchedulerEvent('la_pass_snapshot', {
                 runId: snapshot.runId,
                 preWm: _routerPrePassWatermark,
                 historyLen: settings.routerHistory.length,
                 isManual,
             });
-            void saveSettings();
+            // D5: sin guardado forzoso antes del paso. La entrada sólo está completa
+            // al cerrarlo, y `finalizeRouterHistorySnapshot` ya persiste entonces.
         }
         let activeEntriesFull = [];
         let newlyTriggeredFull = [];
@@ -2812,6 +2881,13 @@ ${recordCategoryGuidance}`;
 
         return true;
     } catch (e) {
+        // El paso pudo escribir libros antes de fallar: se cierra su entrada también
+        // aquí para que el deshacer siga siendo posible en la misma sesión (D5/R3).
+        // El `try` envuelve la propia lectura de la variable: si el paso abortó antes
+        // de declararla, la referencia está en zona muerta y no hay nada que cerrar.
+        try {
+            if (_routerSnapshotRunId) await finalizeRouterHistorySnapshot(_routerSnapshotRunId, ownsChat);
+        } catch (_) { /* paso sin entrada que cerrar */ }
         if (e?.name === 'AbortError') {
             const chatChanged = /chat changed/i.test(e?.message || '');
             console.log(chatChanged
@@ -3651,6 +3727,46 @@ async function recoverRouterLoreState(recoveryState, attemptedState, originalHis
 }
 
 /**
+ * Guarda anti-edición manual (spec 2026-11-05, D2). Comprueba si algún libro con
+ * preimagen cambió después del paso del agente y pide confirmación una sola vez,
+ * antes de escribir nada en disco. Devuelve los libros que NO deben restaurarse:
+ * los que el usuario rechace y, si no hay diálogo disponible, todos los dudosos
+ * (no sobrescribir es siempre la opción segura). Las entradas migradas de formato
+ * antiguo no traen huellas posteriores: ahí no hay nada que comparar.
+ * @param {any} snapshot Entrada del historial.
+ * @param {any} ctx Contexto de SillyTavern.
+ * @returns {Promise<string[]>}
+ */
+async function librosOmitidosPorEdicionManual(snapshot, ctx) {
+    const huellasPosteriores = snapshot?.bookFingerprintsPost;
+    if (!huellasPosteriores || typeof huellasPosteriores !== 'object') return [];
+    const nombresConCopia = Object.keys(snapshot.bookSnapshots || {});
+    if (!nombresConCopia.length) return [];
+    const dudosos = [];
+    for (const bookName of nombresConCopia) {
+        const esperada = huellasPosteriores[bookName];
+        if (!esperada) continue;
+        const actual = await loadWorldInfoFresh(bookName, ctx);
+        if (!actual) continue;
+        if (fingerprintLorebook(actual) !== esperada) dudosos.push(bookName);
+    }
+    if (!dudosos.length) return [];
+    const pregunta = `El Agente de Lorebooks encontró ${dudosos.length} libro(s) editados a mano después de ese paso: ${dudosos.join(', ')}.`
+        + '\n\n¿Quieres restaurar también esos libros a su versión anterior al paso?'
+        + '\nSi cancelas, se restaurarán los demás y esos libros quedarán intactos.';
+    const { Popup, POPUP_RESULT } = SillyTavern.getContext();
+    if (Popup?.show?.confirm) {
+        const aprobacion = await Popup.show.confirm(pregunta, 'Deshacer paso del Agente de Lorebooks');
+        if (aprobacion === (POPUP_RESULT?.AFFIRMATIVE ?? 1)) return [];
+    } else if (typeof globalThis.confirm === 'function'
+        && globalThis.confirm(`${pregunta}\n\n(Aceptar = restaurar también esos libros)`)) {
+        return [];
+    }
+    globalThis.toastr?.warning?.(`Libros omitidos en la restauración por edición manual: ${dudosos.join(', ')}.`, 'Agente de Lorebooks');
+    return dudosos;
+}
+
+/**
  * Restores a past lorebook snapshot from routerHistory.
  * - Deletes any lorebook that was CREATED during the pass (wasn't in snapshot).
  * - Overwrites any lorebook that was MODIFIED during the pass back to its pre-pass content.
@@ -3671,6 +3787,16 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
 
     const snapshot = history[index];
     if (!snapshot) return false;
+    // R3 (spec 2026-11-05): una entrada de paso a medias sin ninguna preimagen no
+    // puede devolverse atrás. Se avisa en vez de hacer un deshacer a medias.
+    if (!isEntryRestorable(snapshot)) {
+        console.warn('[RPG Tracker] Rollback refused: history entry has no pre-pass preimage.', {
+            entryChatId: snapshot.chatId ?? null,
+            runId: snapshot.runId ?? null,
+        });
+        globalThis.toastr?.warning?.('Ese paso del Agente de Lorebooks quedó a medias y no tiene estado anterior que restaurar.', 'Agente de Lorebooks');
+        return false;
+    }
     const activeChatId = getRouterChatId(ctx);
     const livePrefix = getLivePrefix();
     if (!isLoreHistoryEntryForChat(snapshot, { chatId: activeChatId, campaignPrefix: livePrefix })) {
@@ -3704,6 +3830,10 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
             console.warn('[RPG Tracker] Rollback: no campaign prefix; no lorebooks will be deleted.');
         }
 
+        // D2: se decide antes de tocar disco para poder cancelar sin daños.
+        const omitidos = await librosOmitidosPorEdicionManual(snapshot, ctx);
+        if (!ownsChat()) return false;
+
         // Take a complete disk-backed recovery copy before the first mutation.
         safeRecoveryState = safeRecoveryState || chatCommitResult(ownsChat, await captureRouterLoreState());
 
@@ -3719,7 +3849,10 @@ export async function rollbackRouterPass(index = 0, recoveryState = null) {
         }
 
         // -- Step 2: Restore pre-pass lorebooks to their snapshotted state -----
+        // Formato 2: sólo los libros con copia cambiaron en el paso; los demás no se
+        // tocan. Los omitidos por la guarda D2 quedan con la edición del usuario.
         for (const [bookName, bookData] of Object.entries(snapshot.bookSnapshots || {})) {
+            if (omitidos.includes(bookName)) continue;
             chatCommitResult(ownsChat, await evictWorldInfoCache(bookName));
             chatCommitResult(ownsChat, await saveWorldInfoSnapshot(bookName, bookData, ctx, 'Rollback', ownsChat));
         }

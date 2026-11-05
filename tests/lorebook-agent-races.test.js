@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { canCommitPassForChat } from '../src/state/pass-affinity.js';
+import { changedBooksFromFingerprints, getBookPreimage, isEntryRestorable } from '../src/state/lorebook-history.js';
+import { fingerprintLorebook } from '../src/state/content-fingerprint.js';
 import { LOREBOOK_ROLLBACK_LIMIT } from '../src/state/history-retention.js';
 
 const source = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
@@ -58,9 +60,14 @@ function harness({ basic = true, pause = 'llm', cleanupEvery = 0 } = {}) {
         SillyTavern: { getContext: () => ({ chatId, chat, generateRaw: noop }) },
         broadcastStep: noop, stripSkeletonFromRouterPools: () => false,
         fetchRouterArchiveBooks: () => wait('archive', books),
-        buildRouterLoreState: () => ({ bookSnapshots: {}, chatId, campaignPrefix: chatId, routerLastRunChatLength: 0 }),
         getRouterChatId: () => chatId, recordSchedulerEvent: noop, saveSettings: persist,
         getWorldInfoNamesSafe: () => wait('history', ['A_NPCs']),
+        // Formato 2 (spec 2026-11-05): preimagen en memoria, huellas y cierre del paso.
+        runtimeState: { lorePrePassPreimages: {} },
+        cloneRouterValue: (value, fallback) => JSON.parse(JSON.stringify(value ?? fallback)),
+        fingerprintLorebook, changedBooksFromFingerprints, getBookPreimage, isEntryRestorable,
+        loadWorldInfoFresh: name => Promise.resolve(books[name] ? JSON.parse(JSON.stringify(books[name])) : null),
+        toastr: { warning: noop, info: noop, success: noop, error: noop },
         getLorebookSnapshotNames: () => [], bookBelongsToPrefix: (name, prefix) => name.startsWith(`${prefix}_`),
         isSkeletonBookName: () => false, buildKeyringText: empty,
         formatAgentChatLogFromIndex: empty, extractFooterLocation: empty, findLatestDungeonLocation: empty,
@@ -81,6 +88,7 @@ function harness({ basic = true, pause = 'llm', cleanupEvery = 0 } = {}) {
     });
     runInContext(`let _routerRunning = false, _routerController = null, _routerCleanupTimer = null, _routerNormalRunCount = 0;
         ${functionSource('stopRouterPass')}
+        ${functionSource('buildRouterLoreState')}
         ${functionSource('finalizeRouterHistorySnapshot')}
         ${functionSource('runRouterPass')}`, context);
     return { context, settings, apply, watermark, timestamp, persist, llm, timers, entered,

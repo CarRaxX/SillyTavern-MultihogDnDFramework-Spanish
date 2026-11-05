@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
     bookBelongsToCampaignPrefix,
+    changedBooksFromFingerprints,
     findLoreHistoryIndexForChat,
+    getBookPreimage,
     getCreatedLorebookNames,
+    getEntryBookNames,
     getLorebookSnapshotNames,
+    isEntryRestorable,
     isLoreHistoryEntryForChat,
     isLoreRedoEntryForChat,
     trimLoreHistoryForRollback,
@@ -132,5 +136,81 @@ describe('Lorebook Agent history safety', () => {
     it('does not treat a longer campaign prefix as part of a shorter one', () => {
         expect(bookBelongsToCampaignPrefix('Campaign_NPCs', 'Campaign')).toBe(true);
         expect(bookBelongsToCampaignPrefix('Campaign_2026_NPCs', 'Campaign')).toBe(false);
+    });
+});
+
+describe('Formato 2 del historial (spec 2026-11-05, dieta del blob)', () => {
+    const entrada = {
+        campaignBookNames: ['Campaña_NPCs', 'Campaña_Locations', 'Campaña_WorldInfo'],
+        bookFingerprintsPre: {
+            Campaña_NPCs: '10:aaaa1111bbbb2222',
+            Campaña_Locations: '10:cccc3333dddd4444',
+            Campaña_WorldInfo: '10:eeee5555ffff6666',
+        },
+        // Sólo el libro tocado por el paso guarda copia textual.
+        bookSnapshots: { Campaña_NPCs: { entries: { 0: { content: 'antes' } } } },
+        snapshotFormat: 2,
+        finalized: true,
+    };
+
+    it('une las huellas al conjunto de libros previos al paso', () => {
+        expect(getEntryBookNames(entrada).sort()).toEqual([
+            'Campaña_Locations', 'Campaña_NPCs', 'Campaña_WorldInfo',
+        ]);
+        expect(getLorebookSnapshotNames(entrada).sort())
+            .toEqual(getEntryBookNames(entrada).sort());
+    });
+
+    it('no borra un libro intacto sin copia al deshacer', () => {
+        // Paso moderno: la entrada declara los libros creados. El libro intacto sin
+        // copia está en las huellas previas, así que NO pudo ser creado por el paso.
+        const modernos = getCreatedLorebookNames({
+            snapshot: { ...entrada, createdBookNames: ['Campaña_Nuevo', 'Campaña_Locations'] },
+            currentNames: ['Campaña_NPCs', 'Campaña_Locations', 'Campaña_WorldInfo', 'Campaña_Nuevo'],
+            currentRouterLog: [],
+            prefix: 'Campaña',
+        });
+        expect(modernos).toEqual(['Campaña_Nuevo']);
+
+        // Paso legado sin lista exacta: se apoya en el registro del paso. Sin las
+        // huellas previas, WorldInfo parecería creado y el deshacer lo borraría.
+        const sinHuellas = { ...entrada, bookFingerprintsPre: undefined, campaignBookNames: undefined };
+        const conHuellas = getCreatedLorebookNames({
+            snapshot: entrada,
+            currentNames: ['Campaña_NPCs', 'Campaña_Locations', 'Campaña_WorldInfo'],
+            currentRouterLog: [{ record: ['Campaña_WorldInfo::0'] }],
+            prefix: 'Campaña',
+        });
+        const legado = getCreatedLorebookNames({
+            snapshot: sinHuellas,
+            currentNames: ['Campaña_NPCs', 'Campaña_Locations', 'Campaña_WorldInfo'],
+            currentRouterLog: [{ record: ['Campaña_WorldInfo::0'] }],
+            prefix: 'Campaña',
+        });
+        expect(conHuellas).toEqual([]);
+        expect(legado).toEqual(['Campaña_WorldInfo']);
+    });
+
+    it('devuelve la preimagen sólo del libro que la conserva', () => {
+        expect(getBookPreimage(entrada, 'Campaña_NPCs')).toEqual({ entries: { 0: { content: 'antes' } } });
+        expect(getBookPreimage(entrada, 'Campaña_Locations')).toBeNull();
+        expect(getBookPreimage(null, 'Campaña_Locations')).toBeNull();
+    });
+
+    it('descarta como no deshacible la entrada sin cerrar y sin copias', () => {
+        expect(isEntryRestorable(entrada)).toBe(true);
+        expect(isEntryRestorable({ ...entrada, bookSnapshots: {} })).toBe(true);
+        expect(isEntryRestorable({ snapshotFormat: 2, finalized: false, bookSnapshots: {} })).toBe(false);
+        expect(isEntryRestorable({ bookSnapshots: { A: { entries: {} } } })).toBe(true);
+        expect(isEntryRestorable({ chatId: 'A' })).toBe(false);
+        expect(isEntryRestorable(null)).toBe(false);
+    });
+
+    it('detecta cambios, libros creados y libros borrados por huella', () => {
+        const pre = { A: '1:x', B: '1:y', C: '1:z' };
+        const post = { A: '1:x', B: '1:y2', D: '1:w' };
+        expect(changedBooksFromFingerprints(pre, post).sort()).toEqual(['B', 'C', 'D']);
+        expect(changedBooksFromFingerprints(pre, pre)).toEqual([]);
+        expect(changedBooksFromFingerprints(null, null)).toEqual([]);
     });
 });

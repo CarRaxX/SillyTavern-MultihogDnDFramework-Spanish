@@ -13,6 +13,13 @@ export const runtimeState = {
     liveDungeonMapBackup: null,
     renderedViewActive: false,
     loreRedoStack: [],
+    /**
+     * Preimagen completa del paso del Agente de Lorebooks, por `runId` y sólo en
+     * memoria (spec 2026-11-05, D1-A). Al cerrar el paso sólo los libros tocados
+     * pasan a `routerHistory`; el resto se descarta aquí para no hinchar el blob.
+     * @type {Record<string, Record<string, any>>}
+     */
+    lorePrePassPreimages: {},
     renderRouterUI: null,
     refreshAgentManifest: async () => {},
     refreshImmersionView: async () => {},
