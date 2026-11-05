@@ -1,0 +1,14 @@
+{
+  "nota": "Instantánea de la semántica de gating tomada sobre main b3edbde ANTES de la ola 3 (T6/AC0). Con los valores guardados del defecto (1,5) el agente corre cada turno: ni un byte de esta ruta cambia hasta que el usuario toque el dial.",
+  "fuente": "b3edbde:narrative-hooks.js",
+  "gating": "        const runEvery = settings.routerRunEvery || 1;\n",
+  "manual": "            await runRouterPass(combinedNarrative, manualPrompt, lookback, true);\n",
+  "decision_defecto": {
+    "ajustes": {
+      "routerRunEvery": 1,
+      "routerMaxTurns": 5
+    },
+    "runEvery_efe": 1,
+    "corre_cada_turno": true
+  }
+}
