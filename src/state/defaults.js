@@ -1518,7 +1518,14 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 
         lastSeenPromptDefaultsFingerprint: "",
 
-        /** @type {ReturnType<typeof buildBundledPromptsSnapshot>|null} Last-acked shipped defaults (for upgrade diffs). */
+        /**
+         * Defaults enviados que el usuario reconoció por última vez (spec 2026-11-05,
+         * D3). Guarda el digest compacto `{ v: 2, fingerprint, elements }` de
+         * `buildBundledPromptsDigest`, no el texto íntegro: el diálogo «Qué cambió»
+         * sólo necesita huellas. Un valor antigo con texto sigue leyéndose y se
+         * migra al cargar (`migrateCustomFields`).
+         * @type {{ v: number, fingerprint: string, elements: Record<string, string> }|Record<string, any>|null}
+         */
 
         lastSeenPromptDefaultsSnapshot: null,
 

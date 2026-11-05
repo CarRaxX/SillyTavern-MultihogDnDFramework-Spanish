@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
@@ -6864,6 +6864,13 @@ function organizeConnectionSettingsUI() {
                 for (const cat of PROMPT_DEFAULTS_CATEGORIES) changed.add(cat);
                 return changed;
             }
+            // Digest (spec 2026-11-05, D3): en disco sólo hay huellas por elemento, así
+            // que se comparan las huellas guardadas contra las de los defaults actuales.
+            if (isBundledPromptsDigest(oldSnap)) {
+                const actual = isBundledPromptsDigest(newSnap) ? newSnap : buildBundledPromptsDigest(newSnap);
+                for (const cat of diffBundledPromptsDigests(oldSnap, actual).categories) changed.add(cat);
+                return changed;
+            }
             for (const cat of PROMPT_DEFAULTS_CATEGORIES) {
                 const oldBlocks = getSnapshotCategoryBlocks(oldSnap, cat);
                 const newBlocks = getSnapshotCategoryBlocks(newSnap, cat);
@@ -6882,6 +6889,84 @@ function organizeConnectionSettingsUI() {
                 }
             }
             return changed;
+        }
+
+        /**
+         * Huellas de la copia viva del usuario, elemento a elemento (T9). Es lo único
+         * que hace falta para las insignias: el texto se lee de los ajustes en memoria.
+         * @param {Record<string, any>} liveSettings
+         * @param {string} mainSyspromptText
+         * @returns {Record<string, string>}
+         */
+        function buildLivePromptDigestElements(liveSettings, mainSyspromptText = '') {
+            const opts = { mainSyspromptText };
+            /** @type {Record<string, string>} */
+            const elementos = {};
+            for (const cat of PROMPT_DEFAULTS_CATEGORIES) {
+                for (const block of getLivePromptCategoryBlocks(liveSettings, cat, opts)) {
+                    elementos[promptDigestElementKey(cat, block.label)] = fingerprintText(block.text || '');
+                }
+            }
+            return elementos;
+        }
+
+        /**
+         * Sección «Qué cambió» sobre huellas (spec 2026-11-05, D3/T9): lista los
+         * elementos por etiqueta con su estado y una insignia calculada comparando
+         * huellas. Ya no existe el texto íntegro anterior en disco, así que no hay
+         * diff línea a línea que volcar.
+         * @param {ReturnType<typeof buildBundledPromptsDigest>} oldDigest
+         * @param {ReturnType<typeof buildBundledPromptsSnapshot>} newSnap
+         * @param {Record<string, any>} liveSettings
+         * @param {string} mainSyspromptText
+         * @returns {string}
+         */
+        function buildPromptDefaultsDigestSectionHtml(oldDigest, newSnap, liveSettings, mainSyspromptText = '') {
+            const nuevoDigest = isBundledPromptsDigest(newSnap) ? newSnap : buildBundledPromptsDigest(newSnap);
+            const diferencias = diffBundledPromptsDigests(oldDigest, nuevoDigest);
+            const envoltorio = (contenido, abierto) => `
+                                    <details ${abierto ? 'open' : ''} style="margin-top:4px;background:rgba(0,0,0,0.12);padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
+                                        <summary style="cursor:pointer;user-select:none;font-weight:600;">Qué cambió</summary>
+                                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">${contenido}</div>
+                                    </details>`;
+            const afectados = [...diferencias.added, ...diferencias.changed, ...diferencias.removed].sort();
+            if (!afectados.length) {
+                return envoltorio('<div style="opacity:0.85;font-size:12px;">No hay cambios de texto entre los defaults que reconociste y los que trae esta versión.</div>', false);
+            }
+            const vivos = buildLivePromptDigestElements(liveSettings, mainSyspromptText);
+            /** @type {Map<string, string[]>} */
+            const porCategoria = new Map();
+            for (const clave of afectados) {
+                const { category } = parsePromptDigestElementKey(clave);
+                if (!porCategoria.has(category)) porCategoria.set(category, []);
+                porCategoria.get(category).push(clave);
+            }
+            const estiloPill = 'font-size:10px;padding:1px 6px;border-radius:999px;';
+            const bloques = [];
+            for (const [cat, claves] of porCategoria) {
+                const filas = claves.map((clave) => {
+                    const { label } = parsePromptDigestElementKey(clave);
+                    const estado = diferencias.added.includes(clave) ? 'nuevo'
+                        : diferencias.removed.includes(clave) ? 'retirado' : 'modificado';
+                    const estadoColor = estado === 'nuevo' ? '#86efac' : estado === 'retirado' ? '#fca5a5' : '#fbbf24';
+                    const insignia = diferencias.removed.includes(clave)
+                        ? 'unknown'
+                        : getPromptDigestElementBadge(clave, oldDigest.elements, nuevoDigest.elements, vivos);
+                    return `
+                                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;">
+                                                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word;">${escapeHtml(label)}</span>
+                                                <span style="${estiloPill}color:${estadoColor};border:1px solid ${estadoColor}55;">${estado}</span>
+                                                <span style="${estiloPill}background:rgba(148,163,184,0.12);color:#cbd5e1;">${escapeHtml(PROMPT_DIGEST_BADGE_LABELS_ES[insignia] || insignia)}</span>
+                                            </div>`;
+                }).join('');
+                const etiqueta = PROMPT_DEFAULTS_CATEGORY_LABELS_ES[cat] || cat;
+                bloques.push(`
+                                        <details style="margin:0;">
+                                            <summary style="cursor:pointer;user-select:none;font-weight:600;">${escapeHtml(etiqueta)} — ${claves.length} elemento${claves.length === 1 ? '' : 's'}</summary>
+                                            <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">${filas}</div>
+                                        </details>`);
+            }
+            return envoltorio(bloques.join(''), true);
         }
 
         /**
@@ -6911,6 +6996,12 @@ function organizeConnectionSettingsUI() {
                                         <summary style="cursor:pointer;user-select:none;font-weight:600;">What changed</summary>
                                         <div style="margin-top:8px;opacity:0.85;font-size:12px;">Diff available after this acknowledge — a snapshot of today's shipped defaults will be saved so the next update can show a line-by-line changelog.</div>
                                     </details>`;
+            }
+
+            // Digest (spec 2026-11-05, D3): el valor persistido ya no trae texto, así
+            // que la sección se construye por etiquetas e insignias de huella.
+            if (isBundledPromptsDigest(oldSnap)) {
+                return buildPromptDefaultsDigestSectionHtml(oldSnap, newSnap, liveSettings, mainSyspromptText);
             }
 
             const opts = { mainSyspromptText };
@@ -6997,17 +7088,26 @@ function organizeConnectionSettingsUI() {
             const currentFingerprint = computeBundledPromptsFingerprint();
             const currentSnapshot = buildBundledPromptsSnapshot();
             const rawStoredSnapshot = settings.lastSeenPromptDefaultsSnapshot || null;
-            const storedSnapshot = rawStoredSnapshot
-                ? normalizeBundledPromptsSnapshot(rawStoredSnapshot)
-                : null;
-            const storedFingerprint = storedSnapshot
-                ? computeBundledPromptsFingerprintForSnapshot(storedSnapshot)
-                : (settings.lastSeenPromptDefaultsFingerprint || '');
+            // Digest (D3): si el valor persistido ya es compacto se usa tal cual; el
+            // snapshot de texto antigo sigue normalizándose hasta la migración (T11).
+            const storedSnapshot = !rawStoredSnapshot
+                ? null
+                : isBundledPromptsDigest(rawStoredSnapshot)
+                    ? rawStoredSnapshot
+                    : normalizeBundledPromptsSnapshot(rawStoredSnapshot);
+            const storedFingerprint = isBundledPromptsDigest(storedSnapshot)
+                ? (storedSnapshot.fingerprint || settings.lastSeenPromptDefaultsFingerprint || '')
+                : (storedSnapshot
+                    ? computeBundledPromptsFingerprintForSnapshot(storedSnapshot)
+                    : (settings.lastSeenPromptDefaultsFingerprint || ''));
 
             const persistPromptDefaultsAck = (target) => {
                 target.lastResetVersion = currentVersion;
                 target.lastSeenPromptDefaultsFingerprint = currentFingerprint;
-                target.lastSeenPromptDefaultsSnapshot = currentSnapshot;
+                // Se persiste el digest y no el texto íntegro (~205 KB). La WAL de
+                // localStorage se reescribe acto seguido con ese valor compacto, así
+                // el texto no puede resucitar al recargar (T10/R5).
+                target.lastSeenPromptDefaultsSnapshot = buildBundledPromptsDigest(currentSnapshot);
                 // Sync first — reload during the 12MB disk write must not resurrect the dialog.
                 stampCriticalSettingsSynced(target, writeCriticalSettingsBackup(target));
             };
