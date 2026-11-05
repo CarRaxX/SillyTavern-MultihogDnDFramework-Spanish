@@ -691,6 +691,22 @@
                             </button>
                         </div>
                     </div>
+
+                    <details id="rpg_local_thinking_policy_box" style="margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px;">
+                        <summary style="font-size: 0.82em; font-weight: bold; opacity: 0.8; cursor: pointer; outline: none; user-select: none; padding-bottom: 4px;">⚙️ Rendimiento (modelo local)</summary>
+                        <div style="display:flex;flex-direction:column;gap:8px;padding-left:5px;">
+                            <div style="font-size: 0.75em; opacity: 0.7; line-height: 1.4;">
+                                Gobierna el <b>pensamiento</b> (razonamiento oculto) de cada trabajo de fondo, uno a uno. Mientras todo esté en <b>Herdar</b> las peticiones salen exactamente igual que siempre: no se añade ni un campo. El ajuste fino sólo se aplica cuando la fuente del trabajo es <b>OpenAI compatible</b> y el servidor es <b>llama.cpp b9982</b> o más nuevo; por <b>API Principal</b> o <b>Perfil</b> manda SillyTavern y la política queda inerte.
+                            </div>
+                            <div style="font-size: 0.75em; opacity: 0.7; line-height: 1.4;">
+                                Quitar el pensamiento abarata y acelera cada pasada, pero el modelo pierde su borrador interno y sube el fallo de contrato (JSON mal formado o secciones perdidas). Con el modelo local en un solo slot, cada cambio de presupuesto re-prefila la conversación: el ahorro se nota en varias pasadas, no en una.
+                            </div>
+                            <div id="rpg_thinking_policy_rows" class="flex-container flexFlowColumn gap-1"></div>
+                            <button type="button" id="rpg_thinking_policy_reset" class="menu_button interactable" style="width:100%;font-size:11px;" title="Deja los ocho trabajos otra vez en Heredar: comportamiento idéntico al de siempre.">
+                                <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores heredados
+                            </button>
+                        </div>
+                    </details>
                 </div>
             </div>
 
