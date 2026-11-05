@@ -180,6 +180,49 @@ describe('Guarda anti-edición manual del deshacer (spec 2026-11-05, D2)', () =>
         expect(h.confirm).not.toHaveBeenCalled();
     });
 
+    // Regresión del laudo R2: un libro BORRADO por el paso también tiene copia, así
+    // que su estado actual hay que compararlo igual que el de los editados.
+    it('no sobrescribe un libro borrado por el paso y recreado a mano sin confirmar', async () => {
+        const recreado = { entries: { 0: { uid: 0, content: 'Mapamundi escrito a mano tras el paso' } } };
+        const h = harness({ discos: { ...DESPUES, A_WorldInfo: recreado }, popupResult: 2 });
+        await expect(h.deshacer()).resolves.toBe(true);
+        // El usuario canceló: su trabajo manual queda intacto y se restauran los demás.
+        expect(h.books.A_WorldInfo).toEqual(recreado);
+        expect(h.writes).toEqual(['A_NPCs']);
+        expect(String(h.confirm.mock.calls[0][0])).toContain('A_WorldInfo');
+        expect(String(h.toastr.warning.mock.calls[0][0])).toContain('A_WorldInfo');
+    });
+
+    it('restaura el libro recreado a mano cuando el usuario lo autoriza', async () => {
+        const recreado = { entries: { 0: { uid: 0, content: 'Mapamundi escrito a mano tras el paso' } } };
+        const h = harness({ discos: { ...DESPUES, A_WorldInfo: recreado }, popupResult: 1 });
+        await expect(h.deshacer()).resolves.toBe(true);
+        expect(h.confirm).toHaveBeenCalledTimes(1);
+        expect(h.books.A_WorldInfo).toEqual(ANTES.A_WorldInfo);
+        expect(h.writes.sort()).toEqual(['A_NPCs', 'A_WorldInfo']);
+    });
+
+    it('omite el libro recreado a mano cuando no hay diálogo disponible', async () => {
+        const recreado = { entries: { 0: { uid: 0, content: 'Mapamundi escrito a mano tras el paso' } } };
+        const h = harness({ discos: { ...DESPUES, A_WorldInfo: recreado } });
+        await expect(h.deshacer()).resolves.toBe(true);
+        expect(h.confirm).not.toHaveBeenCalled();
+        expect(h.books.A_WorldInfo).toEqual(recreado);
+        expect(h.writes).toEqual(['A_NPCs']);
+        expect(h.toastr.warning).toHaveBeenCalledTimes(1);
+    });
+
+    it('también es dudoso un libro que el usuario borró después del paso', async () => {
+        // El paso dejó A_NPCs en disco y el usuario lo borró desde entonces: el undo
+        // lo recrearía por encima de una decisión manual.
+        const sinNpcs = { A_Locations: DESPUES.A_Locations, A_Chronicle: DESPUES.A_Chronicle };
+        const h = harness({ discos: sinNpcs, popupResult: 2 });
+        await expect(h.deshacer()).resolves.toBe(true);
+        expect(h.books.A_NPCs).toBeUndefined();
+        expect(h.writes).toEqual(['A_WorldInfo']);
+        expect(String(h.toastr.warning.mock.calls[0][0])).toContain('A_NPCs');
+    });
+
     it('rechaza una entrada de paso a medias sin preimagen y no escribe nada', async () => {
         const h = harness({ entrada: crearEntrada({ copias: [], finalized: false }) });
         await expect(h.deshacer()).resolves.toBe(false);

@@ -3742,12 +3742,13 @@ async function recoverRouterLoreState(recoveryState, attemptedState, originalHis
 }
 
 /**
- * Guarda anti-edición manual (spec 2026-11-05, D2). Comprueba si algún libro con
- * preimagen cambió después del paso del agente y pide confirmación una sola vez,
- * antes de escribir nada en disco. Devuelve los libros que NO deben restaurarse:
- * los que el usuario rechace y, si no hay diálogo disponible, todos los dudosos
- * (no sobrescribir es siempre la opción segura). Las entradas migradas de formato
- * antiguo no traen huellas posteriores: ahí no hay nada que comparar.
+ * Guarda anti-edición manual (spec 2026-11-05, D2). Compara cada libro con preimagen
+ * contra lo que el paso dejó en disco y pide confirmación una sola vez, antes de
+ * escribir nada. Son dudosos: los editados a mano, los que el paso borró y el usuario
+ * recreó, y los que el usuario borró desde entonces. Devuelve los libros que NO deben
+ * restaurarse: los que el usuario rechace y, si no hay diálogo disponible, todos los
+ * dudosos (no sobrescribir es siempre la opción segura). Las entradas migradas de
+ * formato antiguo no traen huellas posteriores: ahí no hay nada que comparar.
  * @param {any} snapshot Entrada del historial.
  * @param {any} ctx Contexto de SillyTavern.
  * @returns {Promise<string[]>}
@@ -3759,14 +3760,21 @@ async function librosOmitidosPorEdicionManual(snapshot, ctx) {
     if (!nombresConCopia.length) return [];
     const dudosos = [];
     for (const bookName of nombresConCopia) {
-        const esperada = huellasPosteriores[bookName];
-        if (!esperada) continue;
+        const esperada = huellasPosteriores[bookName] || null;
         const actual = await loadWorldInfoFresh(bookName, ctx);
-        if (!actual) continue;
-        if (fingerprintLorebook(actual) !== esperada) dudosos.push(bookName);
+        const huellaActual = actual ? fingerprintLorebook(actual) : null;
+        // Cualquier diferencia contra lo que el paso dejó en disco es dudosa (laudo R2):
+        //   - libro modificado a mano despues del paso;
+        //   - libro que el paso BORRO (sin huella posterior) y el usuario recreo: su
+        //     contenido de hoy no es el que dejo el paso y la preimagen lo pisaria;
+        //   - libro que el usuario borro desde entonces: restaurarlo por encima tambien
+        //     es destruir trabajo ajeno.
+        // Si ambos lados estan ausentes (el paso lo borro y sigue borrado) no hay nada
+        // que proteger: el deshacer lo recrea sin preguntar.
+        if (huellaActual !== esperada) dudosos.push(bookName);
     }
     if (!dudosos.length) return [];
-    const pregunta = `El Agente de Lorebooks encontró ${dudosos.length} libro(s) editados a mano después de ese paso: ${dudosos.join(', ')}.`
+    const pregunta = `El Agente de Lorebooks encontró ${dudosos.length} libro(s) modificados a mano después de ese paso (editados, recreados o borrados): ${dudosos.join(', ')}.`
         + '\n\n¿Quieres restaurar también esos libros a su versión anterior al paso?'
         + '\nSi cancelas, se restaurarán los demás y esos libros quedarán intactos.';
     const { Popup, POPUP_RESULT } = SillyTavern.getContext();
