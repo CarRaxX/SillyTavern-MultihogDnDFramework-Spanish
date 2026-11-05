@@ -27,9 +27,11 @@ const LIBROS_INICIALES = () => ({
 
 /**
  * Paso completo con E/S controlada. `efecto` simula en el disco lo que el agente
- * escribe durante el paso.
+ * escribe durante el paso; `fallo` hace que la aplicación aborte después de escribir
+ * (paso detenido o roto con libros ya tocados).
  */
-function harness({ efecto = () => {}, campaignBooks } = {}) {
+function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {}) {
+    let chatId = 'A';
     const books = LIBROS_INICIALES();
     const nombresIniciales = Object.keys(books);
     const abrirPuerta = { resolve: null };
@@ -51,6 +53,11 @@ function harness({ efecto = () => {}, campaignBooks } = {}) {
         entrar.resolve();
         await puerta;
         efecto(books);
+        if (fallo === 'aborto') {
+            const error = new Error('Stopped by user');
+            error.name = 'AbortError';
+            throw error;
+        }
         return { success: true, errors: [], recordedIds: [] };
     });
     const noop = () => {};
@@ -60,13 +67,13 @@ function harness({ efecto = () => {}, campaignBooks } = {}) {
         ...chatAffinity,
         AbortController, console: { log() {}, warn() {}, error() {}, info() {} },
         canCommitPassForChat, LOREBOOK_ROLLBACK_LIMIT, LORE_EXISTENCE_RULE: '',
-        getActiveChatId: () => 'A', getLivePrefix: () => 'A',
+        getActiveChatId: () => chatId, getLivePrefix: () => chatId,
         getSettings: () => settings, isLocationMappingEnabled: () => false,
         isLorebookAgentRuntimeActive: () => true,
-        SillyTavern: { getContext: () => ({ chatId: 'A', chat, generateRaw: noop }) },
+        SillyTavern: { getContext: () => ({ chatId, chat, generateRaw: noop }) },
         broadcastStep: noop, stripSkeletonFromRouterPools: () => false,
         fetchRouterArchiveBooks: () => Promise.resolve(books),
-        getRouterChatId: () => 'A', recordSchedulerEvent: noop, saveSettings: persist,
+        getRouterChatId: () => chatId, recordSchedulerEvent: noop, saveSettings: persist,
         getWorldInfoNamesSafe: () => Promise.resolve(Object.keys(books)),
         runtimeState,
         cloneRouterValue: (value, fallback) => JSON.parse(JSON.stringify(value ?? fallback)),
@@ -101,7 +108,10 @@ function harness({ efecto = () => {}, campaignBooks } = {}) {
         ${functionSource('runRouterPass')}`, context);
     const pending = context.runRouterPass('Narrative', null, null, false);
     return { context, settings, runtimeState, books, persist, haEntrado,
-        abrir: () => abrirPuerta.resolve(), terminar: () => pending };
+        abrir: () => abrirPuerta.resolve(), terminar: () => pending,
+        // Cambio de chat real: invalida los guardas de propiedad igual que onChatChanged.
+        cambiarChat: () => { chatId = 'B'; chatAffinity.invalidateChatCommitGuards(); },
+        cambiarChatId: id => { chatId = id; } };
 }
 
 // El agente reescribe NPCs y elimina el libro de mundo, como haría un paso real.
@@ -197,9 +207,8 @@ describe('Dieta de la entrada del historial (D1-A, D5)', () => {
     });
 
     it('mantiene la preimagen aparcada mientras la entrada no está cerrada', async () => {
-        // Un paso interrumpido deja la entrada sin cerrar: en el blob no hay copia,
-        // así que no se ofrece como deshacible y la preimagen sigue en memoria para
-        // el cierre del `catch`.
+        // A mitad de paso el blob aún no tiene copia: la entrada no se ofrece como
+        // deshacible y la preimagen espera en memoria al cierre.
         const h = harness({ efecto: EFECTO_ESTANDAR });
         await h.haEntrado;
         const entrada = h.settings.routerHistory[0];
@@ -208,5 +217,50 @@ describe('Dieta de la entrada del historial (D1-A, D5)', () => {
         expect(Object.keys(h.runtimeState.lorePrePassPreimages[entrada.runId])).toHaveLength(4);
         h.abrir();
         await h.terminar();
+    });
+});
+
+// Regresión del paso abortado (laudo D5/R3): sin el guardado previo al paso, si la
+// entrada no se cerrara al abortar, los libros que el agente ya escribió quedarían
+// irreversibles y la preimagen seguiría colgada en memoria toda la sesión.
+describe('Paso abortado con libros ya escritos (D5/R3)', () => {
+    it('cierra la entrada y persiste las copias de lo que llegó a escribirse', async () => {
+        const h = harness({ efecto: EFECTO_ESTANDAR, fallo: 'aborto' });
+        await h.haEntrado;
+        const runId = h.settings.routerHistory[0].runId;
+        h.abrir();
+        await expect(h.terminar()).resolves.toBe(false);
+
+        const entrada = h.settings.routerHistory[0];
+        expect(entrada.runId).toBe(runId);
+        expect(entrada.finalized).toBe(true);
+        // Lo que el agente tocó antes de caerse queda deshacible.
+        expect(Object.keys(entrada.bookSnapshots).sort()).toEqual(['A_NPCs', 'A_WorldInfo']);
+        expect(entrada.bookSnapshots.A_NPCs).toEqual(LIBROS_INICIALES().A_NPCs);
+        expect(entrada.bookFingerprintsPost.A_NPCs).toBeDefined();
+        expect(isEntryRestorable(entrada)).toBe(true);
+        // Y se persiste en el cierre (D5): sin este guardado el undo moriría al recargar.
+        expect(h.persist).toHaveBeenCalled();
+        expect(h.runtimeState.lorePrePassPreimages[runId]).toBeUndefined();
+    });
+
+    it('no escribe en el chat ajeno al abortar, pero libera la preimagen aparcada', async () => {
+        const h = harness({ efecto: EFECTO_ESTANDAR, fallo: 'aborto' });
+        await h.haEntrado;
+        const entrada = h.settings.routerHistory[0];
+        h.persist.mockClear();
+        h.abrir();
+        h.cambiarChat();
+        await expect(h.terminar()).resolves.toBe(false);
+
+        // Sin propiedad del chat no se toca el blob del chat que llegó.
+        expect(entrada.finalized).toBe(false);
+        expect(entrada.bookSnapshots).toEqual({});
+        expect(entrada.createdBookNames).toBeUndefined();
+        expect(h.persist).not.toHaveBeenCalled();
+        // La entrada sin cerrar no se ofrece como deshacible (se descarta al arrancar),
+        // y su preimagen no puede quedarse megas colgada en la sesión.
+        expect(isEntryRestorable(entrada)).toBe(false);
+        expect(Object.keys(h.runtimeState.lorePrePassPreimages)).toEqual([]);
     });
 });

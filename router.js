@@ -1538,6 +1538,13 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
     const ctx = SillyTavern.getContext();
     if (!ctx.generateRaw) return;
 
+    // El cierre de la entrada del historial (D5/R3) también tiene que ocurrir cuando
+    // el paso aborta o falla, así que `ownsChat` y el `runId` se declaran FUERA del
+    // `try`: declaradas dentro, el `catch` no las ve y la lectura lanza ReferenceError.
+    // `ownsChat` arranca negándose: sin propiedad del chat no se escribe en nadie.
+    let ownsChat = () => false;
+    let _routerSnapshotRunId = null;
+
     try {
         _routerRunning = true;
         // Pin chat ownership before any lorebook/LLM await. applyAction routes
@@ -1548,7 +1555,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         stopRouterPass();
         _routerController = new AbortController();
         const _routerSignal = _routerController.signal;
-        const ownsChat = createChatCommitGuard(passChatId, getActiveChatId, { signal: _routerSignal });
+        ownsChat = createChatCommitGuard(passChatId, getActiveChatId, { signal: _routerSignal });
         const assertOwnsChat = () => {
             if (!ownsChat()) {
                 const err = new Error('Active chat changed');
@@ -1578,8 +1585,8 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         let archiveBooks = await fetchArchiveBooks();
         assertOwnsChat();
         let _routerTriggerMsg = null;
-        let _routerSnapshotRunId = null;
         let _routerPrePassWatermark = 0;
+        // `_routerSnapshotRunId` se declara antes del `try` (cierre en el `catch`).
 
         // ?? Snapshot state BEFORE this pass (for rollback) ??????????????????
         {
@@ -2882,12 +2889,20 @@ ${recordCategoryGuidance}`;
         return true;
     } catch (e) {
         // El paso pudo escribir libros antes de fallar: se cierra su entrada también
-        // aquí para que el deshacer siga siendo posible en la misma sesión (D5/R3).
-        // El `try` envuelve la propia lectura de la variable: si el paso abortó antes
-        // de declararla, la referencia está en zona muerta y no hay nada que cerrar.
-        try {
-            if (_routerSnapshotRunId) await finalizeRouterHistorySnapshot(_routerSnapshotRunId, ownsChat);
-        } catch (_) { /* paso sin entrada que cerrar */ }
+        // aquí para que lo ya escrito siga siendo reversible (D5/R3).
+        if (_routerSnapshotRunId) {
+            try {
+                await finalizeRouterHistorySnapshot(_routerSnapshotRunId, ownsChat);
+            } catch (cierreError) {
+                console.warn('[RPG Tracker] Could not finalize the lorebook history entry after a failed pass:', cierreError);
+            }
+            // Si el cierre no se produjo (se perdió la propiedad del chat o falló el
+            // I/O de las huellas), la preimagen aparcada ya no sirve para nada: se
+            // libera para no arrastrar megas el resto de la sesión. La entrada sin
+            // cerrar no se ofrece como deshacible y se descarta al arrancar (R3).
+            const entrada = (settings.routerHistory || []).find(entry => entry?.runId === _routerSnapshotRunId);
+            if (!entrada?.finalized) delete runtimeState.lorePrePassPreimages[_routerSnapshotRunId];
+        }
         if (e?.name === 'AbortError') {
             const chatChanged = /chat changed/i.test(e?.message || '');
             console.log(chatChanged
