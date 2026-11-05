@@ -29,6 +29,7 @@ import { DEFAULT_MAP_ARCHITECT_SYSTEM_PROMPT } from '../../map-architect-prompt.
 import { DEFAULT_MAP_UPDATER_SYSTEM_PROMPT } from '../../map-updater-prompt.js';
 import { DEFAULT_MAP_EVOLUTION_SYSTEM_PROMPT } from '../../map-evolution-prompt.js';
 import { normalizeMapTheme, normalizeSavedMapThemePresets } from './map-themes.js';
+import { normalizeThinkingPolicy } from './thinking-policy.js';
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
@@ -1354,6 +1355,18 @@ function getSettingsInternal(extensionSettings) {
         }
         s.macroOnlyWorldSkeletonMigrated = true;
     }
+
+    // ── Pensamiento por trabajo (spec 2026-11-05, T2/D2) ─────────────────────────
+    // La política se valida en cada carga: un modo desconocido, un presupuesto que
+    // no sea entero positivo o un «desactivar» en un trabajo de juicio vuelven a
+    // `heredar` por validación, no por convención. Con las entradas ya limpias se
+    // conserva el objeto tal cual: quien no mueva nada no reescribe sus ajustes.
+    const politicaPensamiento = normalizeThinkingPolicy(s.localThinkingPolicy);
+    if (!s.localThinkingPolicy || typeof s.localThinkingPolicy !== 'object'
+        || JSON.stringify(s.localThinkingPolicy) !== JSON.stringify(politicaPensamiento)) {
+        s.localThinkingPolicy = politicaPensamiento;
+    }
+
     return extensionSettings[MODULE_NAME];
 }
 
