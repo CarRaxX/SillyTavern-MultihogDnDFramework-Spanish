@@ -30,7 +30,7 @@ const LIBROS_INICIALES = () => ({
  * escribe durante el paso; `fallo` hace que la aplicación aborte después de escribir
  * (paso detenido o roto con libros ya tocados).
  */
-function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {}) {
+function harness({ efecto = () => {}, campaignBooks = null, fallo = null, falloTrasCierre = false } = {}) {
     let chatId = 'A';
     const books = LIBROS_INICIALES();
     const nombresIniciales = Object.keys(books);
@@ -48,6 +48,19 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {})
     };
     const runtimeState = { lorePrePassPreimages: {} };
     const persist = vi.fn();
+    const avisos = [];
+    const consola = {
+        log() {}, error() {}, info() {},
+        warn: (...args) => { avisos.push(args.map(String).join(' ')); },
+    };
+    const registrarEvento = (evento) => {
+        // Simula el fallo de un sitio posterior al cierre feliz: con el panel de
+        // depuración abierto, renderSchedulerPanel() corre sin try dentro de este
+        // registro y soltaba el `catch` por segunda vez sobre la misma entrada.
+        if (falloTrasCierre && evento === 'la_pass_complete') {
+            throw new Error('renderSchedulerPanel exploded');
+        }
+    };
     const chat = [{ is_user: false, mes: 'A narrative.' }];
     const apply = vi.fn(async () => {
         entrar.resolve();
@@ -65,7 +78,7 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {})
     const llm = vi.fn(() => 'A response');
     const context = createContext({
         ...chatAffinity,
-        AbortController, console: { log() {}, warn() {}, error() {}, info() {} },
+        AbortController, console: consola,
         canCommitPassForChat, LOREBOOK_ROLLBACK_LIMIT, LORE_EXISTENCE_RULE: '',
         getActiveChatId: () => chatId, getLivePrefix: () => chatId,
         getSettings: () => settings, isLocationMappingEnabled: () => false,
@@ -73,7 +86,7 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {})
         SillyTavern: { getContext: () => ({ chatId, chat, generateRaw: noop }) },
         broadcastStep: noop, stripSkeletonFromRouterPools: () => false,
         fetchRouterArchiveBooks: () => Promise.resolve(books),
-        getRouterChatId: () => chatId, recordSchedulerEvent: noop, saveSettings: persist,
+        getRouterChatId: () => chatId, recordSchedulerEvent: registrarEvento, saveSettings: persist,
         getWorldInfoNamesSafe: () => Promise.resolve(Object.keys(books)),
         runtimeState,
         cloneRouterValue: (value, fallback) => JSON.parse(JSON.stringify(value ?? fallback)),
@@ -107,7 +120,7 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null } = {})
         ${functionSource('finalizeRouterHistorySnapshot')}
         ${functionSource('runRouterPass')}`, context);
     const pending = context.runRouterPass('Narrative', null, null, false);
-    return { context, settings, runtimeState, books, persist, haEntrado,
+    return { context, settings, runtimeState, books, persist, avisos, haEntrado,
         abrir: () => abrirPuerta.resolve(), terminar: () => pending,
         // Cambio de chat real: invalida los guardas de propiedad igual que onChatChanged.
         cambiarChat: () => { chatId = 'B'; chatAffinity.invalidateChatCommitGuards(); },
@@ -261,6 +274,36 @@ describe('Paso abortado con libros ya escritos (D5/R3)', () => {
         // La entrada sin cerrar no se ofrece como deshacible (se descarta al arrancar),
         // y su preimagen no puede quedarse megas colgada en la sesión.
         expect(isEntryRestorable(entrada)).toBe(false);
+        expect(Object.keys(h.runtimeState.lorePrePassPreimages)).toEqual([]);
+    });
+});
+
+// Regresión del doble cierre (ronda 2): el camino feliz ya cerró y persistió la
+// entrada; si después lanza un sitio real del `try` (registro del scheduler con el
+// panel de depuración abierto, tick automático o auto-limpieza), el `catch` no puede
+// volver a cerrarla: su preimagen ya está liberada y un segundo cierre vaciaría
+// `bookSnapshots` dejando una entrada «deshacible» que no restaura nada (AC2/AC5).
+describe('Segundo cierre sobre una entrada ya cerrada', () => {
+    it('no vacía las copias ni persiste dos veces si algo falla tras el cierre feliz', async () => {
+        const h = harness({ efecto: EFECTO_ESTANDAR, falloTrasCierre: true });
+        await h.haEntrado;
+        const runId = h.settings.routerHistory[0].runId;
+        h.abrir();
+        // El paso falla despues del cierre: debe devolver false sin dañar la entrada.
+        await expect(h.terminar()).resolves.toBe(false);
+
+        const entrada = h.settings.routerHistory[0];
+        expect(entrada.runId).toBe(runId);
+        expect(entrada.finalized).toBe(true);
+        // Las copias del cierre feliz siguen intactas: es lo que necesita el deshacer.
+        expect(Object.keys(entrada.bookSnapshots).sort()).toEqual(['A_NPCs', 'A_WorldInfo']);
+        expect(entrada.bookSnapshots.A_NPCs).toEqual(LIBROS_INICIALES().A_NPCs);
+        expect(entrada.bookSnapshots.A_WorldInfo).toEqual(LIBROS_INICIALES().A_WorldInfo);
+        expect(isEntryRestorable(entrada)).toBe(true);
+        // El cierre persistio una sola vez: un segundo guardado seria el vaciado.
+        expect(h.persist).toHaveBeenCalledTimes(1);
+        // Y no hubo un segundo cierre rebuscando preimagenes ya liberadas.
+        expect(h.avisos.filter(aviso => aviso.includes('no preimage'))).toEqual([]);
         expect(Object.keys(h.runtimeState.lorePrePassPreimages)).toEqual([]);
     });
 });

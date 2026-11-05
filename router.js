@@ -1272,6 +1272,14 @@ async function finalizeRouterHistorySnapshot(runId, canCommit = () => true) {
         delete runtimeState.lorePrePassPreimages[runId];
         return;
     }
+    // Cierre idempotente: una entrada ya cerrada NO se vuelve a cerrar. Su preimagen
+    // en memoria ya se liberó, así que un segundo paso por aquí no encontraría copias
+    // que medir y reescribiría el blob con `bookSnapshots` vacío, dejando una entrada
+    // `finalized: true` que se ofrece como deshacible sin restaurar nada (AC2/AC5).
+    if (snapshot.finalized === true) {
+        delete runtimeState.lorePrePassPreimages[runId];
+        return;
+    }
     const preimagenes = runtimeState.lorePrePassPreimages[runId] || {};
     const liberarPreimagenes = () => { delete runtimeState.lorePrePassPreimages[runId]; };
     const prefix = snapshot.campaignPrefix || getLivePrefix();
@@ -2849,6 +2857,13 @@ ${recordCategoryGuidance}`;
         // Rollback can then remove only books proven to have been created by this pass.
         await finalizeRouterHistorySnapshot(_routerSnapshotRunId, ownsChat);
         assertOwnsChat();
+        // Entrada ya cerrada y persistida con el chat aún propio: se guarda el runId
+        // para el evento del scheduler y se suelta la variable, para que un fallo
+        // posterior dentro del `try` (el tick automático, el evento del scheduler con
+        // el panel de depuración abierto o la auto-limpieza) no vuelva a cerrar la
+        // misma entrada desde el `catch`.
+        const completedRunId = _routerSnapshotRunId;
+        _routerSnapshotRunId = null;
 
         // Manual passes don't go through onGenerationEnded's throttle reset — treat like an auto run.
         if (typeof globalThis._rpgResetRouterAutoTick === 'function') {
@@ -2856,7 +2871,7 @@ ${recordCategoryGuidance}`;
         }
         document.dispatchEvent(new CustomEvent('rt_generation_tick'));
         recordSchedulerEvent('la_pass_complete', {
-            runId: _routerSnapshotRunId,
+            runId: completedRunId,
             isManual,
             usedSinceLastRun,
             chatLength: ctx.chat.length,
