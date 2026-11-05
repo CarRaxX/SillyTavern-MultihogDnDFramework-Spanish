@@ -602,12 +602,13 @@ function resolveMaxTokens(settings) {
  * su ausencia, de los ajustes globales — los cuerpos derivados de mapas o del
  * Agente de Lorebook no arrastran la clave.
  * @param {object|null} settings Ajustes de la petición, si el llamante los tiene
- * @param {{thinkingJob?: string, thinkingPolicy?: object}} options
+ * @param {{thinkingJob?: string, thinkingPolicy?: object}|null} options Opciones de la llamada, si las trae
  * @returns {{mode:string,tokens?:number}}
  */
-function thinkingPolicyForRequest(settings, options = {}) {
-    const jobId = options.thinkingJob || null;
-    if (options.thinkingPolicy) return applyJobEligibility(options.thinkingPolicy, jobId);
+function thinkingPolicyForRequest(settings, options = null) {
+    const opts = options || {};
+    const jobId = opts.thinkingJob || null;
+    if (opts.thinkingPolicy) return applyJobEligibility(opts.thinkingPolicy, jobId);
     if (!jobId) return { mode: 'heredar' };
     const conClave = settings && settings[THINKING_POLICY_SETTINGS_KEY];
     if (conClave) return resolveThinkingPolicy(settings, jobId);
@@ -629,16 +630,17 @@ function applyJobEligibility(policy, jobId) {
  * el objeto queda intacto: ni un byte nuevo, exactamente el comportamiento actual.
  * @param {Record<string, unknown>} body
  * @param {object|null} settings
- * @param {{thinkingJob?: string, thinkingPolicy?: object}} options
+ * @param {{thinkingJob?: string, thinkingPolicy?: object}|null} options Opciones de la llamada, si las trae
  * @param {string} fuente Ruta de conexión real de la petición
  */
-function applyThinkingPolicyToRequest(body, settings, options = {}, fuente = '') {
-    const policy = thinkingPolicyForRequest(settings, options);
-    if (options.thinkingJob && settings?.debugMode) {
-        const estado = describeThinkingEffect({ [THINKING_POLICY_SETTINGS_KEY]: { [options.thinkingJob]: policy } }, options.thinkingJob, fuente || settings?.connectionSource);
-        console.log(`[RPG Tracker] Pensamiento del trabajo "${options.thinkingJob}": ${estado.text}`);
+function applyThinkingPolicyToRequest(body, settings, options = null, fuente = '') {
+    const opts = options || {};
+    const policy = thinkingPolicyForRequest(settings, opts);
+    if (opts.thinkingJob && settings?.debugMode) {
+        const estado = describeThinkingEffect({ [THINKING_POLICY_SETTINGS_KEY]: { [opts.thinkingJob]: policy } }, opts.thinkingJob, fuente || settings?.connectionSource);
+        console.log(`[RPG Tracker] Pensamiento del trabajo "${opts.thinkingJob}": ${estado.text}`);
     }
-    return applyThinkingPolicyToBody(body, policy, options.thinkingJob || null);
+    return applyThinkingPolicyToBody(body, policy, opts.thinkingJob || null);
 }
 
 // ── Ollama ─────────────────────────────────────────────────────────────────────
