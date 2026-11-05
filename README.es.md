@@ -58,6 +58,8 @@ En conjunto, estos componentes resuelven los cuatro problemas clásicos de los j
 - **Modo de Visualización en Tiempo Real** — convierte el Agente de Lorebook en un visor visual que genera imágenes de la escena actual y retratos de entidades presentes.
 - **Acción Instantánea** — comienza a jugar con un solo botón.
 - **Acompañante de Aventura (Adventure Companion)** — aprende a usar el framework con el modo tutorial opcional, consulta sobre tu campaña o deja que realice tu siguiente turno.
+- **Pensamiento del modelo por trabajo** — presupuesto o apagado del razonamiento oculto para cada trabajo de fondo, con la ruta efectiva a la vista.
+- **Contrato bilingüe tolerante** — acepta en español o en inglés las claves, categorías y estados del contrato, sin tocar nunca nombres propios ni texto narrativo.
 
 ---
 
@@ -73,6 +75,33 @@ En conjunto, estos componentes resuelven los cuatro problemas clásicos de los j
 2. **Seguimiento Automático:** A medida que juegas, la extensión analiza inteligentemente las respuestas del asistente, detectando pérdidas de vida, nuevo botín o desencadenantes de combate.
 3. **Inyección de Prompts y Ejecución:** La nota de estado (State Memo) y la cola RNG se inyectan en tu prompt saliente para actuar como la fuente de verdad.
 4. **Progresión del Mundo:** Opcionalmente, configura el componente de Progresión del Mundo para recibir informes periódicos sobre sucesos en el universo de juego.
+
+---
+
+## Pensamiento del modelo por trabajo
+
+El razonamiento oculto del modelo local se goberna trabajo a trabajo en **Ajustes → Conexiones y Modelos → ⚙️ Rendimiento (modelo local)**. Cada uno de los ocho trabajos de fondo tiene su propio selector:
+
+| Modo | Qué envía | Para qué |
+|------|-----------|----------|
+| **Herdar** (defecto) | Nada: la petición sale exactamente igual que siempre | Mientras no se mida nada |
+| **Presupuesto** | `reasoning_budget_tokens` y su alias `thinking_budget_tokens`, con el mismo valor | Recortar el borrador interno sin quitarlo |
+| **Desactivar** | `reasoning_effort: "none"` y `chat_template_kwargs: { enable_thinking: false }` | Sólo la transcripción del memo del Rastreador y la compresión del historial de Evolución de Mapas |
+
+Cuatro cosas que hay que saber antes de tocar nada:
+
+- **Sólo manda en la ruta directa.** El ajuste fino se aplica a los cuerpos que arma la propia extensión, así que la conexión del trabajo debe estar en **OpenAI compatible**. Por **API Principal** o **Perfil** manda SillyTavern, que no reenvía campos que no conoce, y sigue aplicándose el `custom_include_body` global sobre todas las peticiones por igual. Cada fila del cajón muestra la **ruta efectiva** de su trabajo para que no se mida nada a ciegas.
+- **Requisito de servidor:** llama.cpp **b9982** o más nuevo. En binarios anteriores el presupuesto es inocuo (se ignora sin error); `reasoning_budget_tokens` es el campo canónico y `thinking_budget_tokens` viaja como alias para versiones viejas. `enable_thinking` se manda como booleano: como cadena el servidor responde 400.
+- **Los trabajos de juicio no se apagan.** El Agente de Lorebook, el Actualizador y la Evolución de Mapas, World Progression y la Revisión de Estado Completa y la auditoría del Rastreador sólo admiten **Herdar** o **Presupuesto**, tanto en la interfaz como al validar los ajustes: su salida es JSON o reconstrucción de secciones y sin pensamiento sube el fallo de contrato.
+- **Coste real del ahorro.** Con el modelo local en un solo slot cada petición re-prefila la conversación: lo que se ahorra al quitar pensamiento se nota en varias pasadas, no en una.
+
+Todo vive en una sola clave de ajustes (`localThinkingPolicy`). **Restaurar valores heredados**, borrar la clave o revertir la rama devuelve el comportamiento anterior sin migración inversa.
+
+> **Experimento futuro (fuera de esta ola):** fijar la forma de la salida con una gramática **GBNF** en el propio servidor en vez de pedir el contrato por prompt. Es tocar el motor y necesita su propia especificación.
+
+## Contrato bilingüe tolerante
+
+El contrato de salida está escrito en español, pero el modelo contesta con las claves, categorías y estados en inglés o con acentos saltados a veces. La extensión pliega esos tokens de máquina contra una tabla conocida de alias (español ↔ inglés, sin mayúsculas ni diacríticos) antes de validar, tanto en las etiquetas del rastreador como en el JSON de mapas y en el del compresor de historial. El plegado **nunca** toca texto narrativo, títulos ni nombres propios, y una clave desconocida queda intacta: ningún token inglés deja de aceptarse por este cambio.
 
 ---
 
