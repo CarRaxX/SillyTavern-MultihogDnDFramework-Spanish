@@ -9,7 +9,7 @@ describe('deleted chat data cleanup', () => {
         localStorage.setItem(MEMO_RECOVERY_KEY, JSON.stringify({ Deleted: { currentMemo: 'memo' } }));
         const settings = {
             chatStates: { Active: { currentMemo: 'alive' } },
-            routerHistory: [{ chatId: 'Deleted', bookSnapshots: {} }],
+            routerHistory: [{ chatId: 'Deleted', snapshotFormat: 2, finalized: true, bookSnapshots: {} }],
         };
         expect(storedChatIds(settings)).toEqual(['Active', 'Deleted']);
         expect(existingChatIds([{ file_name: 'Active.jsonl' }, { file_name: 'Group 1.jsonl' }]))

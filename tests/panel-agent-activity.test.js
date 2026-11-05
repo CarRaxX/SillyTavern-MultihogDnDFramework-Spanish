@@ -25,7 +25,7 @@ describe('Agent activity controls', () => {
         const handlers = {};
         const button = id => ({ addEventListener: (_, fn) => { handlers[id] = fn; } });
         const back = button('undo'), forward = button('redo');
-        const history = [{ chatId: 'Chat A', campaignPrefix: 'A', bookSnapshots: {} }];
+        const history = [{ chatId: 'Chat A', campaignPrefix: 'A', snapshotFormat: 2, finalized: true, bookSnapshots: {} }];
         const postPassState = { chatId: 'Chat A', campaignPrefix: 'A' };
         runtimeState.loreRedoStack = [{ prePassSnapshot: history[0], postPassState }];
         globalThis.document = { addEventListener: vi.fn() };
@@ -78,7 +78,7 @@ describe('Agent activity controls', () => {
             addEventListener: (name, handler) => { handlers[name] = handler; },
         };
         const forward = { disabled: false, addEventListener: vi.fn() };
-        const history = [{ chatId: 'Chat A', bookSnapshots: {}, campaignBookNames: [] }];
+        const history = [{ chatId: 'Chat A', snapshotFormat: 2, finalized: true, bookSnapshots: {}, campaignBookNames: [], bookFingerprintsPre: {} }];
         const captureRouterLoreState = vi.fn().mockResolvedValue({
             campaignBookNames: ['Campaign_NPCs'],
             bookSnapshots: { Campaign_NPCs: { entries: { 0: { content: 'Initial world' } } } },
@@ -120,8 +120,8 @@ describe('Agent activity controls', () => {
         };
         const forward = { disabled: false, addEventListener: vi.fn() };
         const history = [
-            { chatId: 'Chat B', campaignPrefix: 'B', bookSnapshots: { B_NPCs: { entries: {} } } },
-            { chatId: 'Chat A', campaignPrefix: 'A', bookSnapshots: { A_NPCs: { entries: {} } } },
+            { chatId: 'Chat B', campaignPrefix: 'B', snapshotFormat: 2, finalized: true, bookSnapshots: { B_NPCs: { entries: {} } }, bookFingerprintsPre: { B_NPCs: '1:bbbb1111cccc2222' } },
+            { chatId: 'Chat A', campaignPrefix: 'A', snapshotFormat: 2, finalized: true, bookSnapshots: { A_NPCs: { entries: {} } }, bookFingerprintsPre: { A_NPCs: '1:aaaa1111bbbb2222' } },
         ];
         const postPassState = { chatId: 'Chat A', campaignBookNames: ['A_NPCs'], bookSnapshots: {} };
         const captureRouterLoreState = vi.fn().mockResolvedValue(postPassState);
@@ -186,5 +186,88 @@ describe('Agent activity controls', () => {
         activity.syncAgentNav();
         expect(back.disabled).toBe(true);
         expect(forward.disabled).toBe(true);
+    });
+});
+
+// Spec 2026-11-05 (T7): el estado posterior al deshacer alimenta el rehacer y la
+// recuperación, así que vive en `runtimeState`. Si acabara en `settings` pagaría en
+// el blob de `extension_settings` exactamente lo que esta ola pretende quitar.
+describe('Estado posterior al deshacer fuera del blob persistido', () => {
+    const MARCA = 'ESTADO-POSTERIOR-NO-PERSISTIBLE';
+
+    function escenario({ deshacerOk = true } = {}) {
+        const handlers = {};
+        const back = { disabled: false, addEventListener: (_name, fn) => { handlers.back = fn; } };
+        const forward = { disabled: true, addEventListener: (_name, fn) => { handlers.forward = fn; } };
+        const entrada = {
+            chatId: 'Chat A', campaignPrefix: 'A', snapshotFormat: 2, finalized: true,
+            campaignBookNames: ['A_NPCs'],
+            bookFingerprintsPre: { A_NPCs: '5:aaaa1111bbbb2222' },
+            bookSnapshots: { A_NPCs: { entries: { 0: { content: 'antes del paso' } } } },
+            routerLog: [], routerLastRunChatLength: 3,
+        };
+        const postPassState = {
+            chatId: 'Chat A', campaignPrefix: 'A',
+            bookSnapshots: { A_NPCs: { entries: { 0: { content: MARCA } } } },
+        };
+        // `settings` es lo que se serializa dentro de extension_settings.rpg_tracker.
+        const settings = { routerHistory: [entrada], routerCampaignPrefix: 'A', chatStates: {} };
+        const escrituras = [];
+        const saveSettings = vi.fn(() => { escrituras.push(JSON.stringify(settings)); });
+        const reapplyRouterPass = vi.fn().mockResolvedValue(true);
+        globalThis.document = { addEventListener: vi.fn() };
+        globalThis.toastr = { error: vi.fn() };
+        wireAgentActivity({
+            agentPanel: {
+                querySelector: selector => selector === '#rt-agent-nav-back'
+                    ? back
+                    : selector === '#rt-agent-nav-fwd' ? forward : null,
+            },
+            captureRouterLoreState: () => Promise.resolve(postPassState),
+            getRouterTick: () => 0,
+            getSettings: () => settings,
+            reapplyRouterPass,
+            refreshManifest: vi.fn().mockResolvedValue(undefined),
+            // El deshacer guarda el blob al cerrar (D5): aquí se comprueba qué escribe.
+            rollbackRouterPass: vi.fn(async () => { if (deshacerOk) saveSettings(); return deshacerOk; }),
+            saveSettings,
+        });
+        return { handlers, settings, escrituras, entrada, postPassState, reapplyRouterPass };
+    }
+
+    it('guarda el estado posterior sólo en memoria al deshacer', async () => {
+        const e = escenario();
+        await e.handlers.back();
+        expect(runtimeState.loreRedoStack).toHaveLength(1);
+        expect(runtimeState.loreRedoStack[0].postPassState).toBe(e.postPassState);
+        expect(runtimeState.loreRedoStack[0].prePassSnapshot).toBe(e.entrada);
+        // El blob escrito en disco no lleva el estado posterior ni pila de rehacer.
+        expect(e.escrituras.length).toBeGreaterThan(0);
+        expect(e.escrituras.some(texto => texto.includes(MARCA))).toBe(false);
+        expect(JSON.stringify(e.settings)).not.toContain(MARCA);
+        expect(Object.keys(e.settings)).not.toContain('loreRedoStack');
+        expect(e.settings.routerHistory[0]).not.toHaveProperty('postPassState');
+    });
+
+    it('rehace desde memoria sin escribir el estado posterior en el blob', async () => {
+        const e = escenario();
+        await e.handlers.back();
+        await e.handlers.forward();
+        // El rehacer recibe las copias por parámetro, no desde settings.
+        expect(e.reapplyRouterPass).toHaveBeenCalledWith(e.entrada, e.postPassState);
+        expect(runtimeState.loreRedoStack).toHaveLength(0);
+        expect(JSON.stringify(e.settings)).not.toContain(MARCA);
+        expect(e.escrituras.some(texto => texto.includes(MARCA))).toBe(false);
+    });
+
+    it('no deja nada en el blob ni en la pila cuando el deshacer falla', async () => {
+        // Sin estado posterior capturado no hay rehacer: la pila y el blob deben
+        // quedar intactos y el usuario debe recibir el aviso de fallo.
+        const e = escenario({ deshacerOk: false });
+        await e.handlers.back();
+        expect(runtimeState.loreRedoStack).toEqual([]);
+        expect(e.escrituras).toEqual([]);
+        expect(JSON.stringify(e.settings)).not.toContain(MARCA);
+        expect(globalThis.toastr.error).toHaveBeenCalled();
     });
 });

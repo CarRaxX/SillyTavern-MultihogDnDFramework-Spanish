@@ -4,6 +4,7 @@ import { HISTORY_ENTRY_LIMIT } from '../src/state/history-retention.js';
 import { describe, expect, it, vi } from 'vitest';
 import { parseAst } from 'rollup/parseAst';
 import * as affinity from '../src/state/pass-affinity.js';
+import { isEntryRestorable } from '../src/state/lorebook-history.js';
 import { normalizeWorldReportMetadata, WORLD_REPORT_METADATA_KEY } from '../world-progression-lib.js';
 
 const sources = Object.fromEntries(['router', 'map-updater', 'map-evolution', 'map-architect', 'narrative-hooks']
@@ -67,6 +68,12 @@ function harness(phase) {
         cleanMessageContent: m => m.mes,
         rememberCampaignBook: vi.fn(),
         isWorldInfoBookKnown: () => wait('known', true),
+        // Formato 2 (spec 2026-11-05): el rollback real consulta la restaurabilidad de
+        // la entrada y la guarda anti-edición manual antes de tocar disco. La guarda
+        // se salva vacía aquí; su comportamiento propio se prueba en
+        // tests/lorebook-agent-rollback-guard.test.js.
+        isEntryRestorable,
+        librosOmitidosPorEdicionManual: () => Promise.resolve([]),
         loadWorldInfoFresh: () => wait('load', book),
         saveWorldInfoSnapshot: save,
         collectDungeonMapCandidates: () => ({ maps: [], errors: [] }),
@@ -384,6 +391,10 @@ describe('manual world generation and recovery', () => {
 
     it.each(['names', 'snapshot', 'save'])('rollback never recovers into a new chat after %s', async phase => {
         const h = harness(phase);
+        // Entrada deliberadamente de formato 1 (sin `snapshotFormat` ni huellas): la
+        // ruta antiga del deshacer tiene que seguir funcionando con blobs previos a la
+        // dieta (spec 2026-11-05, D6). Las entradas en formato 2 se cubren en
+        // tests/lorebook-agent-rollback-guard.test.js y tests/router-snapshot-diet.test.js.
         h.settings.routerHistory = [{ chatId: 'A', campaignPrefix: 'A', bookSnapshots: { A_NPCs: { entries: {} } } }];
         Object.assign(h.context, {
             getRouterChatId: h.context.getActiveChatId, isLoreHistoryEntryForChat: () => true,

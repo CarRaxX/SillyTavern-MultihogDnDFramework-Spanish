@@ -61,7 +61,7 @@ export function stripChatFileExtension(name) {
 // after resetUnseenChatState. Unknown future/legacy fields are treated as real
 // data so a newer schema can never be silently overwritten by this migrator.
 const KNOWN_PARTITION_KEYS = new Set([
-    'currentMemo', 'combatDefeatedUi', 'memoPersistedAt', 'memoPersistedBy',
+    'currentMemo', 'combatDefeatedUi', 'memoPersistedAt', 'memoPersistedBy', 'lastSeenAt',
     'memoHistory', 'dungeonMapHistory', 'lastDelta', 'customPortraits', 'customLocationImages',
     'modules', 'blockOrder', 'stockPrompts', 'stockTemplates', 'quests', 'historyIndex',
     'activeRouterKeys', 'activeWorldKeys', 'keywordActivatedKeys', 'routerLog',

@@ -601,6 +601,11 @@ export function saveChatState(chatId, opts = {}) {
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
 
+        // Es la prueba de que esta partición sigue viva: la poda de chats cerrados
+        // (D4) sólo puede actuar sobre particiones con estampa reciente. Se refresca
+        // en cada guardado normal; sin estampa, nunca es candidata a poda.
+        lastSeenAt: memoPersistedAt,
+
         // Real-Time Mode: last scene location we generated art for (survives F5)
         lastImmersionSceneArtPath: existing.lastImmersionSceneArtPath || null,
         // Chat length at last Real-Time scene-art generation (for every-N-outputs mode)

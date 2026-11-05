@@ -8,6 +8,7 @@ import { buildDefaultSettings } from './defaults.js';
 import { buildFacInstruction, buildLocInstruction, buildNpcInstruction } from './module-instructions.js';
 import { DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './schema-sections.js';
 import { adjustPromptTimestamps } from './router-utils.js';
+import { fingerprintText } from './content-fingerprint.js';
 import { buildNarrativePacingSection } from './narrative-pacing.js';
 
 /**
@@ -226,6 +227,32 @@ export const PROMPT_DEFAULTS_CATEGORY_LABELS = {
     lorebook: 'Lorebook Agent Prompts',
     world: 'World, Map Architect & Map Updater Prompts',
     sections: 'NPC / PC Core Sections',
+};
+
+/**
+ * Etiquetas en español de las mismas categorías (spec 2026-11-05, T8): las usa el
+ * diálogo «Qué cambió» reconstruido sobre huellas, donde ningún texto íntegro ya
+ * está en disco. Se conservan las claves de máquina en inglés.
+ * @type {Record<(typeof PROMPT_DEFAULTS_CATEGORIES)[number], string>}
+ */
+export const PROMPT_DEFAULTS_CATEGORY_LABELS_ES = {
+    sysprompt: 'Prompt principal del sistema',
+    tracker: 'Prompts del State Tracker',
+    lorebook: 'Prompts del Agente de Lorebooks',
+    world: 'Prompts de Mundo, Arquitecto de Mapas y Actualizador de Mapas',
+    sections: 'Secciones núcleo de PNJ / PJ',
+};
+
+/**
+ * Traducción al español de las etiquetas de impacto que devuelve
+ * `getPromptDigestElementBadge`.
+ * @type {Record<string, string>}
+ */
+export const PROMPT_DIGEST_BADGE_LABELS_ES = {
+    customized: 'tu copia es distinta',
+    'matches new': 'coincide con lo nuevo',
+    'matches old': 'coincide con lo anterior',
+    unknown: 'sin copia viva',
 };
 
 /**
@@ -500,6 +527,104 @@ export function computeBundledPromptsFingerprint() {
  */
 export function computeBundledPromptsFingerprintForSnapshot(snapshot) {
     return hashPromptBundle(JSON.stringify(normalizeBundledPromptsSnapshot(snapshot)));
+}
+
+/**
+ * Digest de los defaults enviados (spec 2026-11-05, D3).
+ *
+ * `lastSeenPromptDefaultsSnapshot` guardaba el texto íntegro de las cinco categorías
+ * (~205 KB) con un único fin: poder decir «esto cambió desde el último reconoci-
+ * miento». El digest conserva una huella por elemento, que es todo lo que nece-
+ * sitan el diálogo «Qué cambió» y las insignias de impacto. El texto vivo sigue
+ * leyéndose en memoria desde los ajustes del usuario.
+ */
+export const BUNDLED_PROMPTS_DIGEST_VERSION = 2;
+
+/** Clave de un elemento del digest: categoría + etiqueta de su bloque. */
+export function promptDigestElementKey(category, label) {
+    return `${category}|${label}`;
+}
+
+/** Etiqueta legible de un elemento: `{ category, label }` desde la clave. */
+export function parsePromptDigestElementKey(key) {
+    const at = String(key || '').indexOf('|');
+    return at < 0
+        ? { category: String(key || ''), label: '' }
+        : { category: String(key).slice(0, at), label: String(key).slice(at + 1) };
+}
+
+/**
+ * True cuando el valor persistido ya es un digest y no el snapshot de texto antigo.
+ * @param {any} value
+ * @returns {boolean}
+ */
+export function isBundledPromptsDigest(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value)
+        && value.v === BUNDLED_PROMPTS_DIGEST_VERSION
+        && !!value.elements && typeof value.elements === 'object';
+}
+
+/**
+ * Huella por elemento a partir de un snapshot de defaults enviados.
+ * @param {ReturnType<typeof buildBundledPromptsSnapshot>} snapshot
+ * @returns {{ v: number, fingerprint: string, elements: Record<string, string> }}
+ */
+export function buildBundledPromptsDigest(snapshot) {
+    const elements = {};
+    for (const category of PROMPT_DEFAULTS_CATEGORIES) {
+        for (const block of getSnapshotCategoryBlocks(snapshot, category)) {
+            elements[promptDigestElementKey(category, block.label)] = fingerprintText(block.text || '');
+        }
+    }
+    return {
+        v: BUNDLED_PROMPTS_DIGEST_VERSION,
+        // Se reutiliza la huella histórica para que `lastSeenPromptDefaultsFingerprint`
+        // signifique exactamente lo mismo antes y después de la migración.
+        fingerprint: computeBundledPromptsFingerprintForSnapshot(snapshot),
+        elements,
+    };
+}
+
+/**
+ * Diferencia entre dos digest: elementos añadidos, modificados o desaparecidos.
+ * Un valor que no sea digest (texto antigo o ausente) se trata como vacío: el
+ * llamador decide entonces ofrecer todas las categorías, como hacía antes.
+ * @param {any} previous
+ * @param {any} next
+ * @returns {{ added: string[], changed: string[], removed: string[], categories: string[] }}
+ */
+export function diffBundledPromptsDigests(previous, next) {
+    const before = isBundledPromptsDigest(previous) ? previous.elements : {};
+    const after = isBundledPromptsDigest(next) ? next.elements : {};
+    const added = [];
+    const changed = [];
+    const removed = [];
+    for (const [key, fingerprint] of Object.entries(after)) {
+        if (!(key in before)) { added.push(key); continue; }
+        if (before[key] !== fingerprint) changed.push(key);
+    }
+    for (const key of Object.keys(before)) {
+        if (!(key in after)) removed.push(key);
+    }
+    const categories = [...new Set([...added, ...changed, ...removed]
+        .map(key => parsePromptDigestElementKey(key).category))];
+    return { added, changed, removed, categories };
+}
+
+/**
+ * Insignia de impacto de un elemento comparando sólo huellas: la copia viva se
+ * mide contra lo enviado antes y contra lo nuevo, sin tener el texto antigo en disco.
+ * @param {string} key
+ * @param {Record<string, string>} [previous] huellas del último reconocimiento
+ * @param {Record<string, string>} [current] huellas de los defaults actuales
+ * @param {Record<string, string>} [live] huellas de la copia del usuario
+ * @returns {'matches new'|'matches old'|'customized'|'unknown'}
+ */
+export function getPromptDigestElementBadge(key, previous = {}, current = {}, live = {}) {
+    if (!(key in live)) return 'unknown';
+    if (live[key] === current[key]) return 'matches new';
+    if (key in previous && live[key] === previous[key]) return 'matches old';
+    return 'customized';
 }
 
 /**
