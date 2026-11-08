@@ -11,7 +11,17 @@
     "map_architect": { "chars": 6416, "tok4": 1604 },
     "map_architect_brief": { "chars": 2266, "tok4": 567 },
     "map_evolution_direct": { "chars": 3071, "tok4": 768 },
-    "map_updater_direct": { "chars": 3698, "tok4": 925 }
+    "map_updater_direct": { "chars": 3698, "tok4": 925 },
+    "full_review_state_system": { "chars": 5178, "tok4": 1295 },
+    "full_review_user_suffix": { "chars": 69, "tok4": 18 }
+  },
+  "ola5_T4_prompts_full_review": {
+    "medido_en": "main=9440ed0",
+    "fecha_medicion": "2026-11-08",
+    "que_son": "Los dos prompts que se envían de verdad cuando «Revisión de Estado Completa» está activa: `FULL_REVIEW_STATE_SYSTEM_PROMPT` (system, reemplaza al Core Prompt) y `FULL_REVIEW_USER_PROMPT_SUFFIX` (sufijo del user). Uno por prompt, una línea cada uno; son texto de máquina en inglés.",
+    "consumo": "index.js:3573 (system) y index.js:3755 (sufijo). Los cuatro sitios que los PINTAN son index.js:7517, :7788, :10151 y :13421 sobre los textarea deshabilitados.",
+    "porque_antes_no_estaba": "En la ola 4 no había línea porque la auditoría medía solo las constantes de los trabajos de mapa y mundo; la Revisión Completa quedó fuera y el cuadro de texto mentía (no era editable).",
+    "regla": "Misma tolerancia que las demás claves: NINGÚN crecimiento sobre estos chars. El override del usuario (`fullReviewSystemPromptOverride`) no se mide aquí: vive en suspen/ajustes y se techa en src/ui/agent-settings-editor.js (D-5)."
   },
   "compactos_sin_recorte_D6": ["map_evolution_compress", "world_progression", "map_architect_brief", "map_evolution_direct", "map_updater_direct"],
   "mapped_site_bloque": {
