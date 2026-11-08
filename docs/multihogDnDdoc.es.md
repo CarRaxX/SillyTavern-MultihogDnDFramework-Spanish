@@ -160,6 +160,30 @@ Nota fuera de esta extensión: el ritmo de resumen 3→5 que se comenta por ahí
 
 ---
 
+## Mandos y perfiles de rendimiento
+
+Dentro del cajón **⚙️ Rendimiento (modelo local)** hay un bloque nuevo, **🎛️ Mandos y perfiles de rendimiento** (especificación única en `src/state/agent-controls.js` y `src/state/performance-profiles.js`; la interfaz no escribe ninguna cota a mano).
+
+**Tres mandos de bucle y chunk** (clamp único, `0` es un valor legítimo donde procede):
+
+| Mando (clave) | Fábrica | Cota | Qué manda de verdad |
+|---|---|---|---|
+| Reintentos extra del Agente (`agenteRetriesExtra`) | 2 | 0-4 | Los DOS bucles del Agente a la vez (normal y de limpieza). No gastan vueltas: solo añaden llamadas. |
+| Correcciones de JSON (`jsonCorrectionRetriesExtra`) | 2 | 0-4 | Las correcciones de JSON mal formado; ésas sí consumen vuelta del presupuesto. |
+| Margen de la auditoría (`rpgAuditChunkBuffer`) | 3000 | 500-8000, paso 500 | El MARGEN que se resta al contexto al partir la auditoría, en sus dos sitios (contexto completo del Rastreador y «Full Audit» del Agente). Bajarlo hace trozos más grandes y puede dar HTTP 400. |
+
+Al escribir se aplica el validador cruzado **vueltas + reintentos + correcciones ≤ 12** (las vueltas del dial de ritmo nunca se tocan: se bajan primero las correcciones y luego los reintentos, con aviso). Un valor sin número avisa y no se guarda; los límites de una pasada se leen una sola vez al empezarla, así que mover un mando con el Agente trabajando no cambia esa pasada.
+
+**Tres topes de salida** (`rpgOutputCapStateTracker` / `rpgOutputCapWorldProgression` / `rpgOutputCapMapEvolutionCompress`, 256-8000): **`0` = auto** y entonces rige la cascada de siempre (8192); con valor, el tope clampeado manda sobre esa cascada solo en su trabajo. Los cuatro trabajos que ya tenían su campo de salida no se duplican aquí. El del compresor de Evolución de Mapas nunca sube el tope interno de 8000 de su propio trabajo.
+
+**Revisión de Estado Completa editable**: dos overrides (`fullReviewSystemPromptOverride`, `fullReviewUserPromptSuffixOverride`) en el cajón, **vacío = el prompt de fábrica byte a byte**. El system exige `{{modulesText}}`, `[TAG]`/`[/TAG]` y `REMOVED` (sin ellos el memo no se puede fusionar) con techo de 8192 tokens; el sufijo solo admite `{{char}}`/`{{user}}` y tope 20.000 caracteres. El prompt se resuelve UNA vez por pasada: un override inválido no reenvía nada — se envía la fábrica y solo avisa en español — y los cuatro cuadros de solo lectura muestran lo que de verdad se envía. «Restaurar fábrica» deja los campos vacíos (nunca pega la fábrica dentro).
+
+**Perfiles con nombre (Rápido · Equilibrado · Máxima calidad)**: el selector vive en la clave `rpgPerfProfile` (defecto `Equilibrado`). Son DATOS que aplican los mismos aplicadores de las olas 2-4 (ritmo, techos, pensamiento, mandos y salidas); `Equilibrado` ES la fábrica clave por clave. «Aplicar perfil» es acción explícita: un `Popup` lista `actual → nuevo` solo en lo que cambia, y al confirmar se guarda UNA sola vez. Con el Agente o el Rastreador trabajando se rechaza con aviso (los límites de esa pasada ya están leídos). «Personalizado» se deriva de los ajustes, nunca se guarda; puedes guardar hasta 50 perfiles propios. Los perfiles fijan el pensamiento en `Rápido` y `Máxima calidad`, así que el dial de pensamiento queda marcado como heredado y revive si tocas un modo a mano o aplicas `Equilibrado`. El pensamiento de Revisión Completa y tus prompts propios no viajan en perfiles. Las claves nuevas son globales: no viajan por el estado de cada chat.
+
+Honestidades debidas: `≈` llamadas por 10 turnos usa la misma fórmula que los tooltips del dial de ritmo (típicas = pasadas × 3; peor = pasadas × (vueltas + 2)); los reintentos extra añaden llamadas, **nunca vueltas**. Con todo por defecto (`Equilibrado`) la salida de red es byte a byte la de siempre, sellada con SHA-256 en la suite.
+
+---
+
 ## Comandos de Barra (Slash Commands)
 
 | Comando | Propósito |
