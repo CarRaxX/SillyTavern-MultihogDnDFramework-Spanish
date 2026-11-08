@@ -7272,6 +7272,13 @@ function organizeConnectionSettingsUI() {
         // Inject settings into the overlay BEFORE ID-based jQuery bindings below.
         initSettingsOverlay(settingsHtml, { folderName: FOLDER_NAME });
 
+        // Declared before the perf-drawer binds below: `settings` is a lexical (const)
+        // binding, so reading it from the old position (after those binds) threw
+        // "can't access lexical declaration 'settings' before initialization" (TDZ)
+        // and killed the whole settings UI. Nothing between here and the old position
+        // mutates settings synchronously, so the value read is identical.
+        const settings = getSettings();
+
         organizeConnectionSettingsUI();
         bindConnectionApplyAllControls();
         bindThinkingPolicyControls(settings);
@@ -7318,7 +7325,6 @@ function organizeConnectionSettingsUI() {
             openSettingsOverlay();
         });
 
-        const settings = getSettings();
         if (!settings.chatLinkEnabled && settings.globalHistoryStorage && !await hydrateGlobalHistories(settings)) {
             throw new Error('Could not load the file-backed global memo/map history; persistence remains closed');
         }
