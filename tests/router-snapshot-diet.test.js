@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { canCommitPassForChat } from '../src/state/pass-affinity.js';
+import { leerControlesEfectivos } from '../src/state/agent-controls.js';
 import { changedBooksFromFingerprints, getBookPreimage, getLorebookSnapshotNames, isEntryRestorable } from '../src/state/lorebook-history.js';
 import { fingerprintLorebook } from '../src/state/content-fingerprint.js';
 import { LOREBOOK_ROLLBACK_LIMIT } from '../src/state/history-retention.js';
@@ -108,6 +109,7 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null, falloT
             record: [], update: [], activate: ['A_NPCs::0'], deactivate: [],
             rewrite: [{ id: 'A_NPCs::0', content: 'Rewritten chronicle' }], consolidate: [],
         }), applyAction: apply,
+        leerControlesEfectivos,
         persistRouterLastRunWatermark: noop, persistRouterLastRunTimestamp: noop,
         document: { dispatchEvent: noop }, CustomEvent: class {},
         estimateTokens: () => 400, stripDungeonMapSection: text => text,

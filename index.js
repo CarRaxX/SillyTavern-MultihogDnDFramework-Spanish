@@ -122,6 +122,7 @@ import {
     OUTPUT_CAP_JOBS,
     analizarAgControl,
     analizarOutputCap,
+    clampAgControl,
     estimarLlamadasDeBucles,
     tooltipAgControl,
     validateAgentControlSet,
@@ -3090,6 +3091,19 @@ function renderAgentPerfBox(settings) {
 }
 
 /**
+ * Helper ÚNICO del margen de la auditoría (D-2, T8): el mismo valor rige los dos
+ * sitios que parten la auditoría —la de contexto completo del Rastreador y la
+ * «Full Audit» del Agente de Lorebook—. De fábrica devuelve 3000 (AC0: sin tocar
+ * nada, los chunks salen byte a byte como en `main`); sin número válido devuelve
+ * el defecto sin escribir nada (AC1).
+ * @returns {number} Tokens reservados antes de partir la auditoría
+ */
+function margenAuditoriaEfectivo() {
+    const ajustes = typeof getSettings === 'function' ? getSettings() : null;
+    return clampAgControl(AG_CONTROL_KEYS.auditChunkBuffer, ajustes?.[AG_CONTROL_KEYS.auditChunkBuffer]);
+}
+
+/**
  * Escribe un mando de bucle/margen (AC1): inválido ⇒ aviso y NADA se guarda;
  * fuera de cota ⇒ se guarda el borde con aviso. Después pasa el validador cruzado
  * D-6, que solo actúa al escribir y nunca toca las vueltas del dial de ritmo.
@@ -4041,7 +4055,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
 
         if (isFullContext) {
             const maxContextLimit = SillyTavern.getContext().contextSize || settings.fullAuditMaxTokens || 32000;
-            const tokenBuffer = 3000;
+            const tokenBuffer = margenAuditoriaEfectivo();
             const chunkTokenLimit = Math.max(1000, maxContextLimit - tokenBuffer);
 
             let currentChunk = [];
@@ -12293,7 +12307,7 @@ RULES:
                 const { chat } = ctx;
 
                 const maxContextLimit = ctx.contextSize || settings.fullAuditMaxTokens || 32000;
-                const tokenBuffer = 3000;
+                const tokenBuffer = margenAuditoriaEfectivo();
                 const chunkTokenLimit = Math.max(1000, maxContextLimit - tokenBuffer);
 
                 let chunks = [];

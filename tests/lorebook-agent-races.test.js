@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { canCommitPassForChat } from '../src/state/pass-affinity.js';
+import { leerControlesEfectivos } from '../src/state/agent-controls.js';
 import { changedBooksFromFingerprints, getBookPreimage, isEntryRestorable } from '../src/state/lorebook-history.js';
 import { fingerprintLorebook } from '../src/state/content-fingerprint.js';
 import { LOREBOOK_ROLLBACK_LIMIT } from '../src/state/history-retention.js';
@@ -79,6 +80,7 @@ function harness({ basic = true, pause = 'llm', cleanupEvery = 0 } = {}) {
         expandLorebookPromptTemplate: text => text, stripStaticDungeonAgentGuidance: text => text,
         formatMappedSiteAgentNote: empty, formatArchiveIndexSection: empty, formatCurrentLocationSection: empty,
         sendStateRequest: llm, sendAgentTurn: llm, parseBasicTags: action, applyAction: apply,
+        leerControlesEfectivos,
         persistRouterLastRunWatermark: watermark, persistRouterLastRunTimestamp: timestamp,
         document: { dispatchEvent: noop }, CustomEvent: class {},
         estimateTokens: () => 400, stripDungeonMapSection: text => text,
