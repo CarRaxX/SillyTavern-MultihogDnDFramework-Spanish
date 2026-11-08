@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { FACTORY_RHYTHM_ID, LORE_RHYTHM_CUSTOM_ID, LORE_RHYTHM_PRESETS, clampLoreRhythmCustom, factoryRhythmValues, getLoreRhythmPreset, resolveLoreRhythmId, rhythmPresetEstimate } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
@@ -4018,7 +4018,14 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
         let abandonedForChatSwitch = false;
 
         const modulesText = buildModulesInstructionText(settings);
-        const coreTemplate = settings.fullReviewStateMode ? FULL_REVIEW_STATE_SYSTEM_PROMPT : settings.systemPromptTemplate;
+        // D-4 (ola 5): el prompt de la Revisión Completa se resuelve UNA vez por
+        // pasada. Override vacío = fábrica byte a byte (AC0); override inválido
+        // NO reenvía nada: se envía la fábrica y solo se avisa en español.
+        const revisionResuelta = resolveFullReviewPrompt(settings);
+        if (settings.fullReviewStateMode) {
+            for (const aviso of revisionResuelta.avisos) toastr.warning(aviso, 'Revisión de Estado Completa');
+        }
+        const coreTemplate = settings.fullReviewStateMode ? revisionResuelta.system : settings.systemPromptTemplate;
         let systemPrompt = coreTemplate.replace('{{modulesText}}', modulesText);
         if (settings.npcRelationshipBars && getRelationshipUpdateMode(settings) === RELATIONSHIP_UPDATE_MODES.STATE_TRACKER) {
             systemPrompt += `\n\n${buildStateTrackerRelationshipCommandInstruction(
@@ -4200,7 +4207,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     `## OUTPUT THE COMPLETE VERIFIED STATE MEMO:`;
             } else {
                 const suffix = settings.fullReviewStateMode
-                    ? FULL_REVIEW_USER_PROMPT_SUFFIX
+                    ? revisionResuelta.suffix
                     : (settings.userPromptSuffix || `## OUTPUT ONLY CHANGED SECTIONS:`);
                 userPrompt =
                     worldLoreSection +
@@ -7963,8 +7970,10 @@ function organizeConnectionSettingsUI() {
                         const $corePromptEl = $('#rpg_tracker_core_prompt');
                         const $suffixPromptEl = $('#rpg_tracker_user_prompt_suffix');
                         if (sTempTracker.fullReviewStateMode) {
-                            if ($corePromptEl.length) $corePromptEl.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                            if ($suffixPromptEl.length) $suffixPromptEl.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                            // D-4: se pinta la resolución real (override o fábrica), no la constante.
+                            const revisionPintada = resolveFullReviewPrompt(sTempTracker);
+                            if ($corePromptEl.length) $corePromptEl.val(revisionPintada.system);
+                            if ($suffixPromptEl.length) $suffixPromptEl.val(revisionPintada.suffix);
                         } else {
                             if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                             if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
@@ -8234,8 +8243,10 @@ function organizeConnectionSettingsUI() {
                                     const $corePromptEl = $('#rpg_tracker_core_prompt');
                                     const $suffixPromptEl = $('#rpg_tracker_user_prompt_suffix');
                                     if (sTempTracker.fullReviewStateMode) {
-                                        if ($corePromptEl.length) $corePromptEl.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                                        if ($suffixPromptEl.length) $suffixPromptEl.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                                        // D-4: mismo pintado resuelto que en el cajón del Tracker.
+                                        const revisionPintada = resolveFullReviewPrompt(sTempTracker);
+                                        if ($corePromptEl.length) $corePromptEl.val(revisionPintada.system);
+                                        if ($suffixPromptEl.length) $suffixPromptEl.val(revisionPintada.suffix);
                                     } else {
                                         if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                                         if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
@@ -10597,8 +10608,10 @@ RULES:
             // Show the prompts that are actually sent while Full Review is on; the saved
             // custom Core Prompt / suffix stay in settings and are restored on disable.
             if (enabled) {
-                corePromptTextarea.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                suffixPromptTextarea.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                // D-4: el cuadro de solo lectura muestra lo que de verdad se envía.
+                const revisionPintada = resolveFullReviewPrompt(settings);
+                corePromptTextarea.val(revisionPintada.system);
+                suffixPromptTextarea.val(revisionPintada.suffix);
             } else {
                 corePromptTextarea.val(settings.systemPromptTemplate || '');
                 suffixPromptTextarea.val(settings.userPromptSuffix || '');
@@ -13866,9 +13879,11 @@ RULES:
             $('#rpg_tracker_show_total_value').prop('checked', s.showTotalInventoryValue !== false);
             $('#rpg_tracker_full_review_mode').prop('checked', !!s.fullReviewStateMode);
             if (s.fullReviewStateMode) {
+                // D-4: pintado resuelto (override incluido) sin perder el solo lectura.
+                const revisionPintada = resolveFullReviewPrompt(s);
                 $('#rpg_tracker_full_review_note').css('display', 'block');
-                $('#rpg_tracker_core_prompt').val(FULL_REVIEW_STATE_SYSTEM_PROMPT).prop('disabled', true).css('opacity', '0.4');
-                $('#rpg_tracker_user_prompt_suffix').val(FULL_REVIEW_USER_PROMPT_SUFFIX).prop('disabled', true).css('opacity', '0.4');
+                $('#rpg_tracker_core_prompt').val(revisionPintada.system).prop('disabled', true).css('opacity', '0.4');
+                $('#rpg_tracker_user_prompt_suffix').val(revisionPintada.suffix).prop('disabled', true).css('opacity', '0.4');
                 $('#rpg_tracker_btn_reset_prompt').prop('disabled', true).css('opacity', '0.4');
             } else {
                 $('#rpg_tracker_full_review_note').css('display', 'none');

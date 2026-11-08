@@ -36,22 +36,28 @@ describe('Full Review State Mode', () => {
     });
 
     it('runStateModelPass swaps the Core Prompt template wholesale when the toggle is on', () => {
+        // T10 (ola 5, D-4): la constante cruda se sustituye por la resolución,
+        // que devuelve la fábrica byte a byte cuando no hay override (AC0).
+        expect(indexSource).toContain('const revisionResuelta = resolveFullReviewPrompt(settings);');
         expect(indexSource).toContain(
-            "const coreTemplate = settings.fullReviewStateMode ? FULL_REVIEW_STATE_SYSTEM_PROMPT : settings.systemPromptTemplate;",
+            'const coreTemplate = settings.fullReviewStateMode ? revisionResuelta.system : settings.systemPromptTemplate;',
         );
         expect(indexSource).toContain('let systemPrompt = coreTemplate.replace(\'{{modulesText}}\', modulesText);');
     });
 
     it('forces the complete-state user-prompt suffix instead of the delta suffix when on', () => {
-        expect(indexSource).toContain('? FULL_REVIEW_USER_PROMPT_SUFFIX');
+        expect(indexSource).toContain('? revisionResuelta.suffix');
         expect(FULL_REVIEW_USER_PROMPT_SUFFIX).toBe(
             '## OUTPUT THE COMPLETE, VERIFIED STATE MEMO FOR EVERY ENABLED MODULE:',
         );
     });
 
     it('imports Full Review prompt constants from state-manager', () => {
-        expect(indexSource).toMatch(/import\s*\{[^}]*FULL_REVIEW_STATE_SYSTEM_PROMPT[^}]*\}\s*from\s*'\.\/state-manager\.js'/);
-        expect(indexSource).toMatch(/import\s*\{[^}]*FULL_REVIEW_USER_PROMPT_SUFFIX[^}]*\}\s*from\s*'\.\/state-manager\.js'/);
+        // T10 (ola 5, D-4): index.js ya no importa las constantes crudas; envía y
+        // pinta la resolución del editor, que internamente devuelve la fábrica.
+        expect(indexSource).toMatch(/import\s*\{[^}]*resolveFullReviewPrompt[^}]*\}\s*from\s*'\.\/src\/ui\/agent-settings-editor\.js'/);
+        expect(indexSource).not.toMatch(/import\s*\{[^}]*FULL_REVIEW_STATE_SYSTEM_PROMPT[^}]*\}\s*from\s*'\.\/state-manager\.js'/);
+        expect(indexSource).not.toMatch(/import\s*\{[^}]*FULL_REVIEW_USER_PROMPT_SUFFIX[^}]*\}\s*from\s*'\.\/state-manager\.js'/);
     });
 
     it('settings.html places Full Review Mode and Connection Settings just below Enable Multihog Framework', () => {
@@ -78,8 +84,8 @@ describe('Full Review State Mode', () => {
         expect(indexSource).toContain("settings.fullReviewStateMode = !!$(this).prop('checked');");
         expect(indexSource).toContain('corePromptTextarea.prop(\'disabled\', enabled)');
         expect(indexSource).toContain('suffixPromptTextarea.prop(\'disabled\', enabled)');
-        expect(indexSource).toContain('suffixPromptTextarea.val(FULL_REVIEW_USER_PROMPT_SUFFIX)');
-        expect(indexSource).toContain('corePromptTextarea.val(FULL_REVIEW_STATE_SYSTEM_PROMPT)');
+        expect(indexSource).toContain('suffixPromptTextarea.val(revisionPintada.suffix)');
+        expect(indexSource).toContain('corePromptTextarea.val(revisionPintada.system)');
         expect(settingsHtml).toMatch(/(?:Core Prompt and User Prompt Suffix boxes \(further below\)|el Prompt Central y el Sufijo del Usuario muestran las versiones integradas)/);
     });
 
