@@ -702,6 +702,7 @@
                                 Quitar el pensamiento abarata y acelera cada pasada, pero el modelo pierde su borrador interno y sube el fallo de contrato (JSON mal formado o secciones perdidas). Con el modelo local en un solo slot, cada cambio de presupuesto re-prefila la conversación: el ahorro se nota en varias pasadas, no en una.
                             </div>
                             <div id="rpg_thinking_policy_rows" class="flex-container flexFlowColumn gap-1"></div>
+                            <div id="rpg_thinking_policy_profile_note" class="rt-agent-perf-heredado" style="display:none;"></div>
                             <button type="button" id="rpg_thinking_policy_reset" class="menu_button interactable" style="width:100%;font-size:11px;" title="Deja los ocho trabajos otra vez en Heredar: comportamiento idéntico al de siempre.">
                                 <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores heredados
                             </button>
@@ -736,6 +737,61 @@
                                     <i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores de fábrica (1600 / 4096 / 5)
                                 </button>
                             </div>
+                            <details id="rpgApplyAgentPerfBox" class="rt-agent-perf-cajon">
+                                <summary class="rt-agent-perf-summary">🎛️ Mandos y perfiles de rendimiento</summary>
+                                <div class="rt-agent-perf-cuerpo">
+                                    <p class="rt-agent-perf-intro">
+                                        Estos mandos gobiernan lo que cuesta cada pasada del agente de lorebook y del rastreador mientras el modelo local trabaja en un solo slot. Están fijados en literal desde siempre: mientras no muevas ninguno ni apliques un perfil, las peticiones salen <b>exactamente igual que antes</b>. Abrir estos ajustes no escribe nada.
+                                    </p>
+
+                                    <div class="rt-agent-perf-bloque">
+                                        <div class="rt-agent-perf-subtitulo">Perfiles de rendimiento</div>
+                                        <p class="rt-agent-perf-nota">
+                                            Tres filas cerradas que ponen a la vez ritmo, pensamiento, techos, reintentos, margen y salida. <b>Aplicar un perfil es siempre una acción explícita</b>: primero enseña qué cambia (<i>ahora → con el perfil</i>) y solo guarda si confirmas. El nombre del selector se <b>deriva</b> de tus valores; si no coinciden EXACTAMENTE con una fila, dice <b>«Personalizado»</b> sin guardar ese nombre. «Equilibrado» son los valores de siempre, así que sirve también como «restaurar».
+                                        </p>
+                                        <select id="rpg_perf_profile_select" class="text_pole rt-agent-perf-select"></select>
+                                        <div class="rt-agent-perf-botones">
+                                            <button type="button" id="rpg_perf_apply_Rapido" class="menu_button interactable rt-agent-perf-boton">Rápido</button>
+                                            <button type="button" id="rpg_perf_apply_Equilibrado" class="menu_button interactable rt-agent-perf-boton">Equilibrado</button>
+                                            <button type="button" id="rpg_perf_apply_Calidad" class="menu_button interactable rt-agent-perf-boton">Máxima calidad</button>
+                                        </div>
+                                        <span id="rpg_perf_profile_state" class="rt-agent-perf-estado"></span>
+                                        <div class="rt-agent-perf-propios">
+                                            <input id="rpg_perf_custom_name" type="text" class="text_pole" maxlength="50" placeholder="Nombre de tu perfil (como mucho 50)" title="Guarda los mandos de coste que tienes ahora mismo con este nombre. No se admiten nombres vacíos, repetidos, los de las tres filas ni «Personalizado». Los prompts de Revisión Completa no viajan en perfiles." />
+                                            <button type="button" id="rpg_perf_custom_save" class="menu_button interactable rt-agent-perf-boton">Guardar como perfil propio</button>
+                                            <button type="button" id="rpg_perf_custom_delete" class="menu_button interactable rt-agent-perf-boton">Borrar el del selector</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="rt-agent-perf-bloque">
+                                        <div class="rt-agent-perf-subtitulo">Mandos del bucle del Agente</div>
+                                        <label class="rt-agent-perf-label" for="rpg_ag_agent_retries">Reintentos extra (normal y limpieza) <span class="rt-agent-perf-rango">(0-4)</span></label>
+                                        <input id="rpg_ag_agent_retries" type="text" inputmode="numeric" class="text_pole" />
+                                        <label class="rt-agent-perf-label" for="rpg_ag_json_retries">Correcciones de JSON mal formado <span class="rt-agent-perf-rango">(0-4)</span></label>
+                                        <input id="rpg_ag_json_retries" type="text" inputmode="numeric" class="text_pole" />
+                                        <label class="rt-agent-perf-label" for="rpg_ag_audit_buffer">Margen de la auditoría (tokens) <span class="rt-agent-perf-rango">(500-8000)</span></label>
+                                        <input id="rpg_ag_audit_buffer" type="text" inputmode="numeric" class="text_pole" />
+                                        <p class="rt-agent-perf-nota">
+                                            Las <b>vueltas</b> de los dos bucles no tienen mando propio: comparten los «Turnos Máximos del Agente» del dial de ritmo de arriba, así que se gobiernan desde ahí y desde los perfiles. La suma de vueltas y reintentos no puede pasar de <b>12</b>: al escribir se recortan primero las correcciones de JSON y después los reintentos, nunca las vueltas.
+                                        </p>
+                                    </div>
+
+                                    <div class="rt-agent-perf-bloque">
+                                        <div class="rt-agent-perf-subtitulo">Tope de salida por trabajo</div>
+                                        <label class="rt-agent-perf-label" for="rpg_output_cap_state_tracker">Rastreador de Estado <span class="rt-agent-perf-rango">(0 = auto · 256-8000)</span></label>
+                                        <input id="rpg_output_cap_state_tracker" type="text" inputmode="numeric" class="text_pole" />
+                                        <label class="rt-agent-perf-label" for="rpg_output_cap_world_progression">World Progression <span class="rt-agent-perf-rango">(0 = auto · 256-8000)</span></label>
+                                        <input id="rpg_output_cap_world_progression" type="text" inputmode="numeric" class="text_pole" />
+                                        <label class="rt-agent-perf-label" for="rpg_output_cap_map_evolution_compress">Compresión de Evolución de Mapas <span class="rt-agent-perf-rango">(0 = auto · 256-8000)</span></label>
+                                        <input id="rpg_output_cap_map_evolution_compress" type="text" inputmode="numeric" class="text_pole" />
+                                        <p class="rt-agent-perf-nota">
+                                            Solo se añade mando donde no lo había: el agente de lorebook, el arquitecto de mapas, el actualizador de mapas y la evolución de mapas ya tienen su propio campo de salida en sus cajones. <b>0 = auto</b> deja la cascada de siempre (8192): el campo del Agente arrastra al rastreador y al mundo, y este techo manda sobre él. La compresión está topada a 8000 dentro de su propio trabajo y este mando nunca la sube.
+                                        </p>
+                                    </div>
+
+                                    <div id="rpg_agent_fr_host" class="rt-agent-perf-fr"></div>
+                                </div>
+                            </details>
                         </div>
                     </details>
                 </div>
