@@ -1537,6 +1537,64 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
          */
         localThinkingPolicy: {},
 
+        /**
+         * Reintentos extra del Agente de Lorebook (spec 2026-11-08, D-2). Manda
+         * sobre los DOS bucles: el normal (`router.js:2672`) y el de limpieza
+         * (`router.js:2153`). `0` = ninguno: el primer Action mal formado cierra la
+         * pasada con error. No gastan vueltas, solo añaden llamadas.
+         */
+        agenteRetriesExtra: 2,
+
+        /**
+         * Correcciones del JSON de argumentos mal formado (spec 2026-11-08, D-2):
+         * `MAX_JSON_CORRECTION_RETRIES` (`router.js:2674`). `0` = cero correcciones.
+         */
+        jsonCorrectionRetriesExtra: 2,
+
+        /**
+         * Margen reservado antes de partir la auditoría (spec 2026-11-08, D-2): el
+         * literal 3000 de `index.js:3609-3611` y `index.js:11860-11862`. El límite
+         * resulta de restar este margen al contexto; bajarlo hace trozos más grandes
+         * y puede dar HTTP 400. Rige los dos sitios a la vez.
+         */
+        rpgAuditChunkBuffer: 3000,
+
+        /** Tope de salida del Rastreador (spec 2026-11-08, D-3). 0 = auto: rige la cascada de siempre (`resolveMaxTokens` → 8192). */
+        rpgOutputCapStateTracker: 0,
+
+        /** Tope de salida de World Progression (spec 2026-11-08, D-3). 0 = auto. */
+        rpgOutputCapWorldProgression: 0,
+
+        /** Tope de salida de la compresión de Evolución de Mapas (spec 2026-11-08, D-3). 0 = auto; nunca sube el tope propio de 8000. */
+        rpgOutputCapMapEvolutionCompress: 0,
+
+        /**
+         * System prompt propio de Revisión de Estado Completa (spec 2026-11-08, D-4).
+         * Vacío = el de fábrica, byte a byte como `main`. NO es
+         * `settings.systemPromptTemplate`: son dos cosas distintas y el cajón solo
+         * escribe esta clave.
+         */
+        fullReviewSystemPromptOverride: '',
+
+        /** Sufijo de usuario propio de Revisión de Estado Completa (spec 2026-11-08, D-4). Vacío = el de fábrica. */
+        fullReviewUserPromptSuffixOverride: '',
+
+        /**
+         * Nombre del último perfil de rendimiento aplicado/visible (spec 2026-11-08,
+         * D-7). Es una ETIQUETA derivada: los valores viven en las once claves de la
+         * matriz. Cuando nada coincide, la interfaz muestra «Personalizado» sin
+         * guardar ese nombre.
+         */
+        rpgPerfProfile: 'Equilibrado',
+
+        /**
+         * Perfiles propios del usuario (addendum §4): lista de
+         * `{ nombre, valores }` con las claves de la matriz. Se rechazan el nombre
+         * vacío, el duplicado y el que coincida con las tres matrices; tope 50.
+         * @type {Array<{nombre:string,valores:Record<string,unknown>}>}
+         */
+        rpgPerfProfileCustom: [],
+
         lastResetVersion: "",
 
         lastSeenPromptDefaultsFingerprint: "",
