@@ -16,6 +16,7 @@ import {
     describeThinkingEffect,
     resolveThinkingPolicy,
 } from './src/state/thinking-policy.js';
+import { clampOutputCap, outputCapSettingsKey } from './src/state/agent-controls.js';
 
 /** Placeholder that survives SillyTavern substituteParams() in generateRaw. */
 export const RT_USER_MACRO_SENTINEL = '__RT_USER_MACRO__';
@@ -596,6 +597,23 @@ function resolveMaxTokens(settings) {
 }
 
 /**
+ * Ola 5 (D-3, T9): tope de salida efectivo por trabajo con mando propio
+ * (`state_tracker`, `world_progression`, `map_evolution_compress`). `0`, ausente
+ * o trabajo sin mando ⇒ auto: rige la cascada de siempre (`resolveMaxTokens`,
+ * techo 8192). Con valor, el cap clampeado en [256,8000] manda sobre la cascada.
+ * La ruta Perfil no pasa por aquí (no lleva `jobId`) y `sendViaOpenAI` recibe
+ * el valor ya resuelto: el cap jamás se duplica aguas abajo.
+ * @param {object|null} settings
+ * @param {string|null} jobId Etiqueta del trabajo (token de máquina en inglés)
+ * @returns {number}
+ */
+function maxTokensEfectivos(settings, jobId) {
+    const clave = outputCapSettingsKey(jobId);
+    const cap = clave ? clampOutputCap(jobId, settings?.[clave]) : 0;
+    return cap > 0 ? cap : resolveMaxTokens(settings);
+}
+
+/**
  * Política de pensamiento efectiva de una petición propia (spec 2026-11-05, D2).
  * `options.thinkingPolicy` manda (ya viene resuelta y validada por el llamante);
  * si sólo trae `options.thinkingJob` se lee de los ajustes de ese trabajo y, en
@@ -1110,7 +1128,7 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
     // ── OpenAI Compatible Mode ──
     if (settings.connectionSource === 'openai') {
         if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
-        const text = await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings, signal, null,
+        const text = await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, maxTokensEfectivos(settings, thinkingJob), presetSettings, signal, null,
             { thinkingJob, thinkingPolicy });
         logTransaction(debugSource, [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], text);
         return finalize(text);
@@ -1158,7 +1176,8 @@ export async function sendStateRequest(settings, systemPrompt, userPrompt, signa
             jsonSchema: context.mainApi === 'openai' ? jsonSchema : null,
         };
 
-        options.responseLength = resolveMaxTokens(settings);
+        // Cap por trabajo (D-3): 0/ausente = cascada de siempre, intacta (AC0).
+        options.responseLength = maxTokensEfectivos(settings, thinkingJob);
 
         let result;
         if (jsonSchema && typeof context.generateRawData === 'function') {
@@ -1263,7 +1282,8 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             reasoning_format: 'auto',
         };
         if (tools?.length) body.tools = tools;
-        body.max_tokens = resolveMaxTokens(settings);
+        // Cap por trabajo (D-3) además del gobernable por pensamiento (D3-ola2).
+        body.max_tokens = maxTokensEfectivos(settings, options?.thinkingJob);
         // El otro cuerpo gobernable (spec 2026-11-05, D3). La rama ollama y las
         // rutas de SillyTavern se quedan exactamente como estaban (D3/AC0).
         applyThinkingPolicyToRequest(body, settings, options, 'openai');
@@ -1451,9 +1471,11 @@ export async function sendAgentTurn(settings, messages, tools = null, signal = n
             originalPreset2 = await getCurrentCompletionPreset();
             await setCompletionPreset(settings.completionPresetId);
         }
-        const options = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal, streaming: true };
-        options.responseLength = resolveMaxTokens(settings);
-        const result = await generateRaw(options);
+        // `rawOptions` y no `options`: el local ensombrecía el parámetro y le
+        // ocultaba el `thinkingJob` con el que D-3 resuelve el cap del trabajo.
+        const rawOptions = { prompt: flatUser, systemPrompt: systemMsg?.content || '', bypassAll: true, reasoning_format: 'auto', signal, streaming: true };
+        rawOptions.responseLength = maxTokensEfectivos(settings, options?.thinkingJob);
+        const result = await generateRaw(rawOptions);
         const text = typeof result === 'string' ? result : (/** @type {any} */ (result))?.choices?.[0]?.message?.content ?? '';
         return { content: text, toolCall: null };
     } finally {

@@ -10928,3 +10928,175 @@ dialog .rt-dungeon-graph-asset-tip,
         }
     }
 }
+
+/* ── Mandos y perfiles de rendimiento (ola 5, spec 2026-11-08) ──────────────
+   Densidad de panel técnico: separadores de 1px, cifras tabulares para que los
+   números de los mandos y de la tabla de diferencias no bailen al repintar. */
+.rt-agent-perf-cajon {
+    margin-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
+
+.rt-agent-perf-summary {
+    font-size: 0.78em;
+    font-weight: bold;
+    opacity: 0.85;
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+    padding-bottom: 4px;
+}
+
+.rt-agent-perf-cuerpo {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-left: 5px;
+}
+
+.rt-agent-perf-bloque {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    padding-left: 8px;
+}
+
+.rt-agent-perf-subtitulo {
+    font-size: 0.78em;
+    font-weight: bold;
+    opacity: 0.85;
+    letter-spacing: 0.01em;
+}
+
+.rt-agent-perf-intro,
+.rt-agent-perf-nota {
+    font-size: 0.75em;
+    opacity: 0.7;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.rt-agent-perf-label {
+    font-size: 0.75em;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+.rt-agent-perf-rango {
+    opacity: 0.55;
+    font-size: 0.9em;
+    font-variant-numeric: tabular-nums;
+}
+
+.rt-agent-perf-select,
+#rpgApplyAgentPerfBox input.text_pole {
+    width: 100%;
+    font-size: 0.8em;
+    font-variant-numeric: tabular-nums;
+}
+
+.rt-agent-perf-botones,
+.rt-agent-perf-propios {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.rt-agent-perf-boton {
+    font-size: 11px;
+    padding: 3px 8px;
+}
+
+.rt-agent-perf-estado {
+    font-size: 0.72em;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+.rt-agent-perf-heredado {
+    font-size: 0.72em;
+    line-height: 1.4;
+    padding: 4px 6px;
+    border: 1px solid rgba(255, 200, 80, 0.35);
+    border-left-width: 2px;
+    background: rgba(255, 200, 80, 0.07);
+}
+
+.rt-agent-perf-fr {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
+
+.rt-agent-perf-fr label {
+    font-size: 0.75em;
+    opacity: 0.85;
+}
+
+.rt-agent-fr-counter {
+    font-size: 0.72em;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tabla «ahora → con el perfil» del Popup de confirmación (D-8). */
+.rt-perf-diff {
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.rt-perf-diff-resumen,
+.rt-perf-diff-coste,
+.rt-perf-diff-nota {
+    opacity: 0.8;
+    margin: 0 0 8px;
+}
+
+.rt-perf-diff-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.rt-perf-diff-tabla th,
+.rt-perf-diff-tabla td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 3px 6px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.rt-perf-diff-tabla th {
+    font-weight: 600;
+    opacity: 0.7;
+    border-bottom-width: 1px;
+}
+
+.rt-perf-diff-valor {
+    white-space: pre-wrap;
+    /* Números alineados en la tabla actual→nuevo (densidad técnica del tema). */
+    font-family: var(--rt-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.rt-perf-diff-flecha {
+    width: 20px;
+    text-align: center;
+    opacity: 0.5;
+}
+
+.rt-perf-diff-nuevo {
+    font-weight: 600;
+}
+
+.rt-perf-diff-avisos {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+    opacity: 0.85;
+}

@@ -4,6 +4,7 @@ import { HISTORY_ENTRY_LIMIT } from '../src/state/history-retention.js';
 import { describe, expect, it, vi } from 'vitest';
 import { parseAst } from 'rollup/parseAst';
 import * as affinity from '../src/state/pass-affinity.js';
+import { AG_CONTROL_KEYS, clampAgControl } from '../src/state/agent-controls.js';
 import { isEntryRestorable } from '../src/state/lorebook-history.js';
 import { normalizeWorldReportMetadata, WORLD_REPORT_METADATA_KEY } from '../world-progression-lib.js';
 
@@ -61,6 +62,10 @@ function harness(phase) {
         ...affinity, HISTORY_ENTRY_LIMIT, AbortController, console: { log() {}, warn() {}, error() {}, info() {} },
         getActiveChatId: () => chatId, getLivePrefix: () => chatId,
         getSettings: () => settings, SillyTavern: { getContext: () => ctx },
+        // Mismo helper de index.js (T8): sin `rpgAuditChunkBuffer` devuelve 3000,
+        // idéntico chunk que antes de los mandos.
+        AG_CONTROL_KEYS, clampAgControl,
+        margenAuditoriaEfectivo: () => clampAgControl(AG_CONTROL_KEYS.auditChunkBuffer, settings?.[AG_CONTROL_KEYS.auditChunkBuffer]),
         toastr: { info() {}, warning() {}, success() {}, error() {} },
         document: { dispatchEvent: vi.fn() }, CustomEvent: class {}, saveSettings: persist,
         getWorldInfoNamesSafe: () => wait('names', ['A_Chronicle']),

@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped, formatTimeOfDay } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, FULL_REVIEW_STATE_SYSTEM_PROMPT, FULL_REVIEW_USER_PROMPT_SUFFIX, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, MODULE_BOOK_CATEGORY, getSettings, getBarBackground, migrateCustomFields, saveChatState, getActiveChatId, shouldPreserveLiveChatStateOnBoot, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, LOREBOOK_FULL_AUDIT_INSTRUCTION, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, thinkingJobForTrackerPass, THINKING_JOBS, describeThinkingRoute, resolveThinkingPolicy, normalizeThinkingPolicy, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, computeBundledPromptsFingerprintForSnapshot, normalizeBundledPromptsSnapshot, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getLivePromptCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, PROMPT_DEFAULTS_CATEGORY_LABELS_ES, PROMPT_DIGEST_BADGE_LABELS_ES, buildBundledPromptsDigest, isBundledPromptsDigest, diffBundledPromptsDigests, getPromptDigestElementBadge, promptDigestElementKey, parsePromptDigestElementKey, fingerprintText, getDefaultPortraitLocationSystemPrompt, getDefaultPortraitNpcSystemPrompt, getDefaultPortraitCharacterSystemPrompt, isShippedPortraitLocationSystemPrompt, findShippedPortraitLocationPresetId, FACTORY_PORTRAIT_PROMPT_PRESETS, resolveFactoryPortraitPromptBundle, getFactoryPortraitPromptPresetNameSet, DEFAULT_PORTRAIT_PROMPT_PRESET_ID, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs, buildStateTrackerRelationshipCommandInstruction, extractStateTrackerRelationshipCommands, getRelationshipUpdateMode, RELATIONSHIP_UPDATE_MODES, resetLorebookPromptTemplates, writeCriticalSettingsBackup, stampCriticalSettingsSynced, applyCriticalSettingsBackup, isMainSyspromptBackupEnabled, captureMainSyspromptBackup, restoreMainSyspromptStash, hydrateMainSyspromptBackup, getEffectiveBackupText, getLiveMainSyspromptText, setLiveMainSyspromptText, maybeRestoreMainIfTrackerDisabled, isMainSyspromptSourceReady } from './state-manager.js';
 import { FACTORY_RHYTHM_ID, LORE_RHYTHM_CUSTOM_ID, LORE_RHYTHM_PRESETS, clampLoreRhythmCustom, factoryRhythmValues, getLoreRhythmPreset, resolveLoreRhythmId, rhythmPresetEstimate } from './state-manager.js';
 import { snapshotChatSetup, chatSetupsMatch, syncChatSetupCatalogs, removeChatSetupCatalogEntries, clearChatBoundActivations } from './src/state/chat-setup.js';
 import { buildDirectPromptSystemPrompt, DIRECT_PROMPT_SYSTEM_MODES } from './src/state/direct-prompt-system.js';
@@ -115,6 +115,39 @@ import {
     clampPromptCeiling,
     estimatePromptTokens,
 } from './src/state/prompt-ceilings.js';
+import {
+    AG_CONTROL_KEYS,
+    AG_CONTROL_SPECS,
+    OUTPUT_CAP_BOUNDS,
+    OUTPUT_CAP_JOBS,
+    analizarAgControl,
+    analizarOutputCap,
+    clampAgControl,
+    estimarLlamadasDeBucles,
+    tooltipAgControl,
+    validateAgentControlSet,
+} from './src/state/agent-controls.js';
+import {
+    PERF_PROFILES,
+    PERF_PROFILE_CUSTOM_LABEL_ES,
+    PERF_PROFILE_SETTINGS_KEYS,
+    borrarPerfilPropio,
+    describePerfProfileName,
+    estimarCostePerfil,
+    guardarPerfilPropio,
+    perfProfileValues,
+    perfilGobiernaPensamiento,
+    previewPerfProfile,
+    resolvePerfProfileId,
+    validarNombrePerfilPropio,
+} from './src/state/performance-profiles.js';
+import {
+    aplicarEdicionFullReview,
+    buildFullReviewEditorHtml,
+    contadorFullReview,
+    resolveFullReviewPrompt,
+    restaurarFabricaFullReview,
+} from './src/ui/agent-settings-editor.js';
 import {
     DEFAULT_MAP_THEME,
     FACTORY_MAP_THEME_PRESETS,
@@ -723,12 +756,15 @@ function renderLoreRhythmBox(settings) {
  * @param {string} presetId Id de una fila de `LORE_RHYTHM_PRESETS`
  * @returns {ReadonlyObject|null} la fila aplicada, o null si el id no es de tabla
  */
-function applyLoreRhythmPreset(settings, presetId) {
+function applyLoreRhythmPreset(settings, presetId, opciones = {}) {
+    const { guardar = true } = opciones;
     const fila = getLoreRhythmPreset(presetId);
     if (!fila) return null;
     settings.routerRunEvery = fila.runEvery;
     settings.routerMaxTurns = fila.maxTurns;
-    saveSettings();
+    // `guardar: false` es para quien va a persistir todo junto (aplicar un perfil
+    // de rendimiento hace UN solo guardado, D-8/T13); el dial sigue guardando solo.
+    if (guardar) saveSettings();
     if (typeof globalThis._rpgResetRouterAutoTick === 'function') {
         globalThis._rpgResetRouterAutoTick('lore_rhythm_dial');
     }
@@ -2942,6 +2978,418 @@ function bindPromptCeilingControls(settings) {
     pintar();
 }
 
+/* ============================================================================
+ * Cajón «🎛️ Mandos y perfiles de rendimiento» (spec 2026-11-08, ola 5: C9 + C10)
+ *
+ * Todo lo que aquí se pinta sale de los módulos puros (`agent-controls.js` y
+ * `performance-profiles.js`): el HTML no escribe ninguna cota ni ningún defecto.
+ * Reglas que sostienen el cajón:
+ *  - abrir los ajustes NO escribe (AC0): el render solo lee;
+ *  - mover un mando escribe su valor clampeado y avisa en español; un valor sin
+ *    número no se guarda nunca (AC1);
+ *  - «Aplicar perfil» es acción explícita con confirmación `actual → nuevo` (D-8)
+ *    y UN solo guardado;
+ *  - con el Rastreador o el Agente trabajando, aplicar un perfil se RECHAZA con
+ *    aviso (T12): los límites de una pasada ya están leídos.
+ * ========================================================================== */
+
+/** Mandos de bucle/margen con su input (los tres de D-2). */
+const AGENT_PERF_CONTROL_FIELDS = [
+    ['rpg_ag_agent_retries', AG_CONTROL_KEYS.agentRetries],
+    ['rpg_ag_json_retries', AG_CONTROL_KEYS.jsonCorrections],
+    ['rpg_ag_audit_buffer', AG_CONTROL_KEYS.auditChunkBuffer],
+];
+
+/** Topes de salida por trabajo con su input (los tres de D-3). */
+const AGENT_PERF_CAP_FIELDS = OUTPUT_CAP_JOBS.map(trabajo => [`rpg_output_cap_${trabajo.jobId}`, trabajo.jobId]);
+
+/** Coste real de los dos bucles, en una frase para el tooltip del mando. */
+function fraseCosteDeBucles(settings) {
+    const c = estimarLlamadasDeBucles({
+        runEvery: settings?.routerRunEvery,
+        maxTurns: settings?.routerMaxTurns,
+        [AG_CONTROL_KEYS.agentRetries]: settings?.[AG_CONTROL_KEYS.agentRetries],
+    });
+    return `Ahora mismo: hasta ${c.porBucle} llamadas por bucle en cada pasada (${c.normal} del normal y ${c.limpieza} del de limpieza por 10 turnos, ${c.pasadas} pasadas).`;
+}
+
+/** Opciones del selector: las tres matrices, los perfiles propios y «Personalizado». */
+function buildPerfProfileOptionsHtml(settings) {
+    const custom = Array.isArray(settings?.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+    const resuelto = resolvePerfProfileId(settings, custom);
+    const deMatriz = PERF_PROFILES.map(perfil => {
+        const c = estimarCostePerfil(perfil.id);
+        const titulo = `${perfil.tooltip} Llamadas máximas por 10 turnos: ${c.normal} del bucle normal y ${c.limpieza} del de limpieza (${c.pasadas} pasadas).`;
+        return `<option value="${escapeHtml(perfil.id)}"${perfil.id === resuelto ? ' selected' : ''} title="${escapeHtml(titulo)}">${escapeHtml(perfil.label)}</option>`;
+    }).join('');
+    const propios = custom.map(perfil => `<option value="${escapeHtml(perfil?.nombre || '')}"${perfil?.nombre === resuelto ? ' selected' : ''} title="Tu perfil guardado: se repasa con los mismos clamps que la matriz.">${escapeHtml(perfil?.nombre || '')} (propio)</option>`).join('');
+    const personalizado = `<option value="${escapeHtml(PERF_PROFILE_CUSTOM_LABEL_ES)}"${resuelto ? '' : ' selected'} disabled title="Tus valores actuales no coinciden EXACTAMENTE con ningún perfil. Es solo una etiqueta: no se guarda. Pulsa «Equilibrado» para volver a los valores de siempre.">${escapeHtml(PERF_PROFILE_CUSTOM_LABEL_ES)}</option>`;
+    return `${deMatriz}${propios}${personalizado}`;
+}
+
+/**
+ * D-10: con `Rapido` o `Máxima calidad`, los ocho diables de pensamiento los fija
+ * el perfil, así que se marcan como gobernados y se desactivan. Con `Equilibrado`
+ * o con valores propios quedan activos. Se deriva de los AJUSTES, no del selector,
+ * para que tocar un modo a mano devuelva el dial a la vida en el mismo repintado.
+ * @param {object} settings
+ * @returns {boolean} si el perfil gobierna el pensamiento
+ */
+function suspenderDialPensamientoPorPerfil(settings) {
+    const custom = Array.isArray(settings?.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+    const elegido = resolvePerfProfileId(settings, custom);
+    const gobernado = !!elegido && perfilGobiernaPensamiento(elegido);
+    const contenedor = document.getElementById('rpg_thinking_policy_rows');
+    if (contenedor) {
+        for (const selector of contenedor.querySelectorAll('select[data-job]')) {
+            selector.disabled = gobernado;
+            if (gobernado) {
+                selector.title = `Lo gobierna el perfil «${elegido}»: marca un modo a mano (o aplica «Equilibrado») para devolver este dial a la vida.`;
+            }
+        }
+    }
+    const aviso = document.getElementById('rpg_thinking_policy_profile_note');
+    if (aviso) {
+        aviso.style.display = gobernado ? 'block' : 'none';
+        aviso.textContent = `El pensamiento de los ocho trabajos lo fija el perfil «${elegido}». Para gobernarlo uno a uno, toca un modo o aplica «Equilibrado».`;
+    }
+    return gobernado;
+}
+
+/** Pinta mandos, topes, selector, editor y dial. Es lectura pura: no escribe. */
+function renderAgentPerfBox(settings) {
+    for (const [id, clave] of AGENT_PERF_CONTROL_FIELDS) {
+        const campo = document.getElementById(id);
+        if (!campo) continue;
+        const spec = AG_CONTROL_SPECS[clave];
+        campo.value = settings?.[clave] ?? spec.default;
+        campo.min = String(spec.min);
+        campo.max = String(spec.max);
+        campo.step = String(spec.step);
+        campo.title = tooltipAgControl(clave, null, clave === AG_CONTROL_KEYS.agentRetries ? fraseCosteDeBucles(settings) : '');
+    }
+    for (const [id, jobId] of AGENT_PERF_CAP_FIELDS) {
+        const campo = document.getElementById(id);
+        const trabajo = OUTPUT_CAP_JOBS.find(t => t.jobId === jobId);
+        if (!campo || !trabajo) continue;
+        campo.value = settings?.[trabajo.settingsKey] ?? 0;
+        campo.title = `${trabajo.tooltip} Rango ${OUTPUT_CAP_BOUNDS[0]}-${OUTPUT_CAP_BOUNDS[1]} o 0 (auto).`;
+    }
+    const select = document.getElementById('rpg_perf_profile_select');
+    if (select) {
+        select.innerHTML = buildPerfProfileOptionsHtml(settings);
+        select.title = 'El nombre se DERIVA de tus valores: si no coinciden EXACTAMENTE con una fila, dice «Personalizado» y no guarda ese nombre. Aplicar un perfil se hace con sus botones, con confirmación.';
+    }
+    const estado = document.getElementById('rpg_perf_profile_state');
+    if (estado) {
+        const custom = Array.isArray(settings?.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+        estado.textContent = `Perfil detectado: ${describePerfProfileName(settings, custom)}`;
+    }
+    const huesped = document.getElementById('rpg_agent_fr_host');
+    if (huesped) huesped.innerHTML = buildFullReviewEditorHtml(settings, { escapar: escapeHtml });
+    suspenderDialPensamientoPorPerfil(settings);
+}
+
+/**
+ * Helper ÚNICO del margen de la auditoría (D-2, T8): el mismo valor rige los dos
+ * sitios que parten la auditoría —la de contexto completo del Rastreador y la
+ * «Full Audit» del Agente de Lorebook—. De fábrica devuelve 3000 (AC0: sin tocar
+ * nada, los chunks salen byte a byte como en `main`); sin número válido devuelve
+ * el defecto sin escribir nada (AC1).
+ * @returns {number} Tokens reservados antes de partir la auditoría
+ */
+function margenAuditoriaEfectivo() {
+    const ajustes = typeof getSettings === 'function' ? getSettings() : null;
+    return clampAgControl(AG_CONTROL_KEYS.auditChunkBuffer, ajustes?.[AG_CONTROL_KEYS.auditChunkBuffer]);
+}
+
+/**
+ * Escribe un mando de bucle/margen (AC1): inválido ⇒ aviso y NADA se guarda;
+ * fuera de cota ⇒ se guarda el borde con aviso. Después pasa el validador cruzado
+ * D-6, que solo actúa al escribir y nunca toca las vueltas del dial de ritmo.
+ * @param {object} settings
+ * @param {string} clave
+ * @param {unknown} crudo
+ * @returns {{estado:string,valor:number}} lo que quedó
+ */
+function guardarMandoAg(settings, clave, crudo) {
+    const analisis = analizarAgControl(clave, crudo);
+    if (analisis.estado === 'invalido') {
+        toastr.warning(`${AG_CONTROL_SPECS[clave].label}: ${analisis.motivo}`, 'Mandos de rendimiento');
+        return analisis;
+    }
+    settings[clave] = analisis.valor;
+    const validacion = validateAgentControlSet({
+        routerMaxTurns: settings.routerMaxTurns,
+        [AG_CONTROL_KEYS.agentRetries]: settings[AG_CONTROL_KEYS.agentRetries],
+        [AG_CONTROL_KEYS.jsonCorrections]: settings[AG_CONTROL_KEYS.jsonCorrections],
+    });
+    for (const cambio of validacion.cambios) settings[cambio.clave] = cambio.a;
+    saveSettings();
+    if (analisis.estado === 'recortado') {
+        toastr['info'](`${AG_CONTROL_SPECS[clave].label}: ${analisis.motivo}`, 'Mandos de rendimiento');
+    }
+    for (const aviso of validacion.avisos) toastr['info'](aviso, 'Mandos de rendimiento');
+    return analisis;
+}
+
+/**
+ * Escribe un tope de salida (D-3). `0` = auto: la cascada de `resolveMaxTokens`
+ * (8192) queda intacta. Inválido ⇒ aviso sin escribir (AC1).
+ * @param {object} settings
+ * @param {string} jobId
+ * @param {unknown} crudo
+ * @returns {{estado:string,valor:number}}
+ */
+function guardarTechoSalidaAg(settings, jobId, crudo) {
+    const analisis = analizarOutputCap(jobId, crudo);
+    const trabajo = OUTPUT_CAP_JOBS.find(t => t.jobId === jobId);
+    if (analisis.estado === 'invalido') {
+        toastr.warning(`${trabajo?.label || jobId}: ${analisis.motivo}`, 'Mandos de rendimiento');
+        return analisis;
+    }
+    settings[trabajo.settingsKey] = analisis.valor;
+    saveSettings();
+    if (analisis.estado === 'recortado') {
+        toastr['info'](`${trabajo.label}: ${analisis.motivo}`, 'Mandos de rendimiento');
+    }
+    return analisis;
+}
+
+/**
+ * Aplica un perfil (D-8/D-7): escribe delegando en los aplicadores de cada ola y
+ * hace UN solo `saveSettings()`. Se llama SIEMPRE después de la confirmación y
+ * antes de cualquier persistencia: `saveSettings` es quien arranca el respaldo de
+ * ajustes críticos y la WAL, así que el perfil entra en esa misma escritura.
+ * @param {object} settings
+ * @param {string} id
+ * @param {Array} [custom]
+ * @returns {{validacion:object,valores:object}|null}
+ */
+function aplicarPerfilRendimiento(settings, id, custom = []) {
+    const valores = perfProfileValues(id, custom);
+    if (!valores) return null;
+    // 1) Ritmo: se pide a la tabla canónica de la ola 3. El aplicador escribe el
+    //    PAR, resetea el contador en memoria y avisa al panel; con
+    //    { guardar: false } el guardado lo hace esta función UNA sola vez.
+    const fila = resolveLoreRhythmId(valores);
+    if (fila !== LORE_RHYTHM_CUSTOM_ID) {
+        applyLoreRhythmPreset(settings, fila, { guardar: false });
+    } else {
+        // Perfil propio con una pareja fuera de tabla: mismos clamps, mismo efecto.
+        settings.routerRunEvery = clampLoreRhythmCustom('runEvery', valores.routerRunEvery);
+        settings.routerMaxTurns = clampLoreRhythmCustom('maxTurns', valores.routerMaxTurns);
+        if (typeof globalThis._rpgResetRouterAutoTick === 'function') {
+            globalThis._rpgResetRouterAutoTick('perf_profile');
+        }
+        document.dispatchEvent(new CustomEvent('rt_lore_rhythm_changed'));
+    }
+    // 2) Techos (ola 4) y pensamiento (ola 2): los valores ya salieron de
+    //    `clampPromptCeiling` y de `normalizeThinkingPolicy` en el módulo de datos.
+    for (const clave of Object.values(PROMPT_CEILING_SETTINGS_KEYS)) settings[clave] = valores[clave];
+    settings.localThinkingPolicy = valores.localThinkingPolicy;
+    // 3) Mandos nuevos con el recorte D-6 (solo al escribir) y los topes de salida.
+    const validacion = validateAgentControlSet({
+        routerMaxTurns: valores.routerMaxTurns,
+        [AG_CONTROL_KEYS.agentRetries]: valores[AG_CONTROL_KEYS.agentRetries],
+        [AG_CONTROL_KEYS.jsonCorrections]: valores[AG_CONTROL_KEYS.jsonCorrections],
+    });
+    settings[AG_CONTROL_KEYS.agentRetries] = validacion.valores[AG_CONTROL_KEYS.agentRetries];
+    settings[AG_CONTROL_KEYS.jsonCorrections] = validacion.valores[AG_CONTROL_KEYS.jsonCorrections];
+    settings[AG_CONTROL_KEYS.auditChunkBuffer] = valores[AG_CONTROL_KEYS.auditChunkBuffer];
+    for (const trabajo of OUTPUT_CAP_JOBS) settings[trabajo.settingsKey] = valores[trabajo.settingsKey];
+    settings.rpgPerfProfile = id;
+    saveSettings();
+    return { validacion, valores };
+}
+
+/** Tabla `actual → nuevo` del `Popup` de D-8 (solo lo que cambia). */
+function construirResumenPerfilHtml(vista) {
+    const filas = vista.queCambian.map(d => `<tr>
+            <td>${escapeHtml(d.etiqueta)}</td>
+            <td class="rt-perf-diff-valor">${escapeHtml(d.actual)}</td>
+            <td class="rt-perf-diff-flecha" aria-hidden="true">→</td>
+            <td class="rt-perf-diff-valor rt-perf-diff-nuevo">${escapeHtml(d.nuevo)}</td>
+        </tr>`).join('');
+    const avisos = vista.avisos.length
+        ? `<ul class="rt-perf-diff-avisos">${vista.avisos.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>` : '';
+    const coste = vista.coste;
+    return `<div class="rt-perf-diff">
+        <p class="rt-perf-diff-resumen">${escapeHtml(vista.perfil.resumen || '')}</p>
+        <table class="rt-perf-diff-tabla">
+            <thead><tr><th>Mando</th><th>Ahora</th><th></th><th>Con el perfil</th></tr></thead>
+            <tbody>${filas}</tbody>
+        </table>
+        <p class="rt-perf-diff-coste">Coste del perfil sobre 10 turnos: ${coste.pasadas} pasadas · hasta ${coste.normal} llamadas del bucle normal y ${coste.limpieza} del de limpieza. Los reintentos extra añaden llamadas, nunca vueltas.</p>
+        ${avisos}
+        <p class="rt-perf-diff-nota">Se guarda una sola vez. El pensamiento de Revisión Completa y tus prompts propios no viajan en perfiles.</p>
+    </div>`;
+}
+
+/**
+ * Confirmación + aplicación de un perfil (D-8). Rechaza con aviso si hay
+ * generación activa (T12) y no escribe nada si el perfil ya está aplicado.
+ * @param {object} settings
+ * @param {string} id
+ * @returns {Promise<boolean>}
+ */
+async function confirmarYAplicarPerfil(settings, id) {
+    const ocupado = isRouterRunning()
+        || !!runtimeState.stateModelRunning
+        || (typeof runtimeState.isLoreOrMapAgentBusyRef === 'function' && runtimeState.isLoreOrMapAgentBusyRef());
+    if (ocupado) {
+        toastr.warning('Hay una pasada del Agente o del Rastreador en curso: espera a que termine para aplicar un perfil. Los límites de esta pasada ya están leídos.', 'Perfiles de rendimiento');
+        return false;
+    }
+    const custom = Array.isArray(settings.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+    const vista = previewPerfProfile(settings, id, custom);
+    if (!vista.aplicable) {
+        toastr.warning(vista.avisos[0] || 'Ese perfil no existe.', 'Perfiles de rendimiento');
+        return false;
+    }
+    if (!vista.queCambian.length) {
+        toastr['info'](`«${vista.perfil.label}» coincide con lo que ya tienes: no se escribe nada.`, 'Perfiles de rendimiento');
+        return false;
+    }
+    const { Popup } = SillyTavern.getContext();
+    const eleccion = await Popup.show.confirm(
+        `Aplicar el perfil «${vista.perfil.label}»`,
+        construirResumenPerfilHtml(vista),
+        { okButton: 'Aplicar perfil', cancelButton: 'Cancelar' },
+    );
+    if (eleccion !== 1) return false;
+    const aplicado = aplicarPerfilRendimiento(settings, id, custom);
+    if (!aplicado) return false;
+    for (const aviso of aplicado.validacion.avisos) toastr['info'](aviso, 'Perfiles de rendimiento');
+    toastr['success'](`Perfil «${vista.perfil.label}» aplicado: ${vista.queCambian.length} mando(s) cambiados en un solo guardado.`, 'Perfiles de rendimiento');
+    renderAgentPerfBox(settings);
+    renderLoreRhythmBox(settings);
+    renderPromptCeilingsBox(settings);
+    renderThinkingPolicyBox(settings);
+    suspenderDialPensamientoPorPerfil(settings);
+    return true;
+}
+
+/**
+ * Enlaces del cajón (T6/T7). Como los del resto de cajones: `dataset.rtBound`
+ * evita el doble enlace y el repintado se dispara al abrir el `<details>`.
+ * @param {object} settings
+ */
+function bindAgentPerfControls(settings) {
+    const caja = document.getElementById('rpgApplyAgentPerfBox');
+    if (!caja) return;
+    const pintar = () => renderAgentPerfBox(settings);
+    caja.addEventListener('toggle', pintar);
+
+    for (const [id, clave] of AGENT_PERF_CONTROL_FIELDS) {
+        const campo = document.getElementById(id);
+        if (!campo || campo.dataset.rtBound === '1') continue;
+        campo.dataset.rtBound = '1';
+        campo.addEventListener('change', () => {
+            guardarMandoAg(settings, clave, campo.value);
+            pintar();
+        });
+    }
+    for (const [id, jobId] of AGENT_PERF_CAP_FIELDS) {
+        const campo = document.getElementById(id);
+        if (!campo || campo.dataset.rtBound === '1') continue;
+        campo.dataset.rtBound = '1';
+        campo.addEventListener('change', () => {
+            guardarTechoSalidaAg(settings, jobId, campo.value);
+            pintar();
+        });
+    }
+
+    const select = document.getElementById('rpg_perf_profile_select');
+    if (select && select.dataset.rtBound !== '1') {
+        select.dataset.rtBound = '1';
+        select.addEventListener('change', async () => {
+            const elegido = String(select.value || '');
+            const aplicado = await confirmarYAplicarPerfil(settings, elegido);
+            if (!aplicado) pintar(); // el usuario canceló: el selector vuelve a la realidad
+        });
+    }
+    for (const perfil of PERF_PROFILES) {
+        const boton = document.getElementById(`rpg_perf_apply_${perfil.id}`);
+        if (!boton || boton.dataset.rtBound === '1') continue;
+        boton.dataset.rtBound = '1';
+        boton.addEventListener('click', () => { void confirmarYAplicarPerfil(settings, perfil.id); });
+    }
+
+    const guardarResultado = document.getElementById('rpg_perf_custom_save');
+    if (guardarResultado && guardarResultado.dataset.rtBound !== '1') {
+        guardarResultado.dataset.rtBound = '1';
+        guardarResultado.addEventListener('click', () => {
+            const nombre = String(document.getElementById('rpg_perf_custom_name')?.value || '');
+            const custom = Array.isArray(settings.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+            const chequeo = validarNombrePerfilPropio(nombre, custom);
+            if (!chequeo.valido) {
+                toastr.warning(chequeo.motivo, 'Perfiles de rendimiento');
+                return;
+            }
+            const r = guardarPerfilPropio(custom, chequeo.limpio, settings);
+            settings.rpgPerfProfileCustom = r.lista;
+            saveSettings();
+            toastr['success'](`Perfil «${chequeo.limpio}» guardado con tus once mandos de coste.`, 'Perfiles de rendimiento');
+            pintar();
+        });
+    }
+    const borrarBoton = document.getElementById('rpg_perf_custom_delete');
+    if (borrarBoton && borrarBoton.dataset.rtBound !== '1') {
+        borrarBoton.dataset.rtBound = '1';
+        borrarBoton.addEventListener('click', async () => {
+            const select = document.getElementById('rpg_perf_profile_select');
+            const nombre = String(select?.value || '');
+            const custom = Array.isArray(settings.rpgPerfProfileCustom) ? settings.rpgPerfProfileCustom : [];
+            if (!custom.some(p => String(p?.nombre || '') === nombre)) {
+                toastr['info']('En el selector no hay ningún perfil propio que borrar.', 'Perfiles de rendimiento');
+                return;
+            }
+            const { Popup } = SillyTavern.getContext();
+            const eleccion = await Popup.show.confirm('¿Borrar este perfil propio?', `<p>Se borra <b>${escapeHtml(nombre)}</b> de tus perfiles. Tus ajustes actuales no cambian.</p>`, { okButton: 'Borrar', cancelButton: 'Cancelar' });
+            if (eleccion !== 1) return;
+            const r = borrarPerfilPropio(custom, nombre);
+            settings.rpgPerfProfileCustom = r.lista;
+            saveSettings();
+            toastr['info'](`Perfil «${nombre}» borrado. Tus valores se quedan como estaban.`, 'Perfiles de rendimiento');
+            pintar();
+        });
+    }
+
+    // Editor de Revisión Completa (D-5): contadores en vivo, autosave único y
+    // restaurar. Delegación en el módulo puro; aquí solo DOM.
+    const huesped = document.getElementById('rpg_agent_fr_host');
+    if (huesped && huesped.dataset.rtBound !== '1') {
+        huesped.dataset.rtBound = '1';
+        huesped.addEventListener('input', (evento) => {
+            const campo = evento.target?.dataset?.rpgAgentField;
+            if (!campo) return;
+            const contador = huesped.querySelector(`[data-rpg-agent-counter="${campo}"]`);
+            if (contador) contador.textContent = contadorFullReview(evento.target.value, campo);
+        });
+        huesped.addEventListener('change', (evento) => {
+            const campo = evento.target?.dataset?.rpgAgentField;
+            if (!campo) return;
+            const r = aplicarEdicionFullReview({ settings, guardar: () => saveSettings() }, campo, evento.target.value);
+            if (!r.guardado && r.motivo) toastr.warning(r.motivo, 'Prompt de Revisión Completa');
+            for (const aviso of r.avisos) toastr['info'](aviso, 'Prompt de Revisión Completa');
+            const contador = huesped.querySelector(`[data-rpg-agent-counter="${campo}"]`);
+            if (contador) contador.textContent = contadorFullReview(evento.target.value, campo);
+        });
+        huesped.addEventListener('click', (evento) => {
+            const accion = evento.target?.closest?.('[data-rpg-agent-action]')?.dataset?.rpgAgentAction;
+            if (accion !== 'restaurar') return;
+            const r = restaurarFabricaFullReview({ settings, guardar: () => saveSettings() });
+            toastr[r.guardado ? 'success' : 'info'](
+                r.guardado ? 'Los dos campos quedan vacíos: se envía la fábrica byte a byte.' : 'Ya estabas en la fábrica: no se ha escrito nada.',
+                'Prompt de Revisión Completa',
+            );
+            pintar();
+        });
+    }
+    pintar();
+}
+
 /**
  * Ficha→rastreador con techo de la spec 2026-11-05 (D-2/P2, T4): arma el
  * `priorMemoText` que ya armaba main (TRACKER STATE 0 + estados -N del más viejo
@@ -3570,7 +4018,14 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
         let abandonedForChatSwitch = false;
 
         const modulesText = buildModulesInstructionText(settings);
-        const coreTemplate = settings.fullReviewStateMode ? FULL_REVIEW_STATE_SYSTEM_PROMPT : settings.systemPromptTemplate;
+        // D-4 (ola 5): el prompt de la Revisión Completa se resuelve UNA vez por
+        // pasada. Override vacío = fábrica byte a byte (AC0); override inválido
+        // NO reenvía nada: se envía la fábrica y solo se avisa en español.
+        const revisionResuelta = resolveFullReviewPrompt(settings);
+        if (settings.fullReviewStateMode) {
+            for (const aviso of revisionResuelta.avisos) toastr.warning(aviso, 'Revisión de Estado Completa');
+        }
+        const coreTemplate = settings.fullReviewStateMode ? revisionResuelta.system : settings.systemPromptTemplate;
         let systemPrompt = coreTemplate.replace('{{modulesText}}', modulesText);
         if (settings.npcRelationshipBars && getRelationshipUpdateMode(settings) === RELATIONSHIP_UPDATE_MODES.STATE_TRACKER) {
             systemPrompt += `\n\n${buildStateTrackerRelationshipCommandInstruction(
@@ -3607,7 +4062,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
 
         if (isFullContext) {
             const maxContextLimit = SillyTavern.getContext().contextSize || settings.fullAuditMaxTokens || 32000;
-            const tokenBuffer = 3000;
+            const tokenBuffer = margenAuditoriaEfectivo();
             const chunkTokenLimit = Math.max(1000, maxContextLimit - tokenBuffer);
 
             let currentChunk = [];
@@ -3752,7 +4207,7 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
                     `## OUTPUT THE COMPLETE VERIFIED STATE MEMO:`;
             } else {
                 const suffix = settings.fullReviewStateMode
-                    ? FULL_REVIEW_USER_PROMPT_SUFFIX
+                    ? revisionResuelta.suffix
                     : (settings.userPromptSuffix || `## OUTPUT ONLY CHANGED SECTIONS:`);
                 userPrompt =
                     worldLoreSection +
@@ -6822,6 +7277,7 @@ function organizeConnectionSettingsUI() {
         bindThinkingPolicyControls(settings);
         bindLoreRhythmControls(settings);
         bindPromptCeilingControls(settings);
+        bindAgentPerfControls(settings);
 
         // Bind drawer toggles ONLY for our own content to avoid global conflicts.
         // IMPORTANT: expand each comma-root before appending `.inline-drawer-toggle`.
@@ -7514,8 +7970,10 @@ function organizeConnectionSettingsUI() {
                         const $corePromptEl = $('#rpg_tracker_core_prompt');
                         const $suffixPromptEl = $('#rpg_tracker_user_prompt_suffix');
                         if (sTempTracker.fullReviewStateMode) {
-                            if ($corePromptEl.length) $corePromptEl.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                            if ($suffixPromptEl.length) $suffixPromptEl.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                            // D-4: se pinta la resolución real (override o fábrica), no la constante.
+                            const revisionPintada = resolveFullReviewPrompt(sTempTracker);
+                            if ($corePromptEl.length) $corePromptEl.val(revisionPintada.system);
+                            if ($suffixPromptEl.length) $suffixPromptEl.val(revisionPintada.suffix);
                         } else {
                             if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                             if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
@@ -7785,8 +8243,10 @@ function organizeConnectionSettingsUI() {
                                     const $corePromptEl = $('#rpg_tracker_core_prompt');
                                     const $suffixPromptEl = $('#rpg_tracker_user_prompt_suffix');
                                     if (sTempTracker.fullReviewStateMode) {
-                                        if ($corePromptEl.length) $corePromptEl.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                                        if ($suffixPromptEl.length) $suffixPromptEl.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                                        // D-4: mismo pintado resuelto que en el cajón del Tracker.
+                                        const revisionPintada = resolveFullReviewPrompt(sTempTracker);
+                                        if ($corePromptEl.length) $corePromptEl.val(revisionPintada.system);
+                                        if ($suffixPromptEl.length) $suffixPromptEl.val(revisionPintada.suffix);
                                     } else {
                                         if ($corePromptEl.length) $corePromptEl.val(sTempTracker.systemPromptTemplate);
                                         if ($suffixPromptEl.length) $suffixPromptEl.val(sTempTracker.userPromptSuffix);
@@ -10148,8 +10608,10 @@ RULES:
             // Show the prompts that are actually sent while Full Review is on; the saved
             // custom Core Prompt / suffix stay in settings and are restored on disable.
             if (enabled) {
-                corePromptTextarea.val(FULL_REVIEW_STATE_SYSTEM_PROMPT);
-                suffixPromptTextarea.val(FULL_REVIEW_USER_PROMPT_SUFFIX);
+                // D-4: el cuadro de solo lectura muestra lo que de verdad se envía.
+                const revisionPintada = resolveFullReviewPrompt(settings);
+                corePromptTextarea.val(revisionPintada.system);
+                suffixPromptTextarea.val(revisionPintada.suffix);
             } else {
                 corePromptTextarea.val(settings.systemPromptTemplate || '');
                 suffixPromptTextarea.val(settings.userPromptSuffix || '');
@@ -11858,7 +12320,7 @@ RULES:
                 const { chat } = ctx;
 
                 const maxContextLimit = ctx.contextSize || settings.fullAuditMaxTokens || 32000;
-                const tokenBuffer = 3000;
+                const tokenBuffer = margenAuditoriaEfectivo();
                 const chunkTokenLimit = Math.max(1000, maxContextLimit - tokenBuffer);
 
                 let chunks = [];
@@ -13417,9 +13879,11 @@ RULES:
             $('#rpg_tracker_show_total_value').prop('checked', s.showTotalInventoryValue !== false);
             $('#rpg_tracker_full_review_mode').prop('checked', !!s.fullReviewStateMode);
             if (s.fullReviewStateMode) {
+                // D-4: pintado resuelto (override incluido) sin perder el solo lectura.
+                const revisionPintada = resolveFullReviewPrompt(s);
                 $('#rpg_tracker_full_review_note').css('display', 'block');
-                $('#rpg_tracker_core_prompt').val(FULL_REVIEW_STATE_SYSTEM_PROMPT).prop('disabled', true).css('opacity', '0.4');
-                $('#rpg_tracker_user_prompt_suffix').val(FULL_REVIEW_USER_PROMPT_SUFFIX).prop('disabled', true).css('opacity', '0.4');
+                $('#rpg_tracker_core_prompt').val(revisionPintada.system).prop('disabled', true).css('opacity', '0.4');
+                $('#rpg_tracker_user_prompt_suffix').val(revisionPintada.suffix).prop('disabled', true).css('opacity', '0.4');
                 $('#rpg_tracker_btn_reset_prompt').prop('disabled', true).css('opacity', '0.4');
             } else {
                 $('#rpg_tracker_full_review_note').css('display', 'none');

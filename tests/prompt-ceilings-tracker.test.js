@@ -223,7 +223,17 @@ describe('Rutas hermanas intocables (Non-Goals)', () => {
     });
 
     it('FULL_REVIEW / fullReviewStateMode siguen sin techo propio (Non-Goal §2)', () => {
-        expect(indexSource).toContain('FULL_REVIEW_USER_PROMPT_SUFFIX');
+        // Ola 5 (T10): la constante ya no se importa cruda (se resuelve en
+        // agent-settings-editor.js). El invariante de ola 4 sigue vivo: la
+        // Revisión Completa no tiene techo propio ni pasa por clampPromptCeiling.
+        expect(indexSource).toContain('settings.fullReviewStateMode');
+        expect(indexSource).toContain('resolveFullReviewPrompt');
         expect(indexSource).not.toContain('rpg_ceiling_full_review');
+        const tramo = indexSource.slice(
+            indexSource.indexOf('const revisionResuelta = resolveFullReviewPrompt(settings);'),
+            indexSource.indexOf('revisionResuelta.suffix'),
+        );
+        expect(tramo).not.toContain('clampPromptCeiling');
+        expect(tramo).not.toContain('applyUnitCeiling');
     });
 });

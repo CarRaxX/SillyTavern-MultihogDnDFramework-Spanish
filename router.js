@@ -32,6 +32,7 @@ import {
     trimLoreHistoryForRollback,
 } from './src/state/lorebook-history.js';
 import { fingerprintLorebook } from './src/state/content-fingerprint.js';
+import { leerControlesEfectivos } from './src/state/agent-controls.js';
 import { runtimeState } from './src/app/runtime-state.js';
 import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
 import { findMostRecentNarratorMessage, stripCyoaChoiceBlocks } from './src/state/present-now.js';
@@ -1775,6 +1776,10 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         // 2. The Loop
         let turns = 0;
         const maxTurns = settings.routerMaxTurns || 5;
+        // Ola 5 (T8): los topes de reintento salen de los ajustes, pero leídos
+        // UNA sola vez por pasada. Mover un mando con el router trabajando no
+        // cambia los límites de la pasada en curso.
+        const controlesPasada = leerControlesEfectivos(settings);
         let basicSummaryText = '';
 
         const routerSettings = {
@@ -2150,7 +2155,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
 
             let cleanupTurns = 0;
             let cleanupRetries = 0;
-            const MAX_CLEANUP_RETRIES = 2;
+            const MAX_CLEANUP_RETRIES = controlesPasada.agenteRetriesExtra;
             while (cleanupTurns < maxTurns) {
                 cleanupTurns++;
                 broadcastStep('thought', `Cleanup thinking (Turn ${cleanupTurns}/${maxTurns})...`);
@@ -2669,9 +2674,9 @@ ${recordCategoryGuidance}`;
             ];
 
             let agentRetries = 0;
-            const MAX_AGENT_RETRIES = 2;
+            const MAX_AGENT_RETRIES = controlesPasada.agenteRetriesExtra;
             let jsonCorrectionRetries = 0;
-            const MAX_JSON_CORRECTION_RETRIES = 2;
+            const MAX_JSON_CORRECTION_RETRIES = controlesPasada.jsonCorrectionRetriesExtra;
             let terminalCommitRejection = '';
             while (turns < maxTurns) {
                 turns++;
