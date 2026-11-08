@@ -11079,6 +11079,9 @@ dialog .rt-dungeon-graph-asset-tip,
 
 .rt-perf-diff-valor {
     white-space: pre-wrap;
+    /* Números alineados en la tabla actual→nuevo (densidad técnica del tema). */
+    font-family: var(--rt-font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 .rt-perf-diff-flecha {
