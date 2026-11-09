@@ -124,9 +124,13 @@ export function createChatStateLoader({
     s.worldProgressionSkeletonLorebookFilter = JSON.parse(JSON.stringify(saved.worldProgressionSkeletonLorebookFilter || []));
     s.worldProgressionSkeletonLorebookOnly = saved.worldProgressionSkeletonLorebookOnly ?? false;
     s.worldProgressionExclusionList = saved.worldProgressionExclusionList ?? '';
-    // Techos de expediente y contexto global (Oleada 6a, D-20): 0 = sin límite.
-    s.worldProgressionDossierMaxChars = saved.worldProgressionDossierMaxChars ?? 20000;
-    s.worldProgressionGlobalMaxChars = saved.worldProgressionGlobalMaxChars ?? 12000;
+    /* Techos de expediente y de contexto global: preferencia GLOBAL del motor (Oleada 8, D-37).
+       Aquí NO se restauran desde la partición del chat, siguiendo la precedencia del bloque de
+       más abajo («Global UI / connection / auto-image prefs are NOT restored from chatStates»):
+       saveChatState nunca los captura y el `?? ` de la restauración pisaría el valor vivo del
+       usuario en cada entrada a chat, persistiendo luego la regresión. El valor manda sólo en la
+       raíz de los ajustes y 0 = sin límite; su volcado a los campos del cajón se pinta más abajo
+       desde los ajustes vivos. */
     s.worldProgressionLastFiredAtMinutes = saved.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = saved.worldProgressionLastFiredPeriodLabel || '';
     s.worldProgressionConsolidateEnabled = saved.worldProgressionConsolidateEnabled ?? false;
