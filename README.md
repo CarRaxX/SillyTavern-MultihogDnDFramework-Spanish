@@ -97,6 +97,9 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 3. **Prompt Injection & Execution:** The State Memo and RNG Queue are injected seamlessly into your outgoing prompt to act as the "source of truth." For narrative actions, the framework dynamically catches and resolves the AI's `RollTheDice` tool calls.
 4. **World Progression Skeleton & Settings:** Optionally create a macro-only world skeleton of locations, factions, and conflicts. Locations become simulation subjects while factions and conflicts provide wider context; named NPCs are established through play and ordinary lore instead.
 
+🇪🇸 Local-machine tuning guide (World Progression dossier/global caps, `ctxWorldInfo` and the GM-only lock; in Spanish):
+[docs/guia-parametrizacion-local.es.md](docs/guia-parametrizacion-local.es.md).
+
 ### Initial Setup Video Guide
 
 https://www.youtube.com/watch?v=82Lt9pRYFS0

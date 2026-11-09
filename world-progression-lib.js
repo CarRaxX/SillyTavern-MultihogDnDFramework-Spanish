@@ -112,6 +112,8 @@ function renderRecord(record) {
 export function buildWorldProgressionLocationDossiers(archiveBooks, {
     prefix = '',
     exclusionList = '',
+    dossierMaxChars = 0,
+    globalMaxChars = 0,
 } = {}) {
     const excludedTerms = String(exclusionList || '')
         .split(',')
@@ -127,6 +129,13 @@ export function buildWorldProgressionLocationDossiers(archiveBooks, {
             // Legacy named-individual seeds belong to the retired entity-level
             // skeleton design. Preserve them on disk, but never expose them to WP.
             if (skeleton && String(entry?.extensions?.rpgCategory || '').toUpperCase() === 'NPC') continue;
+            // Cerrotejo GM-only (Oleada 6a, D-19): una entrada con
+            // `extensions.rpgGmOnly === true` es canon exclusivo del narrador y se
+            // omite tanto de los expedientes de ubicación como del `globalContext`.
+            // Afecta SOLO a esta ruta: la inyección nativa de ST por teclas, los
+            // snapshots del Lorebook Agent y los hilos MYSTERY:/SAGA: no pasan por
+            // aquí y siguen viendo la entrada intacta.
+            if (entry?.extensions?.rpgGmOnly === true) continue;
             const label = entryLabel(entry);
             const content = stripDungeonMapSection(String(entry?.content || '')).trim();
             if (!label || !content) continue;
@@ -201,26 +210,68 @@ export function buildWorldProgressionLocationDossiers(archiveBooks, {
             // Factions/events are rendered once in wider-world context below;
             // avoid duplicating them inside every location dossier they mention.
             const context = unique(dossier.contextualRecords.filter(record => !record.global));
-            const blocks = [
-                '## LOCATION LORE',
-                location.map(renderRecord).join('\n\n') || '(No readable location lore.)',
-            ];
-            if (context.length) {
-                blocks.push('', '## PERTINENT CONTEXT (READ-ONLY CONSTRAINTS)', context.map(renderRecord).join('\n\n'));
+            // Ensamble del expediente (Oleada 6a, D-20): cabecera LOCATION LORE,
+            // el PERTINENT CONTEXT de los registros conservados y, si cayó
+            // alguno, la línea determinista de omitidos al final.
+            const montarDossier = (registrosConservados, registrosOmitidos) => {
+                const blocks = [
+                    '## LOCATION LORE',
+                    location.map(renderRecord).join('\n\n') || '(No readable location lore.)',
+                ];
+                if (registrosConservados.length) {
+                    blocks.push('', '## PERTINENT CONTEXT (READ-ONLY CONSTRAINTS)', registrosConservados.map(renderRecord).join('\n\n'));
+                }
+                let texto = blocks.join('\n');
+                if (registrosOmitidos > 0) texto += `\n(${registrosOmitidos} registros de contexto omitidos por techo)`;
+                return texto;
+            };
+            let textoExpediente = montarDossier(context, 0);
+            // Techo por expediente (D-20): `0` sale corto sin medir; si no, se
+            // descartan registros COMPLETOS desde el final de la lista hasta que
+            // la longitud TOTAL del expediente (cabecera, contexto y la propia
+            // línea de omitidos) quepa. El LOCATION LORE es intocable: si él
+            // solo supera el techo, el expediente se conserva con el contexto
+            // vacío. Nunca se trunca un registro a mitad.
+            const techoExpediente = Math.max(0, Number(dossierMaxChars) || 0);
+            if (techoExpediente > 0) {
+                const conservados = [...context];
+                while (textoExpediente.length > techoExpediente && conservados.length) {
+                    conservados.pop();
+                    textoExpediente = montarDossier(conservados, context.length - conservados.length);
+                }
             }
             return {
                 name: dossier.name,
                 aliases: [...dossier.aliases],
-                text: blocks.join('\n'),
+                text: textoExpediente,
                 hasNarrativeLore: dossier.hasNarrativeLore,
             };
         })
         .sort((left, right) => left.name.localeCompare(right.name));
 
     const globalRecords = contextualRecords.filter(record => record.global && !isSupersededSkeleton(record));
-    const globalContext = globalRecords.length
-        ? globalRecords.map(renderRecord).join('\n\n')
-        : '(No separate regional or global lore records.)';
+    // Ensamble del contexto global (D-20) con la misma línea final de omitidos
+    // que los expedientes.
+    const montarGlobal = (registrosConservados, registrosOmitidos) => {
+        let texto = registrosConservados.length
+            ? registrosConservados.map(renderRecord).join('\n\n')
+            : '(No separate regional or global lore records.)';
+        if (registrosOmitidos > 0) texto += `\n(${registrosOmitidos} registros de contexto omitidos por techo)`;
+        return texto;
+    };
+    let globalContext = montarGlobal(globalRecords, 0);
+    // Techo del contexto global (D-20): `0` sale corto sin medir; si no, se
+    // descartan registros COMPLETOS desde el final de `globalRecords` hasta que
+    // quepa la longitud total, línea de omitidos incluida dentro del techo.
+    // Nunca se trunca a mitad.
+    const techoGlobal = Math.max(0, Number(globalMaxChars) || 0);
+    if (techoGlobal > 0) {
+        const conservados = [...globalRecords];
+        while (globalContext.length > techoGlobal && conservados.length) {
+            conservados.pop();
+            globalContext = montarGlobal(conservados, globalRecords.length - conservados.length);
+        }
+    }
 
     return { dossiers, globalContext };
 }

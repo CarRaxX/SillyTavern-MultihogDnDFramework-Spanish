@@ -1,0 +1,31 @@
+{
+  "dossiers": [
+    {
+      "name": "Glassmere",
+      "aliases": [
+        "Glassmere"
+      ],
+      "text": "## LOCATION LORE\n### Glassmere\nA lake settlement supported by reed farms.",
+      "hasNarrativeLore": true
+    },
+    {
+      "name": "Morrowfen",
+      "aliases": [
+        "Morrowfen",
+        "Morrowfen :: Docks",
+        "Docks"
+      ],
+      "text": "## LOCATION LORE\n### Morrowfen\nA tidal trade town governed by competing ward councils.\n\n### Morrowfen :: Docks\nWarehouses and fish markets line the flood-prone quay.\n\n## PERTINENT CONTEXT (READ-ONLY CONSTRAINTS)\n### Captain Ilyra\nCommands the Morrowfen harbor watch from the Docks.",
+      "hasNarrativeLore": true
+    },
+    {
+      "name": "Old Barrow",
+      "aliases": [
+        "Old Barrow"
+      ],
+      "text": "## LOCATION LORE\n### Old Barrow\nAn isolated burial hill.",
+      "hasNarrativeLore": false
+    }
+  ],
+  "globalContext": "### Salt Compact\nControls Morrowfen shipping contracts.\n\n### Sun Court\nA regional power contesting trade routes."
+}

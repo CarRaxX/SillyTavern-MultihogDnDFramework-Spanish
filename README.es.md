@@ -76,6 +76,9 @@ En conjunto, estos componentes resuelven los cuatro problemas clásicos de los j
 3. **Inyección de Prompts y Ejecución:** La nota de estado (State Memo) y la cola RNG se inyectan en tu prompt saliente para actuar como la fuente de verdad.
 4. **Progresión del Mundo:** Opcionalmente, configura el componente de Progresión del Mundo para recibir informes periódicos sobre sucesos en el universo de juego.
 
+🇪🇸 Guía de parametrización para máquinas locales (techos de expedientes y contexto
+global, `ctxWorldInfo` y cerrotejo GM-only): [docs/guia-parametrizacion-local.es.md](docs/guia-parametrizacion-local.es.md).
+
 ---
 
 ## Pensamiento del modelo por trabajo
