@@ -34,7 +34,7 @@ import {
 import { fingerprintLorebook } from './src/state/content-fingerprint.js';
 import { leerControlesEfectivos } from './src/state/agent-controls.js';
 import { runtimeState } from './src/app/runtime-state.js';
-import { buildKeyringText, grepLoreInBooks, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
+import { buildKeyringText, grepLoreInBooks, isAgentReservedEntry, isSkeletonBookName, resolveBooksToScan } from './src/state/lorebook-keyring.js';
 import { findMostRecentNarratorMessage, stripCyoaChoiceBlocks } from './src/state/present-now.js';
 import {
     applyDungeonMapTransaction,
@@ -1665,6 +1665,10 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
                 if (isSkeletonBookName(name)) continue;
                 for (const [uid, entry] of Object.entries(book.entries)) {
                     const fullId = `${name}::${uid}`;
+                    // Oleada 7b (D-35): la reservada no se renderiza en el prompt del agente
+                    // (ni ACTIVE MEMORY ni NEWLY ACTIVATED THIS TURN). Es solo el render: el
+                    // pool (activeRouterKeys) no se muta y el narrador recibe lo de siempre.
+                    if (isAgentReservedEntry(entry)) continue;
                     if (settings.activeRouterKeys?.includes(fullId)) {
                         const label = entry.comment || entry.key?.[0] || fullId;
                         const entryContent = getDungeonMapAttachment(entry)
@@ -2229,7 +2233,17 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                         const [bookName, id] = uid.split('::');
                         const book = await ctx.loadWorldInfo(bookName);
                         assertOwnsChat();
-                        observation = book?.entries?.[id] ? book.entries[id].content : `Entry "${uid}" not found.`;
+                        const entry = book?.entries?.[id];
+                        // Oleada 7b (D-33): la entrada reservada se rechaza sin título,
+                        // contenido ni prefijo. Se consulta la copia recién cargada y también
+                        // el catálogo en memoria: basta que una de las dos la marque.
+                        const reserved = isAgentReservedEntry(entry)
+                            || isAgentReservedEntry(archiveBooks[bookName]?.entries?.[id]);
+                        if (reserved) {
+                            observation = 'Entry is reserved and unavailable';
+                        } else {
+                            observation = entry ? entry.content : `Entry "${uid}" not found.`;
+                        }
                     }
                 } else if (toolName === 'grep_lore') {
                     const hits = grepLoreInBooks(archiveBooks, args.query);
@@ -2239,9 +2253,13 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                     if (isSkeletonBookName(bookName)) {
                         observation = 'World Skeleton lorebooks are not accessible to the Lorebook Agent.';
                     } else if (archiveBooks[bookName]) {
-                        observation = Object.entries(archiveBooks[bookName].entries)
-                            .map(([uid, e]) => `${bookName}::${uid} -- ${e.comment || e.key?.[0] || uid}`)
-                            .join('\n');
+                        // Oleada 7b (D-33): las reservadas fuera del listado; si el libro se
+                        // queda vacío tras el filtro, aviso neutro sin delatar el criterio.
+                        const visibles = Object.entries(archiveBooks[bookName].entries)
+                            .filter(([, e]) => !isAgentReservedEntry(e));
+                        observation = visibles.length > 0
+                            ? visibles.map(([uid, e]) => `${bookName}::${uid} -- ${e.comment || e.key?.[0] || uid}`).join('\n')
+                            : 'No entries available in this book.';
                     } else {
                         observation = `Book "${bookName}" not found.`;
                     }
@@ -2793,9 +2811,13 @@ ${recordCategoryGuidance}`;
                     if (isSkeletonBookName(bookName)) {
                         observation = 'World Skeleton lorebooks are not accessible to the Lorebook Agent.';
                     } else if (archiveBooks[bookName]) {
-                        observation = Object.entries(archiveBooks[bookName].entries)
-                            .map(([uid, e]) => `${bookName}::${uid} -- ${e.comment || e.key?.[0] || uid}`)
-                            .join('\n');
+                        // Oleada 7b (D-33): misma guarda que la otra copia del despacho de
+                        // herramientas — las reservadas no se listan nunca.
+                        const visibles = Object.entries(archiveBooks[bookName].entries)
+                            .filter(([, e]) => !isAgentReservedEntry(e));
+                        observation = visibles.length > 0
+                            ? visibles.map(([uid, e]) => `${bookName}::${uid} -- ${e.comment || e.key?.[0] || uid}`).join('\n')
+                            : 'No entries available in this book.';
                     } else {
                         observation = `Book "${bookName}" not found. Available: ${Object.keys(archiveBooks).join(', ') || 'none'}`;
                     }
@@ -2807,7 +2829,16 @@ ${recordCategoryGuidance}`;
                         const [bookName, id] = uid.split('::');
                         const book = await ctx.loadWorldInfo(bookName);
                         assertOwnsChat();
-                        observation = book?.entries?.[id] ? book.entries[id].content : `Entry "${uid}" not found.`;
+                        const entry = book?.entries?.[id];
+                        // Oleada 7b (D-33): misma guarda que la otra copia — rechazo seco,
+                        // sin título, contenido ni prefijo, sin nombrar el criterio.
+                        const reserved = isAgentReservedEntry(entry)
+                            || isAgentReservedEntry(archiveBooks[bookName]?.entries?.[id]);
+                        if (reserved) {
+                            observation = 'Entry is reserved and unavailable';
+                        } else {
+                            observation = entry ? entry.content : `Entry "${uid}" not found.`;
+                        }
                     }
                 } else {
                     observation = `Unknown tool: ${toolName}`;
@@ -3006,6 +3037,15 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         }
         const [bookName, uid] = k.split('::');
         const exists = allBooks[bookName]?.entries?.[uid];
+        // Oleada 7b (D-34): un ID reservado se descarta en silencio dentro del único
+        // consumidor de action.activate (cubre JSON y [[ACTIVATE: …]] sin tocar el parser).
+        // Sin errors.push: volvería al agente como «Committed with warnings» y confirmaría
+        // que existe. Nunca aborta el commit — los demás IDs del mismo action se activan —
+        // y el aviso queda solo en el host, para diagnóstico del operador.
+        if (isAgentReservedEntry(exists)) {
+            console.warn(`[Lorebook Agent] Activación omitida: entrada reservada (${k}).`);
+            continue;
+        }
         
         if (exists) {
             const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';

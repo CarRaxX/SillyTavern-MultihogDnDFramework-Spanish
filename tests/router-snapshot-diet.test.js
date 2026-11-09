@@ -7,6 +7,9 @@ import { leerControlesEfectivos } from '../src/state/agent-controls.js';
 import { changedBooksFromFingerprints, getBookPreimage, getLorebookSnapshotNames, isEntryRestorable } from '../src/state/lorebook-history.js';
 import { fingerprintLorebook } from '../src/state/content-fingerprint.js';
 import { LOREBOOK_ROLLBACK_LIMIT } from '../src/state/history-retention.js';
+// Oleada 7b (R3): el arnés `vm` ejecuta el router real, así que debe inyectarle el
+// helper nuevo de D-31. Es una dependencia más del contexto, no una aserción.
+import { isAgentReservedEntry } from '../src/state/lorebook-keyring.js';
 
 // Dieta del paso del Agente de Lorebooks (spec 2026-11-05, D1-A/D5): durante el paso
 // las preimágenes viven en memoria y la entrada del historial sólo lleva huellas; al
@@ -96,7 +99,7 @@ function harness({ efecto = () => {}, campaignBooks = null, fallo = null, falloT
         loadWorldInfoFresh: name => Promise.resolve(books[name] ? clone(books[name]) : null),
         toastr: { warning: noop, info: noop, success: noop, error: noop },
         bookBelongsToPrefix: (name, prefix) => name.startsWith(`${prefix}_`),
-        isSkeletonBookName: () => false, buildKeyringText: empty,
+        isSkeletonBookName: () => false, buildKeyringText: empty, isAgentReservedEntry,
         formatAgentChatLogFromIndex: empty, extractFooterLocation: empty, findLatestDungeonLocation: empty,
         extractCurrentTimeStr: empty, computeUnpinnedActiveCount: () => 0,
         extractActiveCombatBlock: empty, extractPartyBlock: empty,
