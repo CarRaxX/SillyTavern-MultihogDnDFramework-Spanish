@@ -4619,8 +4619,19 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
             const keywords = Array.isArray(entry.key) ? entry.key : [];
             if (keywords.length === 0) continue;
 
+            // Oleada 7 — compuerta AND ALL: solo con entry.selective === true y
+            // selectiveLogic === 3 (secretos del GM) la entrada exige TODAS las teclas
+            // primarias y, si las hay, TODAS las secundarias, en la MISMA unidad de
+            // texto. Cualquier otro valor (0/1/2 o ausente) conserva el OR de siempre.
+            const andAllGate = entry.selective === true && entry.selectiveLogic === 3;
+            // Fail-closed: una tecla vacía o no-string cuenta como no cumplida.
+            const hitsUnit = (text) => [keywords, entry.keysecondary].filter(Array.isArray)
+                .every(host => host.every(kw =>
+                    typeof kw === 'string' && kw.length > 0 && text.includes(kw.toLowerCase())
+                ));
+
             // Check the current narrative text (discovery)
-            const isDirectMatch = keywords.some(kw =>
+            const isDirectMatch = andAllGate ? hitsUnit(lowerText) : keywords.some(kw =>
                 typeof kw === 'string' && kw.length > 0 &&
                 lowerText.includes(kw.toLowerCase())
             );
@@ -4633,7 +4644,7 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
                 const depth = (typeof entry.depth === 'number' && entry.depth > 0) ? entry.depth : (book.scan_depth ?? 4);
                 const window = recentMessages.slice(-depth);
                 const windowText = window.map(m => (m.mes || m.content || '')).join(' ').toLowerCase();
-                const isHistoryMatch = keywords.some(kw =>
+                const isHistoryMatch = andAllGate ? hitsUnit(windowText) : keywords.some(kw =>
                     typeof kw === 'string' && kw.length > 0 &&
                     windowText.includes(kw.toLowerCase())
                 );
