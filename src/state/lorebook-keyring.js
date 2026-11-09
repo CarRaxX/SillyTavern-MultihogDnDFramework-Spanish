@@ -6,6 +6,19 @@ export function isSkeletonBookName(bookName) {
 }
 
 /**
+ * Oleada 7b (D-31): candado del Lorebook Agent. Una entrada está reservada
+ * cuando es selectiva con lógica AND ALL exacta (`selective === true` y
+ * `selectiveLogic === 3` numérico): es material del narrador, nunca del agente.
+ * Comparación numérica estricta — `'3'` en texto, `logic: 0`, `selective: false`
+ * o entrada ausente dan `false`, así que las hermanas de guion (ARCO, NPCs,
+ * Factions, Locations, World) siguen viéndose y activándose igual que hoy.
+ * Única definición del criterio: el resto de superficies la importa.
+ */
+export function isAgentReservedEntry(entry) {
+    return entry?.selective === true && entry?.selectiveLogic === 3;
+}
+
+/**
  * Books the keyword / Present-Now scanners should open.
  * `campaignBooks` is the fast ownership list, but it can lag behind a newly
  * created NPCs book until the next Lorebook Agent pass. Union it with
@@ -64,6 +77,9 @@ export function buildKeyringText(allBooks, activeKeys = []) {
         if (!bookData || !bookData.entries) continue;
         for (const [uid, entry] of Object.entries(bookData.entries)) {
             if (activeSet.has(`${bookName}::${uid}`)) continue;
+            // Oleada 7b (D-32): la reservada no sale en el índice — ni UID, ni
+            // etiqueta, ni teclas. Sin anunciar que existen entradas ocultas.
+            if (isAgentReservedEntry(entry)) continue;
             const keys = (entry.key || []).join(', ');
             const label = entry.comment || entry.key?.[0] || 'Unnamed';
             lines.push(`[ARCHIVE] ${bookName}::${uid} | Label: ${label} | Keys: [${keys}]`);
@@ -86,6 +102,9 @@ export function grepLoreInBooks(allBooks, query) {
     for (const [name, book] of Object.entries(allBooks || {})) {
         if (isSkeletonBookName(name)) continue;
         for (const [uid, entry] of Object.entries(book.entries || {})) {
+            // Oleada 7b (D-33): se omite antes de construir el haystack, así que
+            // ni el cuerpo, ni la etiqueta ni las teclas reservadas dan hits.
+            if (isAgentReservedEntry(entry)) continue;
             const keys = Array.isArray(entry.key) ? entry.key.join(' ') : '';
             const haystack = `${entry.content || ''} ${entry.comment || ''} ${keys}`.toLowerCase();
             if (haystack.includes(q)) {

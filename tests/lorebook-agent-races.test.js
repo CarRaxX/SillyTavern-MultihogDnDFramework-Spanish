@@ -7,6 +7,9 @@ import { leerControlesEfectivos } from '../src/state/agent-controls.js';
 import { changedBooksFromFingerprints, getBookPreimage, isEntryRestorable } from '../src/state/lorebook-history.js';
 import { fingerprintLorebook } from '../src/state/content-fingerprint.js';
 import { LOREBOOK_ROLLBACK_LIMIT } from '../src/state/history-retention.js';
+// Oleada 7b (R3): el arnés `vm` ejecuta el router real, así que debe inyectarle el
+// helper nuevo de D-31. Es una dependencia más del contexto, no una aserción.
+import { isAgentReservedEntry } from '../src/state/lorebook-keyring.js';
 
 const source = readFileSync(new URL('../router.js', import.meta.url), 'utf8');
 function functionSource(name, text = source) {
@@ -70,7 +73,7 @@ function harness({ basic = true, pause = 'llm', cleanupEvery = 0 } = {}) {
         loadWorldInfoFresh: name => Promise.resolve(books[name] ? JSON.parse(JSON.stringify(books[name])) : null),
         toastr: { warning: noop, info: noop, success: noop, error: noop },
         getLorebookSnapshotNames: () => [], bookBelongsToPrefix: (name, prefix) => name.startsWith(`${prefix}_`),
-        isSkeletonBookName: () => false, buildKeyringText: empty,
+        isSkeletonBookName: () => false, buildKeyringText: empty, isAgentReservedEntry,
         formatAgentChatLogFromIndex: empty, extractFooterLocation: empty, findLatestDungeonLocation: empty,
         extractCurrentTimeStr: empty, computeUnpinnedActiveCount: () => 0,
         extractActiveCombatBlock: empty, extractPartyBlock: empty,
