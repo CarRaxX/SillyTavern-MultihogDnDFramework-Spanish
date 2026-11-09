@@ -5556,6 +5556,10 @@ ${rawDump}`;
     const locationContext = buildWorldProgressionLocationDossiers(archiveBooks, {
         prefix,
         exclusionList: settings.worldProgressionExclusionList || '',
+        // Techos parametrizados de la Oleada 6a (D-20): `0` deja el trabajo sin
+        // límite; los valores de fábrica 20000/12000 viven solo en `settings`.
+        dossierMaxChars: settings.worldProgressionDossierMaxChars,
+        globalMaxChars: settings.worldProgressionGlobalMaxChars,
     });
     const selectedDossiers = selectWorldProgressionLocations(locationContext.dossiers, {
         count: settings.worldProgressionLocationsPerReport ?? 3,

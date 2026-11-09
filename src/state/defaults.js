@@ -885,6 +885,10 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
 
         worldProgressionExclusionList: '',         // comma-separated location titles or keys excluded from rotation
 
+        worldProgressionDossierMaxChars: 20000,    // techo de caracteres por expediente de ubicación (0 = sin límite, Oleada 6a D-20)
+
+        worldProgressionGlobalMaxChars: 12000,     // techo de caracteres del contexto global (0 = sin límite, Oleada 6a D-20)
+
 
 
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given world source material, generate a sparse foundational skeleton for an RPG campaign simulation.

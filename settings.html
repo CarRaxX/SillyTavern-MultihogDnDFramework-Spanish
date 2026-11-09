@@ -2190,6 +2190,13 @@
                                         <label style="font-size:0.85em; font-weight:bold; display:block; margin-bottom:2px;">Lista de Exclusión de Ubicaciones</label>
                                         <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="ej. isla tutorial, reino de los sueños" title="Títulos o claves de ubicaciones separadas por comas para excluir de la rotación" style="width:100%; box-sizing:border-box;" />
                                     </div>
+                                    <label style="font-size:0.85em; font-weight:bold;">Caracteres máximos por expediente
+                                        <input id="rpg_world_progression_dossier_max_chars" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="20000" title="Techo de caracteres de cada expediente de ubicación (0 = sin límite). Descarta registros completos del contexto pertinente desde el final; el saber del lugar nunca se recorta. Ahorra contexto en modelos locales." />
+                                    </label>
+                                    <label style="font-size:0.85em; font-weight:bold;">Caracteres máximos de contexto global
+                                        <input id="rpg_world_progression_global_max_chars" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="12000" title="Techo de caracteres del contexto global (regiones y facciones) que acompaña a los expedientes (0 = sin límite). Descarta registros completos desde el final. Ahorra contexto en modelos locales." />
+                                    </label>
+                                    <div style="font-size:0.75em; opacity:0.6;">Ambos techos se aplican al armar los expedientes de la Progresión del Mundo; escribe 0 para desactivarlos.</div>
                                 </div>
                             </div>
                         </div>

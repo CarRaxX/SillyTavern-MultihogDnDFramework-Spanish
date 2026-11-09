@@ -4817,6 +4817,9 @@ async function loadProfile(name) {
     $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
     $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
     $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
+    // Refresco de los techos de la Oleada 6a (D-20) al cambiar de perfil.
+    $('#rpg_world_progression_dossier_max_chars').val(s.worldProgressionDossierMaxChars ?? 20000);
+    $('#rpg_world_progression_global_max_chars').val(s.worldProgressionGlobalMaxChars ?? 12000);
 
     // Sync portrait connection settings UI
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
@@ -13078,6 +13081,16 @@ RULES:
             getSettings().worldProgressionExclusionList = String($(this).val() || '');
             saveSettings();
         });
+        // Techos de la Oleada 6a (D-20): cualquier valor negativo o vacío queda
+        // guardado como 0, que es el significado de «sin límite».
+        $('#rpg_world_progression_dossier_max_chars').val(settings.worldProgressionDossierMaxChars ?? 20000).on('input', function () {
+            getSettings().worldProgressionDossierMaxChars = Math.max(0, parseInt(String($(this).val() || '')) || 0);
+            saveSettings();
+        });
+        $('#rpg_world_progression_global_max_chars').val(settings.worldProgressionGlobalMaxChars ?? 12000).on('input', function () {
+            getSettings().worldProgressionGlobalMaxChars = Math.max(0, parseInt(String($(this).val() || '')) || 0);
+            saveSettings();
+        });
         $wpSystemPrompt.val(settings.worldProgressionSystemPrompt || '').on('input', function () {
             getSettings().worldProgressionSystemPrompt = String($(this).val() || '');
             saveSettings();
@@ -13938,6 +13951,9 @@ RULES:
             $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
             $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
             $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
+            // Refresco de los techos de la Oleada 6a (D-20) en el panel de agentes.
+            $('#rpg_world_progression_dossier_max_chars').val(s.worldProgressionDossierMaxChars ?? 20000);
+            $('#rpg_world_progression_global_max_chars').val(s.worldProgressionGlobalMaxChars ?? 12000);
             $('#rpg_world_progression_skeleton_use_existing').prop('checked', !!s.worldProgressionSkeletonUseExisting);
             $('#rpg_world_progression_skeleton_use_lorebooks').prop('checked', !!s.worldProgressionSkeletonUseLorebooks);
             $('#rpg_world_progression_skeleton_lorebook_filter_group').toggle(!!s.worldProgressionSkeletonUseLorebooks);

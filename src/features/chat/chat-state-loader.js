@@ -124,6 +124,9 @@ export function createChatStateLoader({
     s.worldProgressionSkeletonLorebookFilter = JSON.parse(JSON.stringify(saved.worldProgressionSkeletonLorebookFilter || []));
     s.worldProgressionSkeletonLorebookOnly = saved.worldProgressionSkeletonLorebookOnly ?? false;
     s.worldProgressionExclusionList = saved.worldProgressionExclusionList ?? '';
+    // Techos de expediente y contexto global (Oleada 6a, D-20): 0 = sin límite.
+    s.worldProgressionDossierMaxChars = saved.worldProgressionDossierMaxChars ?? 20000;
+    s.worldProgressionGlobalMaxChars = saved.worldProgressionGlobalMaxChars ?? 12000;
     s.worldProgressionLastFiredAtMinutes = saved.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = saved.worldProgressionLastFiredPeriodLabel || '';
     s.worldProgressionConsolidateEnabled = saved.worldProgressionConsolidateEnabled ?? false;
@@ -171,6 +174,9 @@ export function createChatStateLoader({
     $('#rpg_world_progression_locations_per_report').val(s.worldProgressionLocationsPerReport ?? 3);
     $('#rt-agent-world-locations').val(s.worldProgressionLocationsPerReport ?? 3);
     $('#rpg_world_progression_location_randomize').prop('checked', s.worldProgressionLocationRandomize !== false);
+    // Vuelco de los techos nuevos (Oleada 6a, D-20) a los campos del cajón.
+    $('#rpg_world_progression_dossier_max_chars').val(s.worldProgressionDossierMaxChars ?? 20000);
+    $('#rpg_world_progression_global_max_chars').val(s.worldProgressionGlobalMaxChars ?? 12000);
     $('#rpg_map_evolution_world_report_lookback').val(s.mapEvolutionWorldReportLookback ?? 5);
     if (typeof runtimeState.updateAgentMapEvolutionStatusRef === 'function') {
         runtimeState.updateAgentMapEvolutionStatusRef();
